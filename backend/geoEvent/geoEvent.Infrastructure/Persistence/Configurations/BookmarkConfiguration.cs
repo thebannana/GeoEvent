@@ -8,10 +8,24 @@ namespace geoEvent.Infrastructure.Persistence.Configurations
     {
         public void Configure(EntityTypeBuilder<Bookmark> builder)
         {
-            builder.HasOne(r => r.User)
-                .WithMany()
-                .HasForeignKey(r => r.UserId)
-                .OnDelete(DeleteBehavior.NoAction);
+            builder.HasKey(b => b.BookmarkId);
+
+            builder.HasOne(b => b.Event)
+                   .WithMany()
+                   .HasForeignKey(b => b.EventId)
+                   .OnDelete(DeleteBehavior.Cascade);
+
+            builder.HasOne(b => b.User)
+                   .WithMany()
+                   .HasForeignKey(b => b.UserId)
+                   .OnDelete(DeleteBehavior.Cascade);
+
+            builder.HasIndex(b => b.UserId);
+            builder.HasIndex(b => b.EventId);
+            builder.HasIndex(b => b.SavedAt);
+
+            builder.Property(b => b.ImageUrl).HasMaxLength(500).IsRequired();
+            builder.Property(b => b.Memo).HasMaxLength(500);
         }
     }
 }

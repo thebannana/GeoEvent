@@ -8,14 +8,30 @@ namespace geoEvent.Infrastructure.Persistence.Configurations
     {
         public void Configure(EntityTypeBuilder<Message> builder)
         {
-            builder.HasOne(r => r.Receiver)
-                .WithMany()
-                .HasForeignKey(r => r.ReceiverId)
-                .OnDelete(DeleteBehavior.NoAction);
-            builder.HasOne(r => r.Sender)
-                .WithMany()
-                .HasForeignKey(r => r.SenderId)
-                .OnDelete(DeleteBehavior.NoAction);
+            builder.HasKey(m => m.MessageId);
+
+            builder.HasOne(m => m.Sender)
+                   .WithMany()
+                   .HasForeignKey(m => m.SenderId)
+                   .OnDelete(DeleteBehavior.NoAction);
+
+            builder.HasOne(m => m.Receiver)
+                   .WithMany()
+                   .HasForeignKey(m => m.ReceiverId)
+                   .OnDelete(DeleteBehavior.NoAction);
+
+            builder.HasOne(m => m.Event)
+                   .WithMany()
+                   .HasForeignKey(m => m.EventId)
+                   .OnDelete(DeleteBehavior.NoAction);
+
+            builder.HasIndex(m => m.ReceiverId);
+            builder.HasIndex(m => m.SenderId);
+            builder.HasIndex(m => m.EventId);
+            builder.HasIndex(m => m.SentAt);
+            builder.HasIndex(m => m.IsRead);
+
+            builder.Property(m => m.Content).HasMaxLength(4000).IsRequired();
         }
     }
 }

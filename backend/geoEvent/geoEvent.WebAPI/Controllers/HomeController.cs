@@ -4,6 +4,7 @@ using geoEvent.Model.Models;
 using System.Reflection.Metadata.Ecma335;
 using geoEvent.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using System.ComponentModel.DataAnnotations;
 
 namespace geoEvent.WebAPI.Controllers;
 
@@ -27,6 +28,6 @@ public class EventsController : ControllerBase
     public async Task<ActionResult> Create(Event evt)
     {
         await _repo.AddAsync(evt);
-        return CreatedAtAction(nameof(Get), new { id = evt.Id }, evt);
+        return CreatedAtAction(nameof(Get), new { id = evt.EventId }, evt);
     }
 }

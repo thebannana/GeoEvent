@@ -12,7 +12,7 @@ namespace geoEvent.Infrastructure.Repositories
         public EventRepository(GeoEventDbContext db) => _db = db;
 
         public Task<Event?> GetByIdAsync(int id, CancellationToken ct = default)
-            => _db.Events.FirstOrDefaultAsync(e => e.Id == id, ct);
+            => _db.Events.FirstOrDefaultAsync(e => e.EventId == id, ct);
 
         public async Task AddAsync(Event entity, CancellationToken ct = default)
         {

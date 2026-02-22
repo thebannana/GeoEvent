@@ -32,7 +32,8 @@ namespace geoEvent.Infrastructure.Migrations
 
                     b.Property<string>("ActionType")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
 
                     b.Property<int?>("CategoryId")
                         .HasColumnType("int");
@@ -42,7 +43,8 @@ namespace geoEvent.Infrastructure.Migrations
 
                     b.Property<string>("Metadata")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
 
                     b.Property<int>("SessionId")
                         .HasColumnType("int");
@@ -52,7 +54,8 @@ namespace geoEvent.Infrastructure.Migrations
 
                     b.Property<string>("TargetType")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
 
                     b.Property<int?>("UserId")
                         .HasColumnType("int");
@@ -61,7 +64,13 @@ namespace geoEvent.Infrastructure.Migrations
 
                     b.HasIndex("CategoryId");
 
+                    b.HasIndex("CreatedAt");
+
+                    b.HasIndex("SessionId");
+
                     b.HasIndex("UserId");
+
+                    b.HasIndex("ActionType", "CreatedAt");
 
                     b.ToTable("ActivityLogs");
                 });
@@ -84,7 +93,8 @@ namespace geoEvent.Infrastructure.Migrations
 
                     b.Property<string>("DivisionName")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
 
                     b.Property<string>("DivisionType")
                         .IsRequired()
@@ -110,7 +120,11 @@ namespace geoEvent.Infrastructure.Migrations
 
                     b.HasIndex("CountryId");
 
+                    b.HasIndex("DivisionCode");
+
                     b.HasIndex("ParentDivisionId");
+
+                    b.HasIndex("Level", "DivisionType");
 
                     b.ToTable("AdministrativeDivisions");
                 });
@@ -128,11 +142,13 @@ namespace geoEvent.Infrastructure.Migrations
 
                     b.Property<string>("ImageUrl")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
 
                     b.Property<string>("Memo")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
 
                     b.Property<DateTime>("SavedAt")
                         .HasColumnType("datetime2");
@@ -143,6 +159,8 @@ namespace geoEvent.Infrastructure.Migrations
                     b.HasKey("BookmarkId");
 
                     b.HasIndex("EventId");
+
+                    b.HasIndex("SavedAt");
 
                     b.HasIndex("UserId");
 
@@ -159,21 +177,27 @@ namespace geoEvent.Infrastructure.Migrations
 
                     b.Property<string>("CategoryName")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
 
                     b.Property<string>("Color")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(7)
+                        .HasColumnType("nvarchar(7)");
 
                     b.Property<string>("Description")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
 
                     b.Property<string>("IconUrl")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
 
                     b.HasKey("CategoryId");
+
+                    b.HasIndex("CategoryName");
 
                     b.ToTable("Categories");
                 });
@@ -188,7 +212,8 @@ namespace geoEvent.Infrastructure.Migrations
 
                     b.Property<string>("CityName")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
 
                     b.Property<int?>("DivisionId")
                         .HasColumnType("int");
@@ -204,11 +229,16 @@ namespace geoEvent.Infrastructure.Migrations
 
                     b.Property<string>("NormalizedName")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
 
                     b.HasKey("CityId");
 
+                    b.HasIndex("CityName");
+
                     b.HasIndex("DivisionId");
+
+                    b.HasIndex("NormalizedName");
 
                     b.ToTable("Cities");
                 });
@@ -223,7 +253,8 @@ namespace geoEvent.Infrastructure.Migrations
 
                     b.Property<string>("Content")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
@@ -238,6 +269,8 @@ namespace geoEvent.Infrastructure.Migrations
                         .HasColumnType("int");
 
                     b.HasKey("CommentId");
+
+                    b.HasIndex("CreatedAt");
 
                     b.HasIndex("EventId");
 
@@ -261,9 +294,12 @@ namespace geoEvent.Infrastructure.Migrations
 
                     b.Property<string>("ContinentName")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
 
                     b.HasKey("ContinentId");
+
+                    b.HasIndex("ContinentCode");
 
                     b.ToTable("Continents");
                 });
@@ -294,7 +330,8 @@ namespace geoEvent.Infrastructure.Migrations
 
                     b.Property<string>("CountryName")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("bit");
@@ -302,6 +339,12 @@ namespace geoEvent.Infrastructure.Migrations
                     b.HasKey("CountryId");
 
                     b.HasIndex("ContinentId");
+
+                    b.HasIndex("CountryCodeAlpha2");
+
+                    b.HasIndex("CountryCodeAlpha3");
+
+                    b.HasIndex("CountryCodeNumeric");
 
                     b.ToTable("Countries");
                 });
@@ -322,7 +365,8 @@ namespace geoEvent.Infrastructure.Migrations
 
                     b.Property<string>("Description")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
 
                     b.Property<DateTime>("EndDateTime")
                         .HasColumnType("datetime2");
@@ -358,6 +402,12 @@ namespace geoEvent.Infrastructure.Migrations
 
                     b.HasIndex("OrganizerId");
 
+                    b.HasIndex("StartDateTime");
+
+                    b.HasIndex("Status");
+
+                    b.HasIndex("Longitude", "Latitude");
+
                     b.ToTable("Events");
                 });
 
@@ -374,7 +424,8 @@ namespace geoEvent.Infrastructure.Migrations
 
                     b.Property<string>("ImageUrl")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
 
                     b.Property<bool>("IsCover")
                         .HasColumnType("bit");
@@ -385,6 +436,10 @@ namespace geoEvent.Infrastructure.Migrations
                     b.HasKey("ImageId");
 
                     b.HasIndex("EventId");
+
+                    b.HasIndex("IsCover");
+
+                    b.HasIndex("UploadedAt");
 
                     b.ToTable("EventImages");
                 });
@@ -410,6 +465,8 @@ namespace geoEvent.Infrastructure.Migrations
 
                     b.HasIndex("EventId");
 
+                    b.HasIndex("LikedAt");
+
                     b.HasIndex("UserId");
 
                     b.ToTable("EventLikes");
@@ -425,7 +482,8 @@ namespace geoEvent.Infrastructure.Migrations
 
                     b.Property<string>("Content")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(4000)
+                        .HasColumnType("nvarchar(4000)");
 
                     b.Property<int?>("EventId")
                         .HasColumnType("int");
@@ -449,9 +507,13 @@ namespace geoEvent.Infrastructure.Migrations
 
                     b.HasIndex("EventId");
 
+                    b.HasIndex("IsRead");
+
                     b.HasIndex("ReceiverId");
 
                     b.HasIndex("SenderId");
+
+                    b.HasIndex("SentAt");
 
                     b.ToTable("Messages");
                 });
@@ -469,23 +531,32 @@ namespace geoEvent.Infrastructure.Migrations
 
                     b.Property<string>("Description")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
 
                     b.Property<bool>("IsRead")
                         .HasColumnType("bit");
 
                     b.Property<string>("Title")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
 
                     b.Property<string>("Type")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
 
                     b.Property<int?>("UserId")
                         .HasColumnType("int");
 
                     b.HasKey("NotificationId");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.HasIndex("IsRead");
+
+                    b.HasIndex("Type");
 
                     b.HasIndex("UserId");
 
@@ -508,7 +579,8 @@ namespace geoEvent.Infrastructure.Migrations
 
                     b.Property<string>("ErrorMessage")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
 
                     b.Property<DateTime?>("ProcessedAt")
                         .HasColumnType("datetime2");
@@ -523,16 +595,27 @@ namespace geoEvent.Infrastructure.Migrations
 
                     b.Property<string>("Type")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
 
                     b.Property<int?>("UserId")
                         .HasColumnType("int");
 
                     b.Property<string>("payload")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(4000)
+                        .HasColumnType("nvarchar(4000)")
+                        .HasColumnName("Payload");
 
                     b.HasKey("QueueId");
+
+                    b.HasIndex("ProcessedAt");
+
+                    b.HasIndex("ScheduledAt");
+
+                    b.HasIndex("Status");
+
+                    b.HasIndex("Type");
 
                     b.HasIndex("UserId");
 
@@ -552,7 +635,8 @@ namespace geoEvent.Infrastructure.Migrations
 
                     b.Property<string>("Method")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
 
                     b.Property<DateTime>("PaidAt")
                         .HasColumnType("datetime2");
@@ -570,7 +654,11 @@ namespace geoEvent.Infrastructure.Migrations
 
                     b.HasKey("PaymentId");
 
+                    b.HasIndex("PaidAt");
+
                     b.HasIndex("ReservationId");
+
+                    b.HasIndex("Status");
 
                     b.HasIndex("UserId");
 
@@ -591,26 +679,25 @@ namespace geoEvent.Infrastructure.Migrations
                     b.Property<int?>("CityId")
                         .HasColumnType("int");
 
-                    b.Property<string>("Discriminator")
-                        .IsRequired()
-                        .HasMaxLength(8)
-                        .HasColumnType("nvarchar(8)");
-
                     b.Property<string>("FirstName")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
 
                     b.Property<string>("ImageUrl")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
 
                     b.Property<string>("LastName")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
 
                     b.Property<string>("PhoneNumber")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
 
                     b.HasKey("PersonId");
 
@@ -618,9 +705,7 @@ namespace geoEvent.Infrastructure.Migrations
 
                     b.ToTable("People");
 
-                    b.HasDiscriminator().HasValue("Person");
-
-                    b.UseTphMappingStrategy();
+                    b.UseTptMappingStrategy();
                 });
 
             modelBuilder.Entity("geoEvent.Model.Models.PostalCode", b =>
@@ -636,7 +721,8 @@ namespace geoEvent.Infrastructure.Migrations
 
                     b.Property<string>("Code")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
 
                     b.Property<decimal>("Latitude")
                         .HasColumnType("decimal(9,6)");
@@ -647,6 +733,9 @@ namespace geoEvent.Infrastructure.Migrations
                     b.HasKey("PostalCodeId");
 
                     b.HasIndex("CityId");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
 
                     b.ToTable("PostalCodes");
                 });
@@ -661,11 +750,13 @@ namespace geoEvent.Infrastructure.Migrations
 
                     b.Property<string>("Description")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
 
                     b.Property<string>("Reason")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
 
                     b.Property<int?>("ReporterId")
                         .HasColumnType("int");
@@ -683,13 +774,18 @@ namespace geoEvent.Infrastructure.Migrations
 
                     b.Property<string>("TargetType")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
 
                     b.HasKey("ReportId");
 
                     b.HasIndex("ReporterId");
 
                     b.HasIndex("ResolvedById");
+
+                    b.HasIndex("Status");
+
+                    b.HasIndex("TargetType", "TargetId");
 
                     b.ToTable("Reports");
                 });
@@ -723,6 +819,10 @@ namespace geoEvent.Infrastructure.Migrations
 
                     b.HasIndex("EventId");
 
+                    b.HasIndex("ReservedAt");
+
+                    b.HasIndex("Status");
+
                     b.HasIndex("UserId");
 
                     b.ToTable("Reservations");
@@ -752,7 +852,13 @@ namespace geoEvent.Infrastructure.Migrations
 
                     b.HasIndex("CategoryId");
 
+                    b.HasIndex("LastUpdated");
+
                     b.HasIndex("UserId");
+
+                    b.HasIndex("UserId", "CategoryId")
+                        .IsUnique()
+                        .HasFilter("[UserId] IS NOT NULL AND [CategoryId] IS NOT NULL");
 
                     b.ToTable("UserPreferences");
                 });
@@ -766,7 +872,8 @@ namespace geoEvent.Infrastructure.Migrations
 
                     b.Property<string>("Email")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
 
                     b.Property<bool>("IsBanned")
                         .HasColumnType("bit");
@@ -784,24 +891,40 @@ namespace geoEvent.Infrastructure.Migrations
 
                     b.Property<string>("Role")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
 
                     b.Property<string>("Username")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
 
-                    b.HasDiscriminator().HasValue("User");
+                    b.HasIndex("CreatedAt");
+
+                    b.HasIndex("Email")
+                        .IsUnique()
+                        .HasFilter("[Email] IS NOT NULL");
+
+                    b.HasIndex("Role");
+
+                    b.HasIndex("Username")
+                        .IsUnique()
+                        .HasFilter("[Username] IS NOT NULL");
+
+                    b.ToTable("Users");
                 });
 
             modelBuilder.Entity("geoEvent.Model.Models.ActivityLog", b =>
                 {
                     b.HasOne("geoEvent.Model.Models.Category", "Category")
                         .WithMany()
-                        .HasForeignKey("CategoryId");
+                        .HasForeignKey("CategoryId")
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.HasOne("geoEvent.Model.Models.User", "User")
                         .WithMany()
-                        .HasForeignKey("UserId");
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("Category");
 
@@ -829,12 +952,13 @@ namespace geoEvent.Infrastructure.Migrations
                 {
                     b.HasOne("geoEvent.Model.Models.Event", "Event")
                         .WithMany()
-                        .HasForeignKey("EventId");
+                        .HasForeignKey("EventId")
+                        .OnDelete(DeleteBehavior.Cascade);
 
                     b.HasOne("geoEvent.Model.Models.User", "User")
                         .WithMany()
                         .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.NoAction);
+                        .OnDelete(DeleteBehavior.Cascade);
 
                     b.Navigation("Event");
 
@@ -855,12 +979,13 @@ namespace geoEvent.Infrastructure.Migrations
                 {
                     b.HasOne("geoEvent.Model.Models.Event", "Event")
                         .WithMany()
-                        .HasForeignKey("EventId");
+                        .HasForeignKey("EventId")
+                        .OnDelete(DeleteBehavior.Cascade);
 
                     b.HasOne("geoEvent.Model.Models.User", "User")
                         .WithMany()
                         .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.NoAction);
+                        .OnDelete(DeleteBehavior.Cascade);
 
                     b.Navigation("Event");
 
@@ -872,7 +997,7 @@ namespace geoEvent.Infrastructure.Migrations
                     b.HasOne("geoEvent.Model.Models.Continent", "Continent")
                         .WithMany()
                         .HasForeignKey("ContinentId")
-                        .OnDelete(DeleteBehavior.Restrict);
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("Continent");
                 });
@@ -881,11 +1006,13 @@ namespace geoEvent.Infrastructure.Migrations
                 {
                     b.HasOne("geoEvent.Model.Models.Category", "Category")
                         .WithMany()
-                        .HasForeignKey("CategoryId");
+                        .HasForeignKey("CategoryId")
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.HasOne("geoEvent.Model.Models.User", "Organizer")
                         .WithMany()
-                        .HasForeignKey("OrganizerId");
+                        .HasForeignKey("OrganizerId")
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("Category");
 
@@ -896,7 +1023,8 @@ namespace geoEvent.Infrastructure.Migrations
                 {
                     b.HasOne("geoEvent.Model.Models.Event", "Event")
                         .WithMany()
-                        .HasForeignKey("EventId");
+                        .HasForeignKey("EventId")
+                        .OnDelete(DeleteBehavior.Cascade);
 
                     b.Navigation("Event");
                 });
@@ -905,12 +1033,13 @@ namespace geoEvent.Infrastructure.Migrations
                 {
                     b.HasOne("geoEvent.Model.Models.Event", "Event")
                         .WithMany()
-                        .HasForeignKey("EventId");
+                        .HasForeignKey("EventId")
+                        .OnDelete(DeleteBehavior.Cascade);
 
                     b.HasOne("geoEvent.Model.Models.User", "User")
                         .WithMany()
                         .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.NoAction);
+                        .OnDelete(DeleteBehavior.Cascade);
 
                     b.Navigation("Event");
 
@@ -921,7 +1050,8 @@ namespace geoEvent.Infrastructure.Migrations
                 {
                     b.HasOne("geoEvent.Model.Models.Event", "Event")
                         .WithMany()
-                        .HasForeignKey("EventId");
+                        .HasForeignKey("EventId")
+                        .OnDelete(DeleteBehavior.NoAction);
 
                     b.HasOne("geoEvent.Model.Models.User", "Receiver")
                         .WithMany()
@@ -944,7 +1074,8 @@ namespace geoEvent.Infrastructure.Migrations
                 {
                     b.HasOne("geoEvent.Model.Models.User", "User")
                         .WithMany()
-                        .HasForeignKey("UserId");
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade);
 
                     b.Navigation("User");
                 });
@@ -953,7 +1084,8 @@ namespace geoEvent.Infrastructure.Migrations
                 {
                     b.HasOne("geoEvent.Model.Models.User", "User")
                         .WithMany()
-                        .HasForeignKey("UserId");
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("User");
                 });
@@ -963,12 +1095,12 @@ namespace geoEvent.Infrastructure.Migrations
                     b.HasOne("geoEvent.Model.Models.Reservation", "Reservation")
                         .WithMany()
                         .HasForeignKey("ReservationId")
-                        .OnDelete(DeleteBehavior.Restrict);
+                        .OnDelete(DeleteBehavior.NoAction);
 
                     b.HasOne("geoEvent.Model.Models.User", "User")
                         .WithMany()
                         .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Restrict);
+                        .OnDelete(DeleteBehavior.NoAction);
 
                     b.Navigation("Reservation");
 
@@ -989,7 +1121,8 @@ namespace geoEvent.Infrastructure.Migrations
                 {
                     b.HasOne("geoEvent.Model.Models.City", "City")
                         .WithMany("PostalCodes")
-                        .HasForeignKey("CityId");
+                        .HasForeignKey("CityId")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("City");
                 });
@@ -998,7 +1131,8 @@ namespace geoEvent.Infrastructure.Migrations
                 {
                     b.HasOne("geoEvent.Model.Models.User", "Reporter")
                         .WithMany()
-                        .HasForeignKey("ReporterId");
+                        .HasForeignKey("ReporterId")
+                        .OnDelete(DeleteBehavior.NoAction);
 
                     b.HasOne("geoEvent.Model.Models.User", "ResolvedBy")
                         .WithMany()
@@ -1014,12 +1148,13 @@ namespace geoEvent.Infrastructure.Migrations
                 {
                     b.HasOne("geoEvent.Model.Models.Event", "Event")
                         .WithMany()
-                        .HasForeignKey("EventId");
+                        .HasForeignKey("EventId")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("geoEvent.Model.Models.User", "User")
                         .WithMany()
                         .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.NoAction);
+                        .OnDelete(DeleteBehavior.Cascade);
 
                     b.Navigation("Event");
 
@@ -1030,15 +1165,26 @@ namespace geoEvent.Infrastructure.Migrations
                 {
                     b.HasOne("geoEvent.Model.Models.Category", "Category")
                         .WithMany()
-                        .HasForeignKey("CategoryId");
+                        .HasForeignKey("CategoryId")
+                        .OnDelete(DeleteBehavior.Cascade);
 
                     b.HasOne("geoEvent.Model.Models.User", "User")
                         .WithMany()
-                        .HasForeignKey("UserId");
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade);
 
                     b.Navigation("Category");
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("geoEvent.Model.Models.User", b =>
+                {
+                    b.HasOne("geoEvent.Model.Models.Person", null)
+                        .WithOne()
+                        .HasForeignKey("geoEvent.Model.Models.User", "PersonId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("geoEvent.Model.Models.AdministrativeDivision", b =>

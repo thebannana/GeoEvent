@@ -17,10 +17,10 @@ namespace geoEvent.Infrastructure.Migrations
                 {
                     CategoryId = table.Column<int>(type: "int", nullable: false)
                         .Annotation("SqlServer:Identity", "1, 1"),
-                    CategoryName = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    Color = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    IconUrl = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    Description = table.Column<string>(type: "nvarchar(max)", nullable: false)
+                    CategoryName = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: false),
+                    Color = table.Column<string>(type: "nvarchar(7)", maxLength: 7, nullable: false),
+                    IconUrl = table.Column<string>(type: "nvarchar(500)", maxLength: 500, nullable: false),
+                    Description = table.Column<string>(type: "nvarchar(500)", maxLength: 500, nullable: false)
                 },
                 constraints: table =>
                 {
@@ -33,7 +33,7 @@ namespace geoEvent.Infrastructure.Migrations
                 {
                     ContinentId = table.Column<int>(type: "int", nullable: false)
                         .Annotation("SqlServer:Identity", "1, 1"),
-                    ContinentName = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    ContinentName = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: false),
                     ContinentCode = table.Column<string>(type: "nvarchar(10)", maxLength: 10, nullable: false)
                 },
                 constraints: table =>
@@ -47,7 +47,7 @@ namespace geoEvent.Infrastructure.Migrations
                 {
                     CountryId = table.Column<int>(type: "int", nullable: false)
                         .Annotation("SqlServer:Identity", "1, 1"),
-                    CountryName = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    CountryName = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: false),
                     CountryCodeAlpha2 = table.Column<string>(type: "nvarchar(2)", maxLength: 2, nullable: false),
                     CountryCodeAlpha3 = table.Column<string>(type: "nvarchar(3)", maxLength: 3, nullable: false),
                     CountryCodeNumeric = table.Column<int>(type: "int", nullable: false),
@@ -62,7 +62,7 @@ namespace geoEvent.Infrastructure.Migrations
                         column: x => x.ContinentId,
                         principalTable: "Continents",
                         principalColumn: "ContinentId",
-                        onDelete: ReferentialAction.Restrict);
+                        onDelete: ReferentialAction.SetNull);
                 });
 
             migrationBuilder.CreateTable(
@@ -73,7 +73,7 @@ namespace geoEvent.Infrastructure.Migrations
                         .Annotation("SqlServer:Identity", "1, 1"),
                     CountryId = table.Column<int>(type: "int", nullable: true),
                     ParentDivisionId = table.Column<int>(type: "int", nullable: true),
-                    DivisionName = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    DivisionName = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: false),
                     DivisionCode = table.Column<string>(type: "nvarchar(20)", maxLength: 20, nullable: false),
                     DivisionType = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: false),
                     Level = table.Column<int>(type: "int", nullable: false),
@@ -104,8 +104,8 @@ namespace geoEvent.Infrastructure.Migrations
                 {
                     CityId = table.Column<int>(type: "int", nullable: false)
                         .Annotation("SqlServer:Identity", "1, 1"),
-                    CityName = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    NormalizedName = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    CityName = table.Column<string>(type: "nvarchar(255)", maxLength: 255, nullable: false),
+                    NormalizedName = table.Column<string>(type: "nvarchar(255)", maxLength: 255, nullable: false),
                     Longitude = table.Column<decimal>(type: "decimal(9,6)", nullable: false),
                     Latitude = table.Column<decimal>(type: "decimal(9,6)", nullable: false),
                     DivisionId = table.Column<int>(type: "int", nullable: true),
@@ -128,21 +128,12 @@ namespace geoEvent.Infrastructure.Migrations
                 {
                     PersonId = table.Column<int>(type: "int", nullable: false)
                         .Annotation("SqlServer:Identity", "1, 1"),
-                    PhoneNumber = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    FirstName = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    PhoneNumber = table.Column<string>(type: "nvarchar(20)", maxLength: 20, nullable: false),
+                    FirstName = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: false),
                     BirthDate = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    LastName = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    ImageUrl = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    CityId = table.Column<int>(type: "int", nullable: true),
-                    Discriminator = table.Column<string>(type: "nvarchar(8)", maxLength: 8, nullable: false),
-                    Username = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    Email = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    PasswordHash = table.Column<byte[]>(type: "varbinary(max)", nullable: true),
-                    PasswordSalt = table.Column<byte[]>(type: "varbinary(max)", nullable: true),
-                    Role = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    IsVerified = table.Column<bool>(type: "bit", nullable: true),
-                    IsBanned = table.Column<bool>(type: "bit", nullable: true),
-                    CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: true)
+                    LastName = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: false),
+                    ImageUrl = table.Column<string>(type: "nvarchar(500)", maxLength: 500, nullable: false),
+                    CityId = table.Column<int>(type: "int", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -161,7 +152,7 @@ namespace geoEvent.Infrastructure.Migrations
                 {
                     PostalCodeId = table.Column<int>(type: "int", nullable: false)
                         .Annotation("SqlServer:Identity", "1, 1"),
-                    Code = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    Code = table.Column<string>(type: "nvarchar(20)", maxLength: 20, nullable: false),
                     Longitude = table.Column<decimal>(type: "decimal(9,6)", nullable: false),
                     Latitude = table.Column<decimal>(type: "decimal(9,6)", nullable: false),
                     CityId = table.Column<int>(type: "int", nullable: true)
@@ -173,7 +164,33 @@ namespace geoEvent.Infrastructure.Migrations
                         name: "FK_PostalCodes_Cities_CityId",
                         column: x => x.CityId,
                         principalTable: "Cities",
-                        principalColumn: "CityId");
+                        principalColumn: "CityId",
+                        onDelete: ReferentialAction.Restrict);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "Users",
+                columns: table => new
+                {
+                    PersonId = table.Column<int>(type: "int", nullable: false),
+                    Username = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: false),
+                    Email = table.Column<string>(type: "nvarchar(255)", maxLength: 255, nullable: false),
+                    PasswordHash = table.Column<byte[]>(type: "varbinary(max)", nullable: false),
+                    PasswordSalt = table.Column<byte[]>(type: "varbinary(max)", nullable: false),
+                    Role = table.Column<string>(type: "nvarchar(20)", maxLength: 20, nullable: false),
+                    IsVerified = table.Column<bool>(type: "bit", nullable: false),
+                    IsBanned = table.Column<bool>(type: "bit", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Users", x => x.PersonId);
+                    table.ForeignKey(
+                        name: "FK_Users_People_PersonId",
+                        column: x => x.PersonId,
+                        principalTable: "People",
+                        principalColumn: "PersonId",
+                        onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateTable(
@@ -184,9 +201,9 @@ namespace geoEvent.Infrastructure.Migrations
                         .Annotation("SqlServer:Identity", "1, 1"),
                     TargetId = table.Column<int>(type: "int", nullable: false),
                     SessionId = table.Column<int>(type: "int", nullable: false),
-                    ActionType = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    TargetType = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    Metadata = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    ActionType = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: false),
+                    TargetType = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: false),
+                    Metadata = table.Column<string>(type: "nvarchar(1000)", maxLength: 1000, nullable: false),
                     UserId = table.Column<int>(type: "int", nullable: true),
                     CategoryId = table.Column<int>(type: "int", nullable: true),
                     CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false)
@@ -198,12 +215,14 @@ namespace geoEvent.Infrastructure.Migrations
                         name: "FK_ActivityLogs_Categories_CategoryId",
                         column: x => x.CategoryId,
                         principalTable: "Categories",
-                        principalColumn: "CategoryId");
+                        principalColumn: "CategoryId",
+                        onDelete: ReferentialAction.SetNull);
                     table.ForeignKey(
-                        name: "FK_ActivityLogs_People_UserId",
+                        name: "FK_ActivityLogs_Users_UserId",
                         column: x => x.UserId,
-                        principalTable: "People",
-                        principalColumn: "PersonId");
+                        principalTable: "Users",
+                        principalColumn: "PersonId",
+                        onDelete: ReferentialAction.SetNull);
                 });
 
             migrationBuilder.CreateTable(
@@ -215,7 +234,7 @@ namespace geoEvent.Infrastructure.Migrations
                     OrganizerId = table.Column<int>(type: "int", nullable: true),
                     CategoryId = table.Column<int>(type: "int", nullable: true),
                     Title = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: false),
-                    Description = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    Description = table.Column<string>(type: "nvarchar(2000)", maxLength: 2000, nullable: false),
                     Longitude = table.Column<decimal>(type: "decimal(9,6)", nullable: false),
                     Latitude = table.Column<decimal>(type: "decimal(9,6)", nullable: false),
                     StartDateTime = table.Column<DateTime>(type: "datetime2", nullable: false),
@@ -231,12 +250,14 @@ namespace geoEvent.Infrastructure.Migrations
                         name: "FK_Events_Categories_CategoryId",
                         column: x => x.CategoryId,
                         principalTable: "Categories",
-                        principalColumn: "CategoryId");
+                        principalColumn: "CategoryId",
+                        onDelete: ReferentialAction.SetNull);
                     table.ForeignKey(
-                        name: "FK_Events_People_OrganizerId",
+                        name: "FK_Events_Users_OrganizerId",
                         column: x => x.OrganizerId,
-                        principalTable: "People",
-                        principalColumn: "PersonId");
+                        principalTable: "Users",
+                        principalColumn: "PersonId",
+                        onDelete: ReferentialAction.SetNull);
                 });
 
             migrationBuilder.CreateTable(
@@ -249,20 +270,21 @@ namespace geoEvent.Infrastructure.Migrations
                     ProcessedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
                     CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
                     UserId = table.Column<int>(type: "int", nullable: true),
-                    ErrorMessage = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    ErrorMessage = table.Column<string>(type: "nvarchar(1000)", maxLength: 1000, nullable: false),
                     AttemptCount = table.Column<int>(type: "int", nullable: false),
                     Status = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: false),
-                    Type = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    payload = table.Column<string>(type: "nvarchar(max)", nullable: false)
+                    Type = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: false),
+                    Payload = table.Column<string>(type: "nvarchar(4000)", maxLength: 4000, nullable: false)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_NotificationQueues", x => x.QueueId);
                     table.ForeignKey(
-                        name: "FK_NotificationQueues_People_UserId",
+                        name: "FK_NotificationQueues_Users_UserId",
                         column: x => x.UserId,
-                        principalTable: "People",
-                        principalColumn: "PersonId");
+                        principalTable: "Users",
+                        principalColumn: "PersonId",
+                        onDelete: ReferentialAction.SetNull);
                 });
 
             migrationBuilder.CreateTable(
@@ -271,9 +293,9 @@ namespace geoEvent.Infrastructure.Migrations
                 {
                     NotificationId = table.Column<int>(type: "int", nullable: false)
                         .Annotation("SqlServer:Identity", "1, 1"),
-                    Type = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    Title = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    Description = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    Type = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: false),
+                    Title = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: false),
+                    Description = table.Column<string>(type: "nvarchar(1000)", maxLength: 1000, nullable: false),
                     IsRead = table.Column<bool>(type: "bit", nullable: false),
                     UserId = table.Column<int>(type: "int", nullable: true),
                     CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false)
@@ -282,10 +304,11 @@ namespace geoEvent.Infrastructure.Migrations
                 {
                     table.PrimaryKey("PK_Notifications", x => x.NotificationId);
                     table.ForeignKey(
-                        name: "FK_Notifications_People_UserId",
+                        name: "FK_Notifications_Users_UserId",
                         column: x => x.UserId,
-                        principalTable: "People",
-                        principalColumn: "PersonId");
+                        principalTable: "Users",
+                        principalColumn: "PersonId",
+                        onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateTable(
@@ -294,26 +317,26 @@ namespace geoEvent.Infrastructure.Migrations
                 {
                     ReportId = table.Column<int>(type: "int", nullable: false)
                         .Annotation("SqlServer:Identity", "1, 1"),
-                    TargetType = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    TargetType = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: false),
                     TargetId = table.Column<int>(type: "int", nullable: true),
-                    Reason = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    Reason = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: false),
                     Status = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: false),
                     ReporterId = table.Column<int>(type: "int", nullable: true),
                     ResolvedById = table.Column<int>(type: "int", nullable: true),
-                    Description = table.Column<string>(type: "nvarchar(max)", nullable: false)
+                    Description = table.Column<string>(type: "nvarchar(2000)", maxLength: 2000, nullable: false)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_Reports", x => x.ReportId);
                     table.ForeignKey(
-                        name: "FK_Reports_People_ReporterId",
+                        name: "FK_Reports_Users_ReporterId",
                         column: x => x.ReporterId,
-                        principalTable: "People",
+                        principalTable: "Users",
                         principalColumn: "PersonId");
                     table.ForeignKey(
-                        name: "FK_Reports_People_ResolvedById",
+                        name: "FK_Reports_Users_ResolvedById",
                         column: x => x.ResolvedById,
-                        principalTable: "People",
+                        principalTable: "Users",
                         principalColumn: "PersonId");
                 });
 
@@ -335,12 +358,14 @@ namespace geoEvent.Infrastructure.Migrations
                         name: "FK_UserPreferences_Categories_CategoryId",
                         column: x => x.CategoryId,
                         principalTable: "Categories",
-                        principalColumn: "CategoryId");
+                        principalColumn: "CategoryId",
+                        onDelete: ReferentialAction.Cascade);
                     table.ForeignKey(
-                        name: "FK_UserPreferences_People_UserId",
+                        name: "FK_UserPreferences_Users_UserId",
                         column: x => x.UserId,
-                        principalTable: "People",
-                        principalColumn: "PersonId");
+                        principalTable: "Users",
+                        principalColumn: "PersonId",
+                        onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateTable(
@@ -349,9 +374,9 @@ namespace geoEvent.Infrastructure.Migrations
                 {
                     BookmarkId = table.Column<int>(type: "int", nullable: false)
                         .Annotation("SqlServer:Identity", "1, 1"),
-                    ImageUrl = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    ImageUrl = table.Column<string>(type: "nvarchar(500)", maxLength: 500, nullable: false),
                     SavedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    Memo = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    Memo = table.Column<string>(type: "nvarchar(500)", maxLength: 500, nullable: false),
                     EventId = table.Column<int>(type: "int", nullable: true),
                     UserId = table.Column<int>(type: "int", nullable: true)
                 },
@@ -362,12 +387,14 @@ namespace geoEvent.Infrastructure.Migrations
                         name: "FK_Bookmarks_Events_EventId",
                         column: x => x.EventId,
                         principalTable: "Events",
-                        principalColumn: "EventId");
+                        principalColumn: "EventId",
+                        onDelete: ReferentialAction.Cascade);
                     table.ForeignKey(
-                        name: "FK_Bookmarks_People_UserId",
+                        name: "FK_Bookmarks_Users_UserId",
                         column: x => x.UserId,
-                        principalTable: "People",
-                        principalColumn: "PersonId");
+                        principalTable: "Users",
+                        principalColumn: "PersonId",
+                        onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateTable(
@@ -376,7 +403,7 @@ namespace geoEvent.Infrastructure.Migrations
                 {
                     CommentId = table.Column<int>(type: "int", nullable: false)
                         .Annotation("SqlServer:Identity", "1, 1"),
-                    Content = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    Content = table.Column<string>(type: "nvarchar(2000)", maxLength: 2000, nullable: false),
                     LikesCount = table.Column<int>(type: "int", nullable: false),
                     UserId = table.Column<int>(type: "int", nullable: true),
                     EventId = table.Column<int>(type: "int", nullable: true),
@@ -389,12 +416,14 @@ namespace geoEvent.Infrastructure.Migrations
                         name: "FK_Comments_Events_EventId",
                         column: x => x.EventId,
                         principalTable: "Events",
-                        principalColumn: "EventId");
+                        principalColumn: "EventId",
+                        onDelete: ReferentialAction.Cascade);
                     table.ForeignKey(
-                        name: "FK_Comments_People_UserId",
+                        name: "FK_Comments_Users_UserId",
                         column: x => x.UserId,
-                        principalTable: "People",
-                        principalColumn: "PersonId");
+                        principalTable: "Users",
+                        principalColumn: "PersonId",
+                        onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateTable(
@@ -403,7 +432,7 @@ namespace geoEvent.Infrastructure.Migrations
                 {
                     ImageId = table.Column<int>(type: "int", nullable: false)
                         .Annotation("SqlServer:Identity", "1, 1"),
-                    ImageUrl = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    ImageUrl = table.Column<string>(type: "nvarchar(500)", maxLength: 500, nullable: false),
                     UploadedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
                     IsCover = table.Column<bool>(type: "bit", nullable: false),
                     EventId = table.Column<int>(type: "int", nullable: true)
@@ -415,7 +444,8 @@ namespace geoEvent.Infrastructure.Migrations
                         name: "FK_EventImages_Events_EventId",
                         column: x => x.EventId,
                         principalTable: "Events",
-                        principalColumn: "EventId");
+                        principalColumn: "EventId",
+                        onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateTable(
@@ -435,12 +465,14 @@ namespace geoEvent.Infrastructure.Migrations
                         name: "FK_EventLikes_Events_EventId",
                         column: x => x.EventId,
                         principalTable: "Events",
-                        principalColumn: "EventId");
+                        principalColumn: "EventId",
+                        onDelete: ReferentialAction.Cascade);
                     table.ForeignKey(
-                        name: "FK_EventLikes_People_UserId",
+                        name: "FK_EventLikes_Users_UserId",
                         column: x => x.UserId,
-                        principalTable: "People",
-                        principalColumn: "PersonId");
+                        principalTable: "Users",
+                        principalColumn: "PersonId",
+                        onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateTable(
@@ -449,7 +481,7 @@ namespace geoEvent.Infrastructure.Migrations
                 {
                     MessageId = table.Column<int>(type: "int", nullable: false)
                         .Annotation("SqlServer:Identity", "1, 1"),
-                    Content = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    Content = table.Column<string>(type: "nvarchar(4000)", maxLength: 4000, nullable: false),
                     LikesCount = table.Column<int>(type: "int", nullable: false),
                     SenderId = table.Column<int>(type: "int", nullable: true),
                     ReceiverId = table.Column<int>(type: "int", nullable: true),
@@ -466,14 +498,14 @@ namespace geoEvent.Infrastructure.Migrations
                         principalTable: "Events",
                         principalColumn: "EventId");
                     table.ForeignKey(
-                        name: "FK_Messages_People_ReceiverId",
+                        name: "FK_Messages_Users_ReceiverId",
                         column: x => x.ReceiverId,
-                        principalTable: "People",
+                        principalTable: "Users",
                         principalColumn: "PersonId");
                     table.ForeignKey(
-                        name: "FK_Messages_People_SenderId",
+                        name: "FK_Messages_Users_SenderId",
                         column: x => x.SenderId,
-                        principalTable: "People",
+                        principalTable: "Users",
                         principalColumn: "PersonId");
                 });
 
@@ -496,12 +528,14 @@ namespace geoEvent.Infrastructure.Migrations
                         name: "FK_Reservations_Events_EventId",
                         column: x => x.EventId,
                         principalTable: "Events",
-                        principalColumn: "EventId");
+                        principalColumn: "EventId",
+                        onDelete: ReferentialAction.Restrict);
                     table.ForeignKey(
-                        name: "FK_Reservations_People_UserId",
+                        name: "FK_Reservations_Users_UserId",
                         column: x => x.UserId,
-                        principalTable: "People",
-                        principalColumn: "PersonId");
+                        principalTable: "Users",
+                        principalColumn: "PersonId",
+                        onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateTable(
@@ -514,30 +548,43 @@ namespace geoEvent.Infrastructure.Migrations
                     ReservationId = table.Column<int>(type: "int", nullable: true),
                     UserId = table.Column<int>(type: "int", nullable: true),
                     Status = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: false),
-                    Method = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    Method = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: false),
                     Amount = table.Column<decimal>(type: "decimal(18,2)", nullable: false)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_PaymentDetails", x => x.PaymentId);
                     table.ForeignKey(
-                        name: "FK_PaymentDetails_People_UserId",
-                        column: x => x.UserId,
-                        principalTable: "People",
-                        principalColumn: "PersonId",
-                        onDelete: ReferentialAction.Restrict);
-                    table.ForeignKey(
                         name: "FK_PaymentDetails_Reservations_ReservationId",
                         column: x => x.ReservationId,
                         principalTable: "Reservations",
-                        principalColumn: "ReservationId",
-                        onDelete: ReferentialAction.Restrict);
+                        principalColumn: "ReservationId");
+                    table.ForeignKey(
+                        name: "FK_PaymentDetails_Users_UserId",
+                        column: x => x.UserId,
+                        principalTable: "Users",
+                        principalColumn: "PersonId");
                 });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_ActivityLogs_ActionType_CreatedAt",
+                table: "ActivityLogs",
+                columns: new[] { "ActionType", "CreatedAt" });
 
             migrationBuilder.CreateIndex(
                 name: "IX_ActivityLogs_CategoryId",
                 table: "ActivityLogs",
                 column: "CategoryId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_ActivityLogs_CreatedAt",
+                table: "ActivityLogs",
+                column: "CreatedAt");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_ActivityLogs_SessionId",
+                table: "ActivityLogs",
+                column: "SessionId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_ActivityLogs_UserId",
@@ -550,6 +597,16 @@ namespace geoEvent.Infrastructure.Migrations
                 column: "CountryId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_AdministrativeDivisions_DivisionCode",
+                table: "AdministrativeDivisions",
+                column: "DivisionCode");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_AdministrativeDivisions_Level_DivisionType",
+                table: "AdministrativeDivisions",
+                columns: new[] { "Level", "DivisionType" });
+
+            migrationBuilder.CreateIndex(
                 name: "IX_AdministrativeDivisions_ParentDivisionId",
                 table: "AdministrativeDivisions",
                 column: "ParentDivisionId");
@@ -560,14 +617,39 @@ namespace geoEvent.Infrastructure.Migrations
                 column: "EventId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_Bookmarks_SavedAt",
+                table: "Bookmarks",
+                column: "SavedAt");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_Bookmarks_UserId",
                 table: "Bookmarks",
                 column: "UserId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_Categories_CategoryName",
+                table: "Categories",
+                column: "CategoryName");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Cities_CityName",
+                table: "Cities",
+                column: "CityName");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_Cities_DivisionId",
                 table: "Cities",
                 column: "DivisionId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Cities_NormalizedName",
+                table: "Cities",
+                column: "NormalizedName");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Comments_CreatedAt",
+                table: "Comments",
+                column: "CreatedAt");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Comments_EventId",
@@ -580,9 +662,29 @@ namespace geoEvent.Infrastructure.Migrations
                 column: "UserId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_Continents_ContinentCode",
+                table: "Continents",
+                column: "ContinentCode");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_Countries_ContinentId",
                 table: "Countries",
                 column: "ContinentId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Countries_CountryCodeAlpha2",
+                table: "Countries",
+                column: "CountryCodeAlpha2");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Countries_CountryCodeAlpha3",
+                table: "Countries",
+                column: "CountryCodeAlpha3");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Countries_CountryCodeNumeric",
+                table: "Countries",
+                column: "CountryCodeNumeric");
 
             migrationBuilder.CreateIndex(
                 name: "IX_EventImages_EventId",
@@ -590,9 +692,24 @@ namespace geoEvent.Infrastructure.Migrations
                 column: "EventId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_EventImages_IsCover",
+                table: "EventImages",
+                column: "IsCover");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_EventImages_UploadedAt",
+                table: "EventImages",
+                column: "UploadedAt");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_EventLikes_EventId",
                 table: "EventLikes",
                 column: "EventId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_EventLikes_LikedAt",
+                table: "EventLikes",
+                column: "LikedAt");
 
             migrationBuilder.CreateIndex(
                 name: "IX_EventLikes_UserId",
@@ -605,14 +722,34 @@ namespace geoEvent.Infrastructure.Migrations
                 column: "CategoryId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_Events_Longitude_Latitude",
+                table: "Events",
+                columns: new[] { "Longitude", "Latitude" });
+
+            migrationBuilder.CreateIndex(
                 name: "IX_Events_OrganizerId",
                 table: "Events",
                 column: "OrganizerId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_Events_StartDateTime",
+                table: "Events",
+                column: "StartDateTime");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Events_Status",
+                table: "Events",
+                column: "Status");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_Messages_EventId",
                 table: "Messages",
                 column: "EventId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Messages_IsRead",
+                table: "Messages",
+                column: "IsRead");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Messages_ReceiverId",
@@ -625,9 +762,49 @@ namespace geoEvent.Infrastructure.Migrations
                 column: "SenderId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_Messages_SentAt",
+                table: "Messages",
+                column: "SentAt");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_NotificationQueues_ProcessedAt",
+                table: "NotificationQueues",
+                column: "ProcessedAt");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_NotificationQueues_ScheduledAt",
+                table: "NotificationQueues",
+                column: "ScheduledAt");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_NotificationQueues_Status",
+                table: "NotificationQueues",
+                column: "Status");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_NotificationQueues_Type",
+                table: "NotificationQueues",
+                column: "Type");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_NotificationQueues_UserId",
                 table: "NotificationQueues",
                 column: "UserId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Notifications_CreatedAt",
+                table: "Notifications",
+                column: "CreatedAt");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Notifications_IsRead",
+                table: "Notifications",
+                column: "IsRead");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Notifications_Type",
+                table: "Notifications",
+                column: "Type");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Notifications_UserId",
@@ -635,9 +812,19 @@ namespace geoEvent.Infrastructure.Migrations
                 column: "UserId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_PaymentDetails_PaidAt",
+                table: "PaymentDetails",
+                column: "PaidAt");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_PaymentDetails_ReservationId",
                 table: "PaymentDetails",
                 column: "ReservationId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_PaymentDetails_Status",
+                table: "PaymentDetails",
+                column: "Status");
 
             migrationBuilder.CreateIndex(
                 name: "IX_PaymentDetails_UserId",
@@ -655,6 +842,12 @@ namespace geoEvent.Infrastructure.Migrations
                 column: "CityId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_PostalCodes_Code",
+                table: "PostalCodes",
+                column: "Code",
+                unique: true);
+
+            migrationBuilder.CreateIndex(
                 name: "IX_Reports_ReporterId",
                 table: "Reports",
                 column: "ReporterId");
@@ -665,9 +858,29 @@ namespace geoEvent.Infrastructure.Migrations
                 column: "ResolvedById");
 
             migrationBuilder.CreateIndex(
+                name: "IX_Reports_Status",
+                table: "Reports",
+                column: "Status");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Reports_TargetType_TargetId",
+                table: "Reports",
+                columns: new[] { "TargetType", "TargetId" });
+
+            migrationBuilder.CreateIndex(
                 name: "IX_Reservations_EventId",
                 table: "Reservations",
                 column: "EventId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Reservations_ReservedAt",
+                table: "Reservations",
+                column: "ReservedAt");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Reservations_Status",
+                table: "Reservations",
+                column: "Status");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Reservations_UserId",
@@ -680,9 +893,45 @@ namespace geoEvent.Infrastructure.Migrations
                 column: "CategoryId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_UserPreferences_LastUpdated",
+                table: "UserPreferences",
+                column: "LastUpdated");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_UserPreferences_UserId",
                 table: "UserPreferences",
                 column: "UserId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_UserPreferences_UserId_CategoryId",
+                table: "UserPreferences",
+                columns: new[] { "UserId", "CategoryId" },
+                unique: true,
+                filter: "[UserId] IS NOT NULL AND [CategoryId] IS NOT NULL");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Users_CreatedAt",
+                table: "Users",
+                column: "CreatedAt");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Users_Email",
+                table: "Users",
+                column: "Email",
+                unique: true,
+                filter: "[Email] IS NOT NULL");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Users_Role",
+                table: "Users",
+                column: "Role");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Users_Username",
+                table: "Users",
+                column: "Username",
+                unique: true,
+                filter: "[Username] IS NOT NULL");
         }
 
         /// <inheritdoc />
@@ -732,6 +981,9 @@ namespace geoEvent.Infrastructure.Migrations
 
             migrationBuilder.DropTable(
                 name: "Categories");
+
+            migrationBuilder.DropTable(
+                name: "Users");
 
             migrationBuilder.DropTable(
                 name: "People");

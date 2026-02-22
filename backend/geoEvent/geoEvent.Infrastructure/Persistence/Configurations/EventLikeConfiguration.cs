@@ -8,10 +8,23 @@ namespace geoEvent.Infrastructure.Persistence.Configurations
     {
         public void Configure(EntityTypeBuilder<EventLike> builder)
         {
-            builder.HasOne(r => r.User)
-                .WithMany()
-                .HasForeignKey(r => r.UserId)
-                .OnDelete(DeleteBehavior.NoAction);
+            builder.HasKey(l => l.LikeId);
+
+            builder.HasOne(l => l.Event)
+                   .WithMany()
+                   .HasForeignKey(l => l.EventId)
+                   .OnDelete(DeleteBehavior.Cascade);
+
+            builder.HasOne(l => l.User)
+                   .WithMany()
+                   .HasForeignKey(l => l.UserId)
+                   .OnDelete(DeleteBehavior.Cascade);
+
+            builder.HasIndex(l => l.EventId);
+            builder.HasIndex(l => l.UserId);
+            builder.HasIndex(l => l.LikedAt);
+
+            builder.Property(l => l.LikedAt).IsRequired();
         }
     }
 }

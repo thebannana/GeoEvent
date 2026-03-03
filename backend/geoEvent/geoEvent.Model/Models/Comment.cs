@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
@@ -15,6 +16,12 @@ namespace geoEvent.Model.Models
         public int? EventId { get; set; }
         public Event? Event { get; set; }
         public DateTime CreatedAt { get; set; }
+        public DateTime? UpdatedAt { get; set; }
+        public bool IsDeleted { get; set; } = false;
+        public int? ParentCommentId { get; set; }
+        public Comment? ParentComment { get; set; }
+        public ICollection<Comment> Replies { get; set; } = new List<Comment>();
     }
+
 }
 

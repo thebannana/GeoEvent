@@ -11,9 +11,14 @@ namespace geoEvent.Infrastructure.Persistence.Configurations
             builder.HasKey(r => r.ReservationId);
 
             builder.HasOne(r => r.Event)
-                   .WithMany()
+                   .WithMany(e => e.Reservations)
                    .HasForeignKey(r => r.EventId)
-                   .OnDelete(DeleteBehavior.Restrict);
+                   .OnDelete(DeleteBehavior.Cascade);
+
+            builder.HasOne(r => r.Ticket)
+                   .WithMany(t => t.Reservations)
+                   .HasForeignKey(r => r.TicketId)
+                   .OnDelete(DeleteBehavior.NoAction);
 
             builder.HasOne(r => r.User)
                    .WithMany()

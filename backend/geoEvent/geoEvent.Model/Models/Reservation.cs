@@ -14,6 +14,7 @@ namespace geoEvent.Model.Models
         public int? UserId { get; set; }
         public User? User { get; set; }
         public int? TicketId { get; set; }
+        public Ticket? Ticket { get; set; }
         [MaxLength(50)]
         public string Status { get; set; } = string.Empty;
     }

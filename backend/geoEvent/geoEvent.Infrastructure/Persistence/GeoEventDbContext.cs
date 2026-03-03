@@ -12,7 +12,6 @@ namespace geoEvent.Infrastructure.Persistence
         public DbSet<ActivityLog> ActivityLogs => Set<ActivityLog>();
         public DbSet<AdministrativeDivision> AdministrativeDivisions => Set<AdministrativeDivision>();
         public DbSet<Bookmark> Bookmarks => Set<Bookmark>();
-        public DbSet<Category> Categories => Set<Category>();
         public DbSet<City> Cities => Set<City>();
         public DbSet<Comment> Comments => Set<Comment>();
         public DbSet<Continent> Continents => Set<Continent>();
@@ -29,6 +28,12 @@ namespace geoEvent.Infrastructure.Persistence
         public DbSet<Reservation> Reservations => Set<Reservation>();
         public DbSet<User> Users => Set<User>();
         public DbSet<UserPreference> UserPreferences => Set<UserPreference>();
+        public DbSet<Venue> Venues => Set<Venue>();
+        public DbSet<Ticket> Tickets => Set<Ticket>();
+        public DbSet<Segment> Segments => Set<Segment>();
+        public DbSet<Genre> Genres => Set<Genre>();
+        public DbSet<SubGenre> SubGenres => Set<SubGenre>();
+        public DbSet<PriceZone> PriceZones => Set<PriceZone>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {

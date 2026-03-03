@@ -18,6 +18,7 @@ namespace geoEvent.Infrastructure.Persistence.Configurations
             builder.UseTptMappingStrategy();
 
             builder.HasIndex(p => p.CityId);
+            builder.HasIndex(p => p.IsDeleted);
 
             builder.Property(p => p.FirstName).HasMaxLength(100).IsRequired();
             builder.Property(p => p.LastName).HasMaxLength(100).IsRequired();

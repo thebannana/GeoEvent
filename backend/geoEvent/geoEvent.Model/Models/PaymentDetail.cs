@@ -17,6 +17,8 @@ namespace geoEvent.Model.Models
         public string Status { get; set; } = string.Empty;
         public string Method { get; set; } = string.Empty;
         public double Amount { get; set; }
+        public string? TransactionId { get; set; }
+        public string? Currency { get; set; } = "EUR";
     }
 }
 

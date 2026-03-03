@@ -51,6 +51,8 @@
 **/*.pdb
 **/*.mdb
 **/*.Designer.cs
+!**/Migrations/*.Designer.cs
+**/*.Designer.cs
 
 ############################################################
 # NODE / ANGULAR

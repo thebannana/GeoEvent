@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace geoEvent.Infrastructure.Migrations
 {
     /// <inheritdoc />
-    public partial class Initial_Migration : Migration
+    public partial class initial : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -20,11 +20,19 @@ namespace geoEvent.Infrastructure.Migrations
                     CategoryName = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: false),
                     Color = table.Column<string>(type: "nvarchar(7)", maxLength: 7, nullable: false),
                     IconUrl = table.Column<string>(type: "nvarchar(500)", maxLength: 500, nullable: false),
-                    Description = table.Column<string>(type: "nvarchar(500)", maxLength: 500, nullable: false)
+                    Description = table.Column<string>(type: "nvarchar(500)", maxLength: 500, nullable: false),
+                    IsActive = table.Column<bool>(type: "bit", nullable: false, defaultValue: true),
+                    ParentCategoryId = table.Column<int>(type: "int", nullable: true)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_Categories", x => x.CategoryId);
+                    table.ForeignKey(
+                        name: "FK_Categories_Categories_ParentCategoryId",
+                        column: x => x.ParentCategoryId,
+                        principalTable: "Categories",
+                        principalColumn: "CategoryId",
+                        onDelete: ReferentialAction.Restrict);
                 });
 
             migrationBuilder.CreateTable(
@@ -169,6 +177,35 @@ namespace geoEvent.Infrastructure.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "Venues",
+                columns: table => new
+                {
+                    VenueId = table.Column<int>(type: "int", nullable: false)
+                        .Annotation("SqlServer:Identity", "1, 1"),
+                    Name = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: false),
+                    Address = table.Column<string>(type: "nvarchar(500)", maxLength: 500, nullable: true),
+                    Latitude = table.Column<decimal>(type: "decimal(9,6)", nullable: false),
+                    Longitude = table.Column<decimal>(type: "decimal(9,6)", nullable: false),
+                    CityId = table.Column<int>(type: "int", nullable: true),
+                    VenueType = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: true),
+                    WebsiteUrl = table.Column<string>(type: "nvarchar(1000)", maxLength: 1000, nullable: true),
+                    PhoneNumber = table.Column<string>(type: "nvarchar(30)", maxLength: 30, nullable: true),
+                    Description = table.Column<string>(type: "nvarchar(2000)", maxLength: 2000, nullable: true),
+                    IsVerified = table.Column<bool>(type: "bit", nullable: false, defaultValue: false),
+                    CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Venues", x => x.VenueId);
+                    table.ForeignKey(
+                        name: "FK_Venues_Cities_CityId",
+                        column: x => x.CityId,
+                        principalTable: "Cities",
+                        principalColumn: "CityId",
+                        onDelete: ReferentialAction.SetNull);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "Users",
                 columns: table => new
                 {
@@ -233,15 +270,28 @@ namespace geoEvent.Infrastructure.Migrations
                         .Annotation("SqlServer:Identity", "1, 1"),
                     OrganizerId = table.Column<int>(type: "int", nullable: true),
                     CategoryId = table.Column<int>(type: "int", nullable: true),
+                    VenueId = table.Column<int>(type: "int", nullable: true),
+                    CityId = table.Column<int>(type: "int", nullable: true),
                     Title = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: false),
-                    Description = table.Column<string>(type: "nvarchar(2000)", maxLength: 2000, nullable: false),
+                    Description = table.Column<string>(type: "nvarchar(max)", maxLength: 5000, nullable: false),
                     Longitude = table.Column<decimal>(type: "decimal(9,6)", nullable: false),
                     Latitude = table.Column<decimal>(type: "decimal(9,6)", nullable: false),
                     StartDateTime = table.Column<DateTime>(type: "datetime2", nullable: false),
                     EndDateTime = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    Capacity = table.Column<int>(type: "int", nullable: false),
-                    Price = table.Column<decimal>(type: "decimal(18,2)", nullable: false),
-                    Status = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: false)
+                    Capacity = table.Column<int>(type: "int", nullable: false, defaultValue: 0),
+                    Price = table.Column<decimal>(type: "decimal(18,2)", nullable: false, defaultValue: 0m),
+                    Status = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: false),
+                    IsOnline = table.Column<bool>(type: "bit", nullable: false, defaultValue: false),
+                    IsFeatured = table.Column<bool>(type: "bit", nullable: false, defaultValue: false),
+                    ViewCount = table.Column<int>(type: "int", nullable: false, defaultValue: 0),
+                    LikesCount = table.Column<int>(type: "int", nullable: false, defaultValue: 0),
+                    Tags = table.Column<string>(type: "nvarchar(500)", maxLength: 500, nullable: true),
+                    ExternalUrl = table.Column<string>(type: "nvarchar(1000)", maxLength: 1000, nullable: true),
+                    ExternalSource = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: true),
+                    ExternalId = table.Column<string>(type: "nvarchar(255)", maxLength: 255, nullable: true),
+                    AccessibilityInfo = table.Column<string>(type: "nvarchar(1000)", maxLength: 1000, nullable: true),
+                    CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
+                    UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -253,10 +303,22 @@ namespace geoEvent.Infrastructure.Migrations
                         principalColumn: "CategoryId",
                         onDelete: ReferentialAction.SetNull);
                     table.ForeignKey(
+                        name: "FK_Events_Cities_CityId",
+                        column: x => x.CityId,
+                        principalTable: "Cities",
+                        principalColumn: "CityId",
+                        onDelete: ReferentialAction.SetNull);
+                    table.ForeignKey(
                         name: "FK_Events_Users_OrganizerId",
                         column: x => x.OrganizerId,
                         principalTable: "Users",
                         principalColumn: "PersonId",
+                        onDelete: ReferentialAction.SetNull);
+                    table.ForeignKey(
+                        name: "FK_Events_Venues_VenueId",
+                        column: x => x.VenueId,
+                        principalTable: "Venues",
+                        principalColumn: "VenueId",
                         onDelete: ReferentialAction.SetNull);
                 });
 
@@ -404,14 +466,23 @@ namespace geoEvent.Infrastructure.Migrations
                     CommentId = table.Column<int>(type: "int", nullable: false)
                         .Annotation("SqlServer:Identity", "1, 1"),
                     Content = table.Column<string>(type: "nvarchar(2000)", maxLength: 2000, nullable: false),
-                    LikesCount = table.Column<int>(type: "int", nullable: false),
+                    LikesCount = table.Column<int>(type: "int", nullable: false, defaultValue: 0),
                     UserId = table.Column<int>(type: "int", nullable: true),
                     EventId = table.Column<int>(type: "int", nullable: true),
-                    CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false)
+                    CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
+                    UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
+                    IsDeleted = table.Column<bool>(type: "bit", nullable: false),
+                    ParentCommentId = table.Column<int>(type: "int", nullable: true)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_Comments", x => x.CommentId);
+                    table.ForeignKey(
+                        name: "FK_Comments_Comments_ParentCommentId",
+                        column: x => x.ParentCommentId,
+                        principalTable: "Comments",
+                        principalColumn: "CommentId",
+                        onDelete: ReferentialAction.Restrict);
                     table.ForeignKey(
                         name: "FK_Comments_Events_EventId",
                         column: x => x.EventId,
@@ -423,7 +494,7 @@ namespace geoEvent.Infrastructure.Migrations
                         column: x => x.UserId,
                         principalTable: "Users",
                         principalColumn: "PersonId",
-                        onDelete: ReferentialAction.Cascade);
+                        onDelete: ReferentialAction.SetNull);
                 });
 
             migrationBuilder.CreateTable(
@@ -510,6 +581,34 @@ namespace geoEvent.Infrastructure.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "Tickets",
+                columns: table => new
+                {
+                    TicketId = table.Column<int>(type: "int", nullable: false)
+                        .Annotation("SqlServer:Identity", "1, 1"),
+                    EventId = table.Column<int>(type: "int", nullable: false),
+                    TicketType = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: false),
+                    Price = table.Column<decimal>(type: "decimal(18,2)", nullable: false),
+                    TotalQuantity = table.Column<int>(type: "int", nullable: false, defaultValue: 0),
+                    SoldQuantity = table.Column<int>(type: "int", nullable: false, defaultValue: 0),
+                    SaleStartDate = table.Column<DateTime>(type: "datetime2", nullable: true),
+                    SaleEndDate = table.Column<DateTime>(type: "datetime2", nullable: true),
+                    IsActive = table.Column<bool>(type: "bit", nullable: false, defaultValue: true),
+                    Description = table.Column<string>(type: "nvarchar(2000)", maxLength: 2000, nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Tickets", x => x.TicketId);
+                    table.CheckConstraint("CK_Ticket_SoldQuantity", "[SoldQuantity] >= 0 AND ([TotalQuantity] = 0 OR [SoldQuantity] <= [TotalQuantity])");
+                    table.ForeignKey(
+                        name: "FK_Tickets_Events_EventId",
+                        column: x => x.EventId,
+                        principalTable: "Events",
+                        principalColumn: "EventId",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "Reservations",
                 columns: table => new
                 {
@@ -529,7 +628,12 @@ namespace geoEvent.Infrastructure.Migrations
                         column: x => x.EventId,
                         principalTable: "Events",
                         principalColumn: "EventId",
-                        onDelete: ReferentialAction.Restrict);
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_Reservations_Tickets_TicketId",
+                        column: x => x.TicketId,
+                        principalTable: "Tickets",
+                        principalColumn: "TicketId");
                     table.ForeignKey(
                         name: "FK_Reservations_Users_UserId",
                         column: x => x.UserId,
@@ -629,7 +733,13 @@ namespace geoEvent.Infrastructure.Migrations
             migrationBuilder.CreateIndex(
                 name: "IX_Categories_CategoryName",
                 table: "Categories",
-                column: "CategoryName");
+                column: "CategoryName",
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Categories_ParentCategoryId",
+                table: "Categories",
+                column: "ParentCategoryId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Cities_CityName",
@@ -655,6 +765,11 @@ namespace geoEvent.Infrastructure.Migrations
                 name: "IX_Comments_EventId",
                 table: "Comments",
                 column: "EventId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Comments_ParentCommentId",
+                table: "Comments",
+                column: "ParentCommentId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Comments_UserId",
@@ -717,9 +832,48 @@ namespace geoEvent.Infrastructure.Migrations
                 column: "UserId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_EventLikes_UserId_EventId",
+                table: "EventLikes",
+                columns: new[] { "UserId", "EventId" },
+                unique: true,
+                filter: "[UserId] IS NOT NULL AND [EventId] IS NOT NULL");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_Events_CategoryId",
                 table: "Events",
                 column: "CategoryId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Events_CategoryId_StartDateTime",
+                table: "Events",
+                columns: new[] { "CategoryId", "StartDateTime" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Events_CityId",
+                table: "Events",
+                column: "CityId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Events_CityId_StartDateTime",
+                table: "Events",
+                columns: new[] { "CityId", "StartDateTime" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Events_CityId_Status",
+                table: "Events",
+                columns: new[] { "CityId", "Status" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Events_ExternalSource_ExternalId",
+                table: "Events",
+                columns: new[] { "ExternalSource", "ExternalId" },
+                unique: true,
+                filter: "[ExternalSource] IS NOT NULL AND [ExternalId] IS NOT NULL");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Events_IsFeatured",
+                table: "Events",
+                column: "IsFeatured");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Events_Longitude_Latitude",
@@ -740,6 +894,16 @@ namespace geoEvent.Infrastructure.Migrations
                 name: "IX_Events_Status",
                 table: "Events",
                 column: "Status");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Events_Status_StartDateTime",
+                table: "Events",
+                columns: new[] { "Status", "StartDateTime" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Events_VenueId",
+                table: "Events",
+                column: "VenueId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Messages_EventId",
@@ -883,9 +1047,34 @@ namespace geoEvent.Infrastructure.Migrations
                 column: "Status");
 
             migrationBuilder.CreateIndex(
+                name: "IX_Reservations_TicketId",
+                table: "Reservations",
+                column: "TicketId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_Reservations_UserId",
                 table: "Reservations",
                 column: "UserId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Tickets_EventId",
+                table: "Tickets",
+                column: "EventId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Tickets_EventId_IsActive",
+                table: "Tickets",
+                columns: new[] { "EventId", "IsActive" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Tickets_IsActive",
+                table: "Tickets",
+                column: "IsActive");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Tickets_SaleStartDate_SaleEndDate",
+                table: "Tickets",
+                columns: new[] { "SaleStartDate", "SaleEndDate" });
 
             migrationBuilder.CreateIndex(
                 name: "IX_UserPreferences_CategoryId",
@@ -932,6 +1121,36 @@ namespace geoEvent.Infrastructure.Migrations
                 column: "Username",
                 unique: true,
                 filter: "[Username] IS NOT NULL");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Venues_CityId",
+                table: "Venues",
+                column: "CityId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Venues_CityId_VenueType",
+                table: "Venues",
+                columns: new[] { "CityId", "VenueType" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Venues_IsVerified",
+                table: "Venues",
+                column: "IsVerified");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Venues_Longitude_Latitude",
+                table: "Venues",
+                columns: new[] { "Longitude", "Latitude" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Venues_Name",
+                table: "Venues",
+                column: "Name");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Venues_VenueType",
+                table: "Venues",
+                column: "VenueType");
         }
 
         /// <inheritdoc />
@@ -977,6 +1196,9 @@ namespace geoEvent.Infrastructure.Migrations
                 name: "Reservations");
 
             migrationBuilder.DropTable(
+                name: "Tickets");
+
+            migrationBuilder.DropTable(
                 name: "Events");
 
             migrationBuilder.DropTable(
@@ -984,6 +1206,9 @@ namespace geoEvent.Infrastructure.Migrations
 
             migrationBuilder.DropTable(
                 name: "Users");
+
+            migrationBuilder.DropTable(
+                name: "Venues");
 
             migrationBuilder.DropTable(
                 name: "People");

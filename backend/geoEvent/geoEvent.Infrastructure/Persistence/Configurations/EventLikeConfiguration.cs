@@ -11,7 +11,7 @@ namespace geoEvent.Infrastructure.Persistence.Configurations
             builder.HasKey(l => l.LikeId);
 
             builder.HasOne(l => l.Event)
-                   .WithMany()
+                   .WithMany(e => e.Likes)
                    .HasForeignKey(l => l.EventId)
                    .OnDelete(DeleteBehavior.Cascade);
 
@@ -25,6 +25,10 @@ namespace geoEvent.Infrastructure.Persistence.Configurations
             builder.HasIndex(l => l.LikedAt);
 
             builder.Property(l => l.LikedAt).IsRequired();
+
+            builder.HasIndex(l => new { l.UserId, l.EventId })
+                   .IsUnique()
+                   .HasFilter("[UserId] IS NOT NULL AND [EventId] IS NOT NULL");
         }
     }
 }

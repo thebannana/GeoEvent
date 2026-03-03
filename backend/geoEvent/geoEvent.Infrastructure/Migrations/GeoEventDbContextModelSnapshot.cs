@@ -22,6 +22,164 @@ namespace geoEvent.Infrastructure.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
+            modelBuilder.Entity("Event", b =>
+                {
+                    b.Property<int>("EventId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("EventId"));
+
+                    b.Property<string>("AccessibilityInfo")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<int>("Capacity")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
+
+                    b.Property<int?>("CityId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(5000)
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("EndDateTime")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ExternalId")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<string>("ExternalSource")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("ExternalUrl")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<int?>("GenreId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsFeatured")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
+                    b.Property<bool>("IsOnline")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
+                    b.Property<decimal>("Latitude")
+                        .HasColumnType("decimal(9,6)");
+
+                    b.Property<int>("LikesCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
+
+                    b.Property<string>("Locale")
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(10)
+                        .HasColumnType("nvarchar(10)")
+                        .HasDefaultValue("bs-BA");
+
+                    b.Property<decimal>("Longitude")
+                        .HasColumnType("decimal(9,6)");
+
+                    b.Property<int?>("OrganizerId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("Price")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(18,2)")
+                        .HasDefaultValue(0m);
+
+                    b.Property<string>("PromoterName")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<int?>("SegmentId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("StartDateTime")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<int?>("SubGenreId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Tags")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("VenueId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ViewCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
+
+                    b.HasKey("EventId");
+
+                    b.HasIndex("CityId");
+
+                    b.HasIndex("GenreId");
+
+                    b.HasIndex("IsFeatured");
+
+                    b.HasIndex("OrganizerId");
+
+                    b.HasIndex("SegmentId");
+
+                    b.HasIndex("StartDateTime");
+
+                    b.HasIndex("Status");
+
+                    b.HasIndex("SubGenreId");
+
+                    b.HasIndex("VenueId");
+
+                    b.HasIndex("CityId", "StartDateTime");
+
+                    b.HasIndex("CityId", "Status");
+
+                    b.HasIndex("ExternalSource", "ExternalId")
+                        .IsUnique()
+                        .HasFilter("[ExternalSource] IS NOT NULL AND [ExternalId] IS NOT NULL");
+
+                    b.HasIndex("GenreId", "StartDateTime");
+
+                    b.HasIndex("Longitude", "Latitude");
+
+                    b.HasIndex("SegmentId", "StartDateTime");
+
+                    b.HasIndex("Status", "StartDateTime");
+
+                    b.ToTable("Events");
+                });
+
             modelBuilder.Entity("geoEvent.Model.Models.ActivityLog", b =>
                 {
                     b.Property<int>("LogId")
@@ -35,16 +193,19 @@ namespace geoEvent.Infrastructure.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
 
-                    b.Property<int?>("CategoryId")
-                        .HasColumnType("int");
-
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
+
+                    b.Property<int?>("GenreId")
+                        .HasColumnType("int");
 
                     b.Property<string>("Metadata")
                         .IsRequired()
                         .HasMaxLength(1000)
                         .HasColumnType("nvarchar(1000)");
+
+                    b.Property<int?>("SegmentId")
+                        .HasColumnType("int");
 
                     b.Property<int>("SessionId")
                         .HasColumnType("int");
@@ -62,15 +223,21 @@ namespace geoEvent.Infrastructure.Migrations
 
                     b.HasKey("LogId");
 
-                    b.HasIndex("CategoryId");
-
                     b.HasIndex("CreatedAt");
+
+                    b.HasIndex("GenreId");
+
+                    b.HasIndex("SegmentId");
 
                     b.HasIndex("SessionId");
 
                     b.HasIndex("UserId");
 
                     b.HasIndex("ActionType", "CreatedAt");
+
+                    b.HasIndex("SegmentId", "CreatedAt");
+
+                    b.HasIndex("UserId", "CreatedAt");
 
                     b.ToTable("ActivityLogs");
                 });
@@ -167,41 +334,6 @@ namespace geoEvent.Infrastructure.Migrations
                     b.ToTable("Bookmarks");
                 });
 
-            modelBuilder.Entity("geoEvent.Model.Models.Category", b =>
-                {
-                    b.Property<int>("CategoryId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("CategoryId"));
-
-                    b.Property<string>("CategoryName")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<string>("Color")
-                        .IsRequired()
-                        .HasMaxLength(7)
-                        .HasColumnType("nvarchar(7)");
-
-                    b.Property<string>("Description")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
-
-                    b.Property<string>("IconUrl")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
-
-                    b.HasKey("CategoryId");
-
-                    b.HasIndex("CategoryName");
-
-                    b.ToTable("Categories");
-                });
-
             modelBuilder.Entity("geoEvent.Model.Models.City", b =>
                 {
                     b.Property<int>("CityId")
@@ -262,8 +394,19 @@ namespace geoEvent.Infrastructure.Migrations
                     b.Property<int?>("EventId")
                         .HasColumnType("int");
 
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
                     b.Property<int>("LikesCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
+
+                    b.Property<int?>("ParentCommentId")
                         .HasColumnType("int");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
 
                     b.Property<int?>("UserId")
                         .HasColumnType("int");
@@ -273,6 +416,8 @@ namespace geoEvent.Infrastructure.Migrations
                     b.HasIndex("CreatedAt");
 
                     b.HasIndex("EventId");
+
+                    b.HasIndex("ParentCommentId");
 
                     b.HasIndex("UserId");
 
@@ -349,68 +494,6 @@ namespace geoEvent.Infrastructure.Migrations
                     b.ToTable("Countries");
                 });
 
-            modelBuilder.Entity("geoEvent.Model.Models.Event", b =>
-                {
-                    b.Property<int>("EventId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("EventId"));
-
-                    b.Property<int>("Capacity")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("CategoryId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("Description")
-                        .IsRequired()
-                        .HasMaxLength(2000)
-                        .HasColumnType("nvarchar(2000)");
-
-                    b.Property<DateTime>("EndDateTime")
-                        .HasColumnType("datetime2");
-
-                    b.Property<decimal>("Latitude")
-                        .HasColumnType("decimal(9,6)");
-
-                    b.Property<decimal>("Longitude")
-                        .HasColumnType("decimal(9,6)");
-
-                    b.Property<int?>("OrganizerId")
-                        .HasColumnType("int");
-
-                    b.Property<decimal>("Price")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<DateTime>("StartDateTime")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
-
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("nvarchar(200)");
-
-                    b.HasKey("EventId");
-
-                    b.HasIndex("CategoryId");
-
-                    b.HasIndex("OrganizerId");
-
-                    b.HasIndex("StartDateTime");
-
-                    b.HasIndex("Status");
-
-                    b.HasIndex("Longitude", "Latitude");
-
-                    b.ToTable("Events");
-                });
-
             modelBuilder.Entity("geoEvent.Model.Models.EventImage", b =>
                 {
                     b.Property<int>("ImageId")
@@ -469,7 +552,45 @@ namespace geoEvent.Infrastructure.Migrations
 
                     b.HasIndex("UserId");
 
+                    b.HasIndex("UserId", "EventId")
+                        .IsUnique()
+                        .HasFilter("[UserId] IS NOT NULL AND [EventId] IS NOT NULL");
+
                     b.ToTable("EventLikes");
+                });
+
+            modelBuilder.Entity("geoEvent.Model.Models.Genre", b =>
+                {
+                    b.Property<int>("GenreId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("GenreId"));
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<int?>("SegmentId")
+                        .HasColumnType("int");
+
+                    b.HasKey("GenreId");
+
+                    b.HasIndex("IsActive");
+
+                    b.HasIndex("Name");
+
+                    b.HasIndex("SegmentId");
+
+                    b.HasIndex("SegmentId", "IsActive");
+
+                    b.ToTable("Genres");
                 });
 
             modelBuilder.Entity("geoEvent.Model.Models.Message", b =>
@@ -740,6 +861,42 @@ namespace geoEvent.Infrastructure.Migrations
                     b.ToTable("PostalCodes");
                 });
 
+            modelBuilder.Entity("geoEvent.Model.Models.PriceZone", b =>
+                {
+                    b.Property<int>("PriceZoneId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("PriceZoneId"));
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<int>("VenueId")
+                        .HasColumnType("int");
+
+                    b.HasKey("PriceZoneId");
+
+                    b.HasIndex("IsActive");
+
+                    b.HasIndex("VenueId");
+
+                    b.HasIndex("VenueId", "IsActive");
+
+                    b.ToTable("PriceZones");
+                });
+
             modelBuilder.Entity("geoEvent.Model.Models.Report", b =>
                 {
                     b.Property<int>("ReportId")
@@ -823,9 +980,146 @@ namespace geoEvent.Infrastructure.Migrations
 
                     b.HasIndex("Status");
 
+                    b.HasIndex("TicketId");
+
                     b.HasIndex("UserId");
 
                     b.ToTable("Reservations");
+                });
+
+            modelBuilder.Entity("geoEvent.Model.Models.Segment", b =>
+                {
+                    b.Property<int>("SegmentId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("SegmentId"));
+
+                    b.Property<string>("Color")
+                        .HasMaxLength(7)
+                        .HasColumnType("nvarchar(7)");
+
+                    b.Property<string>("IconUrl")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.HasKey("SegmentId");
+
+                    b.HasIndex("IsActive");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("Segments");
+                });
+
+            modelBuilder.Entity("geoEvent.Model.Models.SubGenre", b =>
+                {
+                    b.Property<int>("SubGenreId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("SubGenreId"));
+
+                    b.Property<int?>("GenreId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.HasKey("SubGenreId");
+
+                    b.HasIndex("GenreId");
+
+                    b.HasIndex("IsActive");
+
+                    b.HasIndex("Name");
+
+                    b.HasIndex("GenreId", "IsActive");
+
+                    b.ToTable("SubGenres");
+                });
+
+            modelBuilder.Entity("geoEvent.Model.Models.Ticket", b =>
+                {
+                    b.Property<int>("TicketId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("TicketId"));
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<int>("EventId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<decimal>("Price")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<int?>("PriceZoneId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("SaleEndDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("SaleStartDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("SoldQuantity")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
+
+                    b.Property<string>("TicketType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<int>("TotalQuantity")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
+
+                    b.HasKey("TicketId");
+
+                    b.HasIndex("EventId");
+
+                    b.HasIndex("IsActive");
+
+                    b.HasIndex("PriceZoneId");
+
+                    b.HasIndex("EventId", "IsActive");
+
+                    b.HasIndex("SaleStartDate", "SaleEndDate");
+
+                    b.ToTable("Tickets", t =>
+                        {
+                            t.HasCheckConstraint("CK_Ticket_SoldQuantity", "[SoldQuantity] >= 0 AND ([TotalQuantity] = 0 OR [SoldQuantity] <= [TotalQuantity])");
+                        });
                 });
 
             modelBuilder.Entity("geoEvent.Model.Models.UserPreference", b =>
@@ -836,31 +1130,113 @@ namespace geoEvent.Infrastructure.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("PrefId"));
 
-                    b.Property<int?>("CategoryId")
+                    b.Property<int?>("GenreId")
                         .HasColumnType("int");
 
                     b.Property<DateTime>("LastUpdated")
                         .HasColumnType("datetime2");
 
                     b.Property<double>("Score")
-                        .HasColumnType("float");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("float")
+                        .HasDefaultValue(0.0);
+
+                    b.Property<int?>("SegmentId")
+                        .HasColumnType("int");
 
                     b.Property<int?>("UserId")
                         .HasColumnType("int");
 
                     b.HasKey("PrefId");
 
-                    b.HasIndex("CategoryId");
+                    b.HasIndex("GenreId");
 
                     b.HasIndex("LastUpdated");
 
+                    b.HasIndex("SegmentId");
+
                     b.HasIndex("UserId");
 
-                    b.HasIndex("UserId", "CategoryId")
+                    b.HasIndex("UserId", "SegmentId", "GenreId")
                         .IsUnique()
-                        .HasFilter("[UserId] IS NOT NULL AND [CategoryId] IS NOT NULL");
+                        .HasFilter("[UserId] IS NOT NULL AND [SegmentId] IS NOT NULL");
 
                     b.ToTable("UserPreferences");
+                });
+
+            modelBuilder.Entity("geoEvent.Model.Models.Venue", b =>
+                {
+                    b.Property<int>("VenueId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("VenueId"));
+
+                    b.Property<string>("Address")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<int?>("CityId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<bool>("IsVerified")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
+                    b.Property<decimal>("Latitude")
+                        .HasColumnType("decimal(9,6)");
+
+                    b.Property<string>("Locale")
+                        .HasMaxLength(10)
+                        .HasColumnType("nvarchar(10)");
+
+                    b.Property<decimal>("Longitude")
+                        .HasColumnType("decimal(9,6)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("PhoneNumber")
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<string>("TimeZone")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("VenueType")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("WebsiteUrl")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.HasKey("VenueId");
+
+                    b.HasIndex("CityId");
+
+                    b.HasIndex("IsVerified");
+
+                    b.HasIndex("Name");
+
+                    b.HasIndex("VenueType");
+
+                    b.HasIndex("CityId", "VenueType");
+
+                    b.HasIndex("Longitude", "Latitude");
+
+                    b.ToTable("Venues");
                 });
 
             modelBuilder.Entity("geoEvent.Model.Models.User", b =>
@@ -914,11 +1290,61 @@ namespace geoEvent.Infrastructure.Migrations
                     b.ToTable("Users");
                 });
 
+            modelBuilder.Entity("Event", b =>
+                {
+                    b.HasOne("geoEvent.Model.Models.City", "City")
+                        .WithMany()
+                        .HasForeignKey("CityId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("geoEvent.Model.Models.Genre", "Genre")
+                        .WithMany()
+                        .HasForeignKey("GenreId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("geoEvent.Model.Models.User", "Organizer")
+                        .WithMany()
+                        .HasForeignKey("OrganizerId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("geoEvent.Model.Models.Segment", "Segment")
+                        .WithMany()
+                        .HasForeignKey("SegmentId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("geoEvent.Model.Models.SubGenre", "SubGenre")
+                        .WithMany()
+                        .HasForeignKey("SubGenreId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("geoEvent.Model.Models.Venue", "Venue")
+                        .WithMany("Events")
+                        .HasForeignKey("VenueId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("City");
+
+                    b.Navigation("Genre");
+
+                    b.Navigation("Organizer");
+
+                    b.Navigation("Segment");
+
+                    b.Navigation("SubGenre");
+
+                    b.Navigation("Venue");
+                });
+
             modelBuilder.Entity("geoEvent.Model.Models.ActivityLog", b =>
                 {
-                    b.HasOne("geoEvent.Model.Models.Category", "Category")
+                    b.HasOne("geoEvent.Model.Models.Genre", "Genre")
                         .WithMany()
-                        .HasForeignKey("CategoryId")
+                        .HasForeignKey("GenreId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("geoEvent.Model.Models.Segment", "Segment")
+                        .WithMany()
+                        .HasForeignKey("SegmentId")
                         .OnDelete(DeleteBehavior.SetNull);
 
                     b.HasOne("geoEvent.Model.Models.User", "User")
@@ -926,7 +1352,9 @@ namespace geoEvent.Infrastructure.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.SetNull);
 
-                    b.Navigation("Category");
+                    b.Navigation("Genre");
+
+                    b.Navigation("Segment");
 
                     b.Navigation("User");
                 });
@@ -950,7 +1378,7 @@ namespace geoEvent.Infrastructure.Migrations
 
             modelBuilder.Entity("geoEvent.Model.Models.Bookmark", b =>
                 {
-                    b.HasOne("geoEvent.Model.Models.Event", "Event")
+                    b.HasOne("Event", "Event")
                         .WithMany()
                         .HasForeignKey("EventId")
                         .OnDelete(DeleteBehavior.Cascade);
@@ -977,17 +1405,24 @@ namespace geoEvent.Infrastructure.Migrations
 
             modelBuilder.Entity("geoEvent.Model.Models.Comment", b =>
                 {
-                    b.HasOne("geoEvent.Model.Models.Event", "Event")
-                        .WithMany()
+                    b.HasOne("Event", "Event")
+                        .WithMany("Comments")
                         .HasForeignKey("EventId")
                         .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("geoEvent.Model.Models.Comment", "ParentComment")
+                        .WithMany("Replies")
+                        .HasForeignKey("ParentCommentId")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("geoEvent.Model.Models.User", "User")
                         .WithMany()
                         .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade);
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("Event");
+
+                    b.Navigation("ParentComment");
 
                     b.Navigation("User");
                 });
@@ -1002,27 +1437,10 @@ namespace geoEvent.Infrastructure.Migrations
                     b.Navigation("Continent");
                 });
 
-            modelBuilder.Entity("geoEvent.Model.Models.Event", b =>
-                {
-                    b.HasOne("geoEvent.Model.Models.Category", "Category")
-                        .WithMany()
-                        .HasForeignKey("CategoryId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("geoEvent.Model.Models.User", "Organizer")
-                        .WithMany()
-                        .HasForeignKey("OrganizerId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.Navigation("Category");
-
-                    b.Navigation("Organizer");
-                });
-
             modelBuilder.Entity("geoEvent.Model.Models.EventImage", b =>
                 {
-                    b.HasOne("geoEvent.Model.Models.Event", "Event")
-                        .WithMany()
+                    b.HasOne("Event", "Event")
+                        .WithMany("Images")
                         .HasForeignKey("EventId")
                         .OnDelete(DeleteBehavior.Cascade);
 
@@ -1031,8 +1449,8 @@ namespace geoEvent.Infrastructure.Migrations
 
             modelBuilder.Entity("geoEvent.Model.Models.EventLike", b =>
                 {
-                    b.HasOne("geoEvent.Model.Models.Event", "Event")
-                        .WithMany()
+                    b.HasOne("Event", "Event")
+                        .WithMany("Likes")
                         .HasForeignKey("EventId")
                         .OnDelete(DeleteBehavior.Cascade);
 
@@ -1046,9 +1464,19 @@ namespace geoEvent.Infrastructure.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("geoEvent.Model.Models.Genre", b =>
+                {
+                    b.HasOne("geoEvent.Model.Models.Segment", "Segment")
+                        .WithMany("Genres")
+                        .HasForeignKey("SegmentId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Segment");
+                });
+
             modelBuilder.Entity("geoEvent.Model.Models.Message", b =>
                 {
-                    b.HasOne("geoEvent.Model.Models.Event", "Event")
+                    b.HasOne("Event", "Event")
                         .WithMany()
                         .HasForeignKey("EventId")
                         .OnDelete(DeleteBehavior.NoAction);
@@ -1127,6 +1555,17 @@ namespace geoEvent.Infrastructure.Migrations
                     b.Navigation("City");
                 });
 
+            modelBuilder.Entity("geoEvent.Model.Models.PriceZone", b =>
+                {
+                    b.HasOne("geoEvent.Model.Models.Venue", "Venue")
+                        .WithMany("PriceZones")
+                        .HasForeignKey("VenueId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Venue");
+                });
+
             modelBuilder.Entity("geoEvent.Model.Models.Report", b =>
                 {
                     b.HasOne("geoEvent.Model.Models.User", "Reporter")
@@ -1146,10 +1585,15 @@ namespace geoEvent.Infrastructure.Migrations
 
             modelBuilder.Entity("geoEvent.Model.Models.Reservation", b =>
                 {
-                    b.HasOne("geoEvent.Model.Models.Event", "Event")
-                        .WithMany()
+                    b.HasOne("Event", "Event")
+                        .WithMany("Reservations")
                         .HasForeignKey("EventId")
-                        .OnDelete(DeleteBehavior.Restrict);
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("geoEvent.Model.Models.Ticket", "Ticket")
+                        .WithMany("Reservations")
+                        .HasForeignKey("TicketId")
+                        .OnDelete(DeleteBehavior.NoAction);
 
                     b.HasOne("geoEvent.Model.Models.User", "User")
                         .WithMany()
@@ -1158,14 +1602,48 @@ namespace geoEvent.Infrastructure.Migrations
 
                     b.Navigation("Event");
 
+                    b.Navigation("Ticket");
+
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("geoEvent.Model.Models.SubGenre", b =>
+                {
+                    b.HasOne("geoEvent.Model.Models.Genre", "Genre")
+                        .WithMany("SubGenres")
+                        .HasForeignKey("GenreId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Genre");
+                });
+
+            modelBuilder.Entity("geoEvent.Model.Models.Ticket", b =>
+                {
+                    b.HasOne("Event", "Event")
+                        .WithMany("Tickets")
+                        .HasForeignKey("EventId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("geoEvent.Model.Models.PriceZone", "PriceZone")
+                        .WithMany()
+                        .HasForeignKey("PriceZoneId");
+
+                    b.Navigation("Event");
+
+                    b.Navigation("PriceZone");
                 });
 
             modelBuilder.Entity("geoEvent.Model.Models.UserPreference", b =>
                 {
-                    b.HasOne("geoEvent.Model.Models.Category", "Category")
+                    b.HasOne("geoEvent.Model.Models.Genre", "Genre")
                         .WithMany()
-                        .HasForeignKey("CategoryId")
+                        .HasForeignKey("GenreId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("geoEvent.Model.Models.Segment", "Segment")
+                        .WithMany()
+                        .HasForeignKey("SegmentId")
                         .OnDelete(DeleteBehavior.Cascade);
 
                     b.HasOne("geoEvent.Model.Models.User", "User")
@@ -1173,9 +1651,21 @@ namespace geoEvent.Infrastructure.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade);
 
-                    b.Navigation("Category");
+                    b.Navigation("Genre");
+
+                    b.Navigation("Segment");
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("geoEvent.Model.Models.Venue", b =>
+                {
+                    b.HasOne("geoEvent.Model.Models.City", "City")
+                        .WithMany()
+                        .HasForeignKey("CityId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("City");
                 });
 
             modelBuilder.Entity("geoEvent.Model.Models.User", b =>
@@ -1185,6 +1675,19 @@ namespace geoEvent.Infrastructure.Migrations
                         .HasForeignKey("geoEvent.Model.Models.User", "PersonId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("Event", b =>
+                {
+                    b.Navigation("Comments");
+
+                    b.Navigation("Images");
+
+                    b.Navigation("Likes");
+
+                    b.Navigation("Reservations");
+
+                    b.Navigation("Tickets");
                 });
 
             modelBuilder.Entity("geoEvent.Model.Models.AdministrativeDivision", b =>
@@ -1197,9 +1700,36 @@ namespace geoEvent.Infrastructure.Migrations
                     b.Navigation("PostalCodes");
                 });
 
+            modelBuilder.Entity("geoEvent.Model.Models.Comment", b =>
+                {
+                    b.Navigation("Replies");
+                });
+
             modelBuilder.Entity("geoEvent.Model.Models.Country", b =>
                 {
                     b.Navigation("Divisions");
+                });
+
+            modelBuilder.Entity("geoEvent.Model.Models.Genre", b =>
+                {
+                    b.Navigation("SubGenres");
+                });
+
+            modelBuilder.Entity("geoEvent.Model.Models.Segment", b =>
+                {
+                    b.Navigation("Genres");
+                });
+
+            modelBuilder.Entity("geoEvent.Model.Models.Ticket", b =>
+                {
+                    b.Navigation("Reservations");
+                });
+
+            modelBuilder.Entity("geoEvent.Model.Models.Venue", b =>
+                {
+                    b.Navigation("Events");
+
+                    b.Navigation("PriceZones");
                 });
 #pragma warning restore 612, 618
         }

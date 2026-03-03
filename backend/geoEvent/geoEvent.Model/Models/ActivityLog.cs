@@ -15,9 +15,12 @@ namespace geoEvent.Model.Models
         public string Metadata { get; set; } = string.Empty;
         public int? UserId { get; set; }
         public User? User { get; set; }
-        public int? CategoryId { get; set; }
-        public Category? Category { get; set; }
+        public int? SegmentId { get; set; }
+        public Segment? Segment { get; set; }
+        public int? GenreId { get; set; }
+        public Genre? Genre { get; set; }
         public DateTime CreatedAt { get; set; }
     }
+
 }
 

@@ -11,7 +11,7 @@ namespace geoEvent.Infrastructure.Persistence.Configurations
             builder.HasKey(i => i.ImageId);
 
             builder.HasOne(i => i.Event)
-                   .WithMany()
+                   .WithMany(e => e.Images)
                    .HasForeignKey(i => i.EventId)
                    .OnDelete(DeleteBehavior.Cascade);
 

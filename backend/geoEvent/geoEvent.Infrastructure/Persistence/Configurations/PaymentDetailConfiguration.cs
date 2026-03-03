@@ -28,6 +28,12 @@ namespace geoEvent.Infrastructure.Persistence.Configurations
             builder.Property(p => p.Status).HasMaxLength(50).IsRequired();
             builder.Property(p => p.Method).HasMaxLength(50).IsRequired();
             builder.Property(e => e.Amount).HasColumnType("decimal(18,2)");
+            builder.Property(p => p.TransactionId).HasMaxLength(255);
+            builder.Property(p => p.Currency).HasMaxLength(3).HasDefaultValue("EUR");
+
+            builder.HasIndex(p => p.TransactionId).IsUnique()
+                   .HasFilter("[TransactionId] IS NOT NULL");
+
         }
     }
 }

@@ -34,11 +34,13 @@ namespace geoEvent.Infrastructure.Persistence
         public DbSet<Genre> Genres => Set<Genre>();
         public DbSet<SubGenre> SubGenres => Set<SubGenre>();
         public DbSet<PriceZone> PriceZones => Set<PriceZone>();
+        public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
             modelBuilder.ApplyConfigurationsFromAssembly(typeof(GeoEventDbContext).Assembly);
+            modelBuilder.Entity<Person>().HasQueryFilter(p => !p.IsDeleted);
         }
     }
 }

@@ -15,6 +15,9 @@ namespace geoEvent.Model.Models
         public string ImageUrl { get; set; } = string.Empty;
         public int? CityId { get; set; }
         public City? City { get; set; }
+        public DateTime? UpdatedAt { get; set; }
+        public bool IsDeleted { get; set; } = false;
+        public DateTime? DeletedAt { get; set; }
     }
 }
 

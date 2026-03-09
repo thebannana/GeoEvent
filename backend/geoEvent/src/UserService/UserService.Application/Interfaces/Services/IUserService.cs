@@ -1,0 +1,30 @@
+﻿using UserService.Application.Common;
+using UserService.Application.DTOs;
+
+namespace UserService.Application.Interfaces.Services;
+
+public interface IUserService
+{
+    Task<ServiceResult<UserProfileDto>> GetProfileAsync(int userId);
+    Task<ServiceResult<UserProfileDto>> UpdateProfileAsync(int userId, UpdateProfileDto request);
+    Task<ServiceResult<bool>> DeleteAccountAsync(int userId);
+    Task<ServiceResult<bool>> BanUserAsync(int userId);
+    Task<ServiceResult<bool>> UnbanUserAsync(int userId);
+    Task<ServiceResult<bool>> VerifyEmailAsync(int userId);
+
+    // ── Activity Logs ─────────────────────────────────────────────
+    Task<ServiceResult<List<ActivityLogResponseDto>>> GetUserActivityLogsAsync(int userId, int page, int pageSize);
+    Task<ServiceResult<ActivityLogResponseDto>> LogActivityAsync(int userId, string actionType, string targetType, int targetId, string metadata, int sessionId);
+
+    // ── User Preferences ──────────────────────────────────────────
+    Task<ServiceResult<List<UserPreferenceResponseDto>>> GetUserPreferencesAsync(int userId);
+    Task<ServiceResult<UserPreferenceResponseDto>> UpsertPreferenceAsync(int userId, UpdatePreferenceDto dto);
+    Task<ServiceResult<bool>> DeletePreferenceAsync(int userId, int prefId);
+
+    // ── Reports ───────────────────────────────────────────────────
+    Task<ServiceResult<ReportResponseDto>> CreateReportAsync(CreateReportDto dto, int reporterId);
+    Task<ServiceResult<List<ReportResponseDto>>> GetUserReportsAsync(int userId);
+    Task<ServiceResult<PagedResult<ReportResponseDto>>> GetAllReportsAsync(string? status, int page, int pageSize);
+    Task<ServiceResult<ReportResponseDto>> ResolveReportAsync(int reportId, ResolveReportDto dto, int resolvedById);
+
+}

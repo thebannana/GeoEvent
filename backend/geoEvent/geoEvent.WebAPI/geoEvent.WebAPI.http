@@ -1,6 +1,0 @@
-@geoEvent.WebAPI_HostAddress = http://localhost:5177
-
-GET {{geoEvent.WebAPI_HostAddress}}/weatherforecast/
-Accept: application/json
-
-###

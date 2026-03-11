@@ -1,4 +1,5 @@
-﻿using System.ComponentModel.DataAnnotations;
+﻿using NotificationService.Domain.Enums;
+using System.ComponentModel.DataAnnotations;
 
 namespace NotificationService.Application.DTOs;
 
@@ -8,8 +9,7 @@ public class CreateNotificationDto
     public int UserId { get; set; }
 
     [Required]
-    [MaxLength(50)]
-    public string Type { get; set; } = string.Empty;
+    public NotificationType Type { get; set; }
 
     [Required]
     [MaxLength(200)]

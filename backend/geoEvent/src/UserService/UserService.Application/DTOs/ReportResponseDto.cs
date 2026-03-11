@@ -10,4 +10,7 @@ public class ReportResponseDto
     public int? ReporterId { get; set; }
     public int? ResolvedById { get; set; }
     public string Description { get; set; } = string.Empty;
+    public DateTime CreatedAt { get; set; }
+    public DateTime? ResolvedAt { get; set; }
+
 }

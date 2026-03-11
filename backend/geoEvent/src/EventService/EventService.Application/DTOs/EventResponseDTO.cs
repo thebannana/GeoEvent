@@ -5,9 +5,13 @@ public class EventResponseDto
     public int EventId { get; set; }
     public int? OrganizerId { get; set; }
     public int? SegmentId { get; set; }
+    public string? SegmentName { get; set; }       // new
     public int? GenreId { get; set; }
+    public string? GenreName { get; set; }         // new
     public int? SubGenreId { get; set; }
+    public string? SubGenreName { get; set; }      // new
     public int? VenueId { get; set; }
+    public string? VenueName { get; set; }         // new
     public int? CityId { get; set; }
     public string Title { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;

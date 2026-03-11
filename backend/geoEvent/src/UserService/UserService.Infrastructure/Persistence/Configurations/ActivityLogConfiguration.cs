@@ -11,10 +11,12 @@ public class ActivityLogConfiguration : IEntityTypeConfiguration<ActivityLog>
         builder.HasKey(a => a.LogId);
 
         builder.Property(a => a.ActionType)
+            .HasConversion<string>()
             .HasMaxLength(50)
             .IsRequired();
 
         builder.Property(a => a.TargetType)
+            .HasConversion<string>()
             .HasMaxLength(50)
             .IsRequired();
 

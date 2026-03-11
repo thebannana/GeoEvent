@@ -1,5 +1,5 @@
-﻿using System.Net;
-using System.Text.Json;
+﻿using System.Text.Json;
+using NotificationService.Domain.Exceptions;
 
 namespace NotificationService.API.Middleware;
 
@@ -7,16 +7,11 @@ public class ExceptionMiddleware
 {
     private readonly RequestDelegate _next;
     private readonly ILogger<ExceptionMiddleware> _logger;
-    private readonly IHostEnvironment _env;
 
-    public ExceptionMiddleware(
-        RequestDelegate next,
-        ILogger<ExceptionMiddleware> logger,
-        IHostEnvironment env)
+    public ExceptionMiddleware(RequestDelegate next, ILogger<ExceptionMiddleware> logger)
     {
         _next = next;
         _logger = logger;
-        _env = env;
     }
 
     public async Task InvokeAsync(HttpContext context)
@@ -25,25 +20,43 @@ public class ExceptionMiddleware
         {
             await _next(context);
         }
+        catch (NotificationNotFoundException ex)
+        {
+            await Write(context, StatusCodes.Status404NotFound, ex.Message);
+        }
+        catch (NotificationQueueNotFoundException ex)
+        {
+            await Write(context, StatusCodes.Status404NotFound, ex.Message);
+        }
+        catch (NotificationAccessDeniedException ex)
+        {
+            await Write(context, StatusCodes.Status403Forbidden, ex.Message);
+        }
+        catch (NotificationAlreadyReadException ex)
+        {
+            await Write(context, StatusCodes.Status409Conflict, ex.Message);
+        }
+        catch (QueueItemCannotBeRetriedException ex)
+        {
+            await Write(context, StatusCodes.Status409Conflict, ex.Message);
+        }
+        catch (QueueItemCannotBeCancelledException ex)
+        {
+            await Write(context, StatusCodes.Status409Conflict, ex.Message);
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unhandled exception: {Message}", ex.Message);
-            await HandleExceptionAsync(context, ex);
+            await Write(context, StatusCodes.Status500InternalServerError,
+                "An unexpected error occurred.");
         }
     }
 
-    private Task HandleExceptionAsync(HttpContext context, Exception ex)
+    private static Task Write(HttpContext context, int statusCode, string message)
     {
+        context.Response.StatusCode = statusCode;
         context.Response.ContentType = "application/json";
-        context.Response.StatusCode = (int)HttpStatusCode.InternalServerError;
-
-        var response = JsonSerializer.Serialize(new
-        {
-            statusCode = context.Response.StatusCode,
-            message = "An unexpected error occurred.",
-            detail = _env.IsDevelopment() ? ex.Message : null
-        });
-
-        return context.Response.WriteAsync(response);
+        return context.Response.WriteAsync(
+            JsonSerializer.Serialize(new { error = message }));
     }
 }

@@ -4,7 +4,9 @@ public enum NotificationQueueStatus
 {
     Pending,
     Processing,
+    Retrying,
     Sent,
     Failed,
     Cancelled
 }
+

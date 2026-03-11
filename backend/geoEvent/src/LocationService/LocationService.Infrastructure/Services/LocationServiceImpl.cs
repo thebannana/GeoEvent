@@ -19,7 +19,8 @@ public class LocationServiceImpl : ILocationService
     public async Task<ServiceResult<List<ContinentResponseDto>>> GetAllContinentsAsync()
     {
         var continents = await _repository.GetAllContinentsAsync();
-        return ServiceResult<List<ContinentResponseDto>>.Ok(continents.Select(MapContinent).ToList());
+        return ServiceResult<List<ContinentResponseDto>>.Ok(
+            continents.Select(MapContinent).ToList());
     }
 
     public async Task<ServiceResult<ContinentResponseDto>> GetContinentByIdAsync(int continentId)
@@ -30,18 +31,37 @@ public class LocationServiceImpl : ILocationService
         return ServiceResult<ContinentResponseDto>.Ok(MapContinent(continent));
     }
 
+
     // ── Countries ─────────────────────────────────────────────
-    public async Task<ServiceResult<List<CountryResponseDto>>> GetAllCountriesAsync()
+    public async Task<ServiceResult<List<CountryResponseDto>>> GetCountriesAsync(
+        CountryFilterDto filter)
     {
-        var countries = await _repository.GetAllCountriesAsync();
-        return ServiceResult<List<CountryResponseDto>>.Ok(countries.Select(MapCountry).ToList());
+        var countries = await _repository.GetCountriesAsync(filter);
+        return ServiceResult<List<CountryResponseDto>>.Ok(
+            countries.Select(MapCountry).ToList());
     }
 
-    public async Task<ServiceResult<List<CountryResponseDto>>> GetCountriesByContinentAsync(int continentId)
+    public async Task<ServiceResult<List<CountryResponseDto>>> GetCountriesByContinentAsync(
+    int continentId)
     {
         var countries = await _repository.GetCountriesByContinentAsync(continentId);
-        return ServiceResult<List<CountryResponseDto>>.Ok(countries.Select(MapCountry).ToList());
+        return ServiceResult<List<CountryResponseDto>>.Ok(
+            countries.Select(MapCountry).ToList());
     }
+
+    public async Task<ServiceResult<CountryResponseDto>> GetCountryByCodeAsync(string code)
+    {
+        if (string.IsNullOrWhiteSpace(code))
+            return ServiceResult<CountryResponseDto>.Fail("Country code is required.");
+
+        var country = await _repository.GetCountryByCodeAsync(code.Trim());
+        if (country is null)
+            return ServiceResult<CountryResponseDto>.NotFound(
+                $"Country with code '{code}' was not found.");
+
+        return ServiceResult<CountryResponseDto>.Ok(MapCountry(country));
+    }
+
 
     public async Task<ServiceResult<CountryResponseDto>> GetCountryByIdAsync(int countryId)
     {
@@ -52,16 +72,12 @@ public class LocationServiceImpl : ILocationService
     }
 
     // ── Divisions ─────────────────────────────────────────────
-    public async Task<ServiceResult<List<DivisionResponseDto>>> GetDivisionsByCountryAsync(int countryId)
+    public async Task<ServiceResult<List<DivisionResponseDto>>> GetDivisionsAsync(
+        DivisionFilterDto filter)
     {
-        var divisions = await _repository.GetDivisionsByCountryAsync(countryId);
-        return ServiceResult<List<DivisionResponseDto>>.Ok(divisions.Select(MapDivision).ToList());
-    }
-
-    public async Task<ServiceResult<List<DivisionResponseDto>>> GetChildDivisionsAsync(int parentDivisionId)
-    {
-        var divisions = await _repository.GetChildDivisionsAsync(parentDivisionId);
-        return ServiceResult<List<DivisionResponseDto>>.Ok(divisions.Select(MapDivision).ToList());
+        var divisions = await _repository.GetDivisionsAsync(filter);
+        return ServiceResult<List<DivisionResponseDto>>.Ok(
+            divisions.Select(MapDivision).ToList());
     }
 
     public async Task<ServiceResult<DivisionResponseDto>> GetDivisionByIdAsync(int divisionId)
@@ -94,17 +110,43 @@ public class LocationServiceImpl : ILocationService
         return ServiceResult<CityResponseDto>.Ok(MapCity(city));
     }
 
+    public async Task<ServiceResult<List<CityResponseDto>>> SearchCitiesAsync(string searchTerm, int limit = 10)
+    {
+        var cities = await _repository.SearchCitiesAsync(searchTerm, limit);
+        return ServiceResult<List<CityResponseDto>>.Ok(cities.Select(MapCity).ToList());
+    }
+
+    public async Task<ServiceResult<List<CityResponseDto>>> GetNearbyCitiesAsync(
+    NearbySearchDto dto)
+    {
+        if (dto.RadiusKm <= 0 || dto.RadiusKm > 500)
+            return ServiceResult<List<CityResponseDto>>.Fail(
+                "Radius must be between 1 and 500 km.");
+
+        if (dto.Limit <= 0 || dto.Limit > 50)
+            return ServiceResult<List<CityResponseDto>>.Fail(
+                "Limit must be between 1 and 50.");
+
+        var cities = await _repository.GetNearbyCitiesAsync(
+            dto.Latitude, dto.Longitude, dto.RadiusKm, dto.Limit);
+
+        return ServiceResult<List<CityResponseDto>>.Ok(
+            cities.Select(MapCity).ToList());
+    }
+
     public async Task<ServiceResult<List<CityResponseDto>>> GetCitiesByCountryAsync(int countryId)
     {
         var cities = await _repository.GetCitiesByCountryAsync(countryId);
         return ServiceResult<List<CityResponseDto>>.Ok(cities.Select(MapCity).ToList());
     }
 
-    public async Task<ServiceResult<List<CityResponseDto>>> SearchCitiesAsync(string searchTerm, int limit = 10)
+    public async Task<ServiceResult<List<CityResponseDto>>> GetCitiesByDivisionAsync(int divisionId)
     {
-        var cities = await _repository.SearchCitiesAsync(searchTerm, limit);
+        var cities = await _repository.GetCitiesByDivisionAsync(divisionId);
         return ServiceResult<List<CityResponseDto>>.Ok(cities.Select(MapCity).ToList());
     }
+
+
 
     // ── Postal Codes ──────────────────────────────────────────
     public async Task<ServiceResult<List<PostalCodeResponseDto>>> GetPostalCodesByCityAsync(int cityId)
@@ -113,13 +155,32 @@ public class LocationServiceImpl : ILocationService
         return ServiceResult<List<PostalCodeResponseDto>>.Ok(codes.Select(MapPostalCode).ToList());
     }
 
-    // ── Mappers ───────────────────────────────────────────────
-    private static ContinentResponseDto MapContinent(Continent c) => new()
+    public async Task<ServiceResult<PostalCodeResponseDto>> GetPostalCodeByCodeAsync(string code)
     {
-        ContinentId = c.ContinentId,
-        ContinentName = c.ContinentName,
-        ContinentCode = c.ContinentCode
-    };
+        if (string.IsNullOrWhiteSpace(code))
+            return ServiceResult<PostalCodeResponseDto>.Fail("Postal code is required.");
+
+        var postal = await _repository.GetPostalCodeByCodeAsync(code.Trim());
+        if (postal is null)
+            return ServiceResult<PostalCodeResponseDto>.NotFound(
+                $"Postal code '{code}' was not found.");
+
+        return ServiceResult<PostalCodeResponseDto>.Ok(MapPostalCode(postal));
+    }
+
+    public async Task<ServiceResult<PostalCodeResponseDto>> GetPostalCodeByIdAsync(
+        int postalCodeId)
+    {
+        var postal = await _repository.GetPostalCodeByIdAsync(postalCodeId);
+        if (postal is null)
+            return ServiceResult<PostalCodeResponseDto>.NotFound(
+                $"Postal code with ID {postalCodeId} was not found.");
+
+        return ServiceResult<PostalCodeResponseDto>.Ok(MapPostalCode(postal));
+    }
+
+
+    // ── Mappers ───────────────────────────────────────────────
 
     private static CountryResponseDto MapCountry(Country c) => new()
     {
@@ -133,18 +194,29 @@ public class LocationServiceImpl : ILocationService
         ContinentName = c.Continent?.ContinentName
     };
 
+    private static ContinentResponseDto MapContinent(Continent c) => new()
+    {
+        ContinentId = c.ContinentId,
+        ContinentName = c.ContinentName,
+        ContinentCode = c.ContinentCode,
+        CountryCount = c.Countries.Count        // requires Include(Countries) on query
+    };
+
     private static DivisionResponseDto MapDivision(AdministrativeDivision d) => new()
     {
         DivisionId = d.DivisionId,
         CountryId = d.CountryId,
+        CountryName = d.Country?.CountryName,
         ParentDivisionId = d.ParentDivisionId,
+        ParentDivisionName = d.ParentDivision?.DivisionName,
         DivisionName = d.DivisionName,
         DivisionCode = d.DivisionCode,
         DivisionType = d.DivisionType,
         Level = d.Level,
         Latitude = d.Latitude,
         Longitude = d.Longitude,
-        IsActive = d.IsActive
+        IsActive = d.IsActive,
+        ChildCount = d.ChildDivisions.Count
     };
 
     private static CityResponseDto MapCity(City c) => new()
@@ -156,9 +228,11 @@ public class LocationServiceImpl : ILocationService
         Latitude = c.Latitude,
         DivisionId = c.DivisionId,
         DivisionName = c.Division?.DivisionName,
-        CountryId = c.CountryId,
-        CountryName = c.Country?.CountryName,
-        IsActive = c.IsActive
+        DivisionType = c.Division?.DivisionType,
+        CountryId = c.Division?.CountryId,              // resolve via Division
+        CountryName = c.Division?.Country?.CountryName,
+        IsActive = c.IsActive,
+        PostalCodes = c.PostalCodes.Select(MapPostalCode).ToList()
     };
 
     private static PostalCodeResponseDto MapPostalCode(PostalCode p) => new()
@@ -167,6 +241,8 @@ public class LocationServiceImpl : ILocationService
         Code = p.Code,
         Longitude = p.Longitude,
         Latitude = p.Latitude,
-        CityId = p.CityId
+        CityId = p.CityId,
+        CityName = p.City?.CityName
     };
+
 }

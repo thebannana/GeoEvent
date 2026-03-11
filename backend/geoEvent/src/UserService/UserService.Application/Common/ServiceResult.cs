@@ -21,4 +21,8 @@ public class ServiceResult<T>
 
     public static ServiceResult<T> Forbidden(string error) =>
         new() { Success = false, Error = error, StatusCode = 403 };
+
+    public static ServiceResult<T> Conflict(string error) =>
+    new() { Success = false, Error = error, StatusCode = 409 };
+
 }

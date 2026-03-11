@@ -13,6 +13,7 @@ public class TicketResponseDto
     public string Status { get; set; } = string.Empty;
     public DateTime IssuedAt { get; set; }
     public DateTime? UsedAt { get; set; }
+    public DateTime? CancelledAt { get; set; }
     public string? SeatNumber { get; set; }
     public string? Section { get; set; }
 }

@@ -41,22 +41,4 @@ public class SegmentsController : ControllerBase
             ? Ok(result.Data)
             : StatusCode(result.StatusCode, new { error = result.Error });
     }
-
-    [HttpGet("genres/{genreId:int}")]
-    public async Task<IActionResult> GetGenreById(int genreId)
-    {
-        var result = await _eventService.GetGenreByIdAsync(genreId);
-        return result.Success
-            ? Ok(result.Data)
-            : StatusCode(result.StatusCode, new { error = result.Error });
-    }
-
-    [HttpGet("genres/{genreId:int}/subgenres")]
-    public async Task<IActionResult> GetSubGenres(int genreId)
-    {
-        var result = await _eventService.GetSubGenresByGenreAsync(genreId);
-        return result.Success
-            ? Ok(result.Data)
-            : StatusCode(result.StatusCode, new { error = result.Error });
-    }
 }

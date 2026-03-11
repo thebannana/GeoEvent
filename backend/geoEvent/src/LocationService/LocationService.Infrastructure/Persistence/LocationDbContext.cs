@@ -16,11 +16,8 @@ public class LocationDbContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        modelBuilder.ApplyConfiguration(new ContinentConfiguration());
-        modelBuilder.ApplyConfiguration(new CountryConfiguration());
-        modelBuilder.ApplyConfiguration(new AdministrativeDivisionConfiguration());
-        modelBuilder.ApplyConfiguration(new CityConfiguration());
-        modelBuilder.ApplyConfiguration(new PostalCodeConfiguration());
+        modelBuilder.ApplyConfigurationsFromAssembly(typeof(LocationDbContext).Assembly);
         base.OnModelCreating(modelBuilder);
     }
+
 }

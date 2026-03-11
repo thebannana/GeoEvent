@@ -10,16 +10,18 @@ public class ReportConfiguration : IEntityTypeConfiguration<Report>
     {
         builder.HasKey(r => r.ReportId);
 
+        builder.Property(r => r.Status)
+            .HasConversion<string>()
+            .HasMaxLength(50)
+            .IsRequired();
+
         builder.Property(r => r.TargetType)
+            .HasConversion<string>()
             .HasMaxLength(50)
             .IsRequired();
 
         builder.Property(r => r.Reason)
             .HasMaxLength(200)
-            .IsRequired();
-
-        builder.Property(r => r.Status)
-            .HasMaxLength(50)
             .IsRequired();
 
         builder.Property(r => r.Description)
@@ -39,5 +41,9 @@ public class ReportConfiguration : IEntityTypeConfiguration<Report>
         builder.HasIndex(r => r.ReporterId);
         builder.HasIndex(r => r.ResolvedById);
         builder.HasIndex(r => new { r.TargetType, r.TargetId });
+        builder.Property(r => r.CreatedAt).IsRequired();
+        builder.Property(r => r.ResolvedAt);
+        builder.HasIndex(r => r.CreatedAt);
+
     }
 }

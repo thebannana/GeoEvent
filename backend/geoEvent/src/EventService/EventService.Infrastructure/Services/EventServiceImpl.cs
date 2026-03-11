@@ -3,6 +3,7 @@ using EventService.Application.DTOs;
 using EventService.Application.Interfaces.Repositories;
 using EventService.Application.Interfaces.Services;
 using EventService.Domain.Entities;
+using EventService.Domain.Enums;
 
 namespace EventService.Infrastructure.Services;
 
@@ -21,9 +22,24 @@ public class EventServiceImpl : IEventService
         if (ev is null)
             return ServiceResult<EventResponseDto>.NotFound($"Event {eventId} not found.");
 
-        await _eventRepository.IncrementViewCountAsync(eventId);
+        if (ev.Status == EventStatus.Active)
+            await _eventRepository.IncrementViewCountAsync(eventId);
+
         return ServiceResult<EventResponseDto>.Ok(MapToDto(ev));
     }
+
+    public async Task<ServiceResult<List<EventResponseDto>>> GetNearbyAsync(NearbyEventSearchDto dto)
+    {
+        if (dto.RadiusKm <= 0 || dto.RadiusKm > 500)
+            return ServiceResult<List<EventResponseDto>>.Fail("Radius must be between 1 and 500 km.");
+
+        if (dto.Limit <= 0 || dto.Limit > 100)
+            return ServiceResult<List<EventResponseDto>>.Fail("Limit must be between 1 and 100.");
+
+        var events = await _eventRepository.GetNearbyAsync(dto);
+        return ServiceResult<List<EventResponseDto>>.Ok(events.Select(MapToDto).ToList());
+    }
+
 
     public async Task<ServiceResult<PagedResult<EventResponseDto>>> GetAllAsync(EventFilterDto filter)
     {
@@ -64,6 +80,11 @@ public class EventServiceImpl : IEventService
             Locale = dto.Locale
         };
 
+        if (dto.StartDateTime <= DateTime.UtcNow)
+            return ServiceResult<EventResponseDto>.Fail("Start date must be in the future.");
+        if (dto.EndDateTime <= dto.StartDateTime)
+            return ServiceResult<EventResponseDto>.Fail("End date must be after start date.");
+
         var created = await _eventRepository.CreateAsync(entity);
         return ServiceResult<EventResponseDto>.Ok(MapToDto(created));
     }
@@ -96,6 +117,12 @@ public class EventServiceImpl : IEventService
         if (dto.ExternalUrl is not null) ev.ExternalUrl = dto.ExternalUrl;
         if (dto.AccessibilityInfo is not null) ev.AccessibilityInfo = dto.AccessibilityInfo;
         if (dto.PromoterName is not null) ev.PromoterName = dto.PromoterName;
+
+        var effectiveStart = dto.StartDateTime ?? ev.StartDateTime;
+        var effectiveEnd = dto.EndDateTime ?? ev.EndDateTime;
+        if (effectiveEnd <= effectiveStart)
+            return ServiceResult<EventResponseDto>.Fail("End date must be after start date.");
+
 
         await _eventRepository.UpdateAsync(ev);
         return ServiceResult<EventResponseDto>.Ok(MapToDto(ev));
@@ -164,10 +191,13 @@ public class EventServiceImpl : IEventService
     }
 
     public async Task<ServiceResult<bool>> AddImageAsync(
-        int eventId, string imageUrl, bool isCover)
+    int eventId, string imageUrl, bool isCover, int requesterId)
     {
-        if (!await _eventRepository.ExistsAsync(eventId))
+        var ev = await _eventRepository.GetByIdAsync(eventId);
+        if (ev is null)
             return ServiceResult<bool>.NotFound($"Event {eventId} not found.");
+        if (ev.OrganizerId != requesterId)
+            return ServiceResult<bool>.Forbidden("You do not own this event.");
 
         await _eventRepository.AddImageAsync(new EventImage
         {
@@ -178,38 +208,45 @@ public class EventServiceImpl : IEventService
         return ServiceResult<bool>.Ok(true);
     }
 
-    private static EventResponseDto MapToDto(Domain.Entities.Event ev) => new()
+    public async Task<ServiceResult<bool>> PostponeAsync(int eventId, int requesterId)
     {
-        EventId = ev.EventId,
-        OrganizerId = ev.OrganizerId,
-        SegmentId = ev.SegmentId,
-        GenreId = ev.GenreId,
-        SubGenreId = ev.SubGenreId,
-        VenueId = ev.VenueId,
-        CityId = ev.CityId,
-        Title = ev.Title,
-        Description = ev.Description,
-        Latitude = ev.Latitude,
-        Longitude = ev.Longitude,
-        StartDateTime = ev.StartDateTime,
-        EndDateTime = ev.EndDateTime,
-        Capacity = ev.Capacity,
-        Price = ev.Price,
-        Status = ev.Status.ToString(),
-        IsOnline = ev.IsOnline,
-        IsFeatured = ev.IsFeatured,
-        ViewCount = ev.ViewCount,
-        LikesCount = ev.LikesCount,
-        Tags = ev.Tags,
-        ExternalUrl = ev.ExternalUrl,
-        AccessibilityInfo = ev.AccessibilityInfo,
-        PromoterName = ev.PromoterName,
-        Locale = ev.Locale,
-        CreatedAt = ev.CreatedAt,
-        UpdatedAt = ev.UpdatedAt,
-        ImageUrls = ev.Images.Select(i => i.ImageUrl).ToList(),
-        CoverImageUrl = ev.Images.FirstOrDefault(i => i.IsCover)?.ImageUrl
-    };
+        var ev = await _eventRepository.GetByIdAsync(eventId);
+        if (ev is null) return ServiceResult<bool>.NotFound($"Event {eventId} not found.");
+        if (ev.OrganizerId != requesterId) return ServiceResult<bool>.Forbidden("You do not own this event.");
+        ev.Postpone();
+        await _eventRepository.UpdateAsync(ev);
+        return ServiceResult<bool>.Ok(true);
+    }
+
+    public async Task<ServiceResult<bool>> CompleteAsync(int eventId, int requesterId)
+    {
+        var ev = await _eventRepository.GetByIdAsync(eventId);
+        if (ev is null) return ServiceResult<bool>.NotFound($"Event {eventId} not found.");
+        if (ev.OrganizerId != requesterId) return ServiceResult<bool>.Forbidden("You do not own this event.");
+        ev.Complete();
+        await _eventRepository.UpdateAsync(ev);
+        return ServiceResult<bool>.Ok(true);
+    }
+
+    public async Task<ServiceResult<bool>> DeleteImageAsync(int imageId, int requesterId)
+    {
+        var image = await _eventRepository.GetImageAsync(imageId);
+        if (image is null) return ServiceResult<bool>.NotFound("Image not found.");
+        var ev = await _eventRepository.GetByIdAsync(image.EventId!.Value);
+        if (ev?.OrganizerId != requesterId) return ServiceResult<bool>.Forbidden("You do not own this event.");
+        await _eventRepository.DeleteImageAsync(imageId);
+        return ServiceResult<bool>.Ok(true);
+    }
+
+    public async Task<ServiceResult<bool>> SetCoverImageAsync(int eventId, int imageId, int requesterId)
+    {
+        var ev = await _eventRepository.GetByIdAsync(eventId);
+        if (ev is null) return ServiceResult<bool>.NotFound($"Event {eventId} not found.");
+        if (ev.OrganizerId != requesterId) return ServiceResult<bool>.Forbidden("You do not own this event.");
+        await _eventRepository.SetCoverImageAsync(eventId, imageId);
+        return ServiceResult<bool>.Ok(true);
+    }
+
 
     // ── Segments ──────────────────────────────────────────────────
     public async Task<ServiceResult<List<SegmentResponseDto>>> GetAllSegmentsAsync()
@@ -255,8 +292,13 @@ public class EventServiceImpl : IEventService
         return ServiceResult<List<PriceZoneResponseDto>>.Ok(zones.Select(MapPriceZone).ToList());
     }
 
-    public async Task<ServiceResult<PriceZoneResponseDto>> CreatePriceZoneAsync(CreatePriceZoneDto dto)
+    public async Task<ServiceResult<PriceZoneResponseDto>> CreatePriceZoneAsync(
+     CreatePriceZoneDto dto, int requesterId)
     {
+        var venue = await _eventRepository.GetVenueByIdAsync(dto.VenueId);
+        if (venue is null)
+            return ServiceResult<PriceZoneResponseDto>.NotFound("Venue not found.");
+
         var priceZone = new PriceZone
         {
             VenueId = dto.VenueId,
@@ -267,6 +309,7 @@ public class EventServiceImpl : IEventService
         var created = await _eventRepository.CreatePriceZoneAsync(priceZone);
         return ServiceResult<PriceZoneResponseDto>.Ok(MapPriceZone(created));
     }
+
 
     // ── Bookmarks ─────────────────────────────────────────────────
     public async Task<ServiceResult<List<BookmarkResponseDto>>> GetUserBookmarksAsync(int userId)
@@ -282,7 +325,7 @@ public class EventServiceImpl : IEventService
         if (existing is not null)
             return ServiceResult<BookmarkResponseDto>.Fail("Event already bookmarked.");
 
-        var ev = await _eventRepository.GetByIdWithImagesAsync(dto.EventId);
+        var ev = await _eventRepository.GetByIdWithDetailsAsync(dto.EventId);
         if (ev is null)
             return ServiceResult<BookmarkResponseDto>.NotFound("Event not found.");
 
@@ -367,6 +410,81 @@ public class EventServiceImpl : IEventService
         return ServiceResult<bool>.Ok(true);
     }
 
+    public async Task<ServiceResult<BookmarkResponseDto>> UpdateBookmarkAsync(
+    int bookmarkId, UpdateBookmarkDto dto, int userId)
+    {
+        var bookmark = await _eventRepository.GetBookmarkByIdAsync(bookmarkId);
+        if (bookmark is null) return ServiceResult<BookmarkResponseDto>.NotFound("Bookmark not found.");
+        if (bookmark.UserId != userId) return ServiceResult<BookmarkResponseDto>.Forbidden("Not your bookmark.");
+        bookmark.UpdateMemo(dto.Memo);
+        await _eventRepository.UpdateBookmarkAsync(bookmark);
+        return ServiceResult<BookmarkResponseDto>.Ok(MapBookmark(bookmark));
+    }
+
+    public async Task<ServiceResult<List<CommentResponseDto>>> GetRepliesAsync(int commentId)
+    {
+        var replies = await _eventRepository.GetRepliesAsync(commentId);
+        return ServiceResult<List<CommentResponseDto>>.Ok(replies.Select(MapComment).ToList());
+    }
+
+    public async Task<ServiceResult<bool>> LikeCommentAsync(int commentId, int userId)
+    {
+        var comment = await _eventRepository.GetCommentByIdAsync(commentId);
+        if (comment is null) return ServiceResult<bool>.NotFound("Comment not found.");
+        if (comment.IsDeleted) return ServiceResult<bool>.Fail("Comment has been deleted.");
+
+        if (await _eventRepository.IsCommentLikedByUserAsync(commentId, userId))
+            return ServiceResult<bool>.Conflict("Comment already liked.");
+
+        await _eventRepository.LikeCommentAsync(commentId, userId);
+        return ServiceResult<bool>.Ok(true);
+    }
+
+
+    public async Task<ServiceResult<bool>> UnlikeCommentAsync(int commentId, int userId)
+    {
+        var comment = await _eventRepository.GetCommentByIdAsync(commentId);
+        if (comment is null) return ServiceResult<bool>.NotFound("Comment not found.");
+        await _eventRepository.UnlikeCommentAsync(commentId, userId);
+        return ServiceResult<bool>.Ok(true);
+    }
+
+
+    // ── Venues ──────────────────────────────────────────────────
+
+    public async Task<ServiceResult<VenueResponseDto>> GetVenueByIdAsync(int venueId)
+    {
+        var venue = await _eventRepository.GetVenueByIdAsync(venueId);
+        if (venue is null) return ServiceResult<VenueResponseDto>.NotFound("Venue not found.");
+        return ServiceResult<VenueResponseDto>.Ok(MapVenue(venue));
+    }
+
+    public async Task<ServiceResult<List<VenueResponseDto>>> GetVenuesByCityAsync(int cityId)
+    {
+        var venues = await _eventRepository.GetVenuesByCityAsync(cityId);
+        return ServiceResult<List<VenueResponseDto>>.Ok(venues.Select(MapVenue).ToList());
+    }
+
+    public async Task<ServiceResult<VenueResponseDto>> CreateVenueAsync(CreateVenueDto dto)
+    {
+        var venue = new Venue
+        {
+            Name = dto.Name,
+            Address = dto.Address,
+            Latitude = dto.Latitude,
+            Longitude = dto.Longitude,
+            CityId = dto.CityId,
+            VenueType = dto.VenueType,
+            WebsiteUrl = dto.WebsiteUrl,
+            PhoneNumber = dto.PhoneNumber,
+            Description = dto.Description,
+            TimeZone = dto.TimeZone,
+            Locale = dto.Locale
+        };
+        var created = await _eventRepository.CreateVenueAsync(venue);
+        return ServiceResult<VenueResponseDto>.Created(MapVenue(created));
+    }
+
     // ── Mappers ───────────────────────────────────────────────────
     private static SegmentResponseDto MapSegment(Segment s) => new()
     {
@@ -377,6 +495,44 @@ public class EventServiceImpl : IEventService
         IsActive = s.IsActive,
         Genres = s.Genres.Select(MapGenre).ToList()
     };
+
+    private static EventResponseDto MapToDto(Domain.Entities.Event ev) => new()
+    {
+        EventId = ev.EventId,
+        OrganizerId = ev.OrganizerId,
+        SegmentId = ev.SegmentId,
+        GenreId = ev.GenreId,
+        SubGenreId = ev.SubGenreId,
+        VenueId = ev.VenueId,
+        CityId = ev.CityId,
+        Title = ev.Title,
+        Description = ev.Description,
+        Latitude = ev.Latitude,
+        Longitude = ev.Longitude,
+        StartDateTime = ev.StartDateTime,
+        EndDateTime = ev.EndDateTime,
+        Capacity = ev.Capacity,
+        Price = ev.Price,
+        Status = ev.Status.ToString(),
+        IsOnline = ev.IsOnline,
+        IsFeatured = ev.IsFeatured,
+        ViewCount = ev.ViewCount,
+        LikesCount = ev.LikesCount,
+        Tags = ev.Tags,
+        ExternalUrl = ev.ExternalUrl,
+        AccessibilityInfo = ev.AccessibilityInfo,
+        PromoterName = ev.PromoterName,
+        Locale = ev.Locale,
+        CreatedAt = ev.CreatedAt,
+        UpdatedAt = ev.UpdatedAt,
+        ImageUrls = ev.Images.Select(i => i.ImageUrl).ToList(),
+        CoverImageUrl = ev.Images.FirstOrDefault(i => i.IsCover)?.ImageUrl,
+        SegmentName = ev.Segment?.Name,
+        GenreName = ev.Genre?.Name,
+        SubGenreName = ev.SubGenre?.Name,
+        VenueName = ev.Venue?.Name,
+    };
+
 
     private static GenreResponseDto MapGenre(Genre g) => new()
     {
@@ -417,15 +573,36 @@ public class EventServiceImpl : IEventService
     private static CommentResponseDto MapComment(Comment c) => new()
     {
         CommentId = c.CommentId,
-        Content = c.Content,
+        Content = c.IsDeleted ? "[deleted]" : c.Content,   // mask deleted content
         LikesCount = c.LikesCount,
-        UserId = c.UserId,
+        UserId = c.IsDeleted ? null : c.UserId,            // hide author of deleted comments
         EventId = c.EventId,
         CreatedAt = c.CreatedAt,
         UpdatedAt = c.UpdatedAt,
         IsDeleted = c.IsDeleted,
+        IsReply = c.IsReply,
         ParentCommentId = c.ParentCommentId,
+        ReplyCount = c.Replies.Count,
         Replies = c.Replies.Where(r => !r.IsDeleted).Select(MapComment).ToList()
     };
+
+    private static VenueResponseDto MapVenue(Venue v) => new()
+    {
+        VenueId = v.VenueId,
+        Name = v.Name,
+        Address = v.Address,
+        Latitude = v.Latitude,
+        Longitude = v.Longitude,
+        CityId = v.CityId,
+        VenueType = v.VenueType,
+        WebsiteUrl = v.WebsiteUrl,
+        PhoneNumber = v.PhoneNumber,
+        Description = v.Description,
+        IsVerified = v.IsVerified,
+        TimeZone = v.TimeZone,
+        Locale = v.Locale,
+        PriceZones = v.PriceZones.Select(MapPriceZone).ToList()
+    };
+
 
 }

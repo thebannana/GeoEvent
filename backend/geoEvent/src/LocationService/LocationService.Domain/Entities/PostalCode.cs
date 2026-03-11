@@ -10,4 +10,8 @@ public class PostalCode
 
     // Navigation
     public City? City { get; set; }
+
+    // Domain logic
+    public bool HasCoordinates() =>
+        Latitude != 0 && Longitude != 0;
 }

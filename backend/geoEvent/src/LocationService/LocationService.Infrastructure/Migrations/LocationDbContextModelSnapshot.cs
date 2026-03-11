@@ -70,11 +70,11 @@ namespace LocationService.Infrastructure.Migrations
 
                     b.HasIndex("IsActive");
 
-                    b.HasIndex("Level");
-
                     b.HasIndex("ParentDivisionId");
 
                     b.HasIndex("CountryId", "Level");
+
+                    b.HasIndex("Level", "DivisionType");
 
                     b.ToTable("AdministrativeDivisions");
                 });
@@ -114,6 +114,8 @@ namespace LocationService.Infrastructure.Migrations
 
                     b.HasKey("CityId");
 
+                    b.HasIndex("CityName");
+
                     b.HasIndex("CountryId");
 
                     b.HasIndex("DivisionId");
@@ -122,9 +124,7 @@ namespace LocationService.Infrastructure.Migrations
 
                     b.HasIndex("NormalizedName");
 
-                    b.HasIndex("CountryId", "IsActive");
-
-                    b.HasIndex("NormalizedName", "CountryId");
+                    b.HasIndex("DivisionId", "IsActive");
 
                     b.ToTable("Cities");
                 });
@@ -235,7 +235,8 @@ namespace LocationService.Infrastructure.Migrations
 
                     b.HasIndex("CityId");
 
-                    b.HasIndex("Code");
+                    b.HasIndex("Code")
+                        .IsUnique();
 
                     b.HasIndex("Code", "CityId");
 
@@ -261,17 +262,14 @@ namespace LocationService.Infrastructure.Migrations
 
             modelBuilder.Entity("LocationService.Domain.Entities.City", b =>
                 {
-                    b.HasOne("LocationService.Domain.Entities.Country", "Country")
+                    b.HasOne("LocationService.Domain.Entities.Country", null)
                         .WithMany("Cities")
-                        .HasForeignKey("CountryId")
-                        .OnDelete(DeleteBehavior.Restrict);
+                        .HasForeignKey("CountryId");
 
                     b.HasOne("LocationService.Domain.Entities.AdministrativeDivision", "Division")
                         .WithMany("Cities")
                         .HasForeignKey("DivisionId")
                         .OnDelete(DeleteBehavior.Restrict);
-
-                    b.Navigation("Country");
 
                     b.Navigation("Division");
                 });

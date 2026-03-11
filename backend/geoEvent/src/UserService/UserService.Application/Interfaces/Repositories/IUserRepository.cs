@@ -1,5 +1,7 @@
 ﻿using UserService.Domain.Entities;
 using UserService.Application.Common;
+using UserService.Application.DTOs;
+using UserService.Domain.Enums;
 
 namespace UserService.Application.Interfaces.Repositories;
 
@@ -14,6 +16,12 @@ public interface IUserRepository
     Task<User> CreateAsync(User user, Person person);
     Task UpdateAsync(User user);
     Task SoftDeleteAsync(int userId);
+    Task<PagedResult<User>> GetAllAsync(UserFilterDto filter);
+    Task<RefreshToken?> GetActiveRefreshTokenAsync(string tokenHash);
+    Task CleanupExpiredTokensAsync(int userId);
+    Task<User?> GetByResetTokenAsync(string token);
+    Task<User?> GetByVerificationTokenAsync(string token);
+
 
     // Refresh tokens
     Task<RefreshToken?> GetRefreshTokenAsync(string tokenHash);
@@ -34,7 +42,7 @@ public interface IUserRepository
 
     // ── Reports ───────────────────────────────────────────────────
     Task<Report?> GetReportByIdAsync(int reportId);
-    Task<PagedResult<Report>> GetReportsAsync(string? status, int page, int pageSize);
+    Task<PagedResult<Report>> GetReportsAsync(ReportStatus? status, int page, int pageSize);
     Task<List<Report>> GetUserReportsAsync(int userId);
     Task<Report> CreateReportAsync(Report report);
     Task UpdateReportAsync(Report report);

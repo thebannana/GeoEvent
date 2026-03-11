@@ -25,7 +25,7 @@ public class PostalCodeConfiguration : IEntityTypeConfiguration<PostalCode>
             .HasForeignKey(p => p.CityId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        builder.HasIndex(p => p.Code);
+        builder.HasIndex(p => p.Code).IsUnique();
         builder.HasIndex(p => p.CityId);
         builder.HasIndex(p => new { p.Code, p.CityId });
     }

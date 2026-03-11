@@ -1,4 +1,5 @@
 ﻿using System.ComponentModel.DataAnnotations;
+using UserService.Domain.Enums;
 
 namespace UserService.Application.DTOs;
 
@@ -6,7 +7,7 @@ public class CreateReportDto
 {
     [Required]
     [MaxLength(50)]
-    public string TargetType { get; set; } = string.Empty;
+    public ReportTargetType TargetType { get; set; }
 
     [Required]
     public int TargetId { get; set; }

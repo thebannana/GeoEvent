@@ -2,6 +2,7 @@
 using MessageService.Application.DTOs;
 using MessageService.Application.Interfaces.Repositories;
 using MessageService.Domain.Entities;
+using MessageService.Domain.Enums;
 using MessageService.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -19,13 +20,20 @@ public class MessageRepository : IMessageRepository
     public async Task<Message?> GetByIdAsync(int messageId) =>
         await _context.Messages.FindAsync(messageId);
 
-    public async Task<PagedResult<Message>> GetConversationAsync(int userId, int otherUserId, MessageFilterDto filter)
+    public async Task<PagedResult<Message>> GetConversationAsync(
+        int userId, int otherUserId, MessageFilterDto filter)
     {
         var query = _context.Messages
             .Where(m =>
                 (m.SenderId == userId && m.RecipientId == otherUserId && !m.IsDeletedBySender) ||
-                (m.SenderId == otherUserId && m.RecipientId == userId && !m.IsDeletedByRecipient))
-            .OrderByDescending(m => m.SentAt);
+                (m.SenderId == otherUserId && m.RecipientId == userId && !m.IsDeletedByRecipient));
+
+        if (filter.EventId.HasValue)
+            query = query.Where(m => m.EventId == filter.EventId.Value);
+
+        query = filter.SortOrder == MessageSortOrder.Oldest
+            ? query.OrderBy(m => m.SentAt)
+            : query.OrderByDescending(m => m.SentAt);
 
         var total = await query.CountAsync();
         var items = await query
@@ -50,7 +58,10 @@ public class MessageRepository : IMessageRepository
         if (filter.IsRead.HasValue)
             query = query.Where(m => m.IsRead == filter.IsRead.Value);
 
-        query = query.OrderByDescending(m => m.SentAt);
+        query = filter.SortOrder == MessageSortOrder.Oldest
+            ? query.OrderBy(m => m.SentAt)
+            : query.OrderByDescending(m => m.SentAt);
+
 
         var total = await query.CountAsync();
         var items = await query
@@ -111,6 +122,46 @@ public class MessageRepository : IMessageRepository
         await _context.SaveChangesAsync();
     }
 
-    public async Task SaveChangesAsync() =>
-        await _context.SaveChangesAsync();
+    public async Task<List<ConversationSummaryDto>> GetConversationSummariesAsync(int userId)
+    {
+        var messages = await _context.Messages
+            .Where(m =>
+                (m.SenderId == userId && !m.IsDeletedBySender) ||
+                (m.RecipientId == userId && !m.IsDeletedByRecipient))
+            .OrderByDescending(m => m.SentAt)
+            .ToListAsync();
+
+        return messages
+            .GroupBy(m => m.SenderId == userId ? m.RecipientId : m.SenderId)
+            .Select(g =>
+            {
+                var last = g.First();
+                return new ConversationSummaryDto
+                {
+                    OtherUserId = g.Key,
+                    LastMessageContent = last.Content,
+                    LastMessageSentAt = last.SentAt,
+                    UnreadCount = g.Count(m => m.RecipientId == userId && !m.IsRead),
+                    IsLastMessageFromMe = last.SenderId == userId
+                };
+            })
+            .ToList();
+    }
+
+    public async Task<bool> ExistsAsync(int messageId) =>
+    await _context.Messages.AnyAsync(m => m.Id == messageId);
+
+    public async Task MarkAllAsReadAsync(int userId, int otherUserId)
+    {
+        await _context.Messages
+            .Where(m =>
+                m.SenderId == otherUserId &&
+                m.RecipientId == userId &&
+                !m.IsRead &&
+                !m.IsDeletedByRecipient)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(m => m.IsRead, true)
+                .SetProperty(m => m.ReadAt, DateTime.UtcNow));
+    }
+
 }

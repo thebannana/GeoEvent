@@ -12,6 +12,7 @@ public class TicketConfiguration : IEntityTypeConfiguration<Ticket>
 
         builder.HasKey(t => t.TicketId);
 
+        builder.Property(t => t.CancelledAt);
         builder.Property(t => t.Amount).HasPrecision(18, 2);
         builder.Property(t => t.Currency).HasMaxLength(3).IsRequired();
         builder.Property(t => t.QrCode).HasMaxLength(512).IsRequired();
@@ -24,5 +25,7 @@ public class TicketConfiguration : IEntityTypeConfiguration<Ticket>
         builder.HasIndex(t => t.UserId);
         builder.HasIndex(t => t.EventId);
         builder.HasIndex(t => t.ReservationId);
+        builder.HasIndex(t => t.Status);
+        builder.HasIndex(t => t.IssuedAt);
     }
 }

@@ -16,12 +16,7 @@ public class UserDbContext : DbContext
     public DbSet<Report> Reports => Set<Report>();
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        modelBuilder.ApplyConfiguration(new PersonConfiguration());
-        modelBuilder.ApplyConfiguration(new UserConfiguration());
-        modelBuilder.ApplyConfiguration(new RefreshTokenConfiguration());
-        modelBuilder.ApplyConfiguration(new ActivityLogConfiguration());
-        modelBuilder.ApplyConfiguration(new UserPreferenceConfiguration());
-        modelBuilder.ApplyConfiguration(new ReportConfiguration());
+        modelBuilder.ApplyConfigurationsFromAssembly(typeof(UserDbContext).Assembly);
         base.OnModelCreating(modelBuilder);
     }
 

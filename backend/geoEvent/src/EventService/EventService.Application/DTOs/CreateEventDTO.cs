@@ -9,6 +9,7 @@ public class CreateEventDto
     public string Title { get; set; } = string.Empty;
 
     [Required]
+    [StringLength(5000, MinimumLength = 10)]
     public string Description { get; set; } = string.Empty;
 
     public int? SegmentId { get; set; }
@@ -18,9 +19,11 @@ public class CreateEventDto
     public int? CityId { get; set; }
 
     [Required]
+    [Range(-90.0, 90.0)]
     public decimal Latitude { get; set; }
 
     [Required]
+    [Range(-180.0, 180.0)]
     public decimal Longitude { get; set; }
 
     [Required]
@@ -29,12 +32,27 @@ public class CreateEventDto
     [Required]
     public DateTime EndDateTime { get; set; }
 
+    [Range(0, 1_000_000)]
     public int Capacity { get; set; } = 0;
+
+    [Range(0, 100_000)]
     public decimal Price { get; set; } = 0;
+
     public bool IsOnline { get; set; } = false;
+
+    [StringLength(500)]
     public string? Tags { get; set; }
+
+    [StringLength(1000)]
+    [Url]
     public string? ExternalUrl { get; set; }
+
+    [StringLength(1000)]
     public string? AccessibilityInfo { get; set; }
+
+    [StringLength(200)]
     public string? PromoterName { get; set; }
+
+    [StringLength(10)]
     public string Locale { get; set; } = "bs-BA";
 }

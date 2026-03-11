@@ -47,4 +47,15 @@ public class BookmarksController : ControllerBase
             ? Ok(new { message = "Bookmark removed." })
             : StatusCode(result.StatusCode, new { error = result.Error });
     }
+
+    [HttpPatch("{bookmarkId:int}")]
+    public async Task<IActionResult> Update(int bookmarkId, [FromBody] UpdateBookmarkDto dto)
+    {
+        var userId = User.GetUserId();
+        var result = await _eventService.UpdateBookmarkAsync(bookmarkId, dto, userId);
+        return result.Success
+            ? Ok(result.Data)
+            : StatusCode(result.StatusCode, new { error = result.Error });
+    }
+
 }

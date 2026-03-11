@@ -1,5 +1,5 @@
-﻿using System.Net;
-using System.Text.Json;
+﻿using System.Text.Json;
+using EventService.Domain.Exceptions;
 
 namespace EventService.API.Middleware;
 
@@ -20,25 +20,29 @@ public class ExceptionMiddleware
         {
             await _next(context);
         }
+        catch (EventNotFoundException ex) { await Write(context, 404, ex.Message); }
+        catch (VenueNotFoundException ex) { await Write(context, 404, ex.Message); }
+        catch (CommentNotFoundException ex) { await Write(context, 404, ex.Message); }
+        catch (BookmarkNotFoundException ex) { await Write(context, 404, ex.Message); }
+        catch (EventAccessDeniedException ex) { await Write(context, 403, ex.Message); }
+        catch (CommentAccessDeniedException ex) { await Write(context, 403, ex.Message); }
+        catch (DuplicateLikeException ex) { await Write(context, 409, ex.Message); }
+        catch (DuplicateBookmarkException ex) { await Write(context, 409, ex.Message); }
+        catch (EventCapacityExceededException ex) { await Write(context, 409, ex.Message); }
+        catch (EventNotActiveException ex) { await Write(context, 422, ex.Message); }
+        catch (UnauthorizedAccessException ex) { await Write(context, 401, ex.Message); }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unhandled exception: {Message}", ex.Message);
-            await HandleExceptionAsync(context, ex);
+            await Write(context, 500, "An unexpected error occurred.");
         }
     }
 
-    private static Task HandleExceptionAsync(HttpContext context, Exception ex)
+    private static Task Write(HttpContext context, int statusCode, string message)
     {
+        context.Response.StatusCode = statusCode;
         context.Response.ContentType = "application/json";
-        context.Response.StatusCode = (int)HttpStatusCode.InternalServerError;
-
-        var response = JsonSerializer.Serialize(new
-        {
-            statusCode = context.Response.StatusCode,
-            message = "An unexpected error occurred.",
-            detail = ex.Message
-        });
-
-        return context.Response.WriteAsync(response);
+        return context.Response.WriteAsync(
+            JsonSerializer.Serialize(new { error = message }));
     }
 }

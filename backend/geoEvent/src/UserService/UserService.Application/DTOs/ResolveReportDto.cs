@@ -1,9 +1,10 @@
 ﻿using System.ComponentModel.DataAnnotations;
+using UserService.Domain.Enums;
 
 namespace UserService.Application.DTOs;
 
 public class ResolveReportDto
 {
     [Required]
-    public string Action { get; set; } = string.Empty; // "Resolve" or "Dismiss"
+    public ReportResolutionAction Action { get; set; } // "Resolve" or "Dismiss"
 }

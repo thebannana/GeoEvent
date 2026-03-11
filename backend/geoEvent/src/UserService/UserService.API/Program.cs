@@ -125,20 +125,22 @@ app.UseMiddleware<SecurityHeadersMiddleware>();
 app.UseMiddleware<ExceptionMiddleware>();
 app.UseCors("AllowFrontend");
 app.UseRateLimiter();
+app.UseHttpsRedirection();
 
-// ── Always show Swagger ────────────────────────────────────────
-app.UseSwagger();
-app.UseSwaggerUI(options =>
+// ── Always show Swagger if in develeopment ────────────────────────────────────────
+if (app.Environment.IsDevelopment())
 {
-    options.SwaggerEndpoint("/swagger/v1/swagger.json", "UserService v1");
-    options.RoutePrefix = string.Empty;
-});
+    app.UseSwagger();
+    app.UseSwaggerUI(options =>
+    {
+        options.SwaggerEndpoint("/swagger/v1/swagger.json", "UserService v1");
+        options.RoutePrefix = "swagger";
+    });
+}
+
 
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
-
-// ── Apply rate limit policy to auth endpoints ──────────────────
-app.MapGroup("/api/auth").RequireRateLimiting("auth");
 
 app.Run();

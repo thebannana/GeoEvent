@@ -41,7 +41,7 @@ public class AdministrativeDivisionConfiguration : IEntityTypeConfiguration<Admi
         builder.HasIndex(a => a.CountryId);
         builder.HasIndex(a => a.ParentDivisionId);
         builder.HasIndex(a => a.DivisionCode);
-        builder.HasIndex(a => a.Level);
+        builder.HasIndex(a => new { a.Level, a.DivisionType });
         builder.HasIndex(a => a.IsActive);
         builder.HasIndex(a => new { a.CountryId, a.Level });
     }

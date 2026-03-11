@@ -28,18 +28,16 @@ public class Event
     public string? AccessibilityInfo { get; set; }
     public string? PromoterName { get; set; }
     public string Locale { get; set; } = "bs-BA";
-    public DateTime CreatedAt { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? UpdatedAt { get; set; }
-
     public int? SegmentId { get; set; }
     public int? GenreId { get; set; }
     public int? SubGenreId { get; set; }
 
+    // Navigation
     public Segment? Segment { get; set; }
     public Genre? Genre { get; set; }
     public SubGenre? SubGenre { get; set; }
-
-    // Navigation
     public Venue? Venue { get; set; }
     public ICollection<EventImage> Images { get; set; } = [];
     public ICollection<EventLike> Likes { get; set; } = [];
@@ -49,16 +47,54 @@ public class Event
     // Domain logic
     public bool IsUpcoming() => StartDateTime > DateTime.UtcNow;
     public bool IsPast() => EndDateTime < DateTime.UtcNow;
+    public bool IsActive() => Status == EventStatus.Active;
+
+    public bool CanBePublished() =>
+        Status == EventStatus.Draft &&
+        !string.IsNullOrWhiteSpace(Title) &&
+        StartDateTime > DateTime.UtcNow;
+
+    public bool CanBeCancelled() =>
+        Status == EventStatus.Active ||
+        Status == EventStatus.Draft ||
+        Status == EventStatus.Postponed;
+
+    public void Publish()
+    {
+        if (!CanBePublished())
+            throw new InvalidOperationException(
+                "Event cannot be published in its current state.");
+        Status = EventStatus.Active;
+        UpdatedAt = DateTime.UtcNow;
+    }
 
     public void Cancel()
     {
+        if (!CanBeCancelled())
+            throw new InvalidOperationException(
+                "Event cannot be cancelled in its current state.");
         Status = EventStatus.Cancelled;
         UpdatedAt = DateTime.UtcNow;
     }
 
-    public void Publish()
+    public void Postpone()
     {
-        Status = EventStatus.Active;
+        if (Status != EventStatus.Active)
+            throw new InvalidOperationException("Only active events can be postponed.");
+        Status = EventStatus.Postponed;
         UpdatedAt = DateTime.UtcNow;
     }
+
+    public void Complete()
+    {
+        if (Status != EventStatus.Active)
+            throw new InvalidOperationException("Only active events can be completed.");
+        Status = EventStatus.Completed;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void IncrementView() => ViewCount++;
+
+    public void IncrementLike() => LikesCount++;
+    public void DecrementLike() => LikesCount = Math.Max(0, LikesCount - 1);
 }

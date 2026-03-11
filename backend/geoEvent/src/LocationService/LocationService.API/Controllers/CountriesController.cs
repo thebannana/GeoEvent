@@ -1,7 +1,6 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using LocationService.Application.DTOs;
 using LocationService.Application.Interfaces.Services;
-
-namespace LocationService.API.Controllers;
+using Microsoft.AspNetCore.Mvc;
 
 [ApiController]
 [Route("api/countries")]
@@ -15,11 +14,10 @@ public class CountriesController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetAll()
+    public async Task<IActionResult> GetAll([FromQuery] CountryFilterDto filter)
     {
-        var result = await _locationService.GetAllCountriesAsync();
-        return result.Success
-            ? Ok(result.Data)
+        var result = await _locationService.GetCountriesAsync(filter);
+        return result.Success ? Ok(result.Data)
             : StatusCode(result.StatusCode, new { error = result.Error });
     }
 
@@ -27,17 +25,15 @@ public class CountriesController : ControllerBase
     public async Task<IActionResult> GetById(int countryId)
     {
         var result = await _locationService.GetCountryByIdAsync(countryId);
-        return result.Success
-            ? Ok(result.Data)
+        return result.Success ? Ok(result.Data)
             : StatusCode(result.StatusCode, new { error = result.Error });
     }
 
-    [HttpGet("{countryId:int}/divisions")]
-    public async Task<IActionResult> GetDivisions(int countryId)
+    [HttpGet("code/{code}")]
+    public async Task<IActionResult> GetByCode(string code)
     {
-        var result = await _locationService.GetDivisionsByCountryAsync(countryId);
-        return result.Success
-            ? Ok(result.Data)
+        var result = await _locationService.GetCountryByCodeAsync(code);
+        return result.Success ? Ok(result.Data)
             : StatusCode(result.StatusCode, new { error = result.Error });
     }
 
@@ -45,26 +41,17 @@ public class CountriesController : ControllerBase
     public async Task<IActionResult> GetCities(int countryId)
     {
         var result = await _locationService.GetCitiesByCountryAsync(countryId);
-        return result.Success
-            ? Ok(result.Data)
+        return result.Success ? Ok(result.Data)
             : StatusCode(result.StatusCode, new { error = result.Error });
     }
 
-    [HttpGet("divisions/{divisionId:int}")]
-    public async Task<IActionResult> GetDivisionById(int divisionId)
+    [HttpGet("{countryId:int}/divisions")]
+    public async Task<IActionResult> GetDivisions(
+        int countryId, [FromQuery] DivisionFilterDto filter)
     {
-        var result = await _locationService.GetDivisionByIdAsync(divisionId);
-        return result.Success
-            ? Ok(result.Data)
-            : StatusCode(result.StatusCode, new { error = result.Error });
-    }
-
-    [HttpGet("divisions/{divisionId:int}/children")]
-    public async Task<IActionResult> GetChildDivisions(int divisionId)
-    {
-        var result = await _locationService.GetChildDivisionsAsync(divisionId);
-        return result.Success
-            ? Ok(result.Data)
+        filter.CountryId = countryId;
+        var result = await _locationService.GetDivisionsAsync(filter);
+        return result.Success ? Ok(result.Data)
             : StatusCode(result.StatusCode, new { error = result.Error });
     }
 }

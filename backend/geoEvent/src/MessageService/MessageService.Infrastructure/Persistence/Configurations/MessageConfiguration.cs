@@ -12,7 +12,7 @@ public class MessageConfiguration : IEntityTypeConfiguration<Message>
 
         builder.Property(m => m.Content)
             .IsRequired()
-            .HasMaxLength(2000);
+            .HasMaxLength(4000);
 
         builder.Property(m => m.SentAt)
             .IsRequired();
@@ -26,10 +26,20 @@ public class MessageConfiguration : IEntityTypeConfiguration<Message>
         builder.Property(m => m.IsDeletedByRecipient)
             .HasDefaultValue(false);
 
+        builder.Property(m => m.LikesCount)
+            .HasDefaultValue(0);
+
+        // EventId is nullable FK to external service — no navigation, just the column
+        builder.Property(m => m.EventId);
+
+        builder.Property(m => m.EditedAt);
+
         builder.HasIndex(m => m.SenderId);
         builder.HasIndex(m => m.RecipientId);
         builder.HasIndex(m => m.IsRead);
         builder.HasIndex(m => m.SentAt);
+        builder.HasIndex(m => m.EventId);
         builder.HasIndex(m => new { m.SenderId, m.RecipientId });
+        builder.HasIndex(m => new { m.SenderId, m.RecipientId, m.SentAt });
     }
 }

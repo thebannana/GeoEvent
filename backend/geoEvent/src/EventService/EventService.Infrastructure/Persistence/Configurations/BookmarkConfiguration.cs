@@ -16,7 +16,7 @@ public class BookmarkConfiguration : IEntityTypeConfiguration<Bookmark>
 
         builder.Property(b => b.Memo)
             .HasMaxLength(500)
-            .IsRequired();
+            .IsRequired(false);
 
         builder.HasOne(b => b.Event)
             .WithMany(e => e.Bookmarks)

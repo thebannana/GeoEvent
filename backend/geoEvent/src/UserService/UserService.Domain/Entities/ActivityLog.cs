@@ -1,12 +1,14 @@
-﻿namespace UserService.Domain.Entities;
+﻿using UserService.Domain.Enums;
+
+namespace UserService.Domain.Entities;
 
 public class ActivityLog
 {
     public int LogId { get; set; }
     public int TargetId { get; set; }
-    public int SessionId { get; set; }
-    public string ActionType { get; set; } = string.Empty;
-    public string TargetType { get; set; } = string.Empty;
+    public Guid SessionId { get; set; }
+    public ActivityActionType ActionType { get; set; }
+    public ActivityTargetType TargetType { get; set; }
     public string Metadata { get; set; } = string.Empty;
     public int? UserId { get; set; }
     public int? SegmentId { get; set; }

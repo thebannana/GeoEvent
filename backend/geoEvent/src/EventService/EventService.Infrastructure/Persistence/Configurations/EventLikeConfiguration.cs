@@ -20,5 +20,9 @@ public class EventLikeConfiguration : IEntityTypeConfiguration<EventLike>
             .WithMany(e => e.Likes)
             .HasForeignKey(l => l.EventId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasIndex(l => l.LikedAt);    // in migration, missing from config
+        builder.HasIndex(l => l.EventId);
+
     }
 }

@@ -48,6 +48,15 @@ builder.Services.AddRateLimiter(options =>
         await context.HttpContext.Response.WriteAsync(
             "{\"error\": \"Too many requests. Please slow down.\"}", token);
     };
+
+    options.AddFixedWindowLimiter("create-reservation", opt =>
+    {
+        opt.PermitLimit = 10;
+        opt.Window = TimeSpan.FromMinutes(1);
+        opt.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+        opt.QueueLimit = 0;
+    });
+
 });
 
 // ── JWT Authentication ─────────────────────────────────────────
@@ -115,13 +124,17 @@ app.UseMiddleware<SecurityHeadersMiddleware>();
 app.UseMiddleware<ExceptionMiddleware>();
 app.UseCors("AllowFrontend");
 app.UseRateLimiter();
+app.UseHttpsRedirection();
 
-app.UseSwagger();
-app.UseSwaggerUI(options =>
+if (app.Environment.IsDevelopment())
 {
-    options.SwaggerEndpoint("/swagger/v1/swagger.json", "TicketService v1");
-    options.RoutePrefix = string.Empty;
-});
+    app.UseSwagger();
+    app.UseSwaggerUI(options =>
+    {
+        options.SwaggerEndpoint("/swagger/v1/swagger.json", "TicketService v1");
+        options.RoutePrefix = "swagger";
+    });
+}
 
 app.UseAuthentication();
 app.UseAuthorization();

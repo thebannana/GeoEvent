@@ -7,7 +7,10 @@ public class SendMessageDto
     [Required]
     public int RecipientId { get; set; }
 
+    public int? EventId { get; set; }
+
     [Required]
-    [MaxLength(2000)]
+    [MinLength(1)]
+    [MaxLength(4000)]
     public string Content { get; set; } = string.Empty;
 }

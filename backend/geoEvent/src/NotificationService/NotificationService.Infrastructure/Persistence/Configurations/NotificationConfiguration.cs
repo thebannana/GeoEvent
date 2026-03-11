@@ -11,8 +11,11 @@ public class NotificationConfiguration : IEntityTypeConfiguration<Notification>
         builder.HasKey(n => n.NotificationId);
 
         builder.Property(n => n.Type)
+            .HasConversion<string>()
             .HasMaxLength(50)
             .IsRequired();
+
+        builder.Property(n => n.ReadAt);
 
         builder.Property(n => n.Title)
             .HasMaxLength(200)
@@ -29,6 +32,6 @@ public class NotificationConfiguration : IEntityTypeConfiguration<Notification>
         builder.HasIndex(n => n.IsRead);
         builder.HasIndex(n => n.Type);
         builder.HasIndex(n => n.CreatedAt);
-        builder.HasIndex(n => new { n.UserId, n.IsRead });
+        builder.HasIndex(n => new { n.UserId, n.IsRead, n.CreatedAt });
     }
 }

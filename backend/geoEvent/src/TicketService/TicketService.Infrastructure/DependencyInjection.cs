@@ -6,6 +6,7 @@ using TicketService.Application.Interfaces.Services;
 using TicketService.Infrastructure.Persistence;
 using TicketService.Infrastructure.Repositories;
 using TicketService.Infrastructure.Services;
+using TicketService.Infrastructure.BackgroundServices;
 
 namespace TicketService.Infrastructure;
 
@@ -20,6 +21,7 @@ public static class DependencyInjection
 
         services.AddScoped<ITicketRepository, TicketRepository>();
         services.AddScoped<ITicketService, TicketServiceImpl>();
+        services.AddHostedService<ReservationExpiryBackgroundService>();
 
         return services;
     }

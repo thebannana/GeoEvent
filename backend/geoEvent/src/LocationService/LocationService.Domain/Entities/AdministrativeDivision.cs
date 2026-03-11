@@ -18,4 +18,8 @@ public class AdministrativeDivision
     public AdministrativeDivision? ParentDivision { get; set; }
     public ICollection<AdministrativeDivision> ChildDivisions { get; set; } = [];
     public ICollection<City> Cities { get; set; } = [];
+
+    // Domain logic
+    public bool IsTopLevel() => ParentDivisionId is null;
+    public bool HasChildren() => ChildDivisions.Count > 0;
 }

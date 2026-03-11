@@ -13,6 +13,12 @@ public class User
     public bool IsVerified { get; set; } = false;
     public bool IsBanned { get; set; } = false;
     public DateTime CreatedAt { get; set; }
+    public string? EmailVerificationToken { get; set; }
+    public DateTime? EmailVerificationTokenExpiresAt { get; set; }
+    public DateTime? EmailVerifiedAt { get; set; }
+    public string? PasswordResetToken { get; set; }
+    public DateTime? PasswordResetTokenExpiresAt { get; set; }
+
 
     // Security
     public int FailedLoginAttempts { get; set; } = 0;
@@ -57,4 +63,23 @@ public class User
         Person!.IsDeleted = true;
         Person.DeletedAt = DateTime.UtcNow;
     }
+
+    public bool IsEmailVerificationTokenValid(string token) =>
+    EmailVerificationToken == token &&
+    EmailVerificationTokenExpiresAt.HasValue &&
+    DateTime.UtcNow < EmailVerificationTokenExpiresAt.Value;
+
+    public bool IsPasswordResetTokenValid(string token) =>
+        PasswordResetToken == token &&
+        PasswordResetTokenExpiresAt.HasValue &&
+        DateTime.UtcNow < PasswordResetTokenExpiresAt.Value;
+
+    public void VerifyEmail()
+    {
+        IsVerified = true;
+        EmailVerifiedAt = DateTime.UtcNow;
+        EmailVerificationToken = null;
+        EmailVerificationTokenExpiresAt = null;
+    }
+
 }

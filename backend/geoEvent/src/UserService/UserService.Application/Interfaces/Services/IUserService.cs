@@ -1,5 +1,6 @@
 ﻿using UserService.Application.Common;
 using UserService.Application.DTOs;
+using UserService.Domain.Enums;
 
 namespace UserService.Application.Interfaces.Services;
 
@@ -10,11 +11,15 @@ public interface IUserService
     Task<ServiceResult<bool>> DeleteAccountAsync(int userId);
     Task<ServiceResult<bool>> BanUserAsync(int userId);
     Task<ServiceResult<bool>> UnbanUserAsync(int userId);
-    Task<ServiceResult<bool>> VerifyEmailAsync(int userId);
+    Task<ServiceResult<bool>> VerifyEmailAsync(string token);
+    Task<ServiceResult<bool>> ChangePasswordAsync(int userId, ChangePasswordDto dto);
+    Task<ServiceResult<PagedResult<UserProfileDto>>> GetAllUsersAsync(UserFilterDto filter); // admin
+    Task<ServiceResult<bool>> AdminVerifyUserAsync(int userId);
+
 
     // ── Activity Logs ─────────────────────────────────────────────
     Task<ServiceResult<List<ActivityLogResponseDto>>> GetUserActivityLogsAsync(int userId, int page, int pageSize);
-    Task<ServiceResult<ActivityLogResponseDto>> LogActivityAsync(int userId, string actionType, string targetType, int targetId, string metadata, int sessionId);
+    Task<ServiceResult<ActivityLogResponseDto>> LogActivityAsync(int userId, ActivityActionType actionType, ActivityTargetType targetType, int targetId, string metadata, Guid sessionId);
 
     // ── User Preferences ──────────────────────────────────────────
     Task<ServiceResult<List<UserPreferenceResponseDto>>> GetUserPreferencesAsync(int userId);
@@ -24,7 +29,7 @@ public interface IUserService
     // ── Reports ───────────────────────────────────────────────────
     Task<ServiceResult<ReportResponseDto>> CreateReportAsync(CreateReportDto dto, int reporterId);
     Task<ServiceResult<List<ReportResponseDto>>> GetUserReportsAsync(int userId);
-    Task<ServiceResult<PagedResult<ReportResponseDto>>> GetAllReportsAsync(string? status, int page, int pageSize);
+    Task<ServiceResult<PagedResult<ReportResponseDto>>> GetAllReportsAsync(ReportStatus? status, int page, int pageSize);
     Task<ServiceResult<ReportResponseDto>> ResolveReportAsync(int reportId, ResolveReportDto dto, int resolvedById);
 
 }

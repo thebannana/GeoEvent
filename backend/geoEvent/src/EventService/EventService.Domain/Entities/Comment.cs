@@ -1,4 +1,6 @@
-﻿namespace EventService.Domain.Entities;
+﻿using EventService.Domain.Enums;
+
+namespace EventService.Domain.Entities;
 
 public class Comment
 {
@@ -7,9 +9,9 @@ public class Comment
     public int LikesCount { get; set; } = 0;
     public int? UserId { get; set; }
     public int? EventId { get; set; }
-    public DateTime CreatedAt { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? UpdatedAt { get; set; }
-    public bool IsDeleted { get; set; } = false;
+    public bool IsDeleted { get; set; } = false;       // keep — matches migration column
     public int? ParentCommentId { get; set; }
 
     // Navigation
@@ -18,8 +20,15 @@ public class Comment
     public ICollection<Comment> Replies { get; set; } = [];
 
     // Domain logic
+    public bool IsReply => ParentCommentId is not null;
+    public bool IsTopLevel => ParentCommentId is null;
+
     public void Edit(string content)
     {
+        if (IsDeleted)
+            throw new InvalidOperationException("Cannot edit a deleted comment.");
+        if (string.IsNullOrWhiteSpace(content))
+            throw new ArgumentException("Comment content cannot be empty.");
         Content = content;
         UpdatedAt = DateTime.UtcNow;
     }

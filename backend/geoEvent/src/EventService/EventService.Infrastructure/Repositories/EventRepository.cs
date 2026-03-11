@@ -18,15 +18,22 @@ public class EventRepository : IEventRepository
     }
 
     public async Task<Event?> GetByIdAsync(int eventId) =>
-        await _context.Events
-            .Include(e => e.Images)
-            .Include(e => e.Venue)
-            .FirstOrDefaultAsync(e => e.EventId == eventId);
+    await _context.Events
+        .Include(e => e.Images)
+        .Include(e => e.Venue)
+        .Include(e => e.Segment)
+        .Include(e => e.Genre)
+        .Include(e => e.SubGenre)
+        .FirstOrDefaultAsync(e => e.EventId == eventId);
 
-    public async Task<Event?> GetByIdWithImagesAsync(int eventId) =>
-        await _context.Events
-            .Include(e => e.Images)
-            .FirstOrDefaultAsync(e => e.EventId == eventId);
+    public async Task<Event?> GetByIdWithDetailsAsync(int eventId) =>
+    await _context.Events
+        .Include(e => e.Images)
+        .Include(e => e.Venue)
+        .Include(e => e.Segment)
+        .Include(e => e.Genre)
+        .Include(e => e.SubGenre)
+        .FirstOrDefaultAsync(e => e.EventId == eventId);
 
     public async Task<PagedResult<Event>> GetAllAsync(EventFilterDto filter)
     {
@@ -34,34 +41,8 @@ public class EventRepository : IEventRepository
             .Include(e => e.Images)
             .AsQueryable();
 
-        if (filter.CityId.HasValue)
-            query = query.Where(e => e.CityId == filter.CityId);
-        if (filter.SegmentId.HasValue)
-            query = query.Where(e => e.SegmentId == filter.SegmentId);
-        if (filter.GenreId.HasValue)
-            query = query.Where(e => e.GenreId == filter.GenreId);
-        if (filter.OrganizerId.HasValue)
-            query = query.Where(e => e.OrganizerId == filter.OrganizerId);
-        if (filter.MinPrice.HasValue)
-            query = query.Where(e => e.Price >= filter.MinPrice);
-        if (filter.MaxPrice.HasValue)
-            query = query.Where(e => e.Price <= filter.MaxPrice);
-        if (filter.FromDate.HasValue)
-            query = query.Where(e => e.StartDateTime >= filter.FromDate);
-        if (filter.ToDate.HasValue)
-            query = query.Where(e => e.StartDateTime <= filter.ToDate);
-        if (filter.IsOnline.HasValue)
-            query = query.Where(e => e.IsOnline == filter.IsOnline);
-        if (filter.IsFeatured.HasValue)
-            query = query.Where(e => e.IsFeatured == filter.IsFeatured);
-        if (!string.IsNullOrWhiteSpace(filter.SearchTerm))
-            query = query.Where(e =>
-                e.Title.Contains(filter.SearchTerm) ||
-                e.Description.Contains(filter.SearchTerm) ||
-                e.Tags!.Contains(filter.SearchTerm));
-        if (!string.IsNullOrWhiteSpace(filter.Status) &&
-            Enum.TryParse<EventStatus>(filter.Status, out var status))
-            query = query.Where(e => e.Status == status);
+        if (filter.Status.HasValue)
+            query = query.Where(e => e.Status == filter.Status.Value);
 
         var totalCount = await query.CountAsync();
 
@@ -95,6 +76,44 @@ public class EventRepository : IEventRepository
         };
     }
 
+    public async Task<List<Event>> GetNearbyAsync(NearbyEventSearchDto dto)
+    {
+        // Degree approximations for bounding box pre-filter
+        var latDelta = (decimal)(dto.RadiusKm / 111.0);
+        var lonDelta = (decimal)(dto.RadiusKm / (111.0 * Math.Cos((double)dto.Latitude * Math.PI / 180.0)));
+
+        return await _context.Events
+            .Include(e => e.Images)
+            .Include(e => e.Venue)
+            .Where(e => e.Status == EventStatus.Active &&
+                        e.Latitude >= dto.Latitude - latDelta &&
+                        e.Latitude <= dto.Latitude + latDelta &&
+                        e.Longitude >= dto.Longitude - lonDelta &&
+                        e.Longitude <= dto.Longitude + lonDelta)
+            .OrderBy(e => e.StartDateTime)
+            .Take(dto.Limit)
+            .ToListAsync();
+    }
+
+    public async Task<List<EventImage>> GetEventImagesAsync(int eventId) =>
+    await _context.EventImages
+        .Where(i => i.EventId == eventId)
+        .OrderByDescending(i => i.IsCover)
+        .ThenBy(i => i.UploadedAt)
+        .ToListAsync();
+
+    public async Task SetCoverImageAsync(int eventId, int imageId)
+    {
+        await _context.EventImages
+            .Where(i => i.EventId == eventId)
+            .ExecuteUpdateAsync(s => s.SetProperty(i => i.IsCover, false));
+
+        await _context.EventImages
+            .Where(i => i.ImageId == imageId)
+            .ExecuteUpdateAsync(s => s.SetProperty(i => i.IsCover, true));
+    }
+
+
     public async Task<Event> CreateAsync(Event entity)
     {
         entity.CreatedAt = DateTime.UtcNow;
@@ -126,10 +145,6 @@ public class EventRepository : IEventRepository
             .ExecuteUpdateAsync(s =>
                 s.SetProperty(e => e.ViewCount, e => e.ViewCount + 1));
 
-    public async Task<bool> IsLikedByUserAsync(int eventId, int userId) =>
-        await _context.EventLikes
-            .AnyAsync(l => l.EventId == eventId && l.UserId == userId);
-
     public async Task LikeAsync(int eventId, int userId)
     {
         await _context.EventLikes.AddAsync(new EventLike
@@ -143,6 +158,11 @@ public class EventRepository : IEventRepository
             .ExecuteUpdateAsync(s =>
                 s.SetProperty(e => e.LikesCount, e => e.LikesCount + 1));
     }
+
+    public async Task<bool> IsLikedByUserAsync(int eventId, int userId) =>
+    await _context.EventLikes
+        .AnyAsync(l => l.EventId == eventId && l.UserId == userId);
+
 
     public async Task UnlikeAsync(int eventId, int userId)
     {
@@ -205,6 +225,10 @@ public class EventRepository : IEventRepository
             .OrderBy(s => s.Name)
             .ToListAsync();
 
+    public async Task<SubGenre?> GetSubGenreByIdAsync(int subGenreId) =>
+    await _context.SubGenres.FindAsync(subGenreId);
+
+
     // ── PriceZones ────────────────────────────────────────────────
     public async Task<List<PriceZone>> GetPriceZonesByVenueAsync(int venueId) =>
         await _context.PriceZones
@@ -253,6 +277,13 @@ public class EventRepository : IEventRepository
         await _context.SaveChangesAsync();
     }
 
+    public async Task UpdateBookmarkAsync(Bookmark bookmark)
+    {
+        _context.Bookmarks.Update(bookmark);
+        await _context.SaveChangesAsync();
+    }
+
+
     // ── Comments ──────────────────────────────────────────────────
     public async Task<Comment?> GetCommentByIdAsync(int commentId) =>
         await _context.Comments
@@ -277,6 +308,62 @@ public class EventRepository : IEventRepository
     {
         _context.Comments.Update(comment);
         await _context.SaveChangesAsync();
+    }
+
+    public async Task<List<Comment>> GetRepliesAsync(int parentCommentId) =>
+    await _context.Comments
+        .Where(c => c.ParentCommentId == parentCommentId && !c.IsDeleted)
+        .OrderBy(c => c.CreatedAt)
+        .ToListAsync();
+
+    public async Task<bool> IsCommentLikedByUserAsync(int commentId, int userId) =>
+        await _context.CommentLikes
+            .AnyAsync(l => l.CommentId == commentId && l.UserId == userId);
+
+    public async Task LikeCommentAsync(int commentId, int userId)
+    {
+        _context.CommentLikes.Add(new CommentLike
+        {
+            CommentId = commentId,
+            UserId = userId,
+            LikedAt = DateTime.UtcNow
+        });
+        await _context.Comments
+            .Where(c => c.CommentId == commentId)
+            .ExecuteUpdateAsync(s => s.SetProperty(c => c.LikesCount, c => c.LikesCount + 1));
+        await _context.SaveChangesAsync();
+    }
+
+    public async Task UnlikeCommentAsync(int commentId, int userId)
+    {
+        await _context.CommentLikes
+            .Where(l => l.CommentId == commentId && l.UserId == userId)
+            .ExecuteDeleteAsync();
+        await _context.Comments
+            .Where(c => c.CommentId == commentId && c.LikesCount > 0)
+            .ExecuteUpdateAsync(s => s.SetProperty(c => c.LikesCount, c => c.LikesCount - 1));
+    }
+
+
+    // ── Venues ─────────────────────────────────────────────────
+
+    public async Task<Venue?> GetVenueByIdAsync(int venueId) =>
+    await _context.Venues
+        .Include(v => v.PriceZones.Where(p => p.IsActive))
+        .FirstOrDefaultAsync(v => v.VenueId == venueId);
+
+    public async Task<List<Venue>> GetVenuesByCityAsync(int cityId) =>
+        await _context.Venues
+            .Where(v => v.CityId == cityId)
+            .OrderBy(v => v.Name)
+            .ToListAsync();
+
+    public async Task<Venue> CreateVenueAsync(Venue venue)
+    {
+        venue.CreatedAt = DateTime.UtcNow;
+        _context.Venues.Add(venue);
+        await _context.SaveChangesAsync();
+        return venue;
     }
 
 }

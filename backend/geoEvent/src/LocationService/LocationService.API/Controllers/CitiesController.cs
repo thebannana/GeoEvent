@@ -41,9 +41,18 @@ public class CitiesController : ControllerBase
         if (string.IsNullOrWhiteSpace(term))
             return BadRequest(new { error = "Search term is required." });
 
+        limit = Math.Clamp(limit, 1, 50);    // guard against abuse
+
         var result = await _locationService.SearchCitiesAsync(term, limit);
-        return result.Success
-            ? Ok(result.Data)
+        return result.Success ? Ok(result.Data)
+            : StatusCode(result.StatusCode, new { error = result.Error });
+    }
+
+    [HttpGet("nearby")]
+    public async Task<IActionResult> GetNearby([FromQuery] NearbySearchDto dto)
+    {
+        var result = await _locationService.GetNearbyCitiesAsync(dto);
+        return result.Success ? Ok(result.Data)
             : StatusCode(result.StatusCode, new { error = result.Error });
     }
 

@@ -3,16 +3,65 @@ using UserService.Application.DTOs;
 using UserService.Application.Interfaces.Repositories;
 using UserService.Application.Interfaces.Services;
 using UserService.Domain.Entities;
+using UserService.Domain.Enums;
 
 namespace UserService.Infrastructure.Services;
 
 public class UserServiceImpl : IUserService
 {
     private readonly IUserRepository _userRepository;
+    private readonly PasswordService _passwordService;
 
-    public UserServiceImpl(IUserRepository userRepository)
+    public UserServiceImpl(IUserRepository userRepository, PasswordService passwordService)
     {
         _userRepository = userRepository;
+        _passwordService = passwordService;
+    }
+
+
+    public async Task<ServiceResult<bool>> ChangePasswordAsync(int userId, ChangePasswordDto dto)
+    {
+        var user = await _userRepository.GetByIdAsync(userId);
+        if (user is null)
+            return ServiceResult<bool>.NotFound($"User {userId} not found.");
+
+        if (!_passwordService.VerifyPassword(dto.CurrentPassword, user.PasswordHash, user.PasswordSalt))
+            return ServiceResult<bool>.Unauthorized("Current password is incorrect.");
+
+        var (hash, salt) = _passwordService.HashPassword(dto.NewPassword);
+        user.PasswordHash = hash;
+        user.PasswordSalt = salt;
+
+        await _userRepository.RevokeAllUserTokensAsync(userId);
+        await _userRepository.UpdateAsync(user);
+        return ServiceResult<bool>.Ok(true);
+    }
+
+    public async Task<ServiceResult<bool>> AdminVerifyUserAsync(int userId)
+    {
+        var user = await _userRepository.GetByIdAsync(userId);
+        if (user is null)
+            return ServiceResult<bool>.NotFound($"User {userId} not found.");
+
+        user.IsVerified = true;
+        user.EmailVerifiedAt = DateTime.UtcNow;
+        user.EmailVerificationToken = null;
+        user.EmailVerificationTokenExpiresAt = null;
+        await _userRepository.UpdateAsync(user);
+        return ServiceResult<bool>.Ok(true);
+    }
+
+    public async Task<ServiceResult<PagedResult<UserProfileDto>>> GetAllUsersAsync(UserFilterDto filter)
+    {
+        var result = await _userRepository.GetAllAsync(filter);
+        var mapped = new PagedResult<UserProfileDto>
+        {
+            Items = result.Items.Select(MapToProfile),
+            TotalCount = result.TotalCount,
+            Page = result.Page,
+            PageSize = result.PageSize
+        };
+        return ServiceResult<PagedResult<UserProfileDto>>.Ok(mapped);
     }
 
     public async Task<ServiceResult<UserProfileDto>> GetProfileAsync(int userId)
@@ -80,13 +129,13 @@ public class UserServiceImpl : IUserService
         return ServiceResult<bool>.Ok(true);
     }
 
-    public async Task<ServiceResult<bool>> VerifyEmailAsync(int userId)
+    public async Task<ServiceResult<bool>> VerifyEmailAsync(string token)
     {
-        var user = await _userRepository.GetByIdAsync(userId);
-        if (user is null)
-            return ServiceResult<bool>.NotFound($"User {userId} not found.");
+        var user = await _userRepository.GetByVerificationTokenAsync(token);
+        if (user is null || !user.IsEmailVerificationTokenValid(token))
+            return ServiceResult<bool>.Unauthorized("Invalid or expired verification token.");
 
-        user.IsVerified = true;
+        user.VerifyEmail();
         await _userRepository.UpdateAsync(user);
         return ServiceResult<bool>.Ok(true);
     }
@@ -114,7 +163,12 @@ public class UserServiceImpl : IUserService
     }
 
     public async Task<ServiceResult<ActivityLogResponseDto>> LogActivityAsync(
-        int userId, string actionType, string targetType, int targetId, string metadata, int sessionId)
+    int userId,
+    ActivityActionType actionType,
+    ActivityTargetType targetType,
+    int targetId,
+    string metadata,
+    Guid sessionId)
     {
         var log = new ActivityLog
         {
@@ -129,6 +183,7 @@ public class UserServiceImpl : IUserService
         var created = await _userRepository.CreateActivityLogAsync(log);
         return ServiceResult<ActivityLogResponseDto>.Ok(MapActivityLog(created));
     }
+
 
     // ── User Preferences ──────────────────────────────────────────
     public async Task<ServiceResult<List<UserPreferenceResponseDto>>> GetUserPreferencesAsync(int userId)
@@ -183,8 +238,9 @@ public class UserServiceImpl : IUserService
             TargetId = dto.TargetId,
             Reason = dto.Reason,
             Description = dto.Description,
-            Status = "Pending",
-            ReporterId = reporterId
+            Status = ReportStatus.Pending,
+            ReporterId = reporterId,
+            CreatedAt = DateTime.UtcNow
         };
         var created = await _userRepository.CreateReportAsync(report);
         return ServiceResult<ReportResponseDto>.Ok(MapReport(created));
@@ -197,7 +253,7 @@ public class UserServiceImpl : IUserService
     }
 
     public async Task<ServiceResult<PagedResult<ReportResponseDto>>> GetAllReportsAsync(
-        string? status, int page, int pageSize)
+    ReportStatus? status, int page, int pageSize)
     {
         var result = await _userRepository.GetReportsAsync(status, page, pageSize);
         var mapped = new PagedResult<ReportResponseDto>
@@ -217,9 +273,9 @@ public class UserServiceImpl : IUserService
         if (report is null)
             return ServiceResult<ReportResponseDto>.NotFound("Report not found.");
 
-        if (dto.Action == "Resolve")
+        if (dto.Action == ReportResolutionAction.Resolve)
             report.Resolve(resolvedById);
-        else if (dto.Action == "Dismiss")
+        else if (dto.Action == ReportResolutionAction.Dismiss)
             report.Dismiss(resolvedById);
         else
             return ServiceResult<ReportResponseDto>.Fail("Invalid action. Use 'Resolve' or 'Dismiss'.");
@@ -234,8 +290,8 @@ public class UserServiceImpl : IUserService
         LogId = a.LogId,
         TargetId = a.TargetId,
         SessionId = a.SessionId,
-        ActionType = a.ActionType,
-        TargetType = a.TargetType,
+        ActionType = a.ActionType.ToString(),
+        TargetType = a.TargetType.ToString(),
         Metadata = a.Metadata,
         UserId = a.UserId,
         SegmentId = a.SegmentId,
@@ -256,13 +312,16 @@ public class UserServiceImpl : IUserService
     private static ReportResponseDto MapReport(Report r) => new()
     {
         ReportId = r.ReportId,
-        TargetType = r.TargetType,
+        TargetType = r.TargetType.ToString(),
         TargetId = r.TargetId,
         Reason = r.Reason,
-        Status = r.Status,
+        Status = r.Status.ToString(),
         ReporterId = r.ReporterId,
         ResolvedById = r.ResolvedById,
-        Description = r.Description
+        Description = r.Description,
+        CreatedAt = r.CreatedAt,
+        ResolvedAt = r.ResolvedAt
     };
+
 
 }

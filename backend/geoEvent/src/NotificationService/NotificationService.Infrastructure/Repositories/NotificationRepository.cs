@@ -1,7 +1,9 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using NotificationService.Application.Common;
+using NotificationService.Application.DTOs;
 using NotificationService.Application.Interfaces.Repositories;
 using NotificationService.Domain.Entities;
+using NotificationService.Domain.Enums;
 using NotificationService.Infrastructure.Persistence;
 
 namespace NotificationService.Infrastructure.Repositories;
@@ -21,24 +23,28 @@ public class NotificationRepository : INotificationRepository
             .FirstOrDefaultAsync(n => n.NotificationId == notificationId);
 
     public async Task<PagedResult<Notification>> GetUserNotificationsAsync(
-        int userId, int page, int pageSize)
+    int userId, NotificationFilterDto filter)
     {
         var query = _context.Notifications
-            .Where(n => n.UserId == userId)
-            .OrderByDescending(n => n.CreatedAt);
+            .Where(n => n.UserId == userId);
+
+        if (filter.IsRead.HasValue)
+            query = query.Where(n => n.IsRead == filter.IsRead.Value);
+
+        query = query.OrderByDescending(n => n.CreatedAt);
 
         var total = await query.CountAsync();
         var items = await query
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
+            .Skip((filter.Page - 1) * filter.PageSize)
+            .Take(filter.PageSize)
             .ToListAsync();
 
         return new PagedResult<Notification>
         {
             Items = items,
             TotalCount = total,
-            Page = page,
-            PageSize = pageSize
+            Page = filter.Page,
+            PageSize = filter.PageSize
         };
     }
 
@@ -63,7 +69,9 @@ public class NotificationRepository : INotificationRepository
     {
         await _context.Notifications
             .Where(n => n.UserId == userId && !n.IsRead)
-            .ExecuteUpdateAsync(s => s.SetProperty(n => n.IsRead, true));
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(n => n.IsRead, true)
+                .SetProperty(n => n.ReadAt, DateTime.UtcNow));
     }
 
     // Queue
@@ -72,17 +80,23 @@ public class NotificationRepository : INotificationRepository
             .FirstOrDefaultAsync(q => q.QueueId == queueId);
 
     public async Task<List<NotificationQueue>> GetPendingQueueItemsAsync(int batchSize) =>
-        await _context.NotificationQueues
-            .Where(q => q.Status == "Pending" && q.ScheduledAt <= DateTime.UtcNow)
-            .OrderBy(q => q.ScheduledAt)
-            .Take(batchSize)
-            .ToListAsync();
+     await _context.NotificationQueues
+         .Where(q =>
+             q.Status == NotificationQueueStatus.Pending &&
+             q.ScheduledAt <= DateTime.UtcNow)
+         .OrderBy(q => q.ScheduledAt)
+         .Take(batchSize)
+         .ToListAsync();
 
-    public async Task<List<NotificationQueue>> GetFailedQueueItemsAsync() =>
-        await _context.NotificationQueues
-            .Where(q => q.Status == "Failed" && q.AttemptCount < 3)
-            .OrderBy(q => q.CreatedAt)
-            .ToListAsync();
+
+    public async Task<List<NotificationQueue>> GetFailedRetryableItemsAsync() =>
+    await _context.NotificationQueues
+        .Where(q =>
+            q.Status == NotificationQueueStatus.Failed &&
+            q.AttemptCount < q.MaxAttempts)
+        .OrderBy(q => q.CreatedAt)
+        .ToListAsync();
+
 
     public async Task<NotificationQueue> CreateQueueItemAsync(NotificationQueue queueItem)
     {
@@ -96,4 +110,42 @@ public class NotificationRepository : INotificationRepository
         _context.NotificationQueues.Update(queueItem);
         await _context.SaveChangesAsync();
     }
+
+    public async Task DeleteAsync(Notification notification)
+    {
+        _context.Notifications.Remove(notification);
+        await _context.SaveChangesAsync();
+    }
+
+    public async Task<PagedResult<NotificationQueue>> GetQueueItemsAsync(QueueFilterDto filter)
+    {
+        var query = _context.NotificationQueues.AsQueryable();
+
+        if (filter.Status.HasValue)
+            query = query.Where(q => q.Status == filter.Status.Value);
+
+        if (filter.Type.HasValue)
+            query = query.Where(q => q.Type == filter.Type.Value);
+
+        query = query.OrderByDescending(q => q.CreatedAt);
+
+        var total = await query.CountAsync();
+        var items = await query
+            .Skip((filter.Page - 1) * filter.PageSize)
+            .Take(filter.PageSize)
+            .ToListAsync();
+
+        return new PagedResult<NotificationQueue>
+        {
+            Items = items,
+            TotalCount = total,
+            Page = filter.Page,
+            PageSize = filter.PageSize
+        };
+    }
+
+    public async Task<int> GetQueueDepthAsync(NotificationQueueStatus status) =>
+    await _context.NotificationQueues
+        .CountAsync(q => q.Status == status);
+
 }

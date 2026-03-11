@@ -25,5 +25,6 @@ public class SubGenreConfiguration : IEntityTypeConfiguration<SubGenre>
         builder.HasIndex(s => s.Name);
         builder.HasIndex(s => s.GenreId);
         builder.HasIndex(s => s.IsActive);
+        builder.HasIndex(s => new { s.GenreId, s.IsActive });   // in migration, missing from config
     }
 }

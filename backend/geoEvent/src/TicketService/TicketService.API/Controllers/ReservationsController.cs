@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using TicketService.API.Extensions;
 using TicketService.Application.DTOs;
 using TicketService.Application.Interfaces.Services;
@@ -19,16 +20,17 @@ public class ReservationsController : ControllerBase
     }
 
     [HttpPost]
-    public async Task<IActionResult> Create(
-        [FromBody] CreateReservationDto dto,
-        [FromQuery] decimal pricePerTicket = 0)
+    [EnableRateLimiting("create-reservation")]
+    public async Task<IActionResult> Create([FromBody] CreateReservationDto dto)
     {
         var userId = User.GetUserId();
-        var result = await _ticketService.CreateReservationAsync(dto, userId, pricePerTicket);
+        var result = await _ticketService.CreateReservationAsync(dto, userId);
         return result.Success
-            ? CreatedAtAction(nameof(GetById), new { reservationId = result.Data!.ReservationId }, result.Data)
+            ? CreatedAtAction(nameof(GetById),
+                new { reservationId = result.Data!.ReservationId }, result.Data)
             : StatusCode(result.StatusCode, new { error = result.Error });
     }
+
 
     [HttpPost("{reservationId:int}/confirm")]
     public async Task<IActionResult> Confirm(int reservationId, [FromBody] ConfirmReservationDto dto)
@@ -40,13 +42,13 @@ public class ReservationsController : ControllerBase
             : StatusCode(result.StatusCode, new { error = result.Error });
     }
 
-    [HttpPost("{reservationId:int}/cancel")]
+    [HttpPatch("{reservationId:int}/cancel")]
     public async Task<IActionResult> Cancel(int reservationId)
     {
         var userId = User.GetUserId();
         var result = await _ticketService.CancelReservationAsync(reservationId, userId);
         return result.Success
-            ? Ok(new { message = "Reservation cancelled." })
+            ? NoContent()
             : StatusCode(result.StatusCode, new { error = result.Error });
     }
 
@@ -61,12 +63,33 @@ public class ReservationsController : ControllerBase
     }
 
     [HttpGet("my")]
-    public async Task<IActionResult> GetMyReservations([FromQuery] int page = 1, [FromQuery] int pageSize = 10)
+    public async Task<IActionResult> GetMyReservations([FromQuery] ReservationFilterDto filter)
     {
         var userId = User.GetUserId();
-        var result = await _ticketService.GetUserReservationsAsync(userId, page, pageSize);
+        var result = await _ticketService.GetUserReservationsAsync(userId, filter);
         return result.Success
             ? Ok(result.Data)
             : StatusCode(result.StatusCode, new { error = result.Error });
     }
+
+    [HttpGet("{reservationId:int}/tickets")]
+    public async Task<IActionResult> GetTickets(int reservationId)
+    {
+        var userId = User.GetUserId();
+        var result = await _ticketService.GetTicketsByReservationAsync(reservationId, userId);
+        return result.Success
+            ? Ok(result.Data)
+            : StatusCode(result.StatusCode, new { error = result.Error });
+    }
+
+    [HttpGet("{reservationId:int}/payments")]
+    public async Task<IActionResult> GetPayments(int reservationId)
+    {
+        var userId = User.GetUserId();
+        var result = await _ticketService.GetReservationPaymentsAsync(reservationId, userId);
+        return result.Success
+            ? Ok(result.Data)
+            : StatusCode(result.StatusCode, new { error = result.Error });
+    }
+
 }

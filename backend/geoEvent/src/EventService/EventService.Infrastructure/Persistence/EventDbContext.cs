@@ -18,19 +18,12 @@ public class EventDbContext : DbContext
     public DbSet<PriceZone> PriceZones => Set<PriceZone>();
     public DbSet<Bookmark> Bookmarks => Set<Bookmark>();
     public DbSet<Comment> Comments => Set<Comment>();
+    public DbSet<CommentLike> CommentLikes { get; set; }
+
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        modelBuilder.ApplyConfiguration(new EventConfiguration());
-        modelBuilder.ApplyConfiguration(new VenueConfiguration());
-        modelBuilder.ApplyConfiguration(new EventImageConfiguration());
-        modelBuilder.ApplyConfiguration(new EventLikeConfiguration());
-        modelBuilder.ApplyConfiguration(new SegmentConfiguration());
-        modelBuilder.ApplyConfiguration(new GenreConfiguration());
-        modelBuilder.ApplyConfiguration(new SubGenreConfiguration());
-        modelBuilder.ApplyConfiguration(new PriceZoneConfiguration());
-        modelBuilder.ApplyConfiguration(new BookmarkConfiguration());
-        modelBuilder.ApplyConfiguration(new CommentConfiguration());
+        modelBuilder.ApplyConfigurationsFromAssembly(typeof(EventDbContext).Assembly);
         base.OnModelCreating(modelBuilder);
     }
 

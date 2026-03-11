@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using UserService.API.Extensions;
 using UserService.Application.DTOs;
 using UserService.Application.Interfaces.Services;
+using UserService.Domain.Enums;
 
 namespace UserService.API.Controllers;
 
@@ -45,7 +46,12 @@ public class ReportsController : ControllerBase
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 10)
     {
-        var result = await _userService.GetAllReportsAsync(status, page, pageSize);
+        ReportStatus? parsedStatus = null;
+        if (!string.IsNullOrWhiteSpace(status) &&
+            Enum.TryParse<ReportStatus>(status, ignoreCase: true, out var s))
+            parsedStatus = s;
+
+        var result = await _userService.GetAllReportsAsync(parsedStatus, page, pageSize);
         return result.Success
             ? Ok(result.Data)
             : StatusCode(result.StatusCode, new { error = result.Error });

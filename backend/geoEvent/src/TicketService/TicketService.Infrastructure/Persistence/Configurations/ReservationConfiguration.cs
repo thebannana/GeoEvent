@@ -10,6 +10,7 @@ public class ReservationConfiguration : IEntityTypeConfiguration<Reservation>
     {
         builder.HasKey(r => r.ReservationId);
 
+        builder.Property(r => r.ExpiredAt);
         builder.Property(r => r.TotalAmount).HasPrecision(18, 2);
         builder.Property(r => r.Currency).HasMaxLength(3).IsRequired();
         builder.Property(r => r.PaymentReference).HasMaxLength(256);
@@ -29,7 +30,7 @@ public class ReservationConfiguration : IEntityTypeConfiguration<Reservation>
         builder.HasIndex(r => r.UserId);
         builder.HasIndex(r => r.EventId);
         builder.HasIndex(r => r.EventTicketId);
-        builder.HasIndex(r => r.Status);
+        builder.HasIndex(r => new { r.Status, r.ExpiresAt });
         builder.HasIndex(r => r.ExpiresAt);
         builder.HasIndex(r => r.ReservedAt);
     }

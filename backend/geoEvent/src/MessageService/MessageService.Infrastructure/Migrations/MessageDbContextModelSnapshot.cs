@@ -32,8 +32,14 @@ namespace MessageService.Infrastructure.Migrations
 
                     b.Property<string>("Content")
                         .IsRequired()
-                        .HasMaxLength(2000)
-                        .HasColumnType("nvarchar(2000)");
+                        .HasMaxLength(4000)
+                        .HasColumnType("nvarchar(4000)");
+
+                    b.Property<DateTime?>("EditedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("EventId")
+                        .HasColumnType("int");
 
                     b.Property<bool>("IsDeletedByRecipient")
                         .ValueGeneratedOnAdd()
@@ -50,6 +56,11 @@ namespace MessageService.Infrastructure.Migrations
                         .HasColumnType("bit")
                         .HasDefaultValue(false);
 
+                    b.Property<int>("LikesCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
+
                     b.Property<DateTime?>("ReadAt")
                         .HasColumnType("datetime2");
 
@@ -64,11 +75,19 @@ namespace MessageService.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("EventId");
+
+                    b.HasIndex("IsRead");
+
                     b.HasIndex("RecipientId");
 
                     b.HasIndex("SenderId");
 
+                    b.HasIndex("SentAt");
+
                     b.HasIndex("SenderId", "RecipientId");
+
+                    b.HasIndex("SenderId", "RecipientId", "SentAt");
 
                     b.ToTable("Messages");
                 });

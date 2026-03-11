@@ -33,9 +33,35 @@ public class EventConfiguration : IEntityTypeConfiguration<Event>
         builder.HasIndex(e => new { e.ExternalSource, e.ExternalId }).IsUnique()
             .HasFilter("[ExternalSource] IS NOT NULL AND [ExternalId] IS NOT NULL");
 
+        builder.HasIndex(e => e.VenueId);
+        builder.HasIndex(e => e.SegmentId);
+        builder.HasIndex(e => e.GenreId);
+        builder.HasIndex(e => e.SubGenreId);
+        builder.HasIndex(e => new { e.Status, e.StartDateTime });
+        builder.HasIndex(e => new { e.CityId, e.StartDateTime });
+        builder.HasIndex(e => new { e.CityId, e.Status });
+        builder.HasIndex(e => new { e.SegmentId, e.StartDateTime });
+        builder.HasIndex(e => new { e.GenreId, e.StartDateTime });
+        builder.HasIndex(e => new { e.Longitude, e.Latitude });
+
         builder.HasOne(e => e.Venue)
             .WithMany(v => v.Events)
             .HasForeignKey(e => e.VenueId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        builder.HasOne(e => e.Segment)
+            .WithMany(s => s.Events)
+            .HasForeignKey(e => e.SegmentId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        builder.HasOne(e => e.Genre)
+            .WithMany(g => g.Events)
+            .HasForeignKey(e => e.GenreId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        builder.HasOne(e => e.SubGenre)
+            .WithMany(s => s.Events)
+            .HasForeignKey(e => e.SubGenreId)
             .OnDelete(DeleteBehavior.SetNull);
     }
 }

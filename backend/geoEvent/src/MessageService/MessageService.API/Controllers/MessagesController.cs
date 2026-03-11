@@ -3,6 +3,7 @@ using MessageService.Application.DTOs;
 using MessageService.Application.Interfaces.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace MessageService.API.Controllers;
 
@@ -19,12 +20,13 @@ public class MessagesController : ControllerBase
     }
 
     [HttpPost]
+    [EnableRateLimiting("send-message")]
     public async Task<IActionResult> Send([FromBody] SendMessageDto dto)
     {
         var userId = User.GetUserId();
         var result = await _messageService.SendMessageAsync(userId, dto);
         return result.Success
-            ? CreatedAtAction(nameof(GetConversation), new { otherUserId = dto.RecipientId }, result.Data)
+            ? StatusCode(StatusCodes.Status201Created, result.Data)
             : StatusCode(result.StatusCode, new { error = result.Error });
     }
 
@@ -49,9 +51,13 @@ public class MessagesController : ControllerBase
     }
 
     [HttpGet("conversation/{otherUserId:int}")]
-    public async Task<IActionResult> GetConversation(int otherUserId, [FromQuery] MessageFilterDto filter)
+    public async Task<IActionResult> GetConversation(
+    int otherUserId, [FromQuery] MessageFilterDto filter)
     {
         var userId = User.GetUserId();
+        if (userId == otherUserId)
+            return BadRequest(new { error = "Cannot retrieve conversation with yourself." });
+
         var result = await _messageService.GetConversationAsync(userId, otherUserId, filter);
         return result.Success
             ? Ok(result.Data)
@@ -87,4 +93,55 @@ public class MessagesController : ControllerBase
             ? NoContent()
             : StatusCode(result.StatusCode, new { error = result.Error });
     }
+
+    [HttpGet("conversations")]
+    public async Task<IActionResult> GetConversations()
+    {
+        var userId = User.GetUserId();
+        var result = await _messageService.GetConversationSummariesAsync(userId);
+        return result.Success
+            ? Ok(result.Data)
+            : StatusCode(result.StatusCode, new { error = result.Error });
+    }
+
+    [HttpPatch("conversation/{otherUserId:int}/read-all")]
+    public async Task<IActionResult> MarkAllAsRead(int otherUserId)
+    {
+        var userId = User.GetUserId();
+        var result = await _messageService.MarkAllAsReadAsync(userId, otherUserId);
+        return result.Success
+            ? Ok(new { message = "All messages marked as read." })
+            : StatusCode(result.StatusCode, new { error = result.Error });
+    }
+
+    [HttpPatch("{messageId:int}")]
+    public async Task<IActionResult> Edit(int messageId, [FromBody] EditMessageDto dto)
+    {
+        var userId = User.GetUserId();
+        var result = await _messageService.EditMessageAsync(messageId, userId, dto);
+        return result.Success
+            ? Ok(result.Data)
+            : StatusCode(result.StatusCode, new { error = result.Error });
+    }
+
+    [HttpPost("{messageId:int}/like")]
+    public async Task<IActionResult> Like(int messageId)
+    {
+        var userId = User.GetUserId();
+        var result = await _messageService.LikeMessageAsync(messageId, userId);
+        return result.Success
+            ? Ok(result.Data)
+            : StatusCode(result.StatusCode, new { error = result.Error });
+    }
+
+    [HttpDelete("{messageId:int}/like")]
+    public async Task<IActionResult> Unlike(int messageId)
+    {
+        var userId = User.GetUserId();
+        var result = await _messageService.UnlikeMessageAsync(messageId, userId);
+        return result.Success
+            ? Ok(result.Data)
+            : StatusCode(result.StatusCode, new { error = result.Error });
+    }
+
 }

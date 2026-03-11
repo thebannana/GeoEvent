@@ -58,4 +58,34 @@ public class CommentsController : ControllerBase
             ? Ok(new { message = "Comment deleted." })
             : StatusCode(result.StatusCode, new { error = result.Error });
     }
+
+    [HttpGet("{commentId:int}/replies")]
+    public async Task<IActionResult> GetReplies(int commentId)
+    {
+        var result = await _eventService.GetRepliesAsync(commentId);
+        return result.Success
+            ? Ok(result.Data)
+            : StatusCode(result.StatusCode, new { error = result.Error });
+    }
+
+    [HttpPost("{commentId:int}/like")]
+    [Authorize]
+    public async Task<IActionResult> Like(int commentId)
+    {
+        var result = await _eventService.LikeCommentAsync(commentId, User.GetUserId());
+        return result.Success
+            ? Ok(new { message = "Comment liked." })
+            : StatusCode(result.StatusCode, new { error = result.Error });
+    }
+
+    [HttpDelete("{commentId:int}/like")]
+    [Authorize]
+    public async Task<IActionResult> Unlike(int commentId)
+    {
+        var result = await _eventService.UnlikeCommentAsync(commentId, User.GetUserId());
+        return result.Success
+            ? Ok(new { message = "Comment unliked." })
+            : StatusCode(result.StatusCode, new { error = result.Error });
+    }
+
 }

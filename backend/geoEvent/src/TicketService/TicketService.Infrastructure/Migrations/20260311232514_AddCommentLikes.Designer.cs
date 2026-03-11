@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using TicketService.Infrastructure.Persistence;
 
@@ -11,9 +12,11 @@ using TicketService.Infrastructure.Persistence;
 namespace TicketService.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(TicketDbContext))]
-    partial class TicketDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260311232514_AddCommentLikes")]
+    partial class AddCommentLikes
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -167,6 +170,9 @@ namespace TicketService.Infrastructure.Persistence.Migrations
                     b.Property<int?>("EventTicketId")
                         .HasColumnType("int");
 
+                    b.Property<DateTime?>("ExpiredAt")
+                        .HasColumnType("datetime2");
+
                     b.Property<DateTime>("ExpiresAt")
                         .HasColumnType("datetime2");
 
@@ -206,9 +212,9 @@ namespace TicketService.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("ReservedAt");
 
-                    b.HasIndex("Status");
-
                     b.HasIndex("UserId");
+
+                    b.HasIndex("Status", "ExpiresAt");
 
                     b.ToTable("Reservations");
                 });
@@ -275,10 +281,14 @@ namespace TicketService.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("EventId");
 
+                    b.HasIndex("IssuedAt");
+
                     b.HasIndex("QrCode")
                         .IsUnique();
 
                     b.HasIndex("ReservationId");
+
+                    b.HasIndex("Status");
 
                     b.HasIndex("UserId");
 

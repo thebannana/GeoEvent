@@ -39,7 +39,6 @@ namespace EventService.Infrastructure.Migrations
                         .HasColumnType("nvarchar(500)");
 
                     b.Property<string>("Memo")
-                        .IsRequired()
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
@@ -113,6 +112,36 @@ namespace EventService.Infrastructure.Migrations
                     b.ToTable("Comments");
                 });
 
+            modelBuilder.Entity("EventService.Domain.Entities.CommentLike", b =>
+                {
+                    b.Property<int>("LikeId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("LikeId"));
+
+                    b.Property<int>("CommentId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("LikedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("LikeId");
+
+                    b.HasIndex("CommentId");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("UserId", "CommentId")
+                        .IsUnique()
+                        .HasFilter("UserId IS NOT NULL AND CommentId IS NOT NULL");
+
+                    b.ToTable("CommentLikes", (string)null);
+                });
+
             modelBuilder.Entity("EventService.Domain.Entities.Event", b =>
                 {
                     b.Property<int>("EventId")
@@ -136,22 +165,23 @@ namespace EventService.Infrastructure.Migrations
 
                     b.Property<string>("Description")
                         .IsRequired()
+                        .HasMaxLength(5000)
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<DateTime>("EndDateTime")
                         .HasColumnType("datetime2");
 
                     b.Property<string>("ExternalId")
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
 
                     b.Property<string>("ExternalSource")
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
                     b.Property<string>("ExternalUrl")
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
 
                     b.Property<int?>("GenreId")
                         .HasColumnType("int");
@@ -199,8 +229,8 @@ namespace EventService.Infrastructure.Migrations
 
                     b.Property<string>("Status")
                         .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("nvarchar(20)");
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
 
                     b.Property<int?>("SubGenreId")
                         .HasColumnType("int");
@@ -243,9 +273,21 @@ namespace EventService.Infrastructure.Migrations
 
                     b.HasIndex("VenueId");
 
+                    b.HasIndex("CityId", "StartDateTime");
+
+                    b.HasIndex("CityId", "Status");
+
                     b.HasIndex("ExternalSource", "ExternalId")
                         .IsUnique()
                         .HasFilter("[ExternalSource] IS NOT NULL AND [ExternalId] IS NOT NULL");
+
+                    b.HasIndex("GenreId", "StartDateTime");
+
+                    b.HasIndex("Longitude", "Latitude");
+
+                    b.HasIndex("SegmentId", "StartDateTime");
+
+                    b.HasIndex("Status", "StartDateTime");
 
                     b.ToTable("Events", (string)null);
                 });
@@ -302,11 +344,15 @@ namespace EventService.Infrastructure.Migrations
 
                     b.HasKey("LikeId");
 
+                    b.HasIndex("EventId");
+
+                    b.HasIndex("LikedAt");
+
                     b.HasIndex("UserId");
 
-                    b.HasIndex("EventId", "UserId")
+                    b.HasIndex("UserId", "EventId")
                         .IsUnique()
-                        .HasFilter("[EventId] IS NOT NULL AND [UserId] IS NOT NULL");
+                        .HasFilter("[UserId] IS NOT NULL AND [EventId] IS NOT NULL");
 
                     b.ToTable("EventLikes", (string)null);
                 });
@@ -411,7 +457,8 @@ namespace EventService.Infrastructure.Migrations
 
                     b.HasIndex("IsActive");
 
-                    b.HasIndex("Name");
+                    b.HasIndex("Name")
+                        .IsUnique();
 
                     b.ToTable("Segments");
                 });
@@ -445,6 +492,8 @@ namespace EventService.Infrastructure.Migrations
 
                     b.HasIndex("Name");
 
+                    b.HasIndex("GenreId", "IsActive");
+
                     b.ToTable("SubGenres");
                 });
 
@@ -467,10 +516,13 @@ namespace EventService.Infrastructure.Migrations
                         .HasColumnType("datetime2");
 
                     b.Property<string>("Description")
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
 
                     b.Property<bool>("IsVerified")
-                        .HasColumnType("bit");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
 
                     b.Property<decimal>("Latitude")
                         .HasPrecision(9, 6)
@@ -490,22 +542,34 @@ namespace EventService.Infrastructure.Migrations
                         .HasColumnType("nvarchar(200)");
 
                     b.Property<string>("PhoneNumber")
-                        .HasMaxLength(20)
-                        .HasColumnType("nvarchar(20)");
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
 
                     b.Property<string>("TimeZone")
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<string>("VenueType")
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
 
+                    b.Property<string>("VenueType")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
                     b.Property<string>("WebsiteUrl")
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
 
                     b.HasKey("VenueId");
+
+                    b.HasIndex("CityId");
+
+                    b.HasIndex("IsVerified");
+
+                    b.HasIndex("Name");
+
+                    b.HasIndex("VenueType");
+
+                    b.HasIndex("CityId", "VenueType");
+
+                    b.HasIndex("Longitude", "Latitude");
 
                     b.ToTable("Venues", (string)null);
                 });
@@ -537,19 +601,33 @@ namespace EventService.Infrastructure.Migrations
                     b.Navigation("ParentComment");
                 });
 
+            modelBuilder.Entity("EventService.Domain.Entities.CommentLike", b =>
+                {
+                    b.HasOne("EventService.Domain.Entities.Comment", "Comment")
+                        .WithMany()
+                        .HasForeignKey("CommentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Comment");
+                });
+
             modelBuilder.Entity("EventService.Domain.Entities.Event", b =>
                 {
                     b.HasOne("EventService.Domain.Entities.Genre", "Genre")
                         .WithMany("Events")
-                        .HasForeignKey("GenreId");
+                        .HasForeignKey("GenreId")
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.HasOne("EventService.Domain.Entities.Segment", "Segment")
                         .WithMany("Events")
-                        .HasForeignKey("SegmentId");
+                        .HasForeignKey("SegmentId")
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.HasOne("EventService.Domain.Entities.SubGenre", "SubGenre")
                         .WithMany("Events")
-                        .HasForeignKey("SubGenreId");
+                        .HasForeignKey("SubGenreId")
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.HasOne("EventService.Domain.Entities.Venue", "Venue")
                         .WithMany("Events")

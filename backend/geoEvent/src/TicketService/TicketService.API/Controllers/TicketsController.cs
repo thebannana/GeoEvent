@@ -1,12 +1,14 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using TicketService.API.Extensions;
+using TicketService.Application.DTOs;
 using TicketService.Application.Interfaces.Services;
 
 namespace TicketService.API.Controllers;
 
 [ApiController]
 [Route("api/tickets")]
+[Authorize]
 public class TicketsController : ControllerBase
 {
     private readonly ITicketService _ticketService;
@@ -29,36 +31,39 @@ public class TicketsController : ControllerBase
 
     [HttpGet("my")]
     [Authorize]
-    public async Task<IActionResult> GetMyTickets()
+    public async Task<IActionResult> GetMyTickets([FromQuery] TicketFilterDto filter)
     {
         var userId = User.GetUserId();
-        var result = await _ticketService.GetUserTicketsAsync(userId);
+        var result = await _ticketService.GetUserTicketsAsync(userId, filter);
         return result.Success
             ? Ok(result.Data)
             : StatusCode(result.StatusCode, new { error = result.Error });
     }
 
+
     [HttpPost("validate")]
-    [AllowAnonymous]
+    [Authorize(Roles = "Admin,Organizer,Staff")]
     public async Task<IActionResult> Validate([FromQuery] string qrCode)
     {
         if (string.IsNullOrWhiteSpace(qrCode))
             return BadRequest(new { error = "QR code is required." });
 
-        var result = await _ticketService.ValidateTicketAsync(qrCode);
+        var validatorUserId = User.GetUserId();
+        var result = await _ticketService.ValidateTicketAsync(qrCode, validatorUserId);
         return result.Success
             ? Ok(result.Data)
             : StatusCode(result.StatusCode, new { error = result.Error });
     }
 
-    [HttpPost("{ticketId:int}/cancel")]
+    [HttpPatch("{ticketId:int}/cancel")]
     [Authorize]
     public async Task<IActionResult> Cancel(int ticketId)
     {
         var userId = User.GetUserId();
         var result = await _ticketService.CancelTicketAsync(ticketId, userId);
         return result.Success
-            ? Ok(new { message = "Ticket cancelled." })
+            ? NoContent()
             : StatusCode(result.StatusCode, new { error = result.Error });
     }
+
 }

@@ -8,5 +8,6 @@ public class CreateBookmarkDto
     public int EventId { get; set; }
 
     [MaxLength(500)]
-    public string Memo { get; set; } = string.Empty;
+    public string? Memo { get; set; }
+
 }

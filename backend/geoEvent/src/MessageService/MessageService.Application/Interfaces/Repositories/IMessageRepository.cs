@@ -11,8 +11,10 @@ public interface IMessageRepository
     Task<PagedResult<Message>> GetInboxAsync(int userId, MessageFilterDto filter);
     Task<PagedResult<Message>> GetSentAsync(int userId, MessageFilterDto filter);
     Task<int> GetUnreadCountAsync(int userId);
+    Task<List<ConversationSummaryDto>> GetConversationSummariesAsync(int userId);
+    Task<bool> ExistsAsync(int messageId);
     Task<Message> AddAsync(Message message);
     Task UpdateAsync(Message message);
     Task DeleteAsync(Message message);
-    Task SaveChangesAsync();
+    Task MarkAllAsReadAsync(int userId, int otherUserId);
 }

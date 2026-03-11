@@ -49,8 +49,8 @@ namespace UserService.Infrastructure.Migrations
                     b.Property<int?>("SegmentId")
                         .HasColumnType("int");
 
-                    b.Property<int>("SessionId")
-                        .HasColumnType("int");
+                    b.Property<Guid>("SessionId")
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<int>("TargetId")
                         .HasColumnType("int");
@@ -191,6 +191,9 @@ namespace UserService.Infrastructure.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("ReportId"));
 
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
                     b.Property<string>("Description")
                         .IsRequired()
                         .HasMaxLength(2000)
@@ -203,6 +206,9 @@ namespace UserService.Infrastructure.Migrations
 
                     b.Property<int?>("ReporterId")
                         .HasColumnType("int");
+
+                    b.Property<DateTime?>("ResolvedAt")
+                        .HasColumnType("datetime2");
 
                     b.Property<int?>("ResolvedById")
                         .HasColumnType("int");
@@ -221,6 +227,8 @@ namespace UserService.Infrastructure.Migrations
                         .HasColumnType("nvarchar(50)");
 
                     b.HasKey("ReportId");
+
+                    b.HasIndex("CreatedAt");
 
                     b.HasIndex("ReporterId");
 
@@ -253,6 +261,16 @@ namespace UserService.Infrastructure.Migrations
                         .HasMaxLength(255)
                         .HasColumnType("nvarchar(255)");
 
+                    b.Property<string>("EmailVerificationToken")
+                        .HasMaxLength(512)
+                        .HasColumnType("nvarchar(512)");
+
+                    b.Property<DateTime?>("EmailVerificationTokenExpiresAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("EmailVerifiedAt")
+                        .HasColumnType("datetime2");
+
                     b.Property<int>("FailedLoginAttempts")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("int")
@@ -278,6 +296,13 @@ namespace UserService.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("varbinary(max)");
 
+                    b.Property<string>("PasswordResetToken")
+                        .HasMaxLength(512)
+                        .HasColumnType("nvarchar(512)");
+
+                    b.Property<DateTime?>("PasswordResetTokenExpiresAt")
+                        .HasColumnType("datetime2");
+
                     b.Property<byte[]>("PasswordSalt")
                         .IsRequired()
                         .HasColumnType("varbinary(max)");
@@ -297,7 +322,13 @@ namespace UserService.Infrastructure.Migrations
                     b.HasIndex("Email")
                         .IsUnique();
 
+                    b.HasIndex("EmailVerificationToken")
+                        .HasFilter("[EmailVerificationToken] IS NOT NULL");
+
                     b.HasIndex("LockoutUntil");
+
+                    b.HasIndex("PasswordResetToken")
+                        .HasFilter("[PasswordResetToken] IS NOT NULL");
 
                     b.HasIndex("Username")
                         .IsUnique();
@@ -340,7 +371,7 @@ namespace UserService.Infrastructure.Migrations
 
                     b.HasIndex("UserId", "SegmentId", "GenreId")
                         .IsUnique()
-                        .HasFilter("[UserId] IS NOT NULL");
+                        .HasFilter("[UserId] IS NOT NULL AND [SegmentId] IS NOT NULL");
 
                     b.ToTable("UserPreferences");
                 });

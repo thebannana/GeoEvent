@@ -41,7 +41,7 @@ public class UsersController : ControllerBase
     {
         var result = await _userService.DeleteAccountAsync(User.GetUserId());
         return result.Success
-            ? Ok(new { message = "Account deleted." })
+            ? NoContent()
             : StatusCode(result.StatusCode, new { error = result.Error });
     }
 
@@ -71,9 +71,30 @@ public class UsersController : ControllerBase
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> VerifyUser(int userId)
     {
-        var result = await _userService.VerifyEmailAsync(userId);
+        var result = await _userService.AdminVerifyUserAsync(userId);
         return result.Success
             ? Ok(new { message = "User verified." })
             : StatusCode(result.StatusCode, new { error = result.Error });
     }
+
+    [HttpPut("me/password")]
+    public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordDto dto)
+    {
+        var result = await _userService.ChangePasswordAsync(User.GetUserId(), dto);
+        return result.Success
+            ? Ok(new { message = "Password changed successfully." })
+            : StatusCode(result.StatusCode, new { error = result.Error });
+    }
+
+    [HttpGet]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> GetAllUsers([FromQuery] UserFilterDto filter)
+    {
+        var result = await _userService.GetAllUsersAsync(filter);
+        return result.Success
+            ? Ok(result.Data)
+            : StatusCode(result.StatusCode, new { error = result.Error });
+    }
+
+
 }

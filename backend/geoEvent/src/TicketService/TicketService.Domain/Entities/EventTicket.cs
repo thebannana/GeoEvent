@@ -1,8 +1,7 @@
+using TicketService.Domain.Enums;
+
 namespace TicketService.Domain.Entities;
 
-/// <summary>
-/// Ticket type / inventory for an event (monolith "Tickets" table).
-/// </summary>
 public class EventTicket
 {
     public int TicketId { get; set; }
@@ -19,4 +18,35 @@ public class EventTicket
 
     // Navigation
     public ICollection<Reservation> Reservations { get; set; } = [];
+
+    // Domain logic
+    public int AvailableQuantity => TotalQuantity - SoldQuantity;
+
+    public bool IsAvailable() =>
+        IsActive &&
+        AvailableQuantity > 0 &&
+        (SaleStartDate == null || DateTime.UtcNow >= SaleStartDate) &&
+        (SaleEndDate == null || DateTime.UtcNow <= SaleEndDate);
+
+    public bool IsOnSale() =>
+        IsActive &&
+        (SaleStartDate == null || DateTime.UtcNow >= SaleStartDate) &&
+        (SaleEndDate == null || DateTime.UtcNow <= SaleEndDate);
+
+    public void Reserve(int quantity)
+    {
+        if (quantity <= 0)
+            throw new ArgumentException("Quantity must be greater than zero.");
+        if (quantity > AvailableQuantity)
+            throw new InvalidOperationException(
+                $"Only {AvailableQuantity} tickets available.");
+        SoldQuantity += quantity;
+    }
+
+    public void Release(int quantity)
+    {
+        if (quantity <= 0)
+            throw new ArgumentException("Quantity must be greater than zero.");
+        SoldQuantity = Math.Max(0, SoldQuantity - quantity);
+    }
 }

@@ -9,7 +9,9 @@ public class CityResponseDto
     public decimal Latitude { get; set; }
     public int? DivisionId { get; set; }
     public string? DivisionName { get; set; }
+    public string? DivisionType { get; set; }
     public int? CountryId { get; set; }
     public string? CountryName { get; set; }
     public bool IsActive { get; set; }
+    public List<PostalCodeResponseDto> PostalCodes { get; set; } = [];
 }

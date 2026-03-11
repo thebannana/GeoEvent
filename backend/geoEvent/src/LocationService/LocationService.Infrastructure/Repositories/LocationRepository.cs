@@ -27,12 +27,6 @@ public class LocationRepository : ILocationRepository
             .FirstOrDefaultAsync(c => c.ContinentId == continentId);
 
     // ── Countries ─────────────────────────────────────────────
-    public async Task<List<Country>> GetAllCountriesAsync() =>
-        await _context.Countries
-            .Include(c => c.Continent)
-            .Where(c => c.IsActive)
-            .OrderBy(c => c.CountryName)
-            .ToListAsync();
 
     public async Task<List<Country>> GetCountriesByContinentAsync(int continentId) =>
         await _context.Countries
@@ -40,6 +34,28 @@ public class LocationRepository : ILocationRepository
             .Where(c => c.ContinentId == continentId && c.IsActive)
             .OrderBy(c => c.CountryName)
             .ToListAsync();
+
+    public async Task<List<Country>> GetCountriesAsync(CountryFilterDto filter)
+    {
+        var query = _context.Countries
+            .Include(c => c.Continent)
+            .AsQueryable();
+
+        if (filter.ContinentId.HasValue)
+            query = query.Where(c => c.ContinentId == filter.ContinentId);
+
+        if (filter.IsActive.HasValue)
+            query = query.Where(c => c.IsActive == filter.IsActive);
+
+        if (!string.IsNullOrWhiteSpace(filter.SearchTerm))
+        {
+            var term = filter.SearchTerm.ToLower();
+            query = query.Where(c => c.CountryName.ToLower().Contains(term));
+        }
+
+        return await query.OrderBy(c => c.CountryName).ToListAsync();
+    }
+
 
     public async Task<Country?> GetCountryByIdAsync(int countryId) =>
         await _context.Countries
@@ -54,18 +70,35 @@ public class LocationRepository : ILocationRepository
                 c.CountryCodeAlpha3 == code.ToUpper());
 
     // ── Divisions ─────────────────────────────────────────────
-    public async Task<List<AdministrativeDivision>> GetDivisionsByCountryAsync(int countryId) =>
-        await _context.AdministrativeDivisions
-            .Where(d => d.CountryId == countryId && d.IsActive)
+
+    public async Task<List<AdministrativeDivision>> GetDivisionsAsync(DivisionFilterDto filter)
+    {
+        var query = _context.AdministrativeDivisions
+            .Include(d => d.Country)
+            .Include(d => d.ParentDivision)
+            .Include(d => d.ChildDivisions)
+            .AsQueryable();
+
+        if (filter.CountryId.HasValue)
+            query = query.Where(d => d.CountryId == filter.CountryId);
+
+        if (filter.ParentDivisionId.HasValue)
+            query = query.Where(d => d.ParentDivisionId == filter.ParentDivisionId);
+
+        if (filter.Level.HasValue)
+            query = query.Where(d => d.Level == filter.Level);
+
+        if (filter.IsActive.HasValue)
+            query = query.Where(d => d.IsActive == filter.IsActive);
+
+        if (!string.IsNullOrWhiteSpace(filter.DivisionType))
+            query = query.Where(d => d.DivisionType == filter.DivisionType);
+
+        return await query
             .OrderBy(d => d.Level)
             .ThenBy(d => d.DivisionName)
             .ToListAsync();
-
-    public async Task<List<AdministrativeDivision>> GetChildDivisionsAsync(int parentDivisionId) =>
-        await _context.AdministrativeDivisions
-            .Where(d => d.ParentDivisionId == parentDivisionId && d.IsActive)
-            .OrderBy(d => d.DivisionName)
-            .ToListAsync();
+    }
 
     public async Task<AdministrativeDivision?> GetDivisionByIdAsync(int divisionId) =>
         await _context.AdministrativeDivisions
@@ -77,16 +110,17 @@ public class LocationRepository : ILocationRepository
     public async Task<PagedResult<City>> GetCitiesAsync(CityFilterDto filter)
     {
         var query = _context.Cities
-            .Include(c => c.Country)
             .Include(c => c.Division)
+                .ThenInclude(d => d!.Country)
             .AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(filter.SearchTerm))
-            query = query.Where(c => c.NormalizedName.Contains(filter.SearchTerm.ToLower()) ||
-                                     c.CityName.Contains(filter.SearchTerm));
-
-        if (filter.CountryId.HasValue)
-            query = query.Where(c => c.CountryId == filter.CountryId);
+        {
+            var term = filter.SearchTerm.ToLower();
+            query = query.Where(c =>
+                c.NormalizedName.Contains(term) ||
+                c.CityName.ToLower().Contains(term));
+        }
 
         if (filter.DivisionId.HasValue)
             query = query.Where(c => c.DivisionId == filter.DivisionId);
@@ -111,17 +145,37 @@ public class LocationRepository : ILocationRepository
         };
     }
 
-    public async Task<City?> GetCityByIdAsync(int cityId) =>
-        await _context.Cities
-            .Include(c => c.Country)
-            .Include(c => c.Division)
-            .FirstOrDefaultAsync(c => c.CityId == cityId);
+    public async Task<List<City>> GetNearbyCitiesAsync(
+    decimal latitude, decimal longitude, double radiusKm, int limit)
+    {
+        // Pull candidates within a bounding box first for DB efficiency,
+        // then filter precisely in memory using Haversine
+        var degreeBuffer = (decimal)(radiusKm / 111.0);
 
-    public async Task<List<City>> GetCitiesByCountryAsync(int countryId) =>
-        await _context.Cities
-            .Where(c => c.CountryId == countryId && c.IsActive)
-            .OrderBy(c => c.CityName)
+        var candidates = await _context.Cities
+            .Include(c => c.Division)
+                .ThenInclude(d => d!.Country)
+            .Where(c => c.IsActive &&
+                c.Latitude >= latitude - degreeBuffer &&
+                c.Latitude <= latitude + degreeBuffer &&
+                c.Longitude >= longitude - degreeBuffer &&
+                c.Longitude <= longitude + degreeBuffer)
             .ToListAsync();
+
+        return candidates
+            .Where(c => c.DistanceTo(latitude, longitude) <= radiusKm)
+            .OrderBy(c => c.DistanceTo(latitude, longitude))
+            .Take(limit)
+            .ToList();
+    }
+
+    public async Task<City?> GetCityByIdAsync(int cityId) =>
+    await _context.Cities
+        .Include(c => c.Division)
+            .ThenInclude(d => d!.Country)
+        .Include(c => c.PostalCodes)
+        .FirstOrDefaultAsync(c => c.CityId == cityId);
+
 
     public async Task<List<City>> GetCitiesByDivisionAsync(int divisionId) =>
         await _context.Cities
@@ -129,19 +183,36 @@ public class LocationRepository : ILocationRepository
             .OrderBy(c => c.CityName)
             .ToListAsync();
 
-    public async Task<List<City>> SearchCitiesAsync(string searchTerm, int limit = 10) =>
-        await _context.Cities
-            .Include(c => c.Country)
+    public async Task<List<City>> SearchCitiesAsync(string searchTerm, int limit = 10)
+    {
+        var term = searchTerm.ToLower();
+        return await _context.Cities
+            .Include(c => c.Division)
+                .ThenInclude(d => d!.Country)
             .Where(c => c.IsActive &&
-                       (c.NormalizedName.Contains(searchTerm.ToLower()) ||
-                        c.CityName.Contains(searchTerm)))
+                (c.NormalizedName.Contains(term) ||
+                 c.CityName.ToLower().Contains(term)))
             .OrderBy(c => c.CityName)
             .Take(limit)
             .ToListAsync();
+    }
+
+    public async Task<List<City>> GetCitiesByCountryAsync(int countryId) =>
+    await _context.Cities
+        .Include(c => c.Division)
+            .ThenInclude(d => d!.Country)
+        .Where(c => c.Division != null &&
+                    c.Division.CountryId == countryId &&
+                    c.IsActive)
+        .OrderBy(c => c.CityName)
+        .ToListAsync();
+
+
 
     // ── Postal Codes ──────────────────────────────────────────
     public async Task<List<PostalCode>> GetPostalCodesByCityAsync(int cityId) =>
         await _context.PostalCodes
+            .Include(p => p.City)
             .Where(p => p.CityId == cityId)
             .OrderBy(p => p.Code)
             .ToListAsync();
@@ -150,4 +221,10 @@ public class LocationRepository : ILocationRepository
         await _context.PostalCodes
             .Include(p => p.City)
             .FirstOrDefaultAsync(p => p.Code == code);
+
+    public async Task<PostalCode?> GetPostalCodeByIdAsync(int postalCodeId) =>
+    await _context.PostalCodes
+        .Include(p => p.City)
+        .FirstOrDefaultAsync(p => p.PostalCodeId == postalCodeId);
+
 }

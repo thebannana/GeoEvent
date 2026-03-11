@@ -13,9 +13,9 @@ public class Venue
     public string? PhoneNumber { get; set; }
     public string? Description { get; set; }
     public bool IsVerified { get; set; } = false;
-    public DateTime CreatedAt { get; set; }
     public string? TimeZone { get; set; }
     public string? Locale { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
 
     // Navigation

@@ -19,16 +19,15 @@ public class NotificationsController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetMyNotifications(
-        [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 10)
+    public async Task<IActionResult> GetMyNotifications([FromQuery] NotificationFilterDto filter)
     {
         var userId = User.GetUserId();
-        var result = await _notificationService.GetUserNotificationsAsync(userId, page, pageSize);
+        var result = await _notificationService.GetUserNotificationsAsync(userId, filter);
         return result.Success
             ? Ok(result.Data)
             : StatusCode(result.StatusCode, new { error = result.Error });
     }
+
 
     [HttpGet("unread-count")]
     public async Task<IActionResult> GetUnreadCount()
@@ -50,7 +49,7 @@ public class NotificationsController : ControllerBase
             : StatusCode(result.StatusCode, new { error = result.Error });
     }
 
-    [HttpPost("{notificationId:int}/read")]
+    [HttpPatch("{notificationId:int}/read")]
     public async Task<IActionResult> MarkAsRead(int notificationId)
     {
         var userId = User.GetUserId();
@@ -60,7 +59,7 @@ public class NotificationsController : ControllerBase
             : StatusCode(result.StatusCode, new { error = result.Error });
     }
 
-    [HttpPost("read-all")]
+    [HttpPatch("read-all")]
     public async Task<IActionResult> MarkAllAsRead()
     {
         var userId = User.GetUserId();
@@ -76,7 +75,7 @@ public class NotificationsController : ControllerBase
         var userId = User.GetUserId();
         var result = await _notificationService.DeleteNotificationAsync(notificationId, userId);
         return result.Success
-            ? Ok(new { message = "Notification deleted." })
+            ? NoContent()
             : StatusCode(result.StatusCode, new { error = result.Error });
     }
 }

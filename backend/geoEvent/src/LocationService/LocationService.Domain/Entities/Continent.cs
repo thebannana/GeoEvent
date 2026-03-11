@@ -1,6 +1,4 @@
-﻿using System.Diagnostics.Metrics;
-
-namespace LocationService.Domain.Entities;
+﻿namespace LocationService.Domain.Entities;
 
 public class Continent
 {

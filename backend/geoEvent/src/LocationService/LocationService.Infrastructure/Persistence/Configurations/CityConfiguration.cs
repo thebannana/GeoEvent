@@ -29,16 +29,12 @@ public class CityConfiguration : IEntityTypeConfiguration<City>
             .HasForeignKey(c => c.DivisionId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        builder.HasOne(c => c.Country)
-            .WithMany(co => co.Cities)
-            .HasForeignKey(c => c.CountryId)
-            .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasIndex(c => c.NormalizedName);
-        builder.HasIndex(c => c.CountryId);
         builder.HasIndex(c => c.DivisionId);
+        builder.HasIndex(c => c.CityName);
         builder.HasIndex(c => c.IsActive);
-        builder.HasIndex(c => new { c.CountryId, c.IsActive });
-        builder.HasIndex(c => new { c.NormalizedName, c.CountryId });
+        builder.HasIndex(c => new { c.DivisionId, c.IsActive });
+
     }
 }

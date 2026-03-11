@@ -43,6 +43,9 @@ namespace NotificationService.Infrastructure.Migrations
                         .HasColumnType("bit")
                         .HasDefaultValue(false);
 
+                    b.Property<DateTime?>("ReadAt")
+                        .HasColumnType("datetime2");
+
                     b.Property<string>("Title")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -66,7 +69,7 @@ namespace NotificationService.Infrastructure.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.HasIndex("UserId", "IsRead");
+                    b.HasIndex("UserId", "IsRead", "CreatedAt");
 
                     b.ToTable("Notifications");
                 });
@@ -91,6 +94,11 @@ namespace NotificationService.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(1000)
                         .HasColumnType("nvarchar(1000)");
+
+                    b.Property<int>("MaxAttempts")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(3);
 
                     b.Property<string>("Payload")
                         .IsRequired()
@@ -122,11 +130,11 @@ namespace NotificationService.Infrastructure.Migrations
 
                     b.HasIndex("ScheduledAt");
 
-                    b.HasIndex("Status");
-
                     b.HasIndex("Type");
 
                     b.HasIndex("UserId");
+
+                    b.HasIndex("Status", "ScheduledAt");
 
                     b.ToTable("NotificationQueues");
                 });

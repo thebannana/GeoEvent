@@ -4,16 +4,23 @@ using EventService.Application.Interfaces.Repositories;
 using EventService.Application.Interfaces.Services;
 using EventService.Domain.Entities;
 using EventService.Domain.Enums;
+using MassTransit;
+using Shared.Contracts.Events;
+using DomainEvent = EventService.Domain.Entities.Event;
 
 namespace EventService.Infrastructure.Services;
 
 public class EventServiceImpl : IEventService
 {
     private readonly IEventRepository _eventRepository;
+    private readonly IPublishEndpoint _publishEndpoint;
 
-    public EventServiceImpl(IEventRepository eventRepository)
+    public EventServiceImpl(
+        IEventRepository eventRepository,
+        IPublishEndpoint publishEndpoint)
     {
         _eventRepository = eventRepository;
+        _publishEndpoint = publishEndpoint;
     }
 
     public async Task<ServiceResult<EventResponseDto>> GetByIdAsync(int eventId)
@@ -40,7 +47,6 @@ public class EventServiceImpl : IEventService
         return ServiceResult<List<EventResponseDto>>.Ok(events.Select(MapToDto).ToList());
     }
 
-
     public async Task<ServiceResult<PagedResult<EventResponseDto>>> GetAllAsync(EventFilterDto filter)
     {
         var result = await _eventRepository.GetAllAsync(filter);
@@ -56,7 +62,12 @@ public class EventServiceImpl : IEventService
     public async Task<ServiceResult<EventResponseDto>> CreateAsync(
         CreateEventDto dto, int organizerId)
     {
-        var entity = new Event
+        if (dto.StartDateTime <= DateTime.UtcNow)
+            return ServiceResult<EventResponseDto>.Fail("Start date must be in the future.");
+        if (dto.EndDateTime <= dto.StartDateTime)
+            return ServiceResult<EventResponseDto>.Fail("End date must be after start date.");
+
+        var entity = new DomainEvent
         {
             OrganizerId = organizerId,
             Title = dto.Title,
@@ -80,12 +91,23 @@ public class EventServiceImpl : IEventService
             Locale = dto.Locale
         };
 
-        if (dto.StartDateTime <= DateTime.UtcNow)
-            return ServiceResult<EventResponseDto>.Fail("Start date must be in the future.");
-        if (dto.EndDateTime <= dto.StartDateTime)
-            return ServiceResult<EventResponseDto>.Fail("End date must be after start date.");
-
         var created = await _eventRepository.CreateAsync(entity);
+
+        await _publishEndpoint.Publish(new EventCreatedMessage(
+            created.EventId,
+            created.Title,
+            created.CityId,
+            created.OrganizerId,
+            created.SegmentId,
+            created.GenreId,
+            created.SubGenreId,
+            created.VenueId,
+            created.Price,
+            created.Price == 0,
+            created.StartDateTime,
+            created.EndDateTime,
+            DateTime.UtcNow));
+
         return ServiceResult<EventResponseDto>.Ok(MapToDto(created));
     }
 
@@ -123,8 +145,17 @@ public class EventServiceImpl : IEventService
         if (effectiveEnd <= effectiveStart)
             return ServiceResult<EventResponseDto>.Fail("End date must be after start date.");
 
-
         await _eventRepository.UpdateAsync(ev);
+
+        await _publishEndpoint.Publish(new EventUpdatedMessage(
+            ev.EventId,
+            ev.Title,
+            ev.OrganizerId,
+            ev.StartDateTime,
+            ev.EndDateTime,
+            null,
+            DateTime.UtcNow));
+
         return ServiceResult<EventResponseDto>.Ok(MapToDto(ev));
     }
 
@@ -155,7 +186,8 @@ public class EventServiceImpl : IEventService
         return ServiceResult<bool>.Ok(true);
     }
 
-    public async Task<ServiceResult<bool>> CancelAsync(int eventId, int requesterId)
+    public async Task<ServiceResult<bool>> CancelAsync(
+        int eventId, int requesterId, string reason = "Cancelled by organizer")
     {
         var ev = await _eventRepository.GetByIdAsync(eventId);
         if (ev is null)
@@ -165,6 +197,45 @@ public class EventServiceImpl : IEventService
             return ServiceResult<bool>.Forbidden("You do not own this event.");
 
         ev.Cancel();
+        await _eventRepository.UpdateAsync(ev);
+
+        await _publishEndpoint.Publish(new EventCancelledMessage(
+            ev.EventId,
+            ev.Title,
+            ev.OrganizerId,
+            DateTime.UtcNow,
+            reason));
+
+        return ServiceResult<bool>.Ok(true);
+    }
+
+    public async Task<ServiceResult<bool>> PostponeAsync(int eventId, int requesterId)
+    {
+        var ev = await _eventRepository.GetByIdAsync(eventId);
+        if (ev is null) return ServiceResult<bool>.NotFound($"Event {eventId} not found.");
+        if (ev.OrganizerId != requesterId) return ServiceResult<bool>.Forbidden("You do not own this event.");
+
+        ev.Postpone();
+        await _eventRepository.UpdateAsync(ev);
+
+        await _publishEndpoint.Publish(new EventUpdatedMessage(
+            ev.EventId,
+            ev.Title,
+            ev.OrganizerId,
+            ev.StartDateTime,
+            ev.EndDateTime,
+            "Event postponed",
+            DateTime.UtcNow));
+
+        return ServiceResult<bool>.Ok(true);
+    }
+
+    public async Task<ServiceResult<bool>> CompleteAsync(int eventId, int requesterId)
+    {
+        var ev = await _eventRepository.GetByIdAsync(eventId);
+        if (ev is null) return ServiceResult<bool>.NotFound($"Event {eventId} not found.");
+        if (ev.OrganizerId != requesterId) return ServiceResult<bool>.Forbidden("You do not own this event.");
+        ev.Complete();
         await _eventRepository.UpdateAsync(ev);
         return ServiceResult<bool>.Ok(true);
     }
@@ -191,7 +262,7 @@ public class EventServiceImpl : IEventService
     }
 
     public async Task<ServiceResult<bool>> AddImageAsync(
-    int eventId, string imageUrl, bool isCover, int requesterId)
+        int eventId, string imageUrl, bool isCover, int requesterId)
     {
         var ev = await _eventRepository.GetByIdAsync(eventId);
         if (ev is null)
@@ -205,26 +276,6 @@ public class EventServiceImpl : IEventService
             ImageUrl = imageUrl,
             IsCover = isCover
         });
-        return ServiceResult<bool>.Ok(true);
-    }
-
-    public async Task<ServiceResult<bool>> PostponeAsync(int eventId, int requesterId)
-    {
-        var ev = await _eventRepository.GetByIdAsync(eventId);
-        if (ev is null) return ServiceResult<bool>.NotFound($"Event {eventId} not found.");
-        if (ev.OrganizerId != requesterId) return ServiceResult<bool>.Forbidden("You do not own this event.");
-        ev.Postpone();
-        await _eventRepository.UpdateAsync(ev);
-        return ServiceResult<bool>.Ok(true);
-    }
-
-    public async Task<ServiceResult<bool>> CompleteAsync(int eventId, int requesterId)
-    {
-        var ev = await _eventRepository.GetByIdAsync(eventId);
-        if (ev is null) return ServiceResult<bool>.NotFound($"Event {eventId} not found.");
-        if (ev.OrganizerId != requesterId) return ServiceResult<bool>.Forbidden("You do not own this event.");
-        ev.Complete();
-        await _eventRepository.UpdateAsync(ev);
         return ServiceResult<bool>.Ok(true);
     }
 
@@ -246,7 +297,6 @@ public class EventServiceImpl : IEventService
         await _eventRepository.SetCoverImageAsync(eventId, imageId);
         return ServiceResult<bool>.Ok(true);
     }
-
 
     // ── Segments ──────────────────────────────────────────────────
     public async Task<ServiceResult<List<SegmentResponseDto>>> GetAllSegmentsAsync()
@@ -293,7 +343,7 @@ public class EventServiceImpl : IEventService
     }
 
     public async Task<ServiceResult<PriceZoneResponseDto>> CreatePriceZoneAsync(
-     CreatePriceZoneDto dto, int requesterId)
+        CreatePriceZoneDto dto, int requesterId)
     {
         var venue = await _eventRepository.GetVenueByIdAsync(dto.VenueId);
         if (venue is null)
@@ -309,7 +359,6 @@ public class EventServiceImpl : IEventService
         var created = await _eventRepository.CreatePriceZoneAsync(priceZone);
         return ServiceResult<PriceZoneResponseDto>.Ok(MapPriceZone(created));
     }
-
 
     // ── Bookmarks ─────────────────────────────────────────────────
     public async Task<ServiceResult<List<BookmarkResponseDto>>> GetUserBookmarksAsync(int userId)
@@ -355,6 +404,17 @@ public class EventServiceImpl : IEventService
 
         await _eventRepository.DeleteBookmarkAsync(bookmark);
         return ServiceResult<bool>.Ok(true);
+    }
+
+    public async Task<ServiceResult<BookmarkResponseDto>> UpdateBookmarkAsync(
+        int bookmarkId, UpdateBookmarkDto dto, int userId)
+    {
+        var bookmark = await _eventRepository.GetBookmarkByIdAsync(bookmarkId);
+        if (bookmark is null) return ServiceResult<BookmarkResponseDto>.NotFound("Bookmark not found.");
+        if (bookmark.UserId != userId) return ServiceResult<BookmarkResponseDto>.Forbidden("Not your bookmark.");
+        bookmark.UpdateMemo(dto.Memo);
+        await _eventRepository.UpdateBookmarkAsync(bookmark);
+        return ServiceResult<BookmarkResponseDto>.Ok(MapBookmark(bookmark));
     }
 
     // ── Comments ──────────────────────────────────────────────────
@@ -410,17 +470,6 @@ public class EventServiceImpl : IEventService
         return ServiceResult<bool>.Ok(true);
     }
 
-    public async Task<ServiceResult<BookmarkResponseDto>> UpdateBookmarkAsync(
-    int bookmarkId, UpdateBookmarkDto dto, int userId)
-    {
-        var bookmark = await _eventRepository.GetBookmarkByIdAsync(bookmarkId);
-        if (bookmark is null) return ServiceResult<BookmarkResponseDto>.NotFound("Bookmark not found.");
-        if (bookmark.UserId != userId) return ServiceResult<BookmarkResponseDto>.Forbidden("Not your bookmark.");
-        bookmark.UpdateMemo(dto.Memo);
-        await _eventRepository.UpdateBookmarkAsync(bookmark);
-        return ServiceResult<BookmarkResponseDto>.Ok(MapBookmark(bookmark));
-    }
-
     public async Task<ServiceResult<List<CommentResponseDto>>> GetRepliesAsync(int commentId)
     {
         var replies = await _eventRepository.GetRepliesAsync(commentId);
@@ -440,7 +489,6 @@ public class EventServiceImpl : IEventService
         return ServiceResult<bool>.Ok(true);
     }
 
-
     public async Task<ServiceResult<bool>> UnlikeCommentAsync(int commentId, int userId)
     {
         var comment = await _eventRepository.GetCommentByIdAsync(commentId);
@@ -449,9 +497,7 @@ public class EventServiceImpl : IEventService
         return ServiceResult<bool>.Ok(true);
     }
 
-
-    // ── Venues ──────────────────────────────────────────────────
-
+    // ── Venues ────────────────────────────────────────────────────
     public async Task<ServiceResult<VenueResponseDto>> GetVenueByIdAsync(int venueId)
     {
         var venue = await _eventRepository.GetVenueByIdAsync(venueId);
@@ -486,17 +532,7 @@ public class EventServiceImpl : IEventService
     }
 
     // ── Mappers ───────────────────────────────────────────────────
-    private static SegmentResponseDto MapSegment(Segment s) => new()
-    {
-        SegmentId = s.SegmentId,
-        Name = s.Name,
-        IconUrl = s.IconUrl,
-        Color = s.Color,
-        IsActive = s.IsActive,
-        Genres = s.Genres.Select(MapGenre).ToList()
-    };
-
-    private static EventResponseDto MapToDto(Domain.Entities.Event ev) => new()
+    private static EventResponseDto MapToDto(DomainEvent ev) => new()
     {
         EventId = ev.EventId,
         OrganizerId = ev.OrganizerId,
@@ -530,9 +566,18 @@ public class EventServiceImpl : IEventService
         SegmentName = ev.Segment?.Name,
         GenreName = ev.Genre?.Name,
         SubGenreName = ev.SubGenre?.Name,
-        VenueName = ev.Venue?.Name,
+        VenueName = ev.Venue?.Name
     };
 
+    private static SegmentResponseDto MapSegment(Segment s) => new()
+    {
+        SegmentId = s.SegmentId,
+        Name = s.Name,
+        IconUrl = s.IconUrl,
+        Color = s.Color,
+        IsActive = s.IsActive,
+        Genres = s.Genres.Select(MapGenre).ToList()
+    };
 
     private static GenreResponseDto MapGenre(Genre g) => new()
     {
@@ -573,9 +618,9 @@ public class EventServiceImpl : IEventService
     private static CommentResponseDto MapComment(Comment c) => new()
     {
         CommentId = c.CommentId,
-        Content = c.IsDeleted ? "[deleted]" : c.Content,   // mask deleted content
+        Content = c.IsDeleted ? "[deleted]" : c.Content,
         LikesCount = c.LikesCount,
-        UserId = c.IsDeleted ? null : c.UserId,            // hide author of deleted comments
+        UserId = c.IsDeleted ? null : c.UserId,
         EventId = c.EventId,
         CreatedAt = c.CreatedAt,
         UpdatedAt = c.UpdatedAt,
@@ -603,6 +648,4 @@ public class EventServiceImpl : IEventService
         Locale = v.Locale,
         PriceZones = v.PriceZones.Select(MapPriceZone).ToList()
     };
-
-
 }

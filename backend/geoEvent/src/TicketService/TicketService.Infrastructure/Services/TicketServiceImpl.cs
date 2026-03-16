@@ -1,5 +1,8 @@
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
+using MassTransit;
 using Microsoft.AspNetCore.Http;
+using Shared.Contracts.Events;
+using Shared.Contracts.Tickets;
 using TicketService.Application.Common;
 using TicketService.Application.DTOs;
 using TicketService.Application.Interfaces.Repositories;
@@ -12,15 +15,24 @@ namespace TicketService.Infrastructure.Services;
 public class TicketServiceImpl : ITicketService
 {
     private readonly ITicketRepository _repository;
+    private readonly IPublishEndpoint _publishEndpoint;
 
-    public TicketServiceImpl(ITicketRepository repository)
+    public TicketServiceImpl(
+        ITicketRepository repository,
+        IPublishEndpoint publishEndpoint)
     {
         _repository = repository;
+        _publishEndpoint = publishEndpoint;
     }
 
     public async Task<ServiceResult<ReservationResponseDto>> CreateReservationAsync(
-    CreateReservationDto dto, int userId)
+        CreateReservationDto dto, int userId)
     {
+        // Quantity guard — prevent abuse (e.g. bulk-buying all seats)
+        if (dto.Quantity <= 0 || dto.Quantity > 10)
+            return ServiceResult<ReservationResponseDto>.Fail(
+                "Quantity must be between 1 and 10.");
+
         var eventTicket = await _repository.GetEventTicketByIdAsync(dto.EventTicketId);
         if (eventTicket is null)
             return ServiceResult<ReservationResponseDto>.NotFound("Ticket type not found.");
@@ -57,12 +69,24 @@ public class TicketServiceImpl : ITicketService
         };
 
         var created = await _repository.CreateReservationAsync(reservation);
+
+        await _publishEndpoint.Publish(new ReservationCreatedMessage(
+            created.ReservationId,
+            created.EventId,
+            created.UserId,
+            created.EventTicketId!.Value,
+            eventTicket.TicketType,
+            created.Quantity,
+            created.TotalAmount,
+            created.Currency,
+            created.ExpiresAt,
+            created.CreatedAt));
+
         return ServiceResult<ReservationResponseDto>.Created(MapToReservationResponse(created));
     }
 
-
     public async Task<ServiceResult<ReservationResponseDto>> ConfirmReservationAsync(
-    int reservationId, ConfirmReservationDto dto, int userId)
+        int reservationId, ConfirmReservationDto dto, int userId)
     {
         var reservation = await _repository.GetReservationByIdAsync(reservationId);
         if (reservation is null)
@@ -77,7 +101,18 @@ public class TicketServiceImpl : ITicketService
                     ? "Reservation has expired."
                     : "Reservation is no longer pending.");
 
-        // Idempotency � prevent duplicate payments
+        // Amount integrity check — prevent client-side price tampering
+        var expectedAmount = reservation.TotalAmount;
+        if (dto.Amount != expectedAmount)
+            return ServiceResult<ReservationResponseDto>.Fail(
+                $"Payment amount mismatch. Expected {expectedAmount} {reservation.Currency}.");
+
+        // Currency integrity check
+        if (!string.Equals(dto.Currency, reservation.Currency, StringComparison.OrdinalIgnoreCase))
+            return ServiceResult<ReservationResponseDto>.Fail(
+                $"Currency mismatch. Expected {reservation.Currency}.");
+
+        // Idempotency — prevent duplicate payments
         var existing = await _repository.GetPaymentByTransactionIdAsync(dto.PaymentReference);
         if (existing is not null)
             return ServiceResult<ReservationResponseDto>.Conflict(
@@ -112,16 +147,39 @@ public class TicketServiceImpl : ITicketService
             Currency = reservation.Currency,
             Status = TicketStatus.Active,
             IssuedAt = DateTime.UtcNow
-        });
+        }).ToList();
+
         await _repository.AddTicketsAsync(tickets);
+
+        await _publishEndpoint.Publish(new PaymentSucceededMessage(
+            payment.PaymentId,
+            reservationId,
+            userId,
+            payment.Amount,
+            payment.Currency,
+            payment.TransactionId!,
+            payment.PaidAt));
+
+        // Publish one TicketPurchasedMessage per issued ticket
+        foreach (var ticket in tickets)
+        {
+            await _publishEndpoint.Publish(new TicketPurchasedMessage(
+                ticket.TicketId,
+                reservationId,
+                reservation.EventId,
+                userId,
+                ticket.TicketType,
+                ticket.Amount,
+                ticket.Currency,
+                ticket.IssuedAt));
+        }
 
         var updated = await _repository.GetReservationByIdAsync(reservationId);
         return ServiceResult<ReservationResponseDto>.Ok(MapToReservationResponse(updated!));
     }
 
-
     public async Task<ServiceResult<bool>> CancelReservationAsync(
-    int reservationId, int userId)
+        int reservationId, int userId)
     {
         var reservation = await _repository.GetReservationByIdAsync(reservationId);
         if (reservation is null)
@@ -151,15 +209,29 @@ public class TicketServiceImpl : ITicketService
         {
             ticket.Cancel();
             await _repository.UpdateTicketAsync(ticket);
+
+            await _publishEndpoint.Publish(new TicketCancelledMessage(
+                ticket.TicketId,
+                reservation.EventId,
+                userId,
+                "Reservation cancelled by user",
+                DateTime.UtcNow));
         }
 
         reservation.Cancel();
         await _repository.UpdateReservationAsync(reservation);
+
+        await _publishEndpoint.Publish(new ReservationExpiredMessage(
+            reservation.ReservationId,
+            reservation.EventId,
+            reservation.UserId,
+            DateTime.UtcNow));
+
         return ServiceResult<bool>.Ok(true);
     }
 
-
-    public async Task<ServiceResult<ReservationResponseDto>> GetReservationAsync(int reservationId, int userId)
+    public async Task<ServiceResult<ReservationResponseDto>> GetReservationAsync(
+        int reservationId, int userId)
     {
         var reservation = await _repository.GetReservationByIdAsync(reservationId);
         if (reservation is null)
@@ -172,18 +244,18 @@ public class TicketServiceImpl : ITicketService
     }
 
     public async Task<ServiceResult<PagedResult<ReservationResponseDto>>> GetUserReservationsAsync(
-    int userId, ReservationFilterDto filter)
+        int userId, ReservationFilterDto filter)
     {
         var paged = await _repository.GetUserReservationsAsync(userId, filter);
-        return ServiceResult<PagedResult<ReservationResponseDto>>.Ok(new PagedResult<ReservationResponseDto>
-        {
-            Items = paged.Items.Select(MapToReservationResponse),
-            TotalCount = paged.TotalCount,
-            Page = paged.Page,
-            PageSize = paged.PageSize
-        });
+        return ServiceResult<PagedResult<ReservationResponseDto>>.Ok(
+            new PagedResult<ReservationResponseDto>
+            {
+                Items = paged.Items.Select(MapToReservationResponse),
+                TotalCount = paged.TotalCount,
+                Page = paged.Page,
+                PageSize = paged.PageSize
+            });
     }
-
 
     public async Task<ServiceResult<TicketResponseDto>> GetTicketAsync(int ticketId, int userId)
     {
@@ -198,29 +270,33 @@ public class TicketServiceImpl : ITicketService
     }
 
     public async Task<ServiceResult<PagedResult<TicketResponseDto>>> GetUserTicketsAsync(
-    int userId, TicketFilterDto filter)
+        int userId, TicketFilterDto filter)
     {
         var paged = await _repository.GetUserTicketsAsync(userId, filter);
-        return ServiceResult<PagedResult<TicketResponseDto>>.Ok(new PagedResult<TicketResponseDto>
-        {
-            Items = paged.Items.Select(MapToTicketResponse),
-            TotalCount = paged.TotalCount,
-            Page = paged.Page,
-            PageSize = paged.PageSize
-        });
+        return ServiceResult<PagedResult<TicketResponseDto>>.Ok(
+            new PagedResult<TicketResponseDto>
+            {
+                Items = paged.Items.Select(MapToTicketResponse),
+                TotalCount = paged.TotalCount,
+                Page = paged.Page,
+                PageSize = paged.PageSize
+            });
     }
 
-
     public async Task<ServiceResult<TicketResponseDto>> ValidateTicketAsync(
-    string qrCode, int validatorUserId)
+        string qrCode, int validatorUserId)
     {
+        // Sanitize input — QR codes should only contain URL-safe base64 chars
+        if (string.IsNullOrWhiteSpace(qrCode) || qrCode.Length > 64)
+            return ServiceResult<TicketResponseDto>.Fail("Invalid QR code format.");
+
         var ticket = await _repository.GetTicketByQrCodeAsync(qrCode);
         if (ticket is null)
             return ServiceResult<TicketResponseDto>.NotFound("Ticket not found.");
 
         if (!ticket.CanBeUsed())
             return ServiceResult<TicketResponseDto>.Fail(
-                $"Ticket is not valid � current status: {ticket.Status}.");
+                $"Ticket is not valid — current status: {ticket.Status}.");
 
         ticket.MarkAsUsed();
         await _repository.UpdateTicketAsync(ticket);
@@ -234,7 +310,6 @@ public class TicketServiceImpl : ITicketService
 
         foreach (var reservation in expired)
         {
-            // Release inventory
             if (reservation.EventTicketId.HasValue)
             {
                 var eventTicket = await _repository.GetEventTicketByIdAsync(
@@ -248,6 +323,12 @@ public class TicketServiceImpl : ITicketService
 
             reservation.Expire();
             await _repository.UpdateReservationAsync(reservation);
+
+            await _publishEndpoint.Publish(new ReservationExpiredMessage(
+                reservation.ReservationId,
+                reservation.EventId,
+                reservation.UserId,
+                DateTime.UtcNow));
         }
 
         return ServiceResult<bool>.Ok(true);
@@ -270,7 +351,7 @@ public class TicketServiceImpl : ITicketService
     }
 
     public async Task<ServiceResult<List<TicketResponseDto>>> GetTicketsByReservationAsync(
-    int reservationId, int userId)
+        int reservationId, int userId)
     {
         var reservation = await _repository.GetReservationByIdAsync(reservationId);
         if (reservation is null)
@@ -285,7 +366,7 @@ public class TicketServiceImpl : ITicketService
     }
 
     public async Task<ServiceResult<List<PaymentDetailResponseDto>>> GetReservationPaymentsAsync(
-    int reservationId, int userId)
+        int reservationId, int userId)
     {
         var reservation = await _repository.GetReservationByIdAsync(reservationId);
         if (reservation is null)
@@ -298,7 +379,6 @@ public class TicketServiceImpl : ITicketService
         return ServiceResult<List<PaymentDetailResponseDto>>.Ok(
             payments.Select(MapToPaymentResponse).ToList());
     }
-
 
     public async Task<ServiceResult<bool>> CancelTicketAsync(int ticketId, int userId)
     {
@@ -314,8 +394,83 @@ public class TicketServiceImpl : ITicketService
 
         ticket.Cancel();
         await _repository.UpdateTicketAsync(ticket);
+
+        await _publishEndpoint.Publish(new TicketCancelledMessage(
+            ticket.TicketId,
+            ticket.EventId,
+            userId,
+            "Cancelled by user",
+            DateTime.UtcNow));
+
         return ServiceResult<bool>.Ok(true);
     }
+
+    // ── Consumers (called by MassTransit, not HTTP) ───────────────
+
+    public async Task CancelUserReservationsAsync(int userId)
+    {
+        var reservations = await _repository.GetActiveReservationsByUserAsync(userId);
+        foreach (var reservation in reservations)
+        {
+            if (reservation.EventTicketId.HasValue)
+            {
+                var eventTicket = await _repository.GetEventTicketByIdAsync(
+                    reservation.EventTicketId.Value);
+                if (eventTicket is not null)
+                {
+                    eventTicket.Release(reservation.Quantity);
+                    await _repository.UpdateEventTicketAsync(eventTicket);
+                }
+            }
+
+            var tickets = await _repository.GetTicketsByReservationAsync(reservation.ReservationId);
+            foreach (var ticket in tickets.Where(t => t.CanBeCancelled()))
+            {
+                ticket.Cancel();
+                await _repository.UpdateTicketAsync(ticket);
+            }
+
+            reservation.Cancel();
+            await _repository.UpdateReservationAsync(reservation);
+        }
+    }
+
+    public async Task CancelTicketsByEventAsync(int eventId)
+    {
+        var reservations = await _repository.GetActiveReservationsByEventAsync(eventId);
+        foreach (var reservation in reservations)
+        {
+            if (reservation.EventTicketId.HasValue)
+            {
+                var eventTicket = await _repository.GetEventTicketByIdAsync(
+                    reservation.EventTicketId.Value);
+                if (eventTicket is not null)
+                {
+                    eventTicket.Release(reservation.Quantity);
+                    await _repository.UpdateEventTicketAsync(eventTicket);
+                }
+            }
+
+            var tickets = await _repository.GetTicketsByReservationAsync(reservation.ReservationId);
+            foreach (var ticket in tickets.Where(t => t.CanBeCancelled()))
+            {
+                ticket.Cancel();
+                await _repository.UpdateTicketAsync(ticket);
+
+                await _publishEndpoint.Publish(new TicketCancelledMessage(
+                    ticket.TicketId,
+                    eventId,
+                    reservation.UserId,
+                    "Event cancelled",
+                    DateTime.UtcNow));
+            }
+
+            reservation.Cancel();
+            await _repository.UpdateReservationAsync(reservation);
+        }
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────
 
     private static string GenerateQrCode()
     {
@@ -323,6 +478,8 @@ public class TicketServiceImpl : ITicketService
         RandomNumberGenerator.Fill(bytes);
         return Convert.ToBase64String(bytes).Replace("+", "-").Replace("/", "_").TrimEnd('=');
     }
+
+    // ── Mappers ───────────────────────────────────────────────────
 
     private static ReservationResponseDto MapToReservationResponse(Reservation r) => new()
     {
@@ -391,5 +548,4 @@ public class TicketServiceImpl : ITicketService
         TransactionId = p.TransactionId,
         PaidAt = p.PaidAt
     };
-
 }

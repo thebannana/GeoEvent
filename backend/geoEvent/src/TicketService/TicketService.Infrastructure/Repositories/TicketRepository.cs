@@ -196,4 +196,25 @@ public class TicketRepository : ITicketRepository
         await _context.PaymentDetails.AddAsync(payment);
         await _context.SaveChangesAsync();
     }
+
+    public async Task<List<Reservation>> GetActiveReservationsByUserAsync(int userId)
+    {
+        return await _context.Reservations
+            .Include(r => r.EventTicket)
+            .Where(r => r.UserId == userId &&
+                        (r.Status == ReservationStatus.Pending ||
+                         r.Status == ReservationStatus.Confirmed))
+            .ToListAsync();
+    }
+
+    public async Task<List<Reservation>> GetActiveReservationsByEventAsync(int eventId)
+    {
+        return await _context.Reservations
+            .Include(r => r.EventTicket)
+            .Where(r => r.EventId == eventId &&
+                        (r.Status == ReservationStatus.Pending ||
+                         r.Status == ReservationStatus.Confirmed))
+            .ToListAsync();
+    }
+
 }

@@ -14,6 +14,9 @@ public interface ITicketRepository
     Task UpdateReservationAsync(Reservation reservation);
     Task<List<Reservation>> GetExpiredReservationsAsync();
     Task<bool> HasActiveReservationAsync(int userId, int eventTicketId);   // missing — prevent duplicate reservations
+    Task<List<Reservation>> GetActiveReservationsByUserAsync(int userId);
+    Task<List<Reservation>> GetActiveReservationsByEventAsync(int eventId);
+
 
     // ── Event Tickets ─────────────────────────────────────────
     Task<EventTicket?> GetEventTicketByIdAsync(int eventTicketId);

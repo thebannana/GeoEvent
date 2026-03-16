@@ -1,4 +1,6 @@
-﻿using UserService.Application.Common;
+﻿using MassTransit;
+using Shared.Contracts.Users;
+using UserService.Application.Common;
 using UserService.Application.DTOs;
 using UserService.Application.Interfaces.Repositories;
 using UserService.Application.Interfaces.Services;
@@ -11,11 +13,13 @@ public class UserServiceImpl : IUserService
 {
     private readonly IUserRepository _userRepository;
     private readonly PasswordService _passwordService;
+    private readonly IPublishEndpoint _publishEndpoint;
 
-    public UserServiceImpl(IUserRepository userRepository, PasswordService passwordService)
+    public UserServiceImpl(IUserRepository userRepository, PasswordService passwordService, IPublishEndpoint publishEndpoint)
     {
         _userRepository = userRepository;
         _passwordService = passwordService;
+        _publishEndpoint = publishEndpoint;
     }
 
 
@@ -104,10 +108,12 @@ public class UserServiceImpl : IUserService
             return ServiceResult<bool>.NotFound($"User {userId} not found.");
 
         await _userRepository.SoftDeleteAsync(userId);
+        await _publishEndpoint.Publish(new UserDeletedMessage(userId, DateTime.UtcNow));
         return ServiceResult<bool>.Ok(true);
     }
 
-    public async Task<ServiceResult<bool>> BanUserAsync(int userId)
+
+    public async Task<ServiceResult<bool>> BanUserAsync(int userId, string reason = "Policy violation")
     {
         var user = await _userRepository.GetByIdAsync(userId);
         if (user is null)
@@ -115,8 +121,11 @@ public class UserServiceImpl : IUserService
 
         user.IsBanned = true;
         await _userRepository.UpdateAsync(user);
+        await _publishEndpoint.Publish(new UserBannedMessage(
+            userId, user.Username, reason, DateTime.UtcNow));
         return ServiceResult<bool>.Ok(true);
     }
+
 
     public async Task<ServiceResult<bool>> UnbanUserAsync(int userId)
     {

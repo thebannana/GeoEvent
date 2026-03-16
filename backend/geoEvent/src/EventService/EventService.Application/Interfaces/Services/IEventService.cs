@@ -13,8 +13,7 @@ public interface IEventService
     Task<ServiceResult<EventResponseDto>> UpdateAsync(int eventId, UpdateEventDto dto, int requesterId);
     Task<ServiceResult<bool>> DeleteAsync(int eventId, int requesterId);
     Task<ServiceResult<bool>> PublishAsync(int eventId, int requesterId);
-    Task<ServiceResult<bool>> CancelAsync(int eventId, int requesterId);
-    Task<ServiceResult<bool>> PostponeAsync(int eventId, int requesterId);              // new
+    Task<ServiceResult<bool>> CancelAsync(int eventId, int requesterId, string reason = "Cancelled by organizer"); Task<ServiceResult<bool>> PostponeAsync(int eventId, int requesterId);              // new
     Task<ServiceResult<bool>> CompleteAsync(int eventId, int requesterId);              // new
 
     // ── Likes ─────────────────────────────────────────────────

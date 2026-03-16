@@ -9,8 +9,7 @@ public interface IUserService
     Task<ServiceResult<UserProfileDto>> GetProfileAsync(int userId);
     Task<ServiceResult<UserProfileDto>> UpdateProfileAsync(int userId, UpdateProfileDto request);
     Task<ServiceResult<bool>> DeleteAccountAsync(int userId);
-    Task<ServiceResult<bool>> BanUserAsync(int userId);
-    Task<ServiceResult<bool>> UnbanUserAsync(int userId);
+    Task<ServiceResult<bool>> BanUserAsync(int userId, string reason = "Policy violation"); Task<ServiceResult<bool>> UnbanUserAsync(int userId);
     Task<ServiceResult<bool>> VerifyEmailAsync(string token);
     Task<ServiceResult<bool>> ChangePasswordAsync(int userId, ChangePasswordDto dto);
     Task<ServiceResult<PagedResult<UserProfileDto>>> GetAllUsersAsync(UserFilterDto filter); // admin

@@ -2,31 +2,20 @@
 
 public enum NotificationType
 {
-    // Reservations
-    ReservationCreated,
-    ReservationConfirmed,
-    ReservationCancelled,
-    ReservationExpired,
-
-    // Tickets
-    TicketIssued,
-    TicketCancelled,
-    TicketValidated,
-
-    // Events
-    EventUpdated,
-    EventCancelled,
-    EventReminder,
-
-    // Social
-    NewMessage,
-    ReportResolved,
-
-    // Account
+    Welcome,
     EmailVerification,
     PasswordReset,
     AccountBanned,
-    AccountUnbanned,
-
+    EventCreated,
+    EventUpdated,
+    EventCancelled,
+    EventStartingSoon,
+    ReservationConfirmed,
+    ReservationExpired,
+    TicketPurchased,
+    TicketCancelled,
+    PaymentSucceeded,
+    PaymentFailed,
+    NewMessage,
     General
 }

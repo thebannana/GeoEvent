@@ -6,6 +6,8 @@ using System.Text;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.OpenApi.Models;
+using LocationService.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -127,10 +129,34 @@ app.UseMiddleware<SecurityHeadersMiddleware>();
 app.UseMiddleware<ExceptionMiddleware>();
 app.UseCors("AllowFrontend");
 app.UseRateLimiter();
-app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<LocationDbContext>();
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+
+    var retries = 10;
+    while (retries > 0)
+    {
+        try
+        {
+            logger.LogInformation("Applying migrations...");
+            db.Database.Migrate();
+            logger.LogInformation("Migrations applied successfully.");
+            break;
+        }
+        catch (Exception ex)
+        {
+            retries--;
+            logger.LogWarning("Migration failed. Retries left: {Retries}. Error: {Error}", retries, ex.Message);
+            if (retries == 0) throw;
+            Thread.Sleep(5000); // wait 5s before retry
+        }
+    }
+}
 
 app.Run();

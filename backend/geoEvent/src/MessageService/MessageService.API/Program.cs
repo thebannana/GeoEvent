@@ -6,12 +6,13 @@ using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.OpenApi.Models;
+using MessageService.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
 
 builder.Services.AddInfrastructure(builder.Configuration);
 
@@ -117,19 +118,44 @@ builder.Services.AddRateLimiter(options =>
 
 var app = builder.Build();
 
+app.UseMiddleware<SecurityHeadersMiddleware>();
+app.UseMiddleware<ExceptionMiddleware>();
+app.UseCors("AllowFrontend");
+app.UseRateLimiter();
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
 
-app.UseMiddleware<SecurityHeadersMiddleware>();
-app.UseMiddleware<ExceptionMiddleware>();
-app.UseCors("AllowFrontend");
-app.UseRateLimiter();
-app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<MessageDbContext>();
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+
+    var retries = 10;
+    while (retries > 0)
+    {
+        try
+        {
+            logger.LogInformation("Applying migrations...");
+            db.Database.Migrate();
+            logger.LogInformation("Migrations applied successfully.");
+            break;
+        }
+        catch (Exception ex)
+        {
+            retries--;
+            logger.LogWarning("Migration failed. Retries left: {Retries}. Error: {Error}", retries, ex.Message);
+            if (retries == 0) throw;
+            Thread.Sleep(5000); // wait 5s before retry
+        }
+    }
+}
 
 app.Run();

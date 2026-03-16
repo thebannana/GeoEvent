@@ -7,6 +7,7 @@ using TicketService.Infrastructure.Persistence;
 using TicketService.Infrastructure.Repositories;
 using TicketService.Infrastructure.Services;
 using TicketService.Infrastructure.BackgroundServices;
+using MassTransit;
 
 namespace TicketService.Infrastructure;
 
@@ -17,11 +18,33 @@ public static class DependencyInjection
         IConfiguration configuration)
     {
         services.AddDbContext<TicketDbContext>(options =>
-            options.UseSqlServer(configuration.GetConnectionString("TicketDb")));
+            options.UseSqlServer(
+                configuration.GetConnectionString("TicketDb"),
+                sqlOptions => sqlOptions.EnableRetryOnFailure(
+                    maxRetryCount: 10,
+                    maxRetryDelay: TimeSpan.FromSeconds(15),
+                    errorNumbersToAdd: null
+                )
+            )
+        );
 
         services.AddScoped<ITicketRepository, TicketRepository>();
         services.AddScoped<ITicketService, TicketServiceImpl>();
         services.AddHostedService<ReservationExpiryBackgroundService>();
+
+        services.AddMassTransit(x =>
+        {
+            x.UsingRabbitMq((ctx, cfg) =>
+            {
+                cfg.Host(configuration["RabbitMq:Host"], configuration["RabbitMq:VirtualHost"], h =>
+                {
+                    h.Username(configuration["RabbitMq:Username"]!);
+                    h.Password(configuration["RabbitMq:Password"]!);
+                });
+
+                cfg.ConfigureEndpoints(ctx);
+            });
+        });
 
         return services;
     }

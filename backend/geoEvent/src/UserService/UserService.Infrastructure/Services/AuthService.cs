@@ -1,5 +1,7 @@
 ﻿using System.Security.Cryptography;
 using System.Text;
+using MassTransit;
+using Shared.Contracts.Users;
 using UserService.Application.Common;
 using UserService.Application.DTOs;
 using UserService.Application.Interfaces.Repositories;
@@ -13,15 +15,18 @@ public class AuthService : IAuthService
     private readonly IUserRepository _userRepository;
     private readonly PasswordService _passwordService;
     private readonly TokenService _tokenService;
+    private readonly IPublishEndpoint _publishEndpoint;
 
     public AuthService(
         IUserRepository userRepository,
         PasswordService passwordService,
-        TokenService tokenService)
+        TokenService tokenService,
+        IPublishEndpoint publishEndpoint)
     {
         _userRepository = userRepository;
         _passwordService = passwordService;
         _tokenService = tokenService;
+        _publishEndpoint = publishEndpoint;
     }
 
     public async Task<ServiceResult<AuthResponseDto>> RegisterAsync(
@@ -62,15 +67,29 @@ public class AuthService : IAuthService
             EmailVerificationTokenExpiresAt = DateTime.UtcNow.AddHours(24)
         };
 
-
         await _userRepository.CreateAsync(user, person);
+
+        await _publishEndpoint.Publish(new UserRegisteredMessage(
+            user.PersonId,
+            user.Email,
+            user.Username,
+            person.FirstName,
+            DateTime.UtcNow));
+
+        await _publishEndpoint.Publish(new EmailVerificationRequestedMessage(
+            user.PersonId,
+            user.Email,
+            verificationToken,
+            user.EmailVerificationTokenExpiresAt!.Value));
+
         return await BuildAuthResponseAsync(user, ipAddress);
     }
 
     public async Task<ServiceResult<AuthResponseDto>> LoginAsync(
         LoginRequestDto request, string ipAddress)
     {
-        var user = await _userRepository.GetByEmailOrUsernameAsync(request.Identifier);
+        var user = await _userRepository.GetByEmailOrUsernameAsync(
+            request.Identifier.ToLower().Trim());
 
         if (user is null)
             return ServiceResult<AuthResponseDto>.Unauthorized("Invalid credentials.");
@@ -104,14 +123,20 @@ public class AuthService : IAuthService
             SHA256.HashData(Encoding.UTF8.GetBytes(refreshToken)));
 
         var stored = await _userRepository.GetActiveRefreshTokenAsync(hash);
-
         if (stored is null)
             return ServiceResult<AuthResponseDto>.Unauthorized("Invalid or expired refresh token.");
 
+        if (stored.User!.IsBanned)
+            return ServiceResult<AuthResponseDto>.Forbidden("Account is banned.");
+
+        if (!stored.User.IsVerified)
+            return ServiceResult<AuthResponseDto>.Forbidden("Email not verified.");
+
         stored.Revoke();
-        await _userRepository.UpdateAsync(stored.User!);
-        await _userRepository.CleanupExpiredTokensAsync(stored.User!.PersonId);
-        return await BuildAuthResponseAsync(stored.User!, ipAddress, stored.DeviceInfo);
+        await _userRepository.RevokeRefreshTokenAsync(hash);
+        await _userRepository.CleanupExpiredTokensAsync(stored.User.PersonId);
+
+        return await BuildAuthResponseAsync(stored.User, ipAddress, stored.DeviceInfo);
     }
 
     public async Task<ServiceResult<bool>> LogoutAsync(string refreshToken)
@@ -125,6 +150,43 @@ public class AuthService : IAuthService
     public async Task<ServiceResult<bool>> RevokeAllSessionsAsync(int userId)
     {
         await _userRepository.RevokeAllUserTokensAsync(userId);
+        return ServiceResult<bool>.Ok(true);
+    }
+
+    public async Task<ServiceResult<bool>> ForgotPasswordAsync(ForgotPasswordDto dto)
+    {
+        var user = await _userRepository.GetByEmailAsync(dto.Email);
+        // Always return Ok to prevent email enumeration
+        if (user is null)
+            return ServiceResult<bool>.Ok(true);
+
+        user.PasswordResetToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(64));
+        user.PasswordResetTokenExpiresAt = DateTime.UtcNow.AddHours(1);
+        await _userRepository.UpdateAsync(user);
+
+        await _publishEndpoint.Publish(new PasswordResetRequestedMessage(
+            user.PersonId,
+            user.Email,
+            user.PasswordResetToken,
+            user.PasswordResetTokenExpiresAt.Value));
+
+        return ServiceResult<bool>.Ok(true);
+    }
+
+    public async Task<ServiceResult<bool>> ResetPasswordAsync(ResetPasswordDto dto)
+    {
+        var user = await _userRepository.GetByResetTokenAsync(dto.Token);
+        if (user is null || !user.IsPasswordResetTokenValid(dto.Token))
+            return ServiceResult<bool>.Unauthorized("Invalid or expired reset token.");
+
+        var (hash, salt) = _passwordService.HashPassword(dto.NewPassword);
+        user.PasswordHash = hash;
+        user.PasswordSalt = salt;
+        user.PasswordResetToken = null;
+        user.PasswordResetTokenExpiresAt = null;
+
+        await _userRepository.RevokeAllUserTokensAsync(user.PersonId);
+        await _userRepository.UpdateAsync(user);
         return ServiceResult<bool>.Ok(true);
     }
 
@@ -166,38 +228,4 @@ public class AuthService : IAuthService
             }
         });
     }
-
-    public async Task<ServiceResult<bool>> ForgotPasswordAsync(ForgotPasswordDto dto)
-    {
-        var user = await _userRepository.GetByEmailAsync(dto.Email);
-        // Always return Ok to prevent email enumeration
-        if (user is null)
-            return ServiceResult<bool>.Ok(true);
-
-        user.PasswordResetToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(64));
-        user.PasswordResetTokenExpiresAt = DateTime.UtcNow.AddHours(1);
-        await _userRepository.UpdateAsync(user);
-
-        // TODO: dispatch email via NotificationService
-        return ServiceResult<bool>.Ok(true);
-    }
-
-    public async Task<ServiceResult<bool>> ResetPasswordAsync(ResetPasswordDto dto)
-    {
-        var user = await _userRepository.GetByResetTokenAsync(dto.Token);
-        if (user is null || !user.IsPasswordResetTokenValid(dto.Token))
-            return ServiceResult<bool>.Unauthorized("Invalid or expired reset token.");
-
-        var (hash, salt) = _passwordService.HashPassword(dto.NewPassword);
-        user.PasswordHash = hash;
-        user.PasswordSalt = salt;
-        user.PasswordResetToken = null;
-        user.PasswordResetTokenExpiresAt = null;
-
-        await _userRepository.RevokeAllUserTokensAsync(user.PersonId);
-        await _userRepository.UpdateAsync(user);
-        return ServiceResult<bool>.Ok(true);
-    }
-
-
 }

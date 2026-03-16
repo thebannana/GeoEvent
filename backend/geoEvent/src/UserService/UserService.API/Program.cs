@@ -2,10 +2,12 @@
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using UserService.API.Middleware;
 using UserService.Infrastructure;
+using UserService.Infrastructure.Persistence;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -125,7 +127,6 @@ app.UseMiddleware<SecurityHeadersMiddleware>();
 app.UseMiddleware<ExceptionMiddleware>();
 app.UseCors("AllowFrontend");
 app.UseRateLimiter();
-app.UseHttpsRedirection();
 
 // ── Always show Swagger if in develeopment ────────────────────────────────────────
 if (app.Environment.IsDevelopment())
@@ -142,5 +143,30 @@ if (app.Environment.IsDevelopment())
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+
+    var retries = 10;
+    while (retries > 0)
+    {
+        try
+        {
+            logger.LogInformation("Applying migrations...");
+            db.Database.Migrate();
+            logger.LogInformation("Migrations applied successfully.");
+            break;
+        }
+        catch (Exception ex)
+        {
+            retries--;
+            logger.LogWarning("Migration failed. Retries left: {Retries}. Error: {Error}", retries, ex.Message);
+            if (retries == 0) throw;
+            Thread.Sleep(5000); // wait 5s before retry
+        }
+    }
+}
 
 app.Run();

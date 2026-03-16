@@ -164,4 +164,23 @@ public class MessageRepository : IMessageRepository
                 .SetProperty(m => m.ReadAt, DateTime.UtcNow));
     }
 
+    public async Task SoftDeleteAllForUserAsync(int userId)
+    {
+        var messages = await _context.Messages
+            .Where(m => (m.SenderId == userId || m.RecipientId == userId)
+                        && !m.IsFullyDeleted())
+            .ToListAsync();
+
+        foreach (var message in messages)
+        {
+            message.SoftDeleteFor(userId);
+
+            if (message.IsFullyDeleted())
+                _context.Messages.Remove(message);
+        }
+
+        await _context.SaveChangesAsync();
+    }
+
+
 }

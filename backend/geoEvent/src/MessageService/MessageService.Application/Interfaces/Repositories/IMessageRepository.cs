@@ -17,4 +17,6 @@ public interface IMessageRepository
     Task UpdateAsync(Message message);
     Task DeleteAsync(Message message);
     Task MarkAllAsReadAsync(int userId, int otherUserId);
+    Task SoftDeleteAllForUserAsync(int userId);
+
 }

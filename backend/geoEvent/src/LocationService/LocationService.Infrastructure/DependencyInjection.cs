@@ -15,7 +15,15 @@ public static class DependencyInjection
         this IServiceCollection services, IConfiguration configuration)
     {
         services.AddDbContext<LocationDbContext>(options =>
-            options.UseSqlServer(configuration.GetConnectionString("LocationDb")));
+            options.UseSqlServer(
+                configuration.GetConnectionString("LocationDb"),
+                sqlOptions => sqlOptions.EnableRetryOnFailure(
+                    maxRetryCount: 10,
+                    maxRetryDelay: TimeSpan.FromSeconds(15),
+                    errorNumbersToAdd: null
+                )
+            )
+        );
 
         services.AddScoped<ILocationRepository, LocationRepository>();
         services.AddScoped<ILocationService, LocationServiceImpl>();

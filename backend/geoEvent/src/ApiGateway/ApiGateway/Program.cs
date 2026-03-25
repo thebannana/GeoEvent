@@ -12,9 +12,12 @@ Log.Logger = new LoggerConfiguration()
 var builder = WebApplication.CreateBuilder(args);
 
 // Serilog
-builder.Host.UseSerilog((ctx, cfg) =>
-    cfg.ReadFrom.Configuration(ctx.Configuration)
-       .WriteTo.Console());
+if (!builder.Environment.IsEnvironment("Testing"))
+{
+    builder.Host.UseSerilog((ctx, cfg) =>
+        cfg.ReadFrom.Configuration(ctx.Configuration)
+           .WriteTo.Console());
+}
 
 // YARP Reverse Proxy
 builder.Services.AddReverseProxy()
@@ -92,3 +95,5 @@ app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = Dat
 app.MapReverseProxy();
 
 app.Run();
+
+public partial class Program { }

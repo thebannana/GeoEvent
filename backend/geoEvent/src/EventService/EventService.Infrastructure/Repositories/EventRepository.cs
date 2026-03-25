@@ -80,16 +80,17 @@ public class EventRepository : IEventRepository
     {
         // Degree approximations for bounding box pre-filter
         var latDelta = (decimal)(dto.RadiusKm / 111.0);
-        var lonDelta = (decimal)(dto.RadiusKm / (111.0 * Math.Cos((double)dto.Latitude * Math.PI / 180.0)));
+        var lonDelta = (decimal)(dto.RadiusKm / 111.0 /
+            Math.Cos((double)dto.Latitude!.Value * Math.PI / 180.0));  // .Value here
 
         return await _context.Events
             .Include(e => e.Images)
             .Include(e => e.Venue)
-            .Where(e => e.Status == EventStatus.Active &&
-                        e.Latitude >= dto.Latitude - latDelta &&
-                        e.Latitude <= dto.Latitude + latDelta &&
-                        e.Longitude >= dto.Longitude - lonDelta &&
-                        e.Longitude <= dto.Longitude + lonDelta)
+                .Where(e => e.Status == EventStatus.Active
+                    && e.Latitude >= dto.Latitude!.Value - latDelta   // .Value
+                    && e.Latitude <= dto.Latitude!.Value + latDelta
+                    && e.Longitude >= dto.Longitude!.Value - lonDelta   // .Value
+                    && e.Longitude <= dto.Longitude!.Value + lonDelta)
             .OrderBy(e => e.StartDateTime)
             .Take(dto.Limit)
             .ToListAsync();
@@ -153,6 +154,9 @@ public class EventRepository : IEventRepository
             UserId = userId,
             LikedAt = DateTime.UtcNow
         });
+
+        await _context.SaveChangesAsync();
+
         await _context.Events
             .Where(e => e.EventId == eventId)
             .ExecuteUpdateAsync(s =>

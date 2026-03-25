@@ -1,10 +1,12 @@
 ﻿using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Serialization;
 
 namespace UserService.Application.DTOs;
 
 public class LoginRequestDto
 {
     [Required]
+    [JsonPropertyName("emailOrUsername")]
     public string Identifier { get; set; } = string.Empty; // email or username
 
     [Required]

@@ -4,6 +4,7 @@ using EventService.Application.Interfaces.Repositories;
 using EventService.Application.Interfaces.Services;
 using EventService.Domain.Entities;
 using EventService.Domain.Enums;
+using EventService.Domain.Exceptions;
 using MassTransit;
 using Shared.Contracts.Events;
 using DomainEvent = EventService.Domain.Entities.Event;
@@ -246,16 +247,20 @@ public class EventServiceImpl : IEventService
             return ServiceResult<bool>.NotFound($"Event {eventId} not found.");
 
         if (await _eventRepository.IsLikedByUserAsync(eventId, userId))
-            return ServiceResult<bool>.Fail("Event already liked.");
+            throw new DuplicateLikeException(eventId, userId);
 
         await _eventRepository.LikeAsync(eventId, userId);
         return ServiceResult<bool>.Ok(true);
     }
 
+
     public async Task<ServiceResult<bool>> UnlikeAsync(int eventId, int userId)
     {
         if (!await _eventRepository.ExistsAsync(eventId))
             return ServiceResult<bool>.NotFound($"Event {eventId} not found.");
+
+        if (!await _eventRepository.IsLikedByUserAsync(eventId, userId))
+            return ServiceResult<bool>.NotFound("You have not liked this event.");
 
         await _eventRepository.UnlikeAsync(eventId, userId);
         return ServiceResult<bool>.Ok(true);
@@ -427,6 +432,14 @@ public class EventServiceImpl : IEventService
     public async Task<ServiceResult<CommentResponseDto>> CreateCommentAsync(
         CreateCommentDto dto, int userId)
     {
+        if (dto.ParentCommentId.HasValue)
+        {
+            var parent = await _eventRepository.GetCommentByIdAsync(dto.ParentCommentId.Value);
+            if (parent == null)
+                return ServiceResult<CommentResponseDto>.NotFound(
+                    $"Parent comment {dto.ParentCommentId.Value} not found.");
+        }
+
         var comment = new Comment
         {
             EventId = dto.EventId,
@@ -437,6 +450,7 @@ public class EventServiceImpl : IEventService
             IsDeleted = false,
             LikesCount = 0
         };
+
         var created = await _eventRepository.CreateCommentAsync(comment);
         return ServiceResult<CommentResponseDto>.Ok(MapComment(created));
     }

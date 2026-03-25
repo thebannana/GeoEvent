@@ -5,6 +5,7 @@ using NotificationService.Application.Interfaces.Repositories;
 using NotificationService.Application.Interfaces.Services;
 using NotificationService.Domain.Entities;
 using NotificationService.Domain.Enums;
+using NotificationService.Domain.Exceptions;
 
 namespace NotificationService.Infrastructure.Services;
 
@@ -159,6 +160,9 @@ public class NotificationServiceImpl : INotificationService
             return ServiceResult<bool>.NotFound("Notification not found.");
         if (notification.UserId != userId)
             return ServiceResult<bool>.Forbidden("Access denied.");
+
+        if (notification.IsRead)                                    
+            throw new NotificationAlreadyReadException(notificationId);
 
         notification.MarkAsRead();
         await _repo.UpdateAsync(notification);

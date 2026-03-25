@@ -81,7 +81,12 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 
 builder.Services.AddAuthorization();
-builder.Services.AddControllers();
+
+builder.Services.AddControllers()
+    .AddJsonOptions(o =>
+        o.JsonSerializerOptions.Converters.Add(
+            new System.Text.Json.Serialization.JsonStringEnumConverter()));
+
 builder.Services.AddEndpointsApiExplorer();
 
 // ── Swagger with JWT support ───────────────────────────────────
@@ -126,7 +131,10 @@ var app = builder.Build();
 app.UseMiddleware<SecurityHeadersMiddleware>();
 app.UseMiddleware<ExceptionMiddleware>();
 app.UseCors("AllowFrontend");
-app.UseRateLimiter();
+if (!app.Environment.IsEnvironment("Testing"))
+{
+    app.UseRateLimiter();
+}
 
 // ── Always show Swagger if in develeopment ────────────────────────────────────────
 if (app.Environment.IsDevelopment())
@@ -170,3 +178,5 @@ using (var scope = app.Services.CreateScope())
 }
 
 app.Run();
+
+public partial class Program { }

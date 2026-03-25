@@ -24,9 +24,10 @@ public class ExceptionMiddleware
         catch (VenueNotFoundException ex) { await Write(context, 404, ex.Message); }
         catch (CommentNotFoundException ex) { await Write(context, 404, ex.Message); }
         catch (BookmarkNotFoundException ex) { await Write(context, 404, ex.Message); }
+        catch (InvalidOperationException ex) { await Write(context, 400, ex.Message); }
         catch (EventAccessDeniedException ex) { await Write(context, 403, ex.Message); }
         catch (CommentAccessDeniedException ex) { await Write(context, 403, ex.Message); }
-        catch (DuplicateLikeException ex) { await Write(context, 409, ex.Message); }
+        catch (DuplicateLikeException ex) { await Write(context, 400, ex.Message); }
         catch (DuplicateBookmarkException ex) { await Write(context, 409, ex.Message); }
         catch (EventCapacityExceededException ex) { await Write(context, 409, ex.Message); }
         catch (EventNotActiveException ex) { await Write(context, 422, ex.Message); }

@@ -5,12 +5,9 @@ services:
     image: rabbitmq:3.13-management
     container_name: geoevent-rabbitmq
     user: rabbitmq
-    ports:
-      - "5672:5672"
-      - "15672:15672"
     environment:
-      RABBITMQ_DEFAULT_USER: guest
-      RABBITMQ_DEFAULT_PASS: guest
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS}
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     healthcheck:
@@ -26,15 +23,13 @@ services:
     image: mcr.microsoft.com/mssql/server:2022-CU14-ubuntu-22.04
     container_name: geoevent-sqlserver-user
     environment:
-      MSSQL_SA_PASSWORD: "GeoEvent1Strong"
+      MSSQL_SA_PASSWORD: ${DB_PASSWORD}
       ACCEPT_EULA: "Y"
       MSSQL_PID: "Developer"
-    ports:
-      - "1433:1433"
     volumes:
       - sqlserver_user_data:/var/opt/mssql
     healthcheck:
-      test: ["CMD", "/opt/mssql-tools18/bin/sqlcmd", "-S", "localhost", "-U", "sa", "-P", "GeoEvent1Strong", "-Q", "SELECT 1", "-No"]
+      test: ["CMD", "/opt/mssql-tools18/bin/sqlcmd", "-S", "localhost", "-U", "sa", "-P", "${DB_PASSWORD}", "-Q", "SELECT 1", "-No"]
       interval: 15s
       timeout: 10s
       retries: 15
@@ -46,15 +41,13 @@ services:
     image: mcr.microsoft.com/mssql/server:2022-CU14-ubuntu-22.04
     container_name: geoevent-sqlserver-event
     environment:
-      MSSQL_SA_PASSWORD: "GeoEvent1Strong"
+      MSSQL_SA_PASSWORD: ${DB_PASSWORD}
       ACCEPT_EULA: "Y"
       MSSQL_PID: "Developer"
-    ports:
-      - "1434:1433"
     volumes:
       - sqlserver_event_data:/var/opt/mssql
     healthcheck:
-      test: ["CMD", "/opt/mssql-tools18/bin/sqlcmd", "-S", "localhost", "-U", "sa", "-P", "GeoEvent1Strong", "-Q", "SELECT 1", "-No"]
+      test: ["CMD", "/opt/mssql-tools18/bin/sqlcmd", "-S", "localhost", "-U", "sa", "-P", "${DB_PASSWORD}", "-Q", "SELECT 1", "-No"]
       interval: 15s
       timeout: 10s
       retries: 15
@@ -66,15 +59,13 @@ services:
     image: mcr.microsoft.com/mssql/server:2022-CU14-ubuntu-22.04
     container_name: geoevent-sqlserver-ticket
     environment:
-      MSSQL_SA_PASSWORD: "GeoEvent1Strong"
+      MSSQL_SA_PASSWORD: ${DB_PASSWORD}
       ACCEPT_EULA: "Y"
       MSSQL_PID: "Developer"
-    ports:
-      - "1435:1433"
     volumes:
       - sqlserver_ticket_data:/var/opt/mssql
     healthcheck:
-      test: ["CMD", "/opt/mssql-tools18/bin/sqlcmd", "-S", "localhost", "-U", "sa", "-P", "GeoEvent1Strong", "-Q", "SELECT 1", "-No"]
+      test: ["CMD", "/opt/mssql-tools18/bin/sqlcmd", "-S", "localhost", "-U", "sa", "-P", "${DB_PASSWORD}", "-Q", "SELECT 1", "-No"]
       interval: 15s
       timeout: 10s
       retries: 15
@@ -86,15 +77,13 @@ services:
     image: mcr.microsoft.com/mssql/server:2022-CU14-ubuntu-22.04
     container_name: geoevent-sqlserver-notification
     environment:
-      MSSQL_SA_PASSWORD: "GeoEvent1Strong"
+      MSSQL_SA_PASSWORD: ${DB_PASSWORD}
       ACCEPT_EULA: "Y"
       MSSQL_PID: "Developer"
-    ports:
-      - "1436:1433"
     volumes:
       - sqlserver_notification_data:/var/opt/mssql
     healthcheck:
-      test: ["CMD", "/opt/mssql-tools18/bin/sqlcmd", "-S", "localhost", "-U", "sa", "-P", "GeoEvent1Strong", "-Q", "SELECT 1", "-No"]
+      test: ["CMD", "/opt/mssql-tools18/bin/sqlcmd", "-S", "localhost", "-U", "sa", "-P", "${DB_PASSWORD}", "-Q", "SELECT 1", "-No"]
       interval: 15s
       timeout: 10s
       retries: 15
@@ -106,15 +95,13 @@ services:
     image: mcr.microsoft.com/mssql/server:2022-CU14-ubuntu-22.04
     container_name: geoevent-sqlserver-message
     environment:
-      MSSQL_SA_PASSWORD: "GeoEvent1Strong"
+      MSSQL_SA_PASSWORD: ${DB_PASSWORD}
       ACCEPT_EULA: "Y"
       MSSQL_PID: "Developer"
-    ports:
-      - "1437:1433"
     volumes:
       - sqlserver_message_data:/var/opt/mssql
     healthcheck:
-      test: ["CMD", "/opt/mssql-tools18/bin/sqlcmd", "-S", "localhost", "-U", "sa", "-P", "GeoEvent1Strong", "-Q", "SELECT 1", "-No"]
+      test: ["CMD", "/opt/mssql-tools18/bin/sqlcmd", "-S", "localhost", "-U", "sa", "-P", "${DB_PASSWORD}", "-Q", "SELECT 1", "-No"]
       interval: 15s
       timeout: 10s
       retries: 15
@@ -126,15 +113,13 @@ services:
     image: mcr.microsoft.com/mssql/server:2022-CU14-ubuntu-22.04
     container_name: geoevent-sqlserver-location
     environment:
-      MSSQL_SA_PASSWORD: "GeoEvent1Strong"
+      MSSQL_SA_PASSWORD: ${DB_PASSWORD}
       ACCEPT_EULA: "Y"
       MSSQL_PID: "Developer"
-    ports:
-      - "1438:1433"
     volumes:
       - sqlserver_location_data:/var/opt/mssql
     healthcheck:
-      test: ["CMD", "/opt/mssql-tools18/bin/sqlcmd", "-S", "localhost", "-U", "sa", "-P", "GeoEvent1Strong", "-Q", "SELECT 1", "-No"]
+      test: ["CMD", "/opt/mssql-tools18/bin/sqlcmd", "-S", "localhost", "-U", "sa", "-P", "${DB_PASSWORD}", "-Q", "SELECT 1", "-No"]
       interval: 15s
       timeout: 10s
       retries: 15
@@ -148,18 +133,16 @@ services:
       context: .
       dockerfile: src/UserService/UserService.API/Dockerfile
     container_name: geoevent-user-service
-    ports:
-      - "7001:8080"
     environment:
-      ASPNETCORE_ENVIRONMENT: Development
-      ConnectionStrings__UserDb: "Server=sqlserver-user,1433;Database=UserDb;User Id=sa;Password=GeoEvent1Strong;TrustServerCertificate=True"
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__UserDb: "Server=sqlserver-user,1433;Database=UserDb;User Id=sa;Password=${DB_PASSWORD};TrustServerCertificate=True"
       RabbitMq__Host: rabbitmq
       RabbitMq__VirtualHost: /
-      RabbitMq__Username: guest
-      RabbitMq__Password: guest
-      Jwt__Secret: "geoEvent_SuperSecret_JWT_Key_2026_ThisMustBeAtLeast64CharactersLongForSHA512!!"
-      Jwt__Issuer: "geoEvent.UserService"
-      Jwt__Audience: "geoEvent.Client"
+      RabbitMq__Username: ${RABBITMQ_USER}
+      RabbitMq__Password: ${RABBITMQ_PASS}
+      Jwt__Secret: ${JWT_SECRET}
+      Jwt__Issuer: ${JWT_ISSUER}
+      Jwt__Audience: ${JWT_AUDIENCE}
     depends_on:
       sqlserver-user:
         condition: service_healthy
@@ -173,18 +156,16 @@ services:
       context: .
       dockerfile: src/EventService/EventService.API/Dockerfile
     container_name: geoevent-event-service
-    ports:
-      - "7002:8080"
     environment:
-      ASPNETCORE_ENVIRONMENT: Development
-      ConnectionStrings__EventDb: "Server=sqlserver-event,1433;Database=EventDb;User Id=sa;Password=GeoEvent1Strong;TrustServerCertificate=True"
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__EventDb: "Server=sqlserver-event,1433;Database=EventDb;User Id=sa;Password=${DB_PASSWORD};TrustServerCertificate=True"
       RabbitMq__Host: rabbitmq
       RabbitMq__VirtualHost: /
-      RabbitMq__Username: guest
-      RabbitMq__Password: guest
-      Jwt__Secret: "geoEvent_SuperSecret_JWT_Key_2026_ThisMustBeAtLeast64CharactersLongForSHA512!!"
-      Jwt__Issuer: "geoEvent.UserService"
-      Jwt__Audience: "geoEvent.Client"
+      RabbitMq__Username: ${RABBITMQ_USER}
+      RabbitMq__Password: ${RABBITMQ_PASS}
+      Jwt__Secret: ${JWT_SECRET}
+      Jwt__Issuer: ${JWT_ISSUER}
+      Jwt__Audience: ${JWT_AUDIENCE}
     depends_on:
       sqlserver-event:
         condition: service_healthy
@@ -198,18 +179,16 @@ services:
       context: .
       dockerfile: src/TicketService/TicketService.API/Dockerfile
     container_name: geoevent-ticket-service
-    ports:
-      - "7003:8080"
     environment:
-      ASPNETCORE_ENVIRONMENT: Development
-      ConnectionStrings__TicketDb: "Server=sqlserver-ticket,1433;Database=TicketDb;User Id=sa;Password=GeoEvent1Strong;TrustServerCertificate=True"
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__TicketDb: "Server=sqlserver-ticket,1433;Database=TicketDb;User Id=sa;Password=${DB_PASSWORD};TrustServerCertificate=True"
       RabbitMq__Host: rabbitmq
       RabbitMq__VirtualHost: /
-      RabbitMq__Username: guest
-      RabbitMq__Password: guest
-      Jwt__Secret: "geoEvent_SuperSecret_JWT_Key_2026_ThisMustBeAtLeast64CharactersLongForSHA512!!"
-      Jwt__Issuer: "geoEvent.UserService"
-      Jwt__Audience: "geoEvent.Client"
+      RabbitMq__Username: ${RABBITMQ_USER}
+      RabbitMq__Password: ${RABBITMQ_PASS}
+      Jwt__Secret: ${JWT_SECRET}
+      Jwt__Issuer: ${JWT_ISSUER}
+      Jwt__Audience: ${JWT_AUDIENCE}
     depends_on:
       sqlserver-ticket:
         condition: service_healthy
@@ -223,18 +202,16 @@ services:
       context: .
       dockerfile: src/NotificationService/NotificationService.API/Dockerfile
     container_name: geoevent-notification-service
-    ports:
-      - "7004:8080"
     environment:
-      ASPNETCORE_ENVIRONMENT: Development
-      ConnectionStrings__NotificationDb: "Server=sqlserver-notification,1433;Database=NotificationDb;User Id=sa;Password=GeoEvent1Strong;TrustServerCertificate=True"
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__NotificationDb: "Server=sqlserver-notification,1433;Database=NotificationDb;User Id=sa;Password=${DB_PASSWORD};TrustServerCertificate=True"
       RabbitMq__Host: rabbitmq
       RabbitMq__VirtualHost: /
-      RabbitMq__Username: guest
-      RabbitMq__Password: guest
-      Jwt__Secret: "geoEvent_SuperSecret_JWT_Key_2026_ThisMustBeAtLeast64CharactersLongForSHA512!!"
-      Jwt__Issuer: "geoEvent.UserService"
-      Jwt__Audience: "geoEvent.Client"
+      RabbitMq__Username: ${RABBITMQ_USER}
+      RabbitMq__Password: ${RABBITMQ_PASS}
+      Jwt__Secret: ${JWT_SECRET}
+      Jwt__Issuer: ${JWT_ISSUER}
+      Jwt__Audience: ${JWT_AUDIENCE}
     depends_on:
       sqlserver-notification:
         condition: service_healthy
@@ -248,18 +225,16 @@ services:
       context: .
       dockerfile: src/MessageService/MessageService.API/Dockerfile
     container_name: geoevent-message-service
-    ports:
-      - "7005:8080"
     environment:
-      ASPNETCORE_ENVIRONMENT: Development
-      ConnectionStrings__MessageDb: "Server=sqlserver-message,1433;Database=MessageDb;User Id=sa;Password=GeoEvent1Strong;TrustServerCertificate=True"
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__MessageDb: "Server=sqlserver-message,1433;Database=MessageDb;User Id=sa;Password=${DB_PASSWORD};TrustServerCertificate=True"
       RabbitMq__Host: rabbitmq
       RabbitMq__VirtualHost: /
-      RabbitMq__Username: guest
-      RabbitMq__Password: guest
-      Jwt__Secret: "geoEvent_SuperSecret_JWT_Key_2026_ThisMustBeAtLeast64CharactersLongForSHA512!!"
-      Jwt__Issuer: "geoEvent.UserService"
-      Jwt__Audience: "geoEvent.Client"
+      RabbitMq__Username: ${RABBITMQ_USER}
+      RabbitMq__Password: ${RABBITMQ_PASS}
+      Jwt__Secret: ${JWT_SECRET}
+      Jwt__Issuer: ${JWT_ISSUER}
+      Jwt__Audience: ${JWT_AUDIENCE}
     depends_on:
       sqlserver-message:
         condition: service_healthy
@@ -273,14 +248,12 @@ services:
       context: .
       dockerfile: src/LocationService/LocationService.API/Dockerfile
     container_name: geoevent-location-service
-    ports:
-      - "7006:8080"
     environment:
-      ASPNETCORE_ENVIRONMENT: Development
-      ConnectionStrings__LocationDb: "Server=sqlserver-location,1433;Database=LocationDb;User Id=sa;Password=GeoEvent1Strong;TrustServerCertificate=True"
-      Jwt__Secret: "geoEvent_SuperSecret_JWT_Key_2026_ThisMustBeAtLeast64CharactersLongForSHA512!!"
-      Jwt__Issuer: "geoEvent.UserService"
-      Jwt__Audience: "geoEvent.Client"
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__LocationDb: "Server=sqlserver-location,1433;Database=LocationDb;User Id=sa;Password=${DB_PASSWORD};TrustServerCertificate=True"
+      Jwt__Secret: ${JWT_SECRET}
+      Jwt__Issuer: ${JWT_ISSUER}
+      Jwt__Audience: ${JWT_AUDIENCE}
     depends_on:
       sqlserver-location:
         condition: service_healthy
@@ -295,10 +268,10 @@ services:
     ports:
       - "5000:8080"
     environment:
-      ASPNETCORE_ENVIRONMENT: Development
-      Jwt__SecretKey: "geoEvent_SuperSecret_JWT_Key_2026_ThisMustBeAtLeast64CharactersLongForSHA512!!"
-      Jwt__Issuer: "GeoEvent"
-      Jwt__Audience: "GeoEventUsers"
+      ASPNETCORE_ENVIRONMENT: Production
+      Jwt__SecretKey: ${JWT_SECRET}
+      Jwt__Issuer: ${JWT_ISSUER}
+      Jwt__Audience: ${JWT_AUDIENCE}
       ReverseProxy__Clusters__user-cluster__Destinations__user-service__Address: http://user-service:8080
       ReverseProxy__Clusters__event-cluster__Destinations__event-service__Address: http://event-service:8080
       ReverseProxy__Clusters__ticket-cluster__Destinations__ticket-service__Address: http://ticket-service:8080

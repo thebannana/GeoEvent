@@ -6,7 +6,6 @@ namespace UserService.Application.DTOs;
 public class CreateReportDto
 {
     [Required]
-    [MaxLength(50)]
     public ReportTargetType TargetType { get; set; }
 
     [Required]

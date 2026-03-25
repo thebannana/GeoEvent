@@ -1,6 +1,7 @@
 ﻿using System.Security.Cryptography;
 using System.Text;
 using MassTransit;
+using Microsoft.AspNetCore.Http;
 using Shared.Contracts.Users;
 using UserService.Application.Common;
 using UserService.Application.DTOs;
@@ -30,7 +31,7 @@ public class AuthService : IAuthService
     }
 
     public async Task<ServiceResult<AuthResponseDto>> RegisterAsync(
-        RegisterRequestDto request, string ipAddress)
+     RegisterRequestDto request, string ipAddress)
     {
         if (!request.ConsentGiven)
             return ServiceResult<AuthResponseDto>.Fail("You must accept the terms.");
@@ -70,19 +71,17 @@ public class AuthService : IAuthService
         await _userRepository.CreateAsync(user, person);
 
         await _publishEndpoint.Publish(new UserRegisteredMessage(
-            user.PersonId,
-            user.Email,
-            user.Username,
-            person.FirstName,
-            DateTime.UtcNow));
+            user.PersonId, user.Email, user.Username, person.FirstName, DateTime.UtcNow));
 
         await _publishEndpoint.Publish(new EmailVerificationRequestedMessage(
-            user.PersonId,
-            user.Email,
-            verificationToken,
+            user.PersonId, user.Email, verificationToken,
             user.EmailVerificationTokenExpiresAt!.Value));
 
-        return await BuildAuthResponseAsync(user, ipAddress);
+        // ← Do NOT call BuildAuthResponseAsync here — user is not verified yet
+        return ServiceResult<AuthResponseDto>.Ok(null!);
+
+        // Or return a dedicated RegisterResponseDto that only has a success message,
+        // not tokens. Depends on your API contract.
     }
 
     public async Task<ServiceResult<AuthResponseDto>> LoginAsync(

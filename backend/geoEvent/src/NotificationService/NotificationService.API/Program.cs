@@ -1,4 +1,5 @@
 ﻿using System.Text;
+using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
@@ -72,7 +73,11 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 
 builder.Services.AddAuthorization();
-builder.Services.AddControllers();
+
+builder.Services.AddControllers()
+    .AddJsonOptions(o =>
+        o.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddHostedService<QueueProcessorBackgroundService>();
 
@@ -161,3 +166,5 @@ using (var scope = app.Services.CreateScope())
 }
 
 app.Run();
+
+public partial class Program { }

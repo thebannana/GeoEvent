@@ -16,7 +16,6 @@ public class RegisterRequestDto
     public DateTime BirthDate { get; set; }
 
     [Required]
-    [Phone]
     public string PhoneNumber { get; set; } = string.Empty;
 
     [Required]
@@ -27,7 +26,7 @@ public class RegisterRequestDto
     [Required]
     [StringLength(100, MinimumLength = 8)]
     [RegularExpression(@"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).+$",
-    ErrorMessage = "Password must contain uppercase, lowercase, number and special character.")]
+        ErrorMessage = "Password must contain uppercase, lowercase, number and special character.")]
     public string Password { get; set; } = string.Empty;
 
     [Required]
@@ -37,5 +36,4 @@ public class RegisterRequestDto
     [Required]
     [StringLength(100, MinimumLength = 2)]
     public string LastName { get; set; } = string.Empty;
-
 }

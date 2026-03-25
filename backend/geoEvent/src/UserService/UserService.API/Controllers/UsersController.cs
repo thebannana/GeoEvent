@@ -96,5 +96,12 @@ public class UsersController : ControllerBase
             : StatusCode(result.StatusCode, new { error = result.Error });
     }
 
+    [HttpGet("me/activity-logs")]
+    public async Task<IActionResult> GetMyActivityLogs(
+        [FromQuery] int page = 1, [FromQuery] int pageSize = 10)
+    {
+        var result = await _userService.GetUserActivityLogsAsync(User.GetUserId(), page, pageSize);
+        return result.Success ? Ok(result.Data) : StatusCode(result.StatusCode, new { error = result.Error });
+    }
 
 }

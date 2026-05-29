@@ -18,5 +18,4 @@ public interface IMessageService
     Task<ServiceResult<MessageResponseDto>> LikeMessageAsync(int messageId, int userId);
     Task<ServiceResult<MessageResponseDto>> UnlikeMessageAsync(int messageId, int userId);
     Task SoftDeleteUserMessagesAsync(int userId);
-
 }

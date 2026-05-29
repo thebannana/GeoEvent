@@ -18,26 +18,17 @@ public class UserRepository : IUserRepository
     }
 
     public async Task<User?> GetByIdAsync(int userId) =>
-        await _context.Users
-            .Include(u => u.Person)
-            .FirstOrDefaultAsync(u => u.PersonId == userId);
+        await _context.Users.Include(u => u.Person).FirstOrDefaultAsync(u => u.PersonId == userId);
 
     public async Task<User?> GetByEmailAsync(string email) =>
-        await _context.Users
-            .Include(u => u.Person)
-            .FirstOrDefaultAsync(u => u.Email == email.ToLower());
+        await _context.Users.Include(u => u.Person).FirstOrDefaultAsync(u => u.Email == email.ToLower());
 
     public async Task<User?> GetByUsernameAsync(string username) =>
-        await _context.Users
-            .Include(u => u.Person)
-            .FirstOrDefaultAsync(u => u.Username == username.ToLower());
+        await _context.Users.Include(u => u.Person).FirstOrDefaultAsync(u => u.Username == username.ToLower());
 
     public async Task<User?> GetByEmailOrUsernameAsync(string identifier) =>
-        await _context.Users
-            .Include(u => u.Person)
-            .FirstOrDefaultAsync(u =>
-                u.Email == identifier.ToLower() ||
-                u.Username == identifier.ToLower());
+        await _context.Users.Include(u => u.Person)
+            .FirstOrDefaultAsync(u => u.Email == identifier.ToLower() || u.Username == identifier.ToLower());
 
     public async Task<bool> EmailExistsAsync(string email) =>
         await _context.Users.AnyAsync(u => u.Email == email.ToLower());
@@ -49,7 +40,6 @@ public class UserRepository : IUserRepository
     {
         await _context.People.AddAsync(person);
         await _context.SaveChangesAsync();
-
         user.PersonId = person.PersonId;
         await _context.Users.AddAsync(user);
         await _context.SaveChangesAsync();
@@ -70,12 +60,62 @@ public class UserRepository : IUserRepository
         await _context.SaveChangesAsync();
     }
 
-    public async Task<RefreshToken?> GetRefreshTokenAsync(string tokenHash) =>
-        await _context.RefreshTokens
-            .Include(r => r.User)
-            .ThenInclude(u => u!.Person)
-            .FirstOrDefaultAsync(r => r.TokenHash == tokenHash);
+    public async Task<PagedResult<User>> GetAllAsync(UserFilterDto filter)
+    {
+        var query = _context.Users.Include(u => u.Person).AsQueryable();
 
+        if (!string.IsNullOrWhiteSpace(filter.Search))
+        {
+            query = query.Where(u => u.Username.Contains(filter.Search) || u.Email.Contains(filter.Search));
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.Role))
+        {
+            query = query.Where(u => u.Role.ToString() == filter.Role);
+        }
+
+        if (filter.IsBanned.HasValue)
+        {
+            query = query.Where(u => u.IsBanned == filter.IsBanned.Value);
+        }
+
+        if (filter.IsVerified.HasValue)
+        {
+            query = query.Where(u => u.IsVerified == filter.IsVerified.Value);
+        }
+
+        var total = await query.CountAsync();
+        var items = await query.OrderByDescending(u => u.CreatedAt)
+            .Skip((filter.Page - 1) * filter.PageSize)
+            .Take(filter.PageSize)
+            .ToListAsync();
+
+        return new PagedResult<User>
+        {
+            Items = items,
+            TotalCount = total,
+            Page = filter.Page,
+            PageSize = filter.PageSize
+        };
+    }
+
+    public async Task<RefreshToken?> GetActiveRefreshTokenAsync(string tokenHash) =>
+        await _context.RefreshTokens
+            .Include(r => r.User).ThenInclude(u => u!.Person)
+            .FirstOrDefaultAsync(r => r.TokenHash == tokenHash && r.RevokedAt == null && r.ExpiresAt > DateTime.UtcNow);
+
+    public async Task CleanupExpiredTokensAsync(int userId) =>
+        await _context.RefreshTokens.Where(r => r.UserId == userId && r.ExpiresAt <= DateTime.UtcNow).ExecuteDeleteAsync();
+
+    public async Task<User?> GetByResetTokenAsync(string token) =>
+        await _context.Users.Include(u => u.Person).FirstOrDefaultAsync(u => u.PasswordResetToken == token);
+
+    public async Task<User?> GetByVerificationTokenAsync(string token) =>
+        await _context.Users.Include(u => u.Person).FirstOrDefaultAsync(u => u.EmailVerificationToken == token);
+
+    public async Task<RefreshToken?> GetRefreshTokenAsync(string tokenHash) =>
+        await _context.RefreshTokens.Include(r => r.User).ThenInclude(u => u!.Person)
+            .FirstOrDefaultAsync(r => r.TokenHash == tokenHash);
 
     public async Task AddRefreshTokenAsync(RefreshToken token)
     {
@@ -85,25 +125,18 @@ public class UserRepository : IUserRepository
 
     public async Task RevokeRefreshTokenAsync(string tokenHash)
     {
-        var token = await _context.RefreshTokens
-            .FirstOrDefaultAsync(r => r.TokenHash == tokenHash);
+        var token = await _context.RefreshTokens.FirstOrDefaultAsync(r => r.TokenHash == tokenHash);
         if (token is null) return;
         token.Revoke();
         await _context.SaveChangesAsync();
     }
 
-    public async Task RevokeAllUserTokensAsync(int userId)
-    {
-        await _context.RefreshTokens
-            .Where(r => r.UserId == userId && r.RevokedAt == null)
-            .ExecuteUpdateAsync(s =>
-                s.SetProperty(r => r.RevokedAt, DateTime.UtcNow));
-    }
+    public async Task RevokeAllUserTokensAsync(int userId) =>
+        await _context.RefreshTokens.Where(r => r.UserId == userId && r.RevokedAt == null)
+            .ExecuteUpdateAsync(s => s.SetProperty(r => r.RevokedAt, DateTime.UtcNow));
 
-    // ── Activity Logs ─────────────────────────────────────────────
     public async Task<List<ActivityLog>> GetUserActivityLogsAsync(int userId, int page, int pageSize) =>
-        await _context.ActivityLogs
-            .Where(a => a.UserId == userId)
+        await _context.ActivityLogs.Where(a => a.UserId == userId)
             .OrderByDescending(a => a.CreatedAt)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
@@ -116,19 +149,11 @@ public class UserRepository : IUserRepository
         return log;
     }
 
-    // ── User Preferences ──────────────────────────────────────────
     public async Task<List<UserPreference>> GetUserPreferencesAsync(int userId) =>
-        await _context.UserPreferences
-            .Where(p => p.UserId == userId)
-            .OrderByDescending(p => p.Score)
-            .ToListAsync();
+        await _context.UserPreferences.Where(p => p.UserId == userId).OrderByDescending(p => p.Score).ToListAsync();
 
     public async Task<UserPreference?> GetPreferenceAsync(int userId, int? segmentId, int? genreId) =>
-        await _context.UserPreferences
-            .FirstOrDefaultAsync(p =>
-                p.UserId == userId &&
-                p.SegmentId == segmentId &&
-                p.GenreId == genreId);
+        await _context.UserPreferences.FirstOrDefaultAsync(p => p.UserId == userId && p.SegmentId == segmentId && p.GenreId == genreId);
 
     public async Task<UserPreference> CreatePreferenceAsync(UserPreference preference)
     {
@@ -149,29 +174,23 @@ public class UserRepository : IUserRepository
         await _context.SaveChangesAsync();
     }
 
-    // ── Reports ───────────────────────────────────────────────────
     public async Task<Report?> GetReportByIdAsync(int reportId) =>
-        await _context.Reports
-            .Include(r => r.Reporter)
-            .Include(r => r.ResolvedBy)
+        await _context.Reports.Include(r => r.Reporter).Include(r => r.ResolvedBy)
             .FirstOrDefaultAsync(r => r.ReportId == reportId);
 
     public async Task<PagedResult<Report>> GetReportsAsync(ReportStatus? status, int page, int pageSize)
     {
-        var query = _context.Reports
-            .Include(r => r.Reporter)
-            .AsQueryable();
+        var query = _context.Reports.Include(r => r.Reporter).AsQueryable();
 
         if (status.HasValue)
+        {
             query = query.Where(r => r.Status == status.Value);
+        }
 
         query = query.OrderByDescending(r => r.ReportId);
 
         var total = await query.CountAsync();
-        var items = await query
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .ToListAsync();
+        var items = await query.Skip((page - 1) * pageSize).Take(pageSize).ToListAsync();
 
         return new PagedResult<Report>
         {
@@ -183,10 +202,7 @@ public class UserRepository : IUserRepository
     }
 
     public async Task<List<Report>> GetUserReportsAsync(int userId) =>
-        await _context.Reports
-            .Where(r => r.ReporterId == userId)
-            .OrderByDescending(r => r.ReportId)
-            .ToListAsync();
+        await _context.Reports.Where(r => r.ReporterId == userId).OrderByDescending(r => r.ReportId).ToListAsync();
 
     public async Task<Report> CreateReportAsync(Report report)
     {
@@ -201,67 +217,12 @@ public class UserRepository : IUserRepository
         await _context.SaveChangesAsync();
     }
 
-    public async Task<PagedResult<User>> GetAllAsync(UserFilterDto filter)
+    public async Task<User?> GetPublicByIdAsync(int userId) =>
+        await _context.Users.Include(u => u.Person).FirstOrDefaultAsync(u => u.PersonId == userId);
+
+    public async Task<List<User>> GetPublicByIdsAsync(IEnumerable<int> userIds)
     {
-        var query = _context.Users
-            .Include(u => u.Person)
-            .AsQueryable();
-
-        if (!string.IsNullOrWhiteSpace(filter.Search))
-            query = query.Where(u =>
-                u.Username.Contains(filter.Search) ||
-                u.Email.Contains(filter.Search));
-
-        if (filter.Role is not null)
-            query = query.Where(u => u.Role.ToString() == filter.Role);
-
-        if (filter.IsBanned.HasValue)
-            query = query.Where(u => u.IsBanned == filter.IsBanned.Value);
-
-        if (filter.IsVerified.HasValue)
-            query = query.Where(u => u.IsVerified == filter.IsVerified.Value);
-
-        var total = await query.CountAsync();
-        var items = await query
-            .OrderByDescending(u => u.CreatedAt)
-            .Skip((filter.Page - 1) * filter.PageSize)
-            .Take(filter.PageSize)
-            .ToListAsync();
-
-        return new PagedResult<User>
-        {
-            Items = items,
-            TotalCount = total,
-            Page = filter.Page,
-            PageSize = filter.PageSize
-        };
+        var ids = userIds.Distinct().ToList();
+        return await _context.Users.Include(u => u.Person).Where(u => ids.Contains(u.PersonId)).ToListAsync();
     }
-
-    public async Task<RefreshToken?> GetActiveRefreshTokenAsync(string tokenHash) =>
-    await _context.RefreshTokens
-        .Include(r => r.User)
-        .ThenInclude(u => u!.Person)
-        .FirstOrDefaultAsync(r =>
-            r.TokenHash == tokenHash &&
-            r.RevokedAt == null &&
-            r.ExpiresAt > DateTime.UtcNow);
-
-    public async Task CleanupExpiredTokensAsync(int userId)
-    {
-        await _context.RefreshTokens
-            .Where(r => r.UserId == userId &&
-                        r.ExpiresAt < DateTime.UtcNow)
-            .ExecuteDeleteAsync();
-    }
-
-    public async Task<User?> GetByResetTokenAsync(string token) =>
-    await _context.Users
-        .Include(u => u.Person)
-        .FirstOrDefaultAsync(u => u.PasswordResetToken == token);
-
-    public async Task<User?> GetByVerificationTokenAsync(string token) =>
-        await _context.Users
-            .Include(u => u.Person)
-            .FirstOrDefaultAsync(u => u.EmailVerificationToken == token);
-
 }

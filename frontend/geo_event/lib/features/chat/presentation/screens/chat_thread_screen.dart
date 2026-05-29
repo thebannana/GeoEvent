@@ -1,0 +1,497 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../auth/application/auth_controller.dart';
+import '../../application/chat_thread_controller.dart';
+import '../../../../shared/chat/models/message_item.dart';
+
+class ChatThreadScreen extends ConsumerStatefulWidget {
+  final ChatThreadArgs args;
+
+  const ChatThreadScreen({
+    super.key,
+    required this.args,
+  });
+
+  @override
+  ConsumerState<ChatThreadScreen> createState() => _ChatThreadScreenState();
+}
+
+class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
+  final _messageController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    Future.microtask(() async {
+      final controller =
+          ref.read(chatThreadControllerProvider(widget.args).notifier);
+      await controller.connectRealtime();
+      await controller.markConversationRead();
+    });
+  }
+
+  @override
+  void dispose() {
+    ref
+        .read(chatThreadControllerProvider(widget.args).notifier)
+        .disposeRealtime();
+    _messageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = ref.watch(chatThreadControllerProvider(widget.args));
+    final controller =
+        ref.read(chatThreadControllerProvider(widget.args).notifier);
+    final myUserId = ref.watch(authStateProvider).user?.userId;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.args.title),
+      ),
+      body: Column(
+        children: [
+          Expanded(
+            child: state.thread.when(
+              data: (items) {
+                if (items.isEmpty) {
+                  return ListView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                    children: const [
+                      _ThreadTopStateCard(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(Icons.chat_bubble_outline_rounded, size: 30),
+                            SizedBox(height: 12),
+                            Text(
+                              'No messages yet',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            SizedBox(height: 6),
+                            Text(
+                              'Start the conversation with your first message.',
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  );
+                }
+
+                return ListView.separated(
+                  reverse: false,
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                  itemCount: items.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 10),
+                  itemBuilder: (context, index) {
+                    final message = items[index];
+                    final isMine =
+                        myUserId != null && message.senderId == myUserId;
+
+                    if (!isMine && !message.isRead) {
+                      Future.microtask(
+                        () => controller.markMessageRead(message.id),
+                      );
+                    }
+
+                    return _MessageBubbleCard(
+                      message: message,
+                      isMine: isMine,
+                      isDark: isDark,
+                      onDelete:
+                          isMine ? () => controller.deleteMessage(message.id) : null,
+                      onLike:
+                          !isMine ? () => controller.likeMessage(message.id) : null,
+                      onEdit: isMine
+                          ? () => _showEditDialog(context, controller, message)
+                          : null,
+                    );
+                  },
+                );
+              },
+              error: (_, __) => ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                children: [
+                  _ThreadTopStateCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          Icons.cloud_off_rounded,
+                          size: 30,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                        const SizedBox(height: 12),
+                        const Text(
+                          'Failed to load messages',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Try loading the conversation again.',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Theme.of(context).textTheme.bodySmall?.color,
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        TextButton.icon(
+                          onPressed: controller.load,
+                          icon: const Icon(Icons.refresh_rounded),
+                          label: const Text('Retry'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              loading: () => const Center(child: CircularProgressIndicator()),
+            ),
+          ),
+          SafeArea(
+            top: false,
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+              decoration: BoxDecoration(
+                color: Theme.of(context).scaffoldBackgroundColor,
+                border: Border(
+                  top: BorderSide(
+                    color: Theme.of(context).dividerColor.withValues(alpha: 0.08),
+                  ),
+                ),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Expanded(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? const Color(0xFF17191D)
+                            : Theme.of(context).colorScheme.surface,
+                        borderRadius: BorderRadius.circular(22),
+                        border: Border.all(
+                          color: isDark
+                              ? const Color(0xFF2A303A)
+                              : const Color(0xFFE5EAF2),
+                        ),
+                      ),
+                      child: TextField(
+                        controller: _messageController,
+                        minLines: 1,
+                        maxLines: 5,
+                        decoration: const InputDecoration(
+                          hintText: 'Write a message...',
+                          border: InputBorder.none,
+                          contentPadding:
+                              EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.primary,
+                      shape: BoxShape.circle,
+                    ),
+                    child: IconButton(
+                      onPressed: state.sending
+                          ? null
+                          : () async {
+                              final ok = await controller.sendMessage(
+                                _messageController.text,
+                              );
+                              if (ok) _messageController.clear();
+                            },
+                      icon: state.sending
+                          ? SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Theme.of(context).colorScheme.onPrimary,
+                              ),
+                            )
+                          : Icon(
+                              Icons.send_rounded,
+                              color: Theme.of(context).colorScheme.onPrimary,
+                            ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showEditDialog(
+    BuildContext context,
+    ChatThreadController controller,
+    MessageItem message,
+  ) async {
+    final textController = TextEditingController(text: message.content);
+
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Edit message'),
+        content: TextField(
+          controller: textController,
+          minLines: 2,
+          maxLines: 6,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, textController.text.trim()),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+
+    if (result == null || result.isEmpty) return;
+    await controller.editMessage(messageId: message.id, content: result);
+  }
+}
+
+class _MessageBubbleCard extends StatelessWidget {
+  final MessageItem message;
+  final bool isMine;
+  final bool isDark;
+  final VoidCallback? onDelete;
+  final VoidCallback? onLike;
+  final VoidCallback? onEdit;
+
+  const _MessageBubbleCard({
+    required this.message,
+    required this.isMine,
+    required this.isDark,
+    this.onDelete,
+    this.onLike,
+    this.onEdit,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final avatarUrl = message.senderAvatarUrl;
+    final senderName = message.senderDisplayName;
+
+    return Align(
+      alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 330),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            if (!isMine) ...[
+              CircleAvatar(
+                radius: 16,
+                backgroundImage:
+                    avatarUrl != null && avatarUrl.isNotEmpty
+                        ? NetworkImage(avatarUrl)
+                        : null,
+                child: avatarUrl == null || avatarUrl.isEmpty
+                    ? Text(
+                        senderName.isNotEmpty
+                            ? senderName[0].toUpperCase()
+                            : '?',
+                      )
+                    : null,
+              ),
+              const SizedBox(width: 8),
+            ],
+            Flexible(
+              child: Column(
+                crossAxisAlignment:
+                    isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                children: [
+                  if (!isMine)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 4, bottom: 4),
+                      child: Text(
+                        senderName,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: theme.textTheme.bodySmall?.color,
+                        ),
+                      ),
+                    ),
+                  Material(
+                    color: isMine
+                        ? theme.colorScheme.primary.withValues(alpha: 0.14)
+                        : (isDark
+                            ? const Color(0xFF17191D)
+                            : theme.colorScheme.surface),
+                    borderRadius: BorderRadius.circular(22),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(22),
+                      onLongPress: () async {
+                        await showModalBottomSheet<void>(
+                          context: context,
+                          builder: (_) => SafeArea(
+                            child: Wrap(
+                              children: [
+                                if (onEdit != null)
+                                  ListTile(
+                                    leading: const Icon(Icons.edit_rounded),
+                                    title: const Text('Edit'),
+                                    onTap: () {
+                                      Navigator.pop(context);
+                                      onEdit?.call();
+                                    },
+                                  ),
+                                if (onLike != null)
+                                  ListTile(
+                                    leading:
+                                        const Icon(Icons.favorite_border_rounded),
+                                    title: const Text('Like'),
+                                    onTap: () {
+                                      Navigator.pop(context);
+                                      onLike?.call();
+                                    },
+                                  ),
+                                if (onDelete != null)
+                                  ListTile(
+                                    leading:
+                                        const Icon(Icons.delete_outline_rounded),
+                                    title: const Text('Delete'),
+                                    onTap: () {
+                                      Navigator.pop(context);
+                                      onDelete?.call();
+                                    },
+                                  ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                      child: Container(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(22),
+                          border: Border.all(
+                            color: isMine
+                                ? theme.colorScheme.primary.withValues(alpha: 0.18)
+                                : isDark
+                                    ? const Color(0xFF2A303A)
+                                    : const Color(0xFFE5EAF2),
+                          ),
+                        ),
+                        padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
+                        child: Column(
+                          crossAxisAlignment: isMine
+                              ? CrossAxisAlignment.end
+                              : CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              message.content,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                height: 1.3,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (message.likesCount > 0) ...[
+                                  Icon(
+                                    Icons.favorite_rounded,
+                                    size: 13,
+                                    color: theme.colorScheme.primary,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    message.likesCount.toString(),
+                                    style: const TextStyle(fontSize: 11),
+                                  ),
+                                  const SizedBox(width: 8),
+                                ],
+                                if (message.editedAt != null) ...[
+                                  Text(
+                                    'edited',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: theme.textTheme.bodySmall?.color,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                ],
+                                Text(
+                                  _formatTime(message.sentAt),
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: theme.textTheme.bodySmall?.color,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  static String _formatTime(DateTime value) {
+    final local = value.toLocal();
+    final h = local.hour.toString().padLeft(2, '0');
+    final m = local.minute.toString().padLeft(2, '0');
+    return '$h:$m';
+  }
+}
+
+class _ThreadTopStateCard extends StatelessWidget {
+  final Widget child;
+
+  const _ThreadTopStateCard({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF17191D) : Colors.white,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(
+          color: isDark ? const Color(0xFF2A303A) : const Color(0xFFE5EAF2),
+        ),
+      ),
+      child: child,
+    );
+  }
+}

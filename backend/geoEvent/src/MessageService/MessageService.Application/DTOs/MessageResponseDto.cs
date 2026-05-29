@@ -12,4 +12,9 @@ public class MessageResponseDto
     public DateTime SentAt { get; set; }
     public DateTime? ReadAt { get; set; }
     public DateTime? EditedAt { get; set; }
+
+    public string SenderDisplayName { get; set; } = string.Empty;
+    public string? SenderAvatarUrl { get; set; }
+    public string RecipientDisplayName { get; set; } = string.Empty;
+    public string? RecipientAvatarUrl { get; set; }
 }

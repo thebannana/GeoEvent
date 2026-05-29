@@ -15,7 +15,6 @@ public class Message
     public DateTime? ReadAt { get; set; }
     public DateTime? EditedAt { get; set; }
 
-    // Domain logic
     public bool IsVisibleTo(int userId) =>
         (SenderId == userId && !IsDeletedBySender) ||
         (RecipientId == userId && !IsDeletedByRecipient);
@@ -36,12 +35,20 @@ public class Message
     {
         if (SenderId == userId)
             IsDeletedBySender = true;
+
         if (RecipientId == userId)
             IsDeletedByRecipient = true;
     }
 
-    public bool IsFullyDeleted() => IsDeletedBySender && IsDeletedByRecipient;
+    public bool IsFullyDeleted => IsDeletedBySender && IsDeletedByRecipient;
 
-    public void Like() => LikesCount++;
-    public void Unlike() => LikesCount = Math.Max(0, LikesCount - 1);
+    public void Like()
+    {
+        LikesCount++;
+    }
+
+    public void Unlike()
+    {
+        LikesCount = Math.Max(0, LikesCount - 1);
+    }
 }

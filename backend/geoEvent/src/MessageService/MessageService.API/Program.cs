@@ -1,20 +1,24 @@
+using MessageService.API.Hubs;
 using MessageService.API.Middleware;
+using MessageService.API.Realtime;
+using MessageService.Application.Interfaces.Services;
 using MessageService.Infrastructure;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
-using System.Threading.RateLimiting;
-using Microsoft.IdentityModel.Tokens;
-using System.Text;
-using Microsoft.AspNetCore.RateLimiting;
-using Microsoft.OpenApi.Models;
 using MessageService.Infrastructure.Persistence;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi.Models;
+using System.Text;
+using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
-
 builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddSignalR();
+builder.Services.AddScoped<IMessageRealtimeNotifier, SignalRMessageRealtimeNotifier>();
 
 builder.Services.AddSwaggerGen(options =>
 {
@@ -46,24 +50,23 @@ builder.Services.AddSwaggerGen(options =>
                     Id = "Bearer"
                 }
             },
-            []
+            Array.Empty<string>()
         }
     });
 });
 
-// ── CORS ───────────────────────────────────────────────────────
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
-    {
         policy
-            .WithOrigins(
-                builder.Configuration.GetSection("Cors:AllowedOrigins")
-                    .Get<string[]>() ?? ["http://localhost:3000"])
+            .WithOrigins(builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? new[]
+            {
+                "http://localhost:3000",
+                "http://localhost:5173"
+            })
             .AllowAnyHeader()
             .AllowAnyMethod()
-            .AllowCredentials();
-    });
+            .AllowCredentials());
 });
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -80,6 +83,23 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidAudience = builder.Configuration["Jwt:Audience"],
             ValidateLifetime = true,
             ClockSkew = TimeSpan.Zero
+        };
+
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                var accessToken = context.Request.Query["access_token"];
+                var path = context.HttpContext.Request.Path;
+
+                if (!string.IsNullOrEmpty(accessToken) &&
+                    path.StartsWithSegments("/hubs/messages"))
+                {
+                    context.Token = accessToken;
+                }
+
+                return Task.CompletedTask;
+            }
         };
     });
 
@@ -98,7 +118,6 @@ builder.Services.AddRateLimiter(options =>
                 QueueLimit = 0
             }));
 
-    // Strict limit on send — prevent message spam
     options.AddFixedWindowLimiter("send-message", opt =>
     {
         opt.PermitLimit = 30;
@@ -112,7 +131,7 @@ builder.Services.AddRateLimiter(options =>
         context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
         context.HttpContext.Response.ContentType = "application/json";
         await context.HttpContext.Response.WriteAsync(
-            "{\"error\": \"Too many requests. Please slow down.\"}", token);
+            "{\"error\":\"Too many requests. Please slow down.\"}", token);
     };
 });
 
@@ -120,6 +139,7 @@ var app = builder.Build();
 
 app.UseMiddleware<SecurityHeadersMiddleware>();
 app.UseMiddleware<ExceptionMiddleware>();
+
 app.UseCors("AllowFrontend");
 app.UseRateLimiter();
 
@@ -131,33 +151,32 @@ if (app.Environment.IsDevelopment())
 
 app.UseAuthentication();
 app.UseAuthorization();
+
 app.MapControllers();
+app.MapHub<MessageHub>("/hubs/messages");
 
-using (var scope = app.Services.CreateScope())
+using var scope = app.Services.CreateScope();
+var db = scope.ServiceProvider.GetRequiredService<MessageDbContext>();
+var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+
+var retries = 10;
+while (retries > 0)
 {
-    var db = scope.ServiceProvider.GetRequiredService<MessageDbContext>();
-    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
-
-    var retries = 10;
-    while (retries > 0)
+    try
     {
-        try
-        {
-            logger.LogInformation("Applying migrations...");
-            db.Database.Migrate();
-            logger.LogInformation("Migrations applied successfully.");
-            break;
-        }
-        catch (Exception ex)
-        {
-            retries--;
-            logger.LogWarning("Migration failed. Retries left: {Retries}. Error: {Error}", retries, ex.Message);
-            if (retries == 0) throw;
-            Thread.Sleep(5000); // wait 5s before retry
-        }
+        logger.LogInformation("Applying migrations...");
+        db.Database.Migrate();
+        logger.LogInformation("Migrations applied successfully.");
+        break;
+    }
+    catch (Exception ex)
+    {
+        retries--;
+        logger.LogWarning("Migration failed. Retries left: {Retries}. Error: {Error}", retries, ex.Message);
+        if (retries == 0)
+            throw;
+        Thread.Sleep(5000);
     }
 }
 
 app.Run();
-
-public partial class Program { }

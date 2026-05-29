@@ -13,9 +13,7 @@ namespace MessageService.Infrastructure;
 
 public static class DependencyInjection
 {
-    public static IServiceCollection AddInfrastructure(
-        this IServiceCollection services,
-        IConfiguration configuration)
+    public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
         services.AddDbContext<MessageDbContext>(options =>
             options.UseSqlServer(
@@ -23,10 +21,14 @@ public static class DependencyInjection
                 sqlOptions => sqlOptions.EnableRetryOnFailure(
                     maxRetryCount: 10,
                     maxRetryDelay: TimeSpan.FromSeconds(15),
-                    errorNumbersToAdd: null
-                )
-            )
-        );
+                    errorNumbersToAdd: null)));
+
+        services.AddHttpClient<IUserDirectoryClient, UserDirectoryClient>(client =>
+        {
+            var baseUrl = configuration["Services:UserServiceBaseUrl"] ?? "http://user-service:8080";
+            client.BaseAddress = new Uri(baseUrl);
+            client.Timeout = TimeSpan.FromSeconds(10);
+        });
 
         services.AddScoped<IMessageRepository, MessageRepository>();
         services.AddScoped<IMessageService, MessageServiceImpl>();

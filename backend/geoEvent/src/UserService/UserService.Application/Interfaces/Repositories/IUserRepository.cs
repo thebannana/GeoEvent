@@ -1,6 +1,6 @@
-﻿using UserService.Domain.Entities;
-using UserService.Application.Common;
+﻿using UserService.Application.Common;
 using UserService.Application.DTOs;
+using UserService.Domain.Entities;
 using UserService.Domain.Enums;
 
 namespace UserService.Application.Interfaces.Repositories;
@@ -17,34 +17,31 @@ public interface IUserRepository
     Task UpdateAsync(User user);
     Task SoftDeleteAsync(int userId);
     Task<PagedResult<User>> GetAllAsync(UserFilterDto filter);
+
     Task<RefreshToken?> GetActiveRefreshTokenAsync(string tokenHash);
     Task CleanupExpiredTokensAsync(int userId);
     Task<User?> GetByResetTokenAsync(string token);
     Task<User?> GetByVerificationTokenAsync(string token);
-
-
-    // Refresh tokens
     Task<RefreshToken?> GetRefreshTokenAsync(string tokenHash);
     Task AddRefreshTokenAsync(RefreshToken token);
     Task RevokeRefreshTokenAsync(string tokenHash);
     Task RevokeAllUserTokensAsync(int userId);
 
-    // ── Activity Logs ─────────────────────────────────────────────
     Task<List<ActivityLog>> GetUserActivityLogsAsync(int userId, int page, int pageSize);
     Task<ActivityLog> CreateActivityLogAsync(ActivityLog log);
 
-    // ── User Preferences ──────────────────────────────────────────
     Task<List<UserPreference>> GetUserPreferencesAsync(int userId);
     Task<UserPreference?> GetPreferenceAsync(int userId, int? segmentId, int? genreId);
     Task<UserPreference> CreatePreferenceAsync(UserPreference preference);
     Task UpdatePreferenceAsync(UserPreference preference);
     Task DeletePreferenceAsync(UserPreference preference);
 
-    // ── Reports ───────────────────────────────────────────────────
     Task<Report?> GetReportByIdAsync(int reportId);
     Task<PagedResult<Report>> GetReportsAsync(ReportStatus? status, int page, int pageSize);
     Task<List<Report>> GetUserReportsAsync(int userId);
     Task<Report> CreateReportAsync(Report report);
     Task UpdateReportAsync(Report report);
 
+    Task<User?> GetPublicByIdAsync(int userId);
+    Task<List<User>> GetPublicByIdsAsync(IEnumerable<int> userIds);
 }

@@ -168,14 +168,14 @@ public class MessageRepository : IMessageRepository
     {
         var messages = await _context.Messages
             .Where(m => (m.SenderId == userId || m.RecipientId == userId)
-                        && !m.IsFullyDeleted())
+                        && !m.IsFullyDeleted)
             .ToListAsync();
 
         foreach (var message in messages)
         {
             message.SoftDeleteFor(userId);
 
-            if (message.IsFullyDeleted())
+            if (message.IsFullyDeleted)
                 _context.Messages.Remove(message);
         }
 

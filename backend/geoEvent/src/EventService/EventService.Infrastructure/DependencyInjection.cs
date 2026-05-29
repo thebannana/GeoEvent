@@ -7,6 +7,7 @@ using EventService.Infrastructure.Persistence;
 using EventService.Infrastructure.Repositories;
 using EventService.Infrastructure.Services;
 using MassTransit;
+using EventService.Application.Common.Settings;
 
 namespace EventService.Infrastructure;
 
@@ -16,6 +17,11 @@ public static class DependencyInjection
         this IServiceCollection services,
         IConfiguration configuration)
     {
+        services.Configure<SupabaseStorageSettings>(
+        configuration.GetSection(SupabaseStorageSettings.SectionName));
+
+        services.AddHttpClient<IImageStorageService, SupabaseImageStorageService>();
+
         services.AddDbContext<EventDbContext>(options =>
             options.UseSqlServer(
                 configuration.GetConnectionString("EventDb"),

@@ -11,12 +11,34 @@ public class SecurityHeadersMiddleware
 
     public async Task InvokeAsync(HttpContext context)
     {
-        context.Response.Headers.Append("X-Content-Type-Options", "nosniff");
-        context.Response.Headers.Append("X-Frame-Options", "DENY");
-        context.Response.Headers.Append("X-XSS-Protection", "1; mode=block");
-        context.Response.Headers.Append("Referrer-Policy", "strict-origin-when-cross-origin");
-        context.Response.Headers.Append("Content-Security-Policy", "default-src 'self'");
-        context.Response.Headers.Remove("Server");
+        context.Response.OnStarting(() =>
+        {
+            var headers = context.Response.Headers;
+
+            headers["X-Content-Type-Options"] = "nosniff";
+            headers["X-Frame-Options"] = "DENY";
+            headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
+            headers["X-XSS-Protection"] = "0";
+            headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()";
+            headers["Cache-Control"] = "no-store, no-cache, must-revalidate";
+            headers["Pragma"] = "no-cache";
+            headers["Expires"] = "0";
+
+            if (!headers.ContainsKey("Content-Security-Policy"))
+            {
+                headers["Content-Security-Policy"] =
+                    "default-src 'self'; " +
+                    "base-uri 'self'; " +
+                    "frame-ancestors 'none'; " +
+                    "form-action 'self'";
+            }
+
+            headers.Remove("Server");
+            headers.Remove("X-Powered-By");
+
+            return Task.CompletedTask;
+        });
+
         await _next(context);
     }
 }

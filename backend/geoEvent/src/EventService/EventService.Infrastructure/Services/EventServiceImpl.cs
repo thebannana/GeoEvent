@@ -5,6 +5,7 @@ using EventService.Application.Interfaces.Services;
 using EventService.Domain.Entities;
 using EventService.Domain.Enums;
 using EventService.Domain.Exceptions;
+using EventService.Infrastructure.Repositories;
 using MassTransit;
 using Shared.Contracts.Events;
 using DomainEvent = EventService.Domain.Entities.Event;
@@ -24,33 +25,16 @@ public class EventServiceImpl : IEventService
         _publishEndpoint = publishEndpoint;
     }
 
-    public async Task<ServiceResult<EventResponseDto>> GetByIdAsync(int eventId)
+    // ── Public events ─────────────────────────────────────────
+
+    public async Task<ServiceResult<PagedResult<EventResponseDto>>> GetPublicAsync(EventFilterDto filter)
     {
-        var ev = await _eventRepository.GetByIdAsync(eventId);
-        if (ev is null)
-            return ServiceResult<EventResponseDto>.NotFound($"Event {eventId} not found.");
+        filter ??= new EventFilterDto();
+        filter.Status = EventStatus.Active;
+        filter.OrganizerId = null;
 
-        if (ev.Status == EventStatus.Active)
-            await _eventRepository.IncrementViewCountAsync(eventId);
-
-        return ServiceResult<EventResponseDto>.Ok(MapToDto(ev));
-    }
-
-    public async Task<ServiceResult<List<EventResponseDto>>> GetNearbyAsync(NearbyEventSearchDto dto)
-    {
-        if (dto.RadiusKm <= 0 || dto.RadiusKm > 500)
-            return ServiceResult<List<EventResponseDto>>.Fail("Radius must be between 1 and 500 km.");
-
-        if (dto.Limit <= 0 || dto.Limit > 100)
-            return ServiceResult<List<EventResponseDto>>.Fail("Limit must be between 1 and 100.");
-
-        var events = await _eventRepository.GetNearbyAsync(dto);
-        return ServiceResult<List<EventResponseDto>>.Ok(events.Select(MapToDto).ToList());
-    }
-
-    public async Task<ServiceResult<PagedResult<EventResponseDto>>> GetAllAsync(EventFilterDto filter)
-    {
         var result = await _eventRepository.GetAllAsync(filter);
+
         return ServiceResult<PagedResult<EventResponseDto>>.Ok(new PagedResult<EventResponseDto>
         {
             Items = result.Items.Select(MapToDto),
@@ -60,11 +44,63 @@ public class EventServiceImpl : IEventService
         });
     }
 
-    public async Task<ServiceResult<EventResponseDto>> CreateAsync(
-        CreateEventDto dto, int organizerId)
+    public async Task<ServiceResult<EventResponseDto>> GetPublicByIdAsync(int eventId, int? requesterId = null)
+    {
+        var ev = await _eventRepository.GetByIdWithDetailsAsync(eventId);
+        if (ev is null)
+            return ServiceResult<EventResponseDto>.NotFound($"Event {eventId} not found.");
+
+        if (ev.Status != EventStatus.Active && ev.OrganizerId != requesterId)
+            return ServiceResult<EventResponseDto>.NotFound($"Event {eventId} not found.");
+
+        return ServiceResult<EventResponseDto>.Ok(MapToDto(ev));
+    }
+
+    public async Task<ServiceResult<List<EventResponseDto>>> GetNearbyPublicAsync(NearbyEventSearchDto dto)
+    {
+        if (dto.Latitude is null || dto.Longitude is null)
+            return ServiceResult<List<EventResponseDto>>.Fail("Latitude and Longitude are required.");
+
+        if (dto.RadiusKm <= 0 || dto.RadiusKm > 500)
+            return ServiceResult<List<EventResponseDto>>.Fail("Radius must be between 1 and 500 km.");
+
+        if (dto.Limit <= 0 || dto.Limit > 100)
+            return ServiceResult<List<EventResponseDto>>.Fail("Limit must be between 1 and 100.");
+
+        var events = await _eventRepository.GetNearbyAsync(dto);
+
+        var publicEvents = events
+            .Where(e => e.Status == EventStatus.Active)
+            .Select(MapToDto)
+            .ToList();
+
+        return ServiceResult<List<EventResponseDto>>.Ok(publicEvents);
+    }
+
+    // ── Organizer/private events ─────────────────────────────
+
+    public async Task<ServiceResult<PagedResult<EventResponseDto>>> GetMyDraftsAsync(EventFilterDto filter, int requesterId)
+    {
+        filter ??= new EventFilterDto();
+        filter.OrganizerId = requesterId;
+        filter.Status = EventStatus.Draft;
+
+        var result = await _eventRepository.GetAllAsync(filter);
+
+        return ServiceResult<PagedResult<EventResponseDto>>.Ok(new PagedResult<EventResponseDto>
+        {
+            Items = result.Items.Select(MapToDto),
+            TotalCount = result.TotalCount,
+            Page = result.Page,
+            PageSize = result.PageSize
+        });
+    }
+
+    public async Task<ServiceResult<EventResponseDto>> CreateAsync(CreateEventDto dto, int organizerId)
     {
         if (dto.StartDateTime <= DateTime.UtcNow)
             return ServiceResult<EventResponseDto>.Fail("Start date must be in the future.");
+
         if (dto.EndDateTime <= dto.StartDateTime)
             return ServiceResult<EventResponseDto>.Fail("End date must be after start date.");
 
@@ -109,11 +145,10 @@ public class EventServiceImpl : IEventService
             created.EndDateTime,
             DateTime.UtcNow));
 
-        return ServiceResult<EventResponseDto>.Ok(MapToDto(created));
+        return ServiceResult<EventResponseDto>.Created(MapToDto(created));
     }
 
-    public async Task<ServiceResult<EventResponseDto>> UpdateAsync(
-        int eventId, UpdateEventDto dto, int requesterId)
+    public async Task<ServiceResult<EventResponseDto>> UpdateAsync(int eventId, UpdateEventDto dto, int requesterId)
     {
         var ev = await _eventRepository.GetByIdAsync(eventId);
         if (ev is null)
@@ -143,6 +178,7 @@ public class EventServiceImpl : IEventService
 
         var effectiveStart = dto.StartDateTime ?? ev.StartDateTime;
         var effectiveEnd = dto.EndDateTime ?? ev.EndDateTime;
+
         if (effectiveEnd <= effectiveStart)
             return ServiceResult<EventResponseDto>.Fail("End date must be after start date.");
 
@@ -157,7 +193,8 @@ public class EventServiceImpl : IEventService
             null,
             DateTime.UtcNow));
 
-        return ServiceResult<EventResponseDto>.Ok(MapToDto(ev));
+        var updated = await _eventRepository.GetByIdWithDetailsAsync(eventId) ?? ev;
+        return ServiceResult<EventResponseDto>.Ok(MapToDto(updated));
     }
 
     public async Task<ServiceResult<bool>> DeleteAsync(int eventId, int requesterId)
@@ -182,13 +219,37 @@ public class EventServiceImpl : IEventService
         if (ev.OrganizerId != requesterId)
             return ServiceResult<bool>.Forbidden("You do not own this event.");
 
+        if (string.IsNullOrWhiteSpace(ev.Title))
+            return ServiceResult<bool>.Fail("Event title is required.");
+
+        if (string.IsNullOrWhiteSpace(ev.Description))
+            return ServiceResult<bool>.Fail("Event description is required.");
+
+        if (ev.StartDateTime <= DateTime.UtcNow)
+            return ServiceResult<bool>.Fail("Start date must be in the future.");
+
+        if (ev.EndDateTime <= ev.StartDateTime)
+            return ServiceResult<bool>.Fail("End date must be after start date.");
+
         ev.Publish();
         await _eventRepository.UpdateAsync(ev);
+
+        await _publishEndpoint.Publish(new EventUpdatedMessage(
+            ev.EventId,
+            ev.Title,
+            ev.OrganizerId,
+            ev.StartDateTime,
+            ev.EndDateTime,
+            "Event published",
+            DateTime.UtcNow));
+
         return ServiceResult<bool>.Ok(true);
     }
 
     public async Task<ServiceResult<bool>> CancelAsync(
-        int eventId, int requesterId, string reason = "Cancelled by organizer")
+        int eventId,
+        int requesterId,
+        string reason = "Cancelled by organizer")
     {
         var ev = await _eventRepository.GetByIdAsync(eventId);
         if (ev is null)
@@ -213,8 +274,11 @@ public class EventServiceImpl : IEventService
     public async Task<ServiceResult<bool>> PostponeAsync(int eventId, int requesterId)
     {
         var ev = await _eventRepository.GetByIdAsync(eventId);
-        if (ev is null) return ServiceResult<bool>.NotFound($"Event {eventId} not found.");
-        if (ev.OrganizerId != requesterId) return ServiceResult<bool>.Forbidden("You do not own this event.");
+        if (ev is null)
+            return ServiceResult<bool>.NotFound($"Event {eventId} not found.");
+
+        if (ev.OrganizerId != requesterId)
+            return ServiceResult<bool>.Forbidden("You do not own this event.");
 
         ev.Postpone();
         await _eventRepository.UpdateAsync(ev);
@@ -234,17 +298,37 @@ public class EventServiceImpl : IEventService
     public async Task<ServiceResult<bool>> CompleteAsync(int eventId, int requesterId)
     {
         var ev = await _eventRepository.GetByIdAsync(eventId);
-        if (ev is null) return ServiceResult<bool>.NotFound($"Event {eventId} not found.");
-        if (ev.OrganizerId != requesterId) return ServiceResult<bool>.Forbidden("You do not own this event.");
+        if (ev is null)
+            return ServiceResult<bool>.NotFound($"Event {eventId} not found.");
+
+        if (ev.OrganizerId != requesterId)
+            return ServiceResult<bool>.Forbidden("You do not own this event.");
+
         ev.Complete();
         await _eventRepository.UpdateAsync(ev);
+
+        await _publishEndpoint.Publish(new EventUpdatedMessage(
+            ev.EventId,
+            ev.Title,
+            ev.OrganizerId,
+            ev.StartDateTime,
+            ev.EndDateTime,
+            "Event completed",
+            DateTime.UtcNow));
+
         return ServiceResult<bool>.Ok(true);
     }
 
+    // ── Interactions ─────────────────────────────────────────
+
     public async Task<ServiceResult<bool>> LikeAsync(int eventId, int userId)
     {
-        if (!await _eventRepository.ExistsAsync(eventId))
+        var ev = await _eventRepository.GetByIdAsync(eventId);
+        if (ev is null)
             return ServiceResult<bool>.NotFound($"Event {eventId} not found.");
+
+        if (ev.Status != EventStatus.Active)
+            return ServiceResult<bool>.Fail("Only active events can be liked.");
 
         if (await _eventRepository.IsLikedByUserAsync(eventId, userId))
             throw new DuplicateLikeException(eventId, userId);
@@ -253,10 +337,10 @@ public class EventServiceImpl : IEventService
         return ServiceResult<bool>.Ok(true);
     }
 
-
     public async Task<ServiceResult<bool>> UnlikeAsync(int eventId, int userId)
     {
-        if (!await _eventRepository.ExistsAsync(eventId))
+        var ev = await _eventRepository.GetByIdAsync(eventId);
+        if (ev is null)
             return ServiceResult<bool>.NotFound($"Event {eventId} not found.");
 
         if (!await _eventRepository.IsLikedByUserAsync(eventId, userId))
@@ -266,12 +350,18 @@ public class EventServiceImpl : IEventService
         return ServiceResult<bool>.Ok(true);
     }
 
+    // ── Images ────────────────────────────────────────────────
+
     public async Task<ServiceResult<bool>> AddImageAsync(
-        int eventId, string imageUrl, bool isCover, int requesterId)
+        int eventId,
+        string imageUrl,
+        bool isCover,
+        int requesterId)
     {
         var ev = await _eventRepository.GetByIdAsync(eventId);
         if (ev is null)
             return ServiceResult<bool>.NotFound($"Event {eventId} not found.");
+
         if (ev.OrganizerId != requesterId)
             return ServiceResult<bool>.Forbidden("You do not own this event.");
 
@@ -281,15 +371,31 @@ public class EventServiceImpl : IEventService
             ImageUrl = imageUrl,
             IsCover = isCover
         });
+
+        if (isCover)
+            await _eventRepository.SetCoverImageAsync(eventId, (await _eventRepository.GetEventImagesAsync(eventId))
+                .OrderByDescending(i => i.ImageId)
+                .First().ImageId);
+
         return ServiceResult<bool>.Ok(true);
     }
 
     public async Task<ServiceResult<bool>> DeleteImageAsync(int imageId, int requesterId)
     {
         var image = await _eventRepository.GetImageAsync(imageId);
-        if (image is null) return ServiceResult<bool>.NotFound("Image not found.");
-        var ev = await _eventRepository.GetByIdAsync(image.EventId!.Value);
-        if (ev?.OrganizerId != requesterId) return ServiceResult<bool>.Forbidden("You do not own this event.");
+        if (image is null)
+            return ServiceResult<bool>.NotFound("Image not found.");
+
+        if (image.EventId is null)
+            return ServiceResult<bool>.Fail("Image is not linked to an event.");
+
+        var ev = await _eventRepository.GetByIdAsync(image.EventId.Value);
+        if (ev is null)
+            return ServiceResult<bool>.NotFound($"Event {image.EventId.Value} not found.");
+
+        if (ev.OrganizerId != requesterId)
+            return ServiceResult<bool>.Forbidden("You do not own this event.");
+
         await _eventRepository.DeleteImageAsync(imageId);
         return ServiceResult<bool>.Ok(true);
     }
@@ -297,13 +403,22 @@ public class EventServiceImpl : IEventService
     public async Task<ServiceResult<bool>> SetCoverImageAsync(int eventId, int imageId, int requesterId)
     {
         var ev = await _eventRepository.GetByIdAsync(eventId);
-        if (ev is null) return ServiceResult<bool>.NotFound($"Event {eventId} not found.");
-        if (ev.OrganizerId != requesterId) return ServiceResult<bool>.Forbidden("You do not own this event.");
+        if (ev is null)
+            return ServiceResult<bool>.NotFound($"Event {eventId} not found.");
+
+        if (ev.OrganizerId != requesterId)
+            return ServiceResult<bool>.Forbidden("You do not own this event.");
+
+        var image = await _eventRepository.GetImageAsync(imageId);
+        if (image is null || image.EventId != eventId)
+            return ServiceResult<bool>.NotFound("Image not found for this event.");
+
         await _eventRepository.SetCoverImageAsync(eventId, imageId);
         return ServiceResult<bool>.Ok(true);
     }
 
-    // ── Segments ──────────────────────────────────────────────────
+    // ── Segments ──────────────────────────────────────────────
+
     public async Task<ServiceResult<List<SegmentResponseDto>>> GetAllSegmentsAsync()
     {
         var segments = await _eventRepository.GetAllSegmentsAsync();
@@ -315,10 +430,12 @@ public class EventServiceImpl : IEventService
         var segment = await _eventRepository.GetSegmentByIdAsync(segmentId);
         if (segment is null)
             return ServiceResult<SegmentResponseDto>.NotFound("Segment not found.");
+
         return ServiceResult<SegmentResponseDto>.Ok(MapSegment(segment));
     }
 
-    // ── Genres ────────────────────────────────────────────────────
+    // ── Genres ────────────────────────────────────────────────
+
     public async Task<ServiceResult<List<GenreResponseDto>>> GetGenresBySegmentAsync(int segmentId)
     {
         var genres = await _eventRepository.GetGenresBySegmentAsync(segmentId);
@@ -330,192 +447,26 @@ public class EventServiceImpl : IEventService
         var genre = await _eventRepository.GetGenreByIdAsync(genreId);
         if (genre is null)
             return ServiceResult<GenreResponseDto>.NotFound("Genre not found.");
+
         return ServiceResult<GenreResponseDto>.Ok(MapGenre(genre));
     }
 
-    // ── SubGenres ─────────────────────────────────────────────────
+    // ── SubGenres ─────────────────────────────────────────────
+
     public async Task<ServiceResult<List<SubGenreResponseDto>>> GetSubGenresByGenreAsync(int genreId)
     {
         var subGenres = await _eventRepository.GetSubGenresByGenreAsync(genreId);
         return ServiceResult<List<SubGenreResponseDto>>.Ok(subGenres.Select(MapSubGenre).ToList());
     }
 
-    // ── PriceZones ────────────────────────────────────────────────
-    public async Task<ServiceResult<List<PriceZoneResponseDto>>> GetPriceZonesByVenueAsync(int venueId)
-    {
-        var zones = await _eventRepository.GetPriceZonesByVenueAsync(venueId);
-        return ServiceResult<List<PriceZoneResponseDto>>.Ok(zones.Select(MapPriceZone).ToList());
-    }
+    // ── Venues ────────────────────────────────────────────────
 
-    public async Task<ServiceResult<PriceZoneResponseDto>> CreatePriceZoneAsync(
-        CreatePriceZoneDto dto, int requesterId)
-    {
-        var venue = await _eventRepository.GetVenueByIdAsync(dto.VenueId);
-        if (venue is null)
-            return ServiceResult<PriceZoneResponseDto>.NotFound("Venue not found.");
-
-        var priceZone = new PriceZone
-        {
-            VenueId = dto.VenueId,
-            Name = dto.Name,
-            Description = dto.Description,
-            IsActive = true
-        };
-        var created = await _eventRepository.CreatePriceZoneAsync(priceZone);
-        return ServiceResult<PriceZoneResponseDto>.Ok(MapPriceZone(created));
-    }
-
-    // ── Bookmarks ─────────────────────────────────────────────────
-    public async Task<ServiceResult<List<BookmarkResponseDto>>> GetUserBookmarksAsync(int userId)
-    {
-        var bookmarks = await _eventRepository.GetUserBookmarksAsync(userId);
-        return ServiceResult<List<BookmarkResponseDto>>.Ok(bookmarks.Select(MapBookmark).ToList());
-    }
-
-    public async Task<ServiceResult<BookmarkResponseDto>> CreateBookmarkAsync(
-        CreateBookmarkDto dto, int userId)
-    {
-        var existing = await _eventRepository.GetBookmarkByUserAndEventAsync(userId, dto.EventId);
-        if (existing is not null)
-            return ServiceResult<BookmarkResponseDto>.Fail("Event already bookmarked.");
-
-        var ev = await _eventRepository.GetByIdWithDetailsAsync(dto.EventId);
-        if (ev is null)
-            return ServiceResult<BookmarkResponseDto>.NotFound("Event not found.");
-
-        var imageUrl = ev.Images.FirstOrDefault(i => i.IsCover)?.ImageUrl
-            ?? ev.Images.FirstOrDefault()?.ImageUrl
-            ?? string.Empty;
-
-        var bookmark = new Bookmark
-        {
-            EventId = dto.EventId,
-            UserId = userId,
-            Memo = dto.Memo,
-            ImageUrl = imageUrl,
-            SavedAt = DateTime.UtcNow
-        };
-        var created = await _eventRepository.CreateBookmarkAsync(bookmark);
-        return ServiceResult<BookmarkResponseDto>.Ok(MapBookmark(created));
-    }
-
-    public async Task<ServiceResult<bool>> DeleteBookmarkAsync(int bookmarkId, int userId)
-    {
-        var bookmark = await _eventRepository.GetBookmarkByIdAsync(bookmarkId);
-        if (bookmark is null)
-            return ServiceResult<bool>.NotFound("Bookmark not found.");
-        if (bookmark.UserId != userId)
-            return ServiceResult<bool>.Forbidden("Not your bookmark.");
-
-        await _eventRepository.DeleteBookmarkAsync(bookmark);
-        return ServiceResult<bool>.Ok(true);
-    }
-
-    public async Task<ServiceResult<BookmarkResponseDto>> UpdateBookmarkAsync(
-        int bookmarkId, UpdateBookmarkDto dto, int userId)
-    {
-        var bookmark = await _eventRepository.GetBookmarkByIdAsync(bookmarkId);
-        if (bookmark is null) return ServiceResult<BookmarkResponseDto>.NotFound("Bookmark not found.");
-        if (bookmark.UserId != userId) return ServiceResult<BookmarkResponseDto>.Forbidden("Not your bookmark.");
-        bookmark.UpdateMemo(dto.Memo);
-        await _eventRepository.UpdateBookmarkAsync(bookmark);
-        return ServiceResult<BookmarkResponseDto>.Ok(MapBookmark(bookmark));
-    }
-
-    // ── Comments ──────────────────────────────────────────────────
-    public async Task<ServiceResult<List<CommentResponseDto>>> GetEventCommentsAsync(int eventId)
-    {
-        var comments = await _eventRepository.GetEventCommentsAsync(eventId);
-        return ServiceResult<List<CommentResponseDto>>.Ok(comments.Select(MapComment).ToList());
-    }
-
-    public async Task<ServiceResult<CommentResponseDto>> CreateCommentAsync(
-        CreateCommentDto dto, int userId)
-    {
-        if (dto.ParentCommentId.HasValue)
-        {
-            var parent = await _eventRepository.GetCommentByIdAsync(dto.ParentCommentId.Value);
-            if (parent == null)
-                return ServiceResult<CommentResponseDto>.NotFound(
-                    $"Parent comment {dto.ParentCommentId.Value} not found.");
-        }
-
-        var comment = new Comment
-        {
-            EventId = dto.EventId,
-            UserId = userId,
-            Content = dto.Content,
-            ParentCommentId = dto.ParentCommentId,
-            CreatedAt = DateTime.UtcNow,
-            IsDeleted = false,
-            LikesCount = 0
-        };
-
-        var created = await _eventRepository.CreateCommentAsync(comment);
-        return ServiceResult<CommentResponseDto>.Ok(MapComment(created));
-    }
-
-    public async Task<ServiceResult<CommentResponseDto>> UpdateCommentAsync(
-        int commentId, UpdateCommentDto dto, int userId)
-    {
-        var comment = await _eventRepository.GetCommentByIdAsync(commentId);
-        if (comment is null)
-            return ServiceResult<CommentResponseDto>.NotFound("Comment not found.");
-        if (comment.UserId != userId)
-            return ServiceResult<CommentResponseDto>.Forbidden("Not your comment.");
-        if (comment.IsDeleted)
-            return ServiceResult<CommentResponseDto>.Fail("Comment has been deleted.");
-
-        comment.Edit(dto.Content);
-        await _eventRepository.UpdateCommentAsync(comment);
-        return ServiceResult<CommentResponseDto>.Ok(MapComment(comment));
-    }
-
-    public async Task<ServiceResult<bool>> DeleteCommentAsync(int commentId, int userId)
-    {
-        var comment = await _eventRepository.GetCommentByIdAsync(commentId);
-        if (comment is null)
-            return ServiceResult<bool>.NotFound("Comment not found.");
-        if (comment.UserId != userId)
-            return ServiceResult<bool>.Forbidden("Not your comment.");
-
-        comment.Delete();
-        await _eventRepository.UpdateCommentAsync(comment);
-        return ServiceResult<bool>.Ok(true);
-    }
-
-    public async Task<ServiceResult<List<CommentResponseDto>>> GetRepliesAsync(int commentId)
-    {
-        var replies = await _eventRepository.GetRepliesAsync(commentId);
-        return ServiceResult<List<CommentResponseDto>>.Ok(replies.Select(MapComment).ToList());
-    }
-
-    public async Task<ServiceResult<bool>> LikeCommentAsync(int commentId, int userId)
-    {
-        var comment = await _eventRepository.GetCommentByIdAsync(commentId);
-        if (comment is null) return ServiceResult<bool>.NotFound("Comment not found.");
-        if (comment.IsDeleted) return ServiceResult<bool>.Fail("Comment has been deleted.");
-
-        if (await _eventRepository.IsCommentLikedByUserAsync(commentId, userId))
-            return ServiceResult<bool>.Conflict("Comment already liked.");
-
-        await _eventRepository.LikeCommentAsync(commentId, userId);
-        return ServiceResult<bool>.Ok(true);
-    }
-
-    public async Task<ServiceResult<bool>> UnlikeCommentAsync(int commentId, int userId)
-    {
-        var comment = await _eventRepository.GetCommentByIdAsync(commentId);
-        if (comment is null) return ServiceResult<bool>.NotFound("Comment not found.");
-        await _eventRepository.UnlikeCommentAsync(commentId, userId);
-        return ServiceResult<bool>.Ok(true);
-    }
-
-    // ── Venues ────────────────────────────────────────────────────
     public async Task<ServiceResult<VenueResponseDto>> GetVenueByIdAsync(int venueId)
     {
         var venue = await _eventRepository.GetVenueByIdAsync(venueId);
-        if (venue is null) return ServiceResult<VenueResponseDto>.NotFound("Venue not found.");
+        if (venue is null)
+            return ServiceResult<VenueResponseDto>.NotFound("Venue not found.");
+
         return ServiceResult<VenueResponseDto>.Ok(MapVenue(venue));
     }
 
@@ -541,19 +492,222 @@ public class EventServiceImpl : IEventService
             TimeZone = dto.TimeZone,
             Locale = dto.Locale
         };
+
         var created = await _eventRepository.CreateVenueAsync(venue);
         return ServiceResult<VenueResponseDto>.Created(MapVenue(created));
     }
 
-    // ── Mappers ───────────────────────────────────────────────────
+    // ── PriceZones ────────────────────────────────────────────
+
+    public async Task<ServiceResult<List<PriceZoneResponseDto>>> GetPriceZonesByVenueAsync(int venueId)
+    {
+        var zones = await _eventRepository.GetPriceZonesByVenueAsync(venueId);
+        return ServiceResult<List<PriceZoneResponseDto>>.Ok(zones.Select(MapPriceZone).ToList());
+    }
+
+    public async Task<ServiceResult<PriceZoneResponseDto>> CreatePriceZoneAsync(
+        CreatePriceZoneDto dto,
+        int requesterId)
+    {
+        var venue = await _eventRepository.GetVenueByIdAsync(dto.VenueId);
+        if (venue is null)
+            return ServiceResult<PriceZoneResponseDto>.NotFound("Venue not found.");
+
+        var priceZone = new PriceZone
+        {
+            VenueId = dto.VenueId,
+            Name = dto.Name,
+            Description = dto.Description,
+            IsActive = true
+        };
+
+        var created = await _eventRepository.CreatePriceZoneAsync(priceZone);
+        return ServiceResult<PriceZoneResponseDto>.Created(MapPriceZone(created));
+    }
+
+    // ── Bookmarks ─────────────────────────────────────────────
+
+    public async Task<ServiceResult<List<BookmarkResponseDto>>> GetUserBookmarksAsync(int userId)
+    {
+        var bookmarks = await _eventRepository.GetUserBookmarksAsync(userId);
+        return ServiceResult<List<BookmarkResponseDto>>.Ok(bookmarks.Select(MapBookmark).ToList());
+    }
+
+    public async Task<ServiceResult<BookmarkResponseDto>> CreateBookmarkAsync(CreateBookmarkDto dto, int userId)
+    {
+        var existing = await _eventRepository.GetBookmarkByUserAndEventAsync(userId, dto.EventId);
+        if (existing is not null)
+            return ServiceResult<BookmarkResponseDto>.Conflict("Event already bookmarked.");
+
+        var ev = await _eventRepository.GetByIdWithDetailsAsync(dto.EventId);
+        if (ev is null)
+            return ServiceResult<BookmarkResponseDto>.NotFound("Event not found.");
+
+        var imageUrl = ev.Images.FirstOrDefault(i => i.IsCover)?.ImageUrl
+            ?? ev.Images.FirstOrDefault()?.ImageUrl
+            ?? string.Empty;
+
+        var bookmark = new Bookmark
+        {
+            EventId = dto.EventId,
+            UserId = userId,
+            Memo = dto.Memo,
+            ImageUrl = imageUrl,
+            SavedAt = DateTime.UtcNow
+        };
+
+        var created = await _eventRepository.CreateBookmarkAsync(bookmark);
+        return ServiceResult<BookmarkResponseDto>.Created(MapBookmark(created));
+    }
+
+    public async Task<ServiceResult<BookmarkResponseDto>> UpdateBookmarkAsync(
+        int bookmarkId,
+        UpdateBookmarkDto dto,
+        int userId)
+    {
+        var bookmark = await _eventRepository.GetBookmarkByIdAsync(bookmarkId);
+        if (bookmark is null)
+            return ServiceResult<BookmarkResponseDto>.NotFound("Bookmark not found.");
+
+        if (bookmark.UserId != userId)
+            return ServiceResult<BookmarkResponseDto>.Forbidden("Not your bookmark.");
+
+        bookmark.UpdateMemo(dto.Memo);
+        await _eventRepository.UpdateBookmarkAsync(bookmark);
+
+        return ServiceResult<BookmarkResponseDto>.Ok(MapBookmark(bookmark));
+    }
+
+    public async Task<ServiceResult<bool>> DeleteBookmarkAsync(int bookmarkId, int userId)
+    {
+        var bookmark = await _eventRepository.GetBookmarkByIdAsync(bookmarkId);
+        if (bookmark is null)
+            return ServiceResult<bool>.NotFound("Bookmark not found.");
+
+        if (bookmark.UserId != userId)
+            return ServiceResult<bool>.Forbidden("Not your bookmark.");
+
+        await _eventRepository.DeleteBookmarkAsync(bookmark);
+        return ServiceResult<bool>.Ok(true);
+    }
+
+    // ── Comments ──────────────────────────────────────────────
+
+    public async Task<ServiceResult<List<CommentResponseDto>>> GetEventCommentsAsync(int eventId)
+    {
+        var comments = await _eventRepository.GetEventCommentsAsync(eventId);
+        return ServiceResult<List<CommentResponseDto>>.Ok(comments.Select(MapComment).ToList());
+    }
+
+    public async Task<ServiceResult<List<CommentResponseDto>>> GetRepliesAsync(int commentId)
+    {
+        var replies = await _eventRepository.GetRepliesAsync(commentId);
+        return ServiceResult<List<CommentResponseDto>>.Ok(replies.Select(MapComment).ToList());
+    }
+
+    public async Task<ServiceResult<CommentResponseDto>> CreateCommentAsync(CreateCommentDto dto, int userId)
+    {
+        if (dto.ParentCommentId.HasValue)
+        {
+            var parent = await _eventRepository.GetCommentByIdAsync(dto.ParentCommentId.Value);
+            if (parent is null)
+            {
+                return ServiceResult<CommentResponseDto>.NotFound(
+                    $"Parent comment {dto.ParentCommentId.Value} not found.");
+            }
+        }
+
+        var comment = new Comment
+        {
+            EventId = dto.EventId,
+            UserId = userId,
+            Content = dto.Content,
+            ParentCommentId = dto.ParentCommentId,
+            CreatedAt = DateTime.UtcNow,
+            IsDeleted = false,
+            LikesCount = 0
+        };
+
+        var created = await _eventRepository.CreateCommentAsync(comment);
+        return ServiceResult<CommentResponseDto>.Created(MapComment(created));
+    }
+
+    public async Task<ServiceResult<CommentResponseDto>> UpdateCommentAsync(
+        int commentId,
+        UpdateCommentDto dto,
+        int userId)
+    {
+        var comment = await _eventRepository.GetCommentByIdAsync(commentId);
+        if (comment is null)
+            return ServiceResult<CommentResponseDto>.NotFound("Comment not found.");
+
+        if (comment.UserId != userId)
+            return ServiceResult<CommentResponseDto>.Forbidden("Not your comment.");
+
+        if (comment.IsDeleted)
+            return ServiceResult<CommentResponseDto>.Fail("Comment has been deleted.");
+
+        comment.Edit(dto.Content);
+        await _eventRepository.UpdateCommentAsync(comment);
+
+        return ServiceResult<CommentResponseDto>.Ok(MapComment(comment));
+    }
+
+    public async Task<ServiceResult<bool>> DeleteCommentAsync(int commentId, int userId)
+    {
+        var comment = await _eventRepository.GetCommentByIdAsync(commentId);
+        if (comment is null)
+            return ServiceResult<bool>.NotFound("Comment not found.");
+
+        if (comment.UserId != userId)
+            return ServiceResult<bool>.Forbidden("Not your comment.");
+
+        comment.Delete();
+        await _eventRepository.UpdateCommentAsync(comment);
+
+        return ServiceResult<bool>.Ok(true);
+    }
+
+    public async Task<ServiceResult<bool>> LikeCommentAsync(int commentId, int userId)
+    {
+        var comment = await _eventRepository.GetCommentByIdAsync(commentId);
+        if (comment is null)
+            return ServiceResult<bool>.NotFound("Comment not found.");
+
+        if (comment.IsDeleted)
+            return ServiceResult<bool>.Fail("Comment has been deleted.");
+
+        if (await _eventRepository.IsCommentLikedByUserAsync(commentId, userId))
+            return ServiceResult<bool>.Conflict("Comment already liked.");
+
+        await _eventRepository.LikeCommentAsync(commentId, userId);
+        return ServiceResult<bool>.Ok(true);
+    }
+
+    public async Task<ServiceResult<bool>> UnlikeCommentAsync(int commentId, int userId)
+    {
+        var comment = await _eventRepository.GetCommentByIdAsync(commentId);
+        if (comment is null)
+            return ServiceResult<bool>.NotFound("Comment not found.");
+
+        await _eventRepository.UnlikeCommentAsync(commentId, userId);
+        return ServiceResult<bool>.Ok(true);
+    }
+
+    // ── Mappers ───────────────────────────────────────────────
+
     private static EventResponseDto MapToDto(DomainEvent ev) => new()
     {
         EventId = ev.EventId,
         OrganizerId = ev.OrganizerId,
         SegmentId = ev.SegmentId,
+        SegmentName = ev.Segment?.Name,
         GenreId = ev.GenreId,
+        GenreName = ev.Genre?.Name,
         SubGenreId = ev.SubGenreId,
+        SubGenreName = ev.SubGenre?.Name,
         VenueId = ev.VenueId,
+        VenueName = ev.Venue?.Name,
         CityId = ev.CityId,
         Title = ev.Title,
         Description = ev.Description,
@@ -576,11 +730,7 @@ public class EventServiceImpl : IEventService
         CreatedAt = ev.CreatedAt,
         UpdatedAt = ev.UpdatedAt,
         ImageUrls = ev.Images.Select(i => i.ImageUrl).ToList(),
-        CoverImageUrl = ev.Images.FirstOrDefault(i => i.IsCover)?.ImageUrl,
-        SegmentName = ev.Segment?.Name,
-        GenreName = ev.Genre?.Name,
-        SubGenreName = ev.SubGenre?.Name,
-        VenueName = ev.Venue?.Name
+        CoverImageUrl = ev.Images.FirstOrDefault(i => i.IsCover)?.ImageUrl
     };
 
     private static SegmentResponseDto MapSegment(Segment s) => new()
@@ -598,6 +748,7 @@ public class EventServiceImpl : IEventService
         GenreId = g.GenreId,
         Name = g.Name,
         SegmentId = g.SegmentId,
+        SegmentName = g.Segment?.Name,
         IsActive = g.IsActive,
         SubGenres = g.SubGenres.Select(MapSubGenre).ToList()
     };
@@ -662,4 +813,18 @@ public class EventServiceImpl : IEventService
         Locale = v.Locale,
         PriceZones = v.PriceZones.Select(MapPriceZone).ToList()
     };
+
+    public async Task<ServiceResult<PagedResult<EventResponseDto>>> GetAllAsync(EventFilterDto filter)
+    {
+        var result = await _eventRepository.GetAllAsync(filter);
+
+        return ServiceResult<PagedResult<EventResponseDto>>.Ok(
+            new PagedResult<EventResponseDto>
+            {
+                Items = result.Items.Select(MapToDto),
+                TotalCount = result.TotalCount,
+                Page = result.Page,
+                PageSize = result.PageSize
+            });
+    }
 }

@@ -46,4 +46,13 @@ class SortOption {
     if (sortBy == 'StartDateTime' && sortDescending) return 'Latest';
     return 'Sort';
   }
+
+  static const all = <SortOption>[
+    soonest,
+    latest,
+    mostLiked,
+    mostViewed,
+    lowestPrice,
+    highestPrice,
+  ];
 }

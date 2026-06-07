@@ -67,4 +67,14 @@ public class ReportsController : ControllerBase
             ? Ok(result.Data)
             : StatusCode(result.StatusCode, new { error = result.Error });
     }
+
+    [HttpGet("{reportId:int}")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> GetById(int reportId)
+    {
+        var result = await _userService.GetReportByIdAsync(reportId);
+        return result.Success
+            ? Ok(result.Data)
+            : StatusCode(result.StatusCode, new { error = result.Error });
+    }
 }

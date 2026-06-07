@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../auth/application/auth_controller.dart';
 import '../../application/profile_controller.dart';
 import 'activity_logs_screen.dart';
 import 'bookmarks_screen.dart';
@@ -16,6 +17,7 @@ class ProfileTabPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final profileAsync = ref.watch(profileControllerProvider);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return profileAsync.when(
       data: (profile) {
@@ -29,7 +31,9 @@ class ProfileTabPage extends ConsumerWidget {
             );
 
             if (result == true) {
-              await ref.read(profileControllerProvider.notifier).refreshProfile();
+              await ref
+                  .read(profileControllerProvider.notifier)
+                  .refreshProfile();
             }
           },
           onChangePassword: () async {
@@ -47,7 +51,7 @@ class ProfileTabPage extends ConsumerWidget {
             );
           },
           onOpenMyEvents: () async {
-            await Navigator.of(context).push(
+            await Navigator.of(context, rootNavigator: true).push(
               MaterialPageRoute(
                 builder: (_) => const MyEventsScreen(),
               ),
@@ -69,7 +73,9 @@ class ProfileTabPage extends ConsumerWidget {
           },
           onRevokeAllSessions: () async {
             try {
-              await ref.read(profileControllerProvider.notifier).revokeAllSessions();
+              await ref
+                  .read(profileControllerProvider.notifier)
+                  .revokeAllSessions();
 
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -88,12 +94,22 @@ class ProfileTabPage extends ConsumerWidget {
               }
             }
           },
-          onLogout: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Logout flow will be connected next.'),
-              ),
-            );
+          onLogout: () async {
+            try {
+              await ref.read(authStateProvider.notifier).logout();
+
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Logged out successfully.')),
+                );
+              }
+            } catch (_) {
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Failed to log out.')),
+                );
+              }
+            }
           },
         );
       },
@@ -105,29 +121,54 @@ class ProfileTabPage extends ConsumerWidget {
       ),
       error: (error, _) => Center(
         child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.error_outline_rounded, size: 40),
-              const SizedBox(height: 12),
-              const Text(
-                'Failed to load profile.',
-                style: TextStyle(fontWeight: FontWeight.w600),
+          padding: const EdgeInsets.all(16),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF17191D) : Colors.white,
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(
+                color: isDark
+                    ? const Color(0xFF2A303A)
+                    : const Color(0xFFE5EAF2),
               ),
-              const SizedBox(height: 8),
-              Text(
-                '$error',
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 16),
-              FilledButton(
-                onPressed: () {
-                  ref.invalidate(profileControllerProvider);
-                },
-                child: const Text('Retry'),
-              ),
-            ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  Icons.error_outline_rounded,
+                  size: 30,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'Failed to load profile',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 16,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  '$error',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Theme.of(context).textTheme.bodySmall?.color,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                TextButton.icon(
+                  onPressed: () {
+                    ref.invalidate(profileControllerProvider);
+                  },
+                  icon: const Icon(Icons.refresh_rounded),
+                  label: const Text('Retry'),
+                ),
+              ],
+            ),
           ),
         ),
       ),

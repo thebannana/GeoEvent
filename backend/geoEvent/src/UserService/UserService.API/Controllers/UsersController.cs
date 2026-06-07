@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Authorization;
+﻿using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using UserService.API.Extensions;
 using UserService.Application.DTOs;
@@ -16,6 +17,14 @@ public class UsersController : ControllerBase
     public UsersController(IUserService userService)
     {
         _userService = userService;
+    }
+
+    [HttpGet("profiles")]
+    [AllowAnonymous]
+    public async Task<IActionResult> GetProfiles([FromQuery] List<int> ids)
+    {
+        var result = await _userService.GetCommentUserProfilesAsync(ids);
+        return Ok(result);
     }
 
     [HttpGet("me")]
@@ -46,6 +55,28 @@ public class UsersController : ControllerBase
         return result.Success ? Ok(new { message = "Password changed successfully." }) : StatusCode(result.StatusCode, new { error = result.Error });
     }
 
+    [HttpPost("{userId:int}/rating")]
+    public async Task<IActionResult> RateUser(int userId, [FromBody] RateUserDto dto)
+    {
+        var raterId = User.GetUserId();
+        var result = await _userService.RateUserAsync(userId, raterId, dto);
+
+        return result.Success
+            ? Ok(new { message = "Rating saved." })
+            : StatusCode(result.StatusCode, new { error = result.Error });
+    }
+
+    [HttpDelete("{userId:int}/rating")]
+    public async Task<IActionResult> DeleteMyReview(int userId)
+    {
+        var raterId = User.GetUserId();
+        var result = await _userService.DeleteUserReviewAsync(userId, raterId);
+
+        return result.Success
+            ? NoContent()
+            : StatusCode(result.StatusCode, new { error = result.Error });
+    }
+
     [HttpGet("me/activity-logs")]
     public async Task<IActionResult> GetMyActivityLogs([FromQuery] int page = 1, [FromQuery] int pageSize = 10)
     {
@@ -57,7 +88,23 @@ public class UsersController : ControllerBase
     [HttpGet("{userId:int}/public")]
     public async Task<IActionResult> GetPublicProfile(int userId)
     {
-        var result = await _userService.GetPublicProfileAsync(userId);
+        int? requesterId = null;
+
+        if (User.Identity?.IsAuthenticated == true)
+            requesterId = User.GetUserId();
+
+        var result = await _userService.GetPublicProfileAsync(userId, requesterId);
+        return result.Success ? Ok(result.Data) : StatusCode(result.StatusCode, new { error = result.Error });
+    }
+
+    [AllowAnonymous]
+    [HttpGet("{userId:int}/reviews")]
+    public async Task<IActionResult> GetUserReviews(
+        int userId,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10)
+    {
+        var result = await _userService.GetUserReviewsAsync(userId, page, pageSize);
         return result.Success ? Ok(result.Data) : StatusCode(result.StatusCode, new { error = result.Error });
     }
 

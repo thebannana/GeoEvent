@@ -66,7 +66,9 @@ class SearchResultCard extends StatelessWidget {
               color: isDark ? const Color(0xFF1B2028) : Colors.white,
               borderRadius: BorderRadius.circular(18),
               border: Border.all(
-                color: isDark ? const Color(0xFF2A303A) : const Color(0xFFE3EAF3),
+                color: isDark
+                    ? const Color(0xFF2A303A)
+                    : const Color(0xFFE3EAF3),
               ),
               boxShadow: [
                 BoxShadow(
@@ -91,26 +93,10 @@ class SearchResultCard extends StatelessWidget {
                             imageUrl,
                             fit: BoxFit.cover,
                             errorBuilder: (_, __, ___) {
-                              return Container(
-                                color: accent.withValues(alpha: 0.90),
-                                alignment: Alignment.center,
-                                child: const Icon(
-                                  Icons.event_rounded,
-                                  size: 30,
-                                  color: Colors.white,
-                                ),
-                              );
+                              return _SearchResultImageFallback(accent: accent);
                             },
                           )
-                        : Container(
-                            color: accent.withValues(alpha: 0.90),
-                            alignment: Alignment.center,
-                            child: const Icon(
-                              Icons.event_rounded,
-                              size: 30,
-                              color: Colors.white,
-                            ),
-                          ),
+                        : _SearchResultImageFallback(accent: accent),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -132,6 +118,8 @@ class SearchResultCard extends StatelessWidget {
                           const SizedBox(height: 4),
                           Text(
                             subtitle,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: theme.colorScheme.onSurfaceVariant,
                             ),
@@ -173,36 +161,25 @@ class SearchResultCard extends StatelessWidget {
                 ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(0, 10, 12, 10),
-                  child: SizedBox(
-                    height: 62,
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Icon(
-                          Icons.more_horiz_rounded,
-                          size: 18,
-                          color: theme.colorScheme.onSurfaceVariant,
+                  child: Align(
+                    alignment: Alignment.bottomRight,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? Colors.white.withValues(alpha: 0.06)
+                            : const Color(0xFFF3F6FA),
+                        borderRadius: BorderRadius.circular(9),
+                      ),
+                      child: Text(
+                        _formatPrice(item.price),
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontWeight: FontWeight.w700,
                         ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 5,
-                          ),
-                          decoration: BoxDecoration(
-                            color: isDark
-                                ? Colors.white.withValues(alpha: 0.06)
-                                : const Color(0xFFF3F6FA),
-                            borderRadius: BorderRadius.circular(9),
-                          ),
-                          child: Text(
-                            'Price: ${_formatPrice(item.price)}',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
                   ),
                 ),
@@ -210,6 +187,27 @@ class SearchResultCard extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _SearchResultImageFallback extends StatelessWidget {
+  final Color accent;
+
+  const _SearchResultImageFallback({
+    required this.accent,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: accent.withValues(alpha: 0.90),
+      alignment: Alignment.center,
+      child: const Icon(
+        Icons.event_rounded,
+        size: 30,
+        color: Colors.white,
       ),
     );
   }

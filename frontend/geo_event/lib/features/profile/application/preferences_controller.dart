@@ -1,59 +1,78 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../auth/application/auth_controller.dart';
-import '../../../shared/profile/data/preferences_api.dart';
-import '../../../shared/profile/data/preferences_repository.dart';
 import '../../../shared/profile/models/user_preference.dart';
+import '../../../shared/profile/providers/profile_providers.dart';
 
-final preferencesApiProvider = Provider<PreferencesApi>((ref) {
-  return PreferencesApi(ref.watch(authorizedDioProvider));
-});
-
-final preferencesRepositoryProvider = Provider<PreferencesRepository>((ref) {
-  return PreferencesRepository(ref.watch(preferencesApiProvider));
-});
-
-final preferencesProvider =
+final preferencesControllerProvider =
     AsyncNotifierProvider<PreferencesController, List<UserPreference>>(
   PreferencesController.new,
 );
 
 class PreferencesController extends AsyncNotifier<List<UserPreference>> {
-  PreferencesRepository get _repository =>
-      ref.read(preferencesRepositoryProvider);
-
   @override
   Future<List<UserPreference>> build() async {
-    return _repository.getPreferences();
+    final items = await ref.read(preferencesRepositoryProvider).getPreferences();
+    return _sort(items);
   }
 
   Future<void> refresh() async {
-    state = const AsyncValue.loading();
-    state = await AsyncValue.guard(_repository.getPreferences);
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(() async {
+      final items =
+          await ref.read(preferencesRepositoryProvider).getPreferences();
+      return _sort(items);
+    });
   }
 
-  Future<void> upsert({int? segmentId, int? genreId, required double score}) async {
-    final updated = await _repository.upsertPreference(
+  Future<void> upsert({
+    int? segmentId,
+    int? genreId,
+    required double score,
+  }) async {
+    final repository = ref.read(preferencesRepositoryProvider);
+    final updated = await repository.upsertPreference(
       segmentId: segmentId,
       genreId: genreId,
       score: score,
     );
+
     state.whenData((list) {
-      final idx = list.indexWhere((p) => p.prefId == updated.prefId);
-      if (idx >= 0) {
-        final newList = [...list];
-        newList[idx] = updated;
-        state = AsyncData(newList);
+      final index = list.indexWhere((p) => p.prefId == updated.prefId);
+
+      if (index >= 0) {
+        final next = [...list];
+        next[index] = updated;
+        state = AsyncData(_sort(next));
       } else {
-        state = AsyncData([...list, updated]);
+        state = AsyncData(_sort([...list, updated]));
       }
     });
   }
 
   Future<void> delete(int prefId) async {
-    await _repository.deletePreference(prefId);
+    await ref.read(preferencesRepositoryProvider).deletePreference(prefId);
+
     state.whenData((list) {
-      state = AsyncData(list.where((p) => p.prefId != prefId).toList());
+      state = AsyncData(
+        _sort(list.where((p) => p.prefId != prefId).toList()),
+      );
     });
+  }
+
+  List<UserPreference> _sort(List<UserPreference> items) {
+    final next = [...items];
+    next.sort((a, b) {
+      final byScore = b.score.compareTo(a.score);
+      if (byScore != 0) return byScore;
+
+      final aType = a.segmentId != null ? 0 : 1;
+      final bType = b.segmentId != null ? 0 : 1;
+      if (aType != bType) return aType.compareTo(bType);
+
+      final aId = a.segmentId ?? a.genreId ?? 0;
+      final bId = b.segmentId ?? b.genreId ?? 0;
+      return aId.compareTo(bId);
+    });
+    return next;
   }
 }

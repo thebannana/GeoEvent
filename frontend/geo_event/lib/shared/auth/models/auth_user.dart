@@ -23,6 +23,8 @@ class AuthUser {
     required this.cityId,
   });
 
+  String get fullName => '$firstName $lastName'.trim();
+
   factory AuthUser.fromJson(Map<String, dynamic> json) {
     return AuthUser(
       userId: json['userId'] as int,
@@ -36,5 +38,20 @@ class AuthUser {
       createdAt: DateTime.parse(json['createdAt'] as String),
       cityId: json['cityId'] as int?,
     );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'userId': userId,
+      'username': username,
+      'email': email,
+      'firstName': firstName,
+      'lastName': lastName,
+      'imageUrl': imageUrl,
+      'role': role,
+      'isVerified': isVerified,
+      'createdAt': createdAt.toUtc().toIso8601String(),
+      'cityId': cityId,
+    };
   }
 }

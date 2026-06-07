@@ -3,20 +3,34 @@ import 'notification_api.dart';
 
 class NotificationRepository {
   final NotificationApi _api;
+
   NotificationRepository(this._api);
 
   Future<List<NotificationItem>> getNotifications({
     int page = 1,
     int pageSize = 30,
     bool? isRead,
-  }) =>
-      _api.getNotifications(page: page, pageSize: pageSize, isRead: isRead);
+  }) {
+    return _api.getNotifications(
+      page: page,
+      pageSize: pageSize,
+      isRead: isRead,
+    );
+  }
 
-  Future<int> getUnreadCount() => _api.getUnreadCount();
+  Future<int> getUnreadCount() {
+    return _api.getUnreadCount();
+  }
 
-  Future<void> markAsRead(int id) => _api.markAsRead(id);
+  Future<void> markAsRead(int id) {
+    return _api.markAsRead(id);
+  }
 
-  Future<void> markAllAsRead() => _api.markAllAsRead();
+  Future<void> markAllAsRead() {
+    return _api.markAllAsRead();
+  }
 
-  Future<void> delete(int id) => _api.delete(id);
+  Future<void> delete(int id) {
+    return _api.delete(id);
+  }
 }

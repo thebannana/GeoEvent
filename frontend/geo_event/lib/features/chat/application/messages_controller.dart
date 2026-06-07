@@ -1,17 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../auth/application/auth_controller.dart';
-import '../../../shared/chat/data/chat_api.dart';
 import '../../../shared/chat/data/chat_repository.dart';
 import '../../../shared/chat/models/conversation_summary.dart';
-
-final messagesApiProvider = Provider<ChatApi>((ref) {
-  return ChatApi(ref.watch(authorizedDioProvider));
-});
-
-final messagesRepositoryProvider = Provider<ChatRepository>((ref) {
-  return ChatRepository(ref.watch(messagesApiProvider));
-});
+import '../../../shared/chat/providers/chat_providers.dart';
 
 class MessagesInboxState {
   final AsyncValue<List<ConversationSummary>> conversations;
@@ -25,6 +16,20 @@ class MessagesInboxState {
     this.unreadOnly = false,
     this.unreadCount = 0,
   });
+
+  List<ConversationSummary> get filteredConversations {
+    final items = conversations.valueOrNull ?? const <ConversationSummary>[];
+    final query = searchQuery.trim().toLowerCase();
+
+    return items.where((conversation) {
+      final matchesUnread = !unreadOnly || conversation.unreadCount > 0;
+      final matchesQuery = query.isEmpty ||
+          conversation.title.toLowerCase().contains(query) ||
+          conversation.lastMessageContent.toLowerCase().contains(query);
+
+      return matchesUnread && matchesQuery;
+    }).toList(growable: false);
+  }
 
   MessagesInboxState copyWith({
     AsyncValue<List<ConversationSummary>>? conversations,
@@ -51,11 +56,17 @@ class MessagesInboxController extends Notifier<MessagesInboxState> {
   }
 
   Future<void> load() async {
-    state = state.copyWith(conversations: const AsyncValue.loading());
+    final previous = state.conversations.valueOrNull;
+
+    state = state.copyWith(
+      conversations: previous == null
+          ? const AsyncValue.loading()
+          : AsyncData<List<ConversationSummary>>(previous),
+    );
 
     final conversationsResult =
         await AsyncValue.guard<List<ConversationSummary>>(
-      _repo.getConversations,
+        _repo.getThreads,
     );
 
     int unreadCount = state.unreadCount;
@@ -69,12 +80,31 @@ class MessagesInboxController extends Notifier<MessagesInboxState> {
     );
   }
 
+  Future<void> refresh() => load();
+
   void setSearchQuery(String value) {
     state = state.copyWith(searchQuery: value);
   }
 
   void setUnreadOnly(bool value) {
     state = state.copyWith(unreadOnly: value);
+  }
+
+  void markThreadLocallyRead(int threadId) {
+    final current = state.conversations.valueOrNull ?? const <ConversationSummary>[];
+
+    var removedUnread = 0;
+    final updated = current.map((conversation) {
+      if (conversation.threadId != threadId) return conversation;
+
+      removedUnread = conversation.unreadCount;
+      return conversation.copyWith(unreadCount: 0);
+    }).toList(growable: false);
+
+    state = state.copyWith(
+      conversations: AsyncData(updated),
+      unreadCount: (state.unreadCount - removedUnread).clamp(0, 1 << 30),
+    );
   }
 }
 

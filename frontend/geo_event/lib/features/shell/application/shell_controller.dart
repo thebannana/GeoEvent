@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../domain/shell_tab.dart';
+import '../../../shared/shell/models/shell_tab.dart';
 
 class ShellController extends StateNotifier<ShellTab?> {
   ShellController() : super(null);
@@ -16,6 +16,8 @@ class ShellController extends StateNotifier<ShellTab?> {
   void close() {
     state = null;
   }
+
+  bool isOpen(ShellTab tab) => state == tab;
 }
 
 final shellControllerProvider =

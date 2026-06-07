@@ -5,6 +5,7 @@ import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_mode_controller.dart';
+import 'features/auth/application/auth_controller.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -15,11 +16,30 @@ void main() {
   runApp(const ProviderScope(child: GeoEventApp()));
 }
 
-class GeoEventApp extends ConsumerWidget {
+class GeoEventApp extends ConsumerStatefulWidget {
   const GeoEventApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<GeoEventApp> createState() => _GeoEventAppState();
+}
+
+class _GeoEventAppState extends ConsumerState<GeoEventApp> {
+  bool _initialized = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    if (_initialized) return;
+    _initialized = true;
+
+    Future.microtask(() async {
+      await ref.read(authStateProvider.notifier).restoreSession();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final themeMode = ref.watch(themeModeControllerProvider);
     final router = ref.watch(appRouterProvider);
 

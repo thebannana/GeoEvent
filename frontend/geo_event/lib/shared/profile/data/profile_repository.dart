@@ -10,19 +10,25 @@ class ProfileRepository {
   Future<UserProfile> getProfile() => api.getMe();
 
   Future<UserProfile> updateProfile({
+    String? username,
+    String? email,
     String? firstName,
     String? lastName,
     String? phoneNumber,
     String? imageUrl,
-    int? cityId,
   }) {
     return api.updateMe(
+      username: username,
+      email: email,
       firstName: firstName,
       lastName: lastName,
       phoneNumber: phoneNumber,
       imageUrl: imageUrl,
-      cityId: cityId,
     );
+  }
+
+  Future<String> uploadProfileImage(String filePath) {
+    return api.uploadProfileImage(filePath);
   }
 
   Future<void> changePassword({
@@ -42,12 +48,5 @@ class ProfileRepository {
     int pageSize = 20,
   }) {
     return api.getMyActivityLogs(page: page, pageSize: pageSize);
-  }
-
-  Future<List<CitySearchResult>> searchCities(
-    String term, {
-    int limit = 10,
-  }) {
-    return api.searchCities(term, limit: limit);
   }
 }

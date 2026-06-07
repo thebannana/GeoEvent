@@ -20,9 +20,12 @@ class _MapSettingsDrawerState extends ConsumerState<MapSettingsDrawer>
   late final AnimationController _controller;
   late final Animation<Offset> _slide;
 
+  bool _closing = false;
+
   @override
   void initState() {
     super.initState();
+
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 260),
@@ -48,8 +51,13 @@ class _MapSettingsDrawerState extends ConsumerState<MapSettingsDrawer>
   }
 
   Future<void> _close() async {
+    if (_closing) return;
+    _closing = true;
+
     await _controller.reverse();
-    if (mounted) widget.onClose();
+
+    if (!mounted) return;
+    widget.onClose();
   }
 
   @override
@@ -68,6 +76,7 @@ class _MapSettingsDrawerState extends ConsumerState<MapSettingsDrawer>
           alignment: Alignment.topLeft,
           child: GestureDetector(
             onTap: () {},
+            behavior: HitTestBehavior.translucent,
             child: Padding(
               padding: const EdgeInsets.fromLTRB(12, 8, 0, 0),
               child: SlideTransition(
@@ -90,7 +99,9 @@ class _MapSettingsDrawerState extends ConsumerState<MapSettingsDrawer>
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withValues(alpha: isDark ? 0.22 : 0.08),
+                        color: Colors.black.withValues(
+                          alpha: isDark ? 0.22 : 0.08,
+                        ),
                         blurRadius: 28,
                         offset: const Offset(0, 10),
                       ),

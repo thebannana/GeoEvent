@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../shared/events/data/events_api.dart';
-import '../../../../shared/events/models/create_event_models.dart';
+import '../../../../shared/events/providers/event_providers.dart';
 
+@immutable
 class MapFilterSelection {
   final int? segmentId;
   final int? genreId;
@@ -68,6 +68,67 @@ class MapFilterSelection {
       maxPrice != null;
 
   factory MapFilterSelection.defaults() => const MapFilterSelection();
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+
+    return other is MapFilterSelection &&
+        other.segmentId == segmentId &&
+        other.genreId == genreId &&
+        other.subGenreId == subGenreId &&
+        other.radiusKm == radiusKm &&
+        other.freeOnly == freeOnly &&
+        other.todayOnly == todayOnly &&
+        other.usePreferences == usePreferences &&
+        other.minPrice == minPrice &&
+        other.maxPrice == maxPrice;
+  }
+
+  @override
+  int get hashCode => Object.hash(
+        segmentId,
+        genreId,
+        subGenreId,
+        radiusKm,
+        freeOnly,
+        todayOnly,
+        usePreferences,
+        minPrice,
+        maxPrice,
+      );
+}
+
+class _SegmentViewData {
+  final int id;
+  final String name;
+  final String? color;
+
+  const _SegmentViewData({
+    required this.id,
+    required this.name,
+    this.color,
+  });
+}
+
+class _GenreViewData {
+  final int id;
+  final String name;
+
+  const _GenreViewData({
+    required this.id,
+    required this.name,
+  });
+}
+
+class _SubGenreViewData {
+  final int id;
+  final String name;
+
+  const _SubGenreViewData({
+    required this.id,
+    required this.name,
+  });
 }
 
 class MapFilterPanel extends ConsumerStatefulWidget {
@@ -88,25 +149,26 @@ class MapFilterPanel extends ConsumerStatefulWidget {
 
 class _MapFilterPanelState extends ConsumerState<MapFilterPanel>
     with SingleTickerProviderStateMixin {
+  static const double _priceMax = 500;
+
   late final AnimationController _controller;
   late final Animation<Offset> _slide;
 
   late MapFilterSelection _selection;
 
-  List<SegmentItem> _segments = [];
-  List<GenreItem> _genres = [];
-  List<SubGenreItem> _subGenres = [];
+  List<_SegmentViewData> _segments = [];
+  List<_GenreViewData> _genres = [];
+  List<_SubGenreViewData> _subGenres = [];
 
   bool _loadingSegments = true;
   bool _loadingGenres = false;
   bool _loadingSubGenres = false;
   String? _error;
-  static const double _priceMax = 500;
 
   RangeValues get _priceRange => RangeValues(
-  _selection.minPrice ?? 0,
-  _selection.maxPrice ?? _priceMax,
-);
+        _selection.minPrice ?? 0,
+        _selection.maxPrice ?? _priceMax,
+      );
 
   @override
   void initState() {
@@ -136,19 +198,50 @@ class _MapFilterPanelState extends ConsumerState<MapFilterPanel>
   }
 
   @override
+  void didUpdateWidget(covariant MapFilterPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialSelection != widget.initialSelection) {
+      setState(() {
+        _selection = widget.initialSelection;
+      });
+    }
+  }
+
+  @override
   void dispose() {
     _controller.dispose();
     super.dispose();
   }
 
   Future<void> _loadInitialData() async {
+    if (!mounted) return;
+
     setState(() {
       _loadingSegments = true;
       _error = null;
     });
 
     try {
-      final segments = await ref.read(eventsApiProvider).getSegments();
+      final api = ref.read(eventsApiProvider);
+      final rawSegments = await api.getSegments();
+
+      final segments = rawSegments
+          .whereType<dynamic>()
+          .map<_SegmentViewData?>((item) {
+            final id = item.segmentId;
+            final name = item.name;
+            if (id == null || name == null || name.toString().trim().isEmpty) {
+              return null;
+            }
+
+            return _SegmentViewData(
+              id: id,
+              name: name.toString().trim(),
+              color: item.color?.toString(),
+            );
+          })
+          .whereType<_SegmentViewData>()
+          .toList();
 
       if (!mounted) return;
 
@@ -174,6 +267,8 @@ class _MapFilterPanelState extends ConsumerState<MapFilterPanel>
   }
 
   Future<void> _loadGenres(int segmentId, {bool keepSelection = false}) async {
+    if (!mounted) return;
+
     setState(() {
       _loadingGenres = true;
       _genres = [];
@@ -186,7 +281,25 @@ class _MapFilterPanelState extends ConsumerState<MapFilterPanel>
     });
 
     try {
-      final genres = await ref.read(eventsApiProvider).getGenresBySegment(segmentId);
+      final api = ref.read(eventsApiProvider);
+      final rawGenres = await api.getGenresBySegment(segmentId);
+
+      final genres = rawGenres
+          .whereType<dynamic>()
+          .map<_GenreViewData?>((item) {
+            final id = item.genreId;
+            final name = item.name;
+            if (id == null || name == null || name.toString().trim().isEmpty) {
+              return null;
+            }
+
+            return _GenreViewData(
+              id: id,
+              name: name.toString().trim(),
+            );
+          })
+          .whereType<_GenreViewData>()
+          .toList();
 
       if (!mounted) return;
 
@@ -203,6 +316,8 @@ class _MapFilterPanelState extends ConsumerState<MapFilterPanel>
   }
 
   Future<void> _loadSubGenres(int genreId, {bool keepSelection = false}) async {
+    if (!mounted) return;
+
     setState(() {
       _loadingSubGenres = true;
       _subGenres = [];
@@ -213,8 +328,25 @@ class _MapFilterPanelState extends ConsumerState<MapFilterPanel>
     });
 
     try {
-      final subGenres =
-          await ref.read(eventsApiProvider).getSubGenresByGenre(genreId);
+      final api = ref.read(eventsApiProvider);
+      final rawSubGenres = await api.getSubGenresByGenre(genreId);
+
+      final subGenres = rawSubGenres
+          .whereType<dynamic>()
+          .map<_SubGenreViewData?>((item) {
+            final id = item.subGenreId;
+            final name = item.name;
+            if (id == null || name == null || name.toString().trim().isEmpty) {
+              return null;
+            }
+
+            return _SubGenreViewData(
+              id: id,
+              name: name.toString().trim(),
+            );
+          })
+          .whereType<_SubGenreViewData>()
+          .toList();
 
       if (!mounted) return;
 
@@ -231,18 +363,20 @@ class _MapFilterPanelState extends ConsumerState<MapFilterPanel>
   }
 
   String _buildPriceLabel() {
-  final min = _selection.minPrice;
-  final max = _selection.maxPrice;
+    final min = _selection.minPrice;
+    final max = _selection.maxPrice;
 
-  if (min == null && max == null) return 'Any price';
-  if (min == null) return 'Up to \$${max!.round()}';
-  if (max == null) return '\$${min.round()} and above';
-  return '\$${min.round()} – \$${max.round()}';
-}
+    if (min == null && max == null) return 'Any price';
+    if (min == null) return 'Up to \$${max!.round()}';
+    if (max == null) return '\$${min.round()} and above';
+    return '\$${min.round()} – \$${max.round()}';
+  }
 
   Future<void> _close() async {
     await _controller.reverse();
-    if (mounted) widget.onClose();
+    if (mounted) {
+      widget.onClose();
+    }
   }
 
   Future<void> _apply() async {
@@ -427,8 +561,8 @@ class _MapFilterPanelState extends ConsumerState<MapFilterPanel>
                                                     },
                                                   ),
                                                   ..._segments.map((segment) {
-                                                    final selected = _selection.segmentId ==
-                                                        segment.segmentId;
+                                                    final selected =
+                                                        _selection.segmentId == segment.id;
                                                     return _ChoicePill(
                                                       label: segment.name,
                                                       icon: _segmentIcon(segment.name),
@@ -436,7 +570,7 @@ class _MapFilterPanelState extends ConsumerState<MapFilterPanel>
                                                       accent: _segmentAccent(segment.color),
                                                       onTap: () async {
                                                         if (selected) return;
-                                                        await _loadGenres(segment.segmentId);
+                                                        await _loadGenres(segment.id);
                                                       },
                                                     );
                                                   }),
@@ -472,10 +606,10 @@ class _MapFilterPanelState extends ConsumerState<MapFilterPanel>
                                               ..._genres.map((genre) {
                                                 return _ChoicePill(
                                                   label: genre.name,
-                                                  selected:
-                                                      _selection.genreId == genre.genreId,
+                                                  selected: _selection.genreId == genre.id,
                                                   onTap: () async {
-                                                    await _loadSubGenres(genre.genreId);
+                                                    if (_selection.genreId == genre.id) return;
+                                                    await _loadSubGenres(genre.id);
                                                   },
                                                 );
                                               }),
@@ -510,12 +644,11 @@ class _MapFilterPanelState extends ConsumerState<MapFilterPanel>
                                                 return _ChoicePill(
                                                   label: subGenre.name,
                                                   selected:
-                                                      _selection.subGenreId ==
-                                                          subGenre.subGenreId,
+                                                      _selection.subGenreId == subGenre.id,
                                                   onTap: () {
                                                     setState(() {
                                                       _selection = _selection.copyWith(
-                                                        subGenreId: subGenre.subGenreId,
+                                                        subGenreId: subGenre.id,
                                                       );
                                                     });
                                                   },
@@ -538,38 +671,36 @@ class _MapFilterPanelState extends ConsumerState<MapFilterPanel>
                                     divisions: 49,
                                     onChanged: (value) {
                                       setState(() {
-                                        _selection =
-                                            _selection.copyWith(radiusKm: value);
+                                        _selection = _selection.copyWith(radiusKm: value);
                                       });
                                     },
                                   ),
                                 ],
                               ),
                               const SizedBox(height: 18),
-                                _DrawerSection(
-                                  title: 'Price',
-                                  children: [
-                                    _RangeSliderCard(
-                                      label: _buildPriceLabel(),
-                                      values: _priceRange,
-                                      min: 0,
-                                      max: _priceMax,
-                                      divisions: 100,
-                                      onChanged: (values) {
-                                        setState(() {
-                                          _selection = _selection.copyWith(
-                                            minPrice: values.start > 0 ? values.start : null,
-                                            maxPrice: values.end < _priceMax ? values.end : null,
-                                            clearMinPrice: values.start == 0,
-                                            clearMaxPrice: values.end == _priceMax,
-                                            // freeOnly off when a range is set manually
-                                            freeOnly: false,
-                                          );
-                                        });
-                                      },
-                                    ),
-                                  ],
-                                ),
+                              _DrawerSection(
+                                title: 'Price',
+                                children: [
+                                  _RangeSliderCard(
+                                    label: _buildPriceLabel(),
+                                    values: _priceRange,
+                                    min: 0,
+                                    max: _priceMax,
+                                    divisions: 100,
+                                    onChanged: (values) {
+                                      setState(() {
+                                        _selection = _selection.copyWith(
+                                          minPrice: values.start > 0 ? values.start : null,
+                                          maxPrice: values.end < _priceMax ? values.end : null,
+                                          clearMinPrice: values.start == 0,
+                                          clearMaxPrice: values.end == _priceMax,
+                                          freeOnly: false,
+                                        );
+                                      });
+                                    },
+                                  ),
+                                ],
+                              ),
                               const SizedBox(height: 18),
                               _DrawerSection(
                                 title: 'Options',
@@ -590,20 +721,17 @@ class _MapFilterPanelState extends ConsumerState<MapFilterPanel>
                                   ),
                                   _ToggleCard(
                                     label: 'Today only',
-                                    subtitle:
-                                        'Only show events happening today.',
+                                    subtitle: 'Only show events happening today.',
                                     value: _selection.todayOnly,
                                     onChanged: (v) {
                                       setState(() {
-                                        _selection =
-                                            _selection.copyWith(todayOnly: v);
+                                        _selection = _selection.copyWith(todayOnly: v);
                                       });
                                     },
                                   ),
                                   _ToggleCard(
                                     label: 'Use my preferences',
-                                    subtitle:
-                                        'Blend map results with your saved interests.',
+                                    subtitle: 'Blend map results with your saved interests.',
                                     value: _selection.usePreferences,
                                     onChanged: (v) {
                                       setState(() {
@@ -770,47 +898,54 @@ class _ChoicePill extends StatelessWidget {
     final baseColor = accent ?? theme.colorScheme.primary;
     final isDark = theme.brightness == Brightness.dark;
 
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-        decoration: BoxDecoration(
-          color: selected
-              ? baseColor.withValues(alpha: isDark ? 0.24 : 0.12)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(
-            color: selected
-                ? baseColor.withValues(alpha: 0.7)
-                : isDark
-                    ? const Color(0xFF2A303A)
-                    : const Color(0xFFE3EAF3),
+    final borderColor = selected
+        ? baseColor.withValues(alpha: 0.7)
+        : isDark
+            ? const Color(0xFF2A303A)
+            : const Color(0xFFE3EAF3);
+
+    final backgroundColor = selected
+        ? baseColor.withValues(alpha: isDark ? 0.24 : 0.12)
+        : Colors.transparent;
+
+    final foregroundColor =
+        selected ? baseColor : theme.colorScheme.onSurface;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(999),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+          decoration: BoxDecoration(
+            color: backgroundColor,
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: borderColor),
           ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (icon != null) ...[
-              Icon(
-                icon,
-                size: 15,
-                color: selected
-                    ? baseColor
-                    : theme.colorScheme.onSurfaceVariant,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (icon != null) ...[
+                Icon(
+                  icon,
+                  size: 15,
+                  color: selected
+                      ? baseColor
+                      : theme.colorScheme.onSurfaceVariant,
+                ),
+                const SizedBox(width: 6),
+              ],
+              Text(
+                label,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+                  color: foregroundColor,
+                ),
               ),
-              const SizedBox(width: 6),
             ],
-            Text(
-              label,
-              style: theme.textTheme.bodySmall?.copyWith(
-                fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
-                color: selected
-                    ? baseColor
-                    : theme.colorScheme.onSurface,
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -860,7 +995,7 @@ class _SliderCard extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Slider(
-            value: value,
+            value: value.clamp(min, max),
             min: min,
             max: max,
             divisions: divisions,
@@ -964,6 +1099,12 @@ class _RangeSliderCard extends StatelessWidget {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
+    final safeStart = values.start.clamp(min, max);
+    final safeEnd = values.end.clamp(min, max);
+    final safeValues = safeStart <= safeEnd
+        ? RangeValues(safeStart, safeEnd)
+        : RangeValues(safeEnd, safeStart);
+
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
@@ -985,7 +1126,7 @@ class _RangeSliderCard extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           RangeSlider(
-            values: values,
+            values: safeValues,
             min: min,
             max: max,
             divisions: divisions,

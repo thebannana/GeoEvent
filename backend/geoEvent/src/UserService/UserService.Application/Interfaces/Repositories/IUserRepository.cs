@@ -8,6 +8,16 @@ namespace UserService.Application.Interfaces.Repositories;
 public interface IUserRepository
 {
     Task<User?> GetByIdAsync(int userId);
+    Task<User?> GetPublicByIdAsync(int userId);
+    Task<List<User>> GetPublicByIdsAsync(IEnumerable<int> userIds);
+
+    Task<Report?> GetReportByIdAsync(int reportId);
+    Task<PagedResult<Report>> GetReportsAsync(ReportStatus? status, int page, int pageSize);
+    Task<List<Report>> GetUserReportsAsync(int userId);
+    Task<Report> CreateReportAsync(Report report);
+    Task UpdateReportAsync(Report report);
+
+    Task<bool> HasOpenReportAsync(int reporterId, ReportTargetType targetType, int targetId);
     Task<User?> GetByEmailAsync(string email);
     Task<User?> GetByUsernameAsync(string username);
     Task<User?> GetByEmailOrUsernameAsync(string identifier);
@@ -36,12 +46,11 @@ public interface IUserRepository
     Task UpdatePreferenceAsync(UserPreference preference);
     Task DeletePreferenceAsync(UserPreference preference);
 
-    Task<Report?> GetReportByIdAsync(int reportId);
-    Task<PagedResult<Report>> GetReportsAsync(ReportStatus? status, int page, int pageSize);
-    Task<List<Report>> GetUserReportsAsync(int userId);
-    Task<Report> CreateReportAsync(Report report);
-    Task UpdateReportAsync(Report report);
-
-    Task<User?> GetPublicByIdAsync(int userId);
-    Task<List<User>> GetPublicByIdsAsync(IEnumerable<int> userIds);
+    Task<UserRating?> GetUserRatingAsync(int raterId, int ratedUserId);
+    Task<UserRating> CreateUserRatingAsync(UserRating rating);
+    Task UpdateUserRatingAsync(UserRating rating);
+    Task DeleteUserRatingAsync(UserRating rating);
+    Task<(double AverageRating, int RatingsCount)> GetUserRatingSummaryAsync(int userId);
+    Task<List<UserRating>> GetUserReviewsAsync(int ratedUserId, int page, int pageSize);
+    Task<int> GetUserReviewsCountAsync(int ratedUserId);
 }

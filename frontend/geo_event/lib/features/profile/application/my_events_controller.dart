@@ -1,10 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:geo_event/features/auth/application/auth_controller.dart';
-import 'package:geo_event/features/profile/application/profile_controller.dart';
-import 'package:geo_event/shared/events/data/my_events_api.dart';
-import 'package:geo_event/shared/events/data/my_events_repository.dart';
-import 'package:geo_event/shared/events/models/my_event_response_dto.dart';
+import '../../../core/network/api_client.dart';
+import '../../profile/application/profile_controller.dart';
+import '../../../shared/events/data/my_events_api.dart';
+import '../../../shared/events/data/my_events_repository.dart';
+import '../../../shared/events/models/my_event_response_dto.dart';
 
 final myEventsApiProvider = Provider<MyEventsApi>((ref) {
   return MyEventsApi(ref.watch(authorizedDioProvider));
@@ -35,4 +35,21 @@ class MyEventsController extends AsyncNotifier<List<MyEventResponseDto>> {
     final repo = ref.read(myEventsRepositoryProvider);
     return repo.getMyEvents(profile.userId);
   }
+
+Future<bool> deleteEvent(int eventId) async {
+  final current = state.valueOrNull ?? const <MyEventResponseDto>[];
+
+  try {
+    await ref.read(myEventsRepositoryProvider).deleteEvent(eventId);
+
+    state = AsyncData(
+      current.where((e) => e.eventId != eventId).toList(),
+    );
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+
 }

@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../application/chat_thread_controller.dart';
-import '../../application/messages_controller.dart';
+import '../../../../shared/chat/models/chat_thread_args.dart';
+import '../../../../shared/chat/models/chat_thread_type.dart';
 import '../../../../shared/chat/models/conversation_summary.dart';
+import '../../application/messages_controller.dart';
+import '../widgets/chat_presence_dot.dart';
 import 'chat_thread_screen.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
@@ -28,18 +30,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final controller = ref.read(messagesInboxControllerProvider.notifier);
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    final conversations =
-        state.conversations.valueOrNull ?? <ConversationSummary>[];
-    final filtered = _filterConversations(
-      items: conversations,
-      query: state.searchQuery,
-      unreadOnly: state.unreadOnly,
-    );
+    final filtered = state.filteredConversations;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: RefreshIndicator(
-        onRefresh: controller.load,
+        onRefresh: controller.refresh,
         child: CustomScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
@@ -62,8 +58,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                             icon: const Icon(Icons.close_rounded, size: 18),
                           )
                         : null,
-                    contentPadding:
-                        const EdgeInsets.symmetric(vertical: 12),
+                    contentPadding: const EdgeInsets.symmetric(vertical: 12),
                     isDense: true,
                   ),
                 ),
@@ -107,7 +102,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               SliverPadding(
                 padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
                 sliver: SliverToBoxAdapter(
-                  child: _ChatErrorState(onRetry: controller.load),
+                  child: _ChatErrorState(onRetry: controller.refresh),
                 ),
               )
             else if (filtered.isEmpty)
@@ -132,18 +127,24 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       item: item,
                       isDark: isDark,
                       onTap: () async {
+                        controller.markThreadLocallyRead(item.threadId);
+
                         await Navigator.of(context).push(
                           MaterialPageRoute(
                             builder: (_) => ChatThreadScreen(
                               args: ChatThreadArgs(
+                                threadId: item.threadId,
+                                type: item.type,
+                                title: item.title,
                                 otherUserId: item.otherUserId,
-                                title: 'User ${item.otherUserId}',
+                                eventId: item.eventId,
                               ),
                             ),
                           ),
                         );
+
                         if (mounted) {
-                          controller.load();
+                          await controller.refresh();
                         }
                       },
                     );
@@ -157,22 +158,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         ),
       ),
     );
-  }
-
-  List<ConversationSummary> _filterConversations({
-    required List<ConversationSummary> items,
-    required String query,
-    required bool unreadOnly,
-  }) {
-    final normalized = query.trim().toLowerCase();
-
-    return items.where((item) {
-      if (unreadOnly && item.unreadCount <= 0) return false;
-      if (normalized.isEmpty) return true;
-
-      return item.lastMessageContent.toLowerCase().contains(normalized) ||
-          item.otherUserId.toString().contains(normalized);
-    }).toList();
   }
 }
 
@@ -212,8 +197,11 @@ class _ConversationCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _ConversationAvatar(
-                userId: item.otherUserId,
+                title: item.title,
+                imageUrl: item.imageUrl,
                 isDark: isDark,
+                type: item.type,
+                isOnline: item.type == ChatThreadType.direct && item.isOnline,
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -223,7 +211,7 @@ class _ConversationCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'User ${item.otherUserId}',
+                        item.title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
@@ -303,41 +291,80 @@ class _ConversationCard extends StatelessWidget {
     if (diff.inDays >= 1) {
       return '${local.day.toString().padLeft(2, '0')}.${local.month.toString().padLeft(2, '0')}';
     }
+
     return '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
   }
 }
 
 class _ConversationAvatar extends StatelessWidget {
-  final int userId;
+  final String title;
+  final String? imageUrl;
   final bool isDark;
+  final ChatThreadType type;
+  final bool isOnline;
 
   const _ConversationAvatar({
-    required this.userId,
+    required this.title,
+    required this.imageUrl,
     required this.isDark,
+    required this.type,
+    required this.isOnline,
   });
 
   @override
   Widget build(BuildContext context) {
     final baseColor = Theme.of(context).colorScheme.primary;
 
-    return Container(
-      width: 46,
-      height: 46,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: baseColor.withValues(alpha: isDark ? 0.22 : 0.15),
-      ),
-      child: Center(
-        child: Text(
-          'U$userId',
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            color: baseColor,
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Container(
+          width: 46,
+          height: 46,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: baseColor.withValues(alpha: isDark ? 0.22 : 0.15),
+            image: imageUrl != null && imageUrl!.trim().isNotEmpty
+                ? DecorationImage(
+                    image: NetworkImage(imageUrl!.trim()),
+                    fit: BoxFit.cover,
+                  )
+                : null,
           ),
+          child: imageUrl == null || imageUrl!.trim().isEmpty
+              ? Center(
+                  child: Text(
+                    _initials(title),
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: baseColor,
+                    ),
+                  ),
+                )
+              : null,
         ),
-      ),
+        if (type == ChatThreadType.direct)
+          Positioned(
+            right: -1,
+            bottom: -1,
+            child: ChatPresenceDot(isOnline: isOnline),
+          ),
+      ],
     );
+  }
+
+  static String _initials(String value) {
+    final parts = value
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((e) => e.isNotEmpty)
+        .toList();
+
+    if (parts.isEmpty) return '?';
+    if (parts.length == 1) return parts.first.characters.first.toUpperCase();
+    return (parts[0].characters.first + parts[1].characters.first)
+        .toUpperCase();
   }
 }
 
@@ -394,8 +421,7 @@ class _TopFilterChip extends StatelessWidget {
             if (trailingCount != null) ...[
               const SizedBox(width: 8),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                 decoration: BoxDecoration(
                   color: theme.colorScheme.primary,
                   borderRadius: BorderRadius.circular(999),

@@ -30,12 +30,22 @@ public static class DependencyInjection
             client.Timeout = TimeSpan.FromSeconds(10);
         });
 
-        services.AddScoped<IMessageRepository, MessageRepository>();
-        services.AddScoped<IMessageService, MessageServiceImpl>();
+        services.AddHttpClient<IEventDirectoryClient, EventDirectoryClient>(client =>
+        {
+            var baseUrl = configuration["Services:EventServiceBaseUrl"] ?? "http://event-service:8080";
+            client.BaseAddress = new Uri(baseUrl);
+            client.Timeout = TimeSpan.FromSeconds(10);
+        });
+
+        services.AddScoped<IChatRepository, ChatRepository>();
+        services.AddScoped<IChatService, ChatServiceImpl>();
+        services.AddSingleton<IUserPresenceTracker, InMemoryUserPresenceTracker>();
 
         services.AddMassTransit(x =>
         {
             x.AddConsumer<UserDeletedConsumer>();
+            x.AddConsumer<ReservationConfirmedConsumer>();
+            x.AddConsumer<ReservationCancelledIntegrationConsumer>();
 
             x.UsingRabbitMq((ctx, cfg) =>
             {

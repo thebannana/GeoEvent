@@ -10,33 +10,64 @@ class ProfileApi {
 
   Future<UserProfile> getMe() async {
     final response = await dio.get('/api/users/me');
-    return UserProfile.fromJson(
-      Map<String, dynamic>.from(response.data as Map),
-    );
+    final raw = response.data;
+    if (raw is! Map) {
+      throw Exception('Invalid profile response.');
+    }
+    return UserProfile.fromJson(Map<String, dynamic>.from(raw));
   }
 
-  Future<UserProfile> updateMe({
-    String? firstName,
-    String? lastName,
-    String? phoneNumber,
-    String? imageUrl,
-    int? cityId,
-  }) async {
-    final response = await dio.put(
-      '/api/users/me',
-      data: {
-        'firstName': firstName,
-        'lastName': lastName,
-        'phoneNumber': phoneNumber,
-        'imageUrl': imageUrl,
-        'cityId': cityId,
-      },
-    );
+    Future<UserProfile> updateMe({
+  String? username,
+  String? email,
+  String? firstName,
+  String? lastName,
+  String? phoneNumber,
+  String? imageUrl,
+}) async {
+  final data = <String, dynamic>{
+    'username': username,
+    'email': email,
+    'firstName': firstName,
+    'lastName': lastName,
+    'phoneNumber': phoneNumber,
+    'imageUrl': imageUrl,
+  }..removeWhere((key, value) => value == null);
 
-    return UserProfile.fromJson(
-      Map<String, dynamic>.from(response.data as Map),
-    );
+  final response = await dio.put('/api/users/me', data: data);
+
+  final raw = response.data;
+  if (raw is! Map) {
+    throw Exception('Invalid profile update response.');
   }
+
+  return UserProfile.fromJson(Map<String, dynamic>.from(raw));
+}
+
+  Future<String> uploadProfileImage(String filePath) async {
+  final fileName = filePath.split('/').last;
+
+  final formData = FormData.fromMap({
+    'file': await MultipartFile.fromFile(filePath, filename: fileName),
+  });
+
+  final response = await dio.post(
+    '/api/uploads/images',
+    data: formData,
+  );
+
+  final raw = response.data;
+
+  if (raw is Map) {
+    final map = Map<String, dynamic>.from(raw);
+    final imageUrl = map['imageUrl']?.toString();
+    if (imageUrl != null && imageUrl.trim().isNotEmpty) {
+      return imageUrl.trim();
+    }
+  }
+
+  throw Exception('Profile image upload returned an invalid response.');
+}
 
   Future<void> changePassword({
     required String currentPassword,
@@ -68,48 +99,14 @@ class ProfileApi {
     );
 
     final raw = response.data;
+    final items = switch (raw) {
+      List _ => raw,
+      Map _ when raw['items'] is List => raw['items'] as List,
+      _ => throw Exception('Invalid activity logs response.'),
+    };
 
-    if (raw is List) {
-      return raw
-          .map((e) => ActivityLog.fromJson(Map<String, dynamic>.from(e)))
-          .toList();
-    }
-
-    if (raw is Map && raw['items'] is List) {
-      return (raw['items'] as List)
-          .map((e) => ActivityLog.fromJson(Map<String, dynamic>.from(e)))
-          .toList();
-    }
-
-    return [];
-  }
-
-  Future<List<CitySearchResult>> searchCities(
-    String term, {
-    int limit = 10,
-  }) async {
-    final response = await dio.get(
-      '/api/cities/search',
-      queryParameters: {
-        'term': term,
-        'limit': limit,
-      },
-    );
-
-    final raw = response.data;
-
-    if (raw is List) {
-      return raw
-          .map((e) => CitySearchResult.fromJson(Map<String, dynamic>.from(e)))
-          .toList();
-    }
-
-    if (raw is Map && raw['items'] is List) {
-      return (raw['items'] as List)
-          .map((e) => CitySearchResult.fromJson(Map<String, dynamic>.from(e)))
-          .toList();
-    }
-
-    return [];
+    return items
+        .map((e) => ActivityLog.fromJson(Map<String, dynamic>.from(e as Map)))
+        .toList();
   }
 }

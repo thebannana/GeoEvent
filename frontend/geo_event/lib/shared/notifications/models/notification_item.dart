@@ -21,20 +21,36 @@ class NotificationItem {
 
   factory NotificationItem.fromJson(Map<String, dynamic> json) {
     return NotificationItem(
-      notificationId: json['notificationId'] as int,
-      type: json['type'] as String,
-      title: json['title'] as String,
-      description: json['description'] as String,
-      isRead: json['isRead'] as bool,
-      userId: json['userId'] as int?,
-      createdAt: DateTime.parse(json['createdAt'] as String),
+      notificationId: (json['notificationId'] as num).toInt(),
+      type: (json['type'] ?? '').toString(),
+      title: (json['title'] ?? '').toString(),
+      description: (json['description'] ?? '').toString(),
+      isRead: json['isRead'] as bool? ?? false,
+      userId: (json['userId'] as num?)?.toInt(),
+      createdAt: DateTime.parse((json['createdAt'] ?? '').toString()),
       readAt: json['readAt'] != null
-          ? DateTime.parse(json['readAt'] as String)
+          ? DateTime.parse(json['readAt'].toString())
           : null,
     );
   }
 
-  NotificationItem copyWith({bool? isRead, DateTime? readAt}) {
+  Map<String, dynamic> toJson() {
+    return {
+      'notificationId': notificationId,
+      'type': type,
+      'title': title,
+      'description': description,
+      'isRead': isRead,
+      'userId': userId,
+      'createdAt': createdAt.toIso8601String(),
+      'readAt': readAt?.toIso8601String(),
+    };
+  }
+
+  NotificationItem copyWith({
+    bool? isRead,
+    DateTime? readAt,
+  }) {
     return NotificationItem(
       notificationId: notificationId,
       type: type,

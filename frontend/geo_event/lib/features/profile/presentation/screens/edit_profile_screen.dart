@@ -1,10 +1,11 @@
-import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 
-import '../../application/profile_controller.dart';
 import '../../../../shared/profile/models/user_profile.dart';
+import '../../application/profile_controller.dart';
 
 class EditProfileScreen extends ConsumerStatefulWidget {
   final UserProfile profile;
@@ -22,16 +23,15 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   late final TextEditingController _firstNameController;
   late final TextEditingController _lastNameController;
   late final TextEditingController _phoneController;
-  late final TextEditingController _imageUrlController;
-  late final TextEditingController _citySearchController;
+  late final TextEditingController _usernameController;
+  late final TextEditingController _emailController;
+  late final ImagePicker _imagePicker;
 
   final _formKey = GlobalKey<FormState>();
 
-  List<CitySearchResult> _cityResults = [];
-  CitySearchResult? _selectedCity;
-  Timer? _debounce;
   bool _isSubmitting = false;
-  bool _isSearchingCity = false;
+  XFile? _pickedImage;
+  bool _removeCurrentPhoto = false;
 
   @override
   void initState() {
@@ -39,72 +39,156 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     _firstNameController = TextEditingController(text: widget.profile.firstName);
     _lastNameController = TextEditingController(text: widget.profile.lastName);
     _phoneController = TextEditingController(text: widget.profile.phoneNumber ?? '');
-    _imageUrlController = TextEditingController(text: widget.profile.imageUrl ?? '');
-    _citySearchController = TextEditingController();
+    _usernameController = TextEditingController(text: widget.profile.username);
+    _emailController = TextEditingController(text: widget.profile.email);
+    _imagePicker = ImagePicker();
   }
 
   @override
   void dispose() {
-    _debounce?.cancel();
     _firstNameController.dispose();
     _lastNameController.dispose();
     _phoneController.dispose();
-    _imageUrlController.dispose();
-    _citySearchController.dispose();
+    _usernameController.dispose();
+    _emailController.dispose();
     super.dispose();
   }
 
-  Future<void> _searchCities(String term) async {
-    if (term.trim().length < 2) {
-      setState(() {
-        _cityResults = [];
-        _isSearchingCity = false;
-      });
-      return;
+  String? _validateName(String? value, String label) {
+    final text = (value ?? '').trim();
+
+    if (text.isEmpty) return '$label is required';
+    if (text.length < 2) return '$label must be at least 2 characters';
+    if (text.length > 50) return '$label must be at most 50 characters';
+
+    final regex = RegExp(r"^[A-Za-zÀ-ÿČĆĐŠŽčćđšž'\- ]+$");
+    if (!regex.hasMatch(text)) {
+      return '$label contains invalid characters';
     }
 
-    setState(() => _isSearchingCity = true);
+    return null;
+  }
 
+  String? _validatePhone(String? value) {
+    final text = (value ?? '').trim();
+    if (text.isEmpty) return null;
+
+    final normalized = text.replaceAll(RegExp(r'[\s\-()]'), '');
+    final regex = RegExp(r'^\+?[0-9]{7,15}$');
+
+    if (!regex.hasMatch(normalized)) {
+      return 'Enter a valid phone number';
+    }
+
+    return null;
+  }
+
+  String? _normalizePhone(String? value) {
+    final text = (value ?? '').trim();
+    if (text.isEmpty) return null;
+    return text.replaceAll(RegExp(r'[\s\-()]'), '');
+  }
+
+  Future<void> _pickProfileImage(ImageSource source) async {
     try {
-      final repo = ref.read(profileRepositoryProvider);
-      final results = await repo.searchCities(term, limit: 8);
+      final image = await _imagePicker.pickImage(
+        source: source,
+        maxWidth: 1400,
+        maxHeight: 1400,
+        imageQuality: 85,
+      );
 
-      if (!mounted) return;
+      if (image == null || !mounted) return;
+
       setState(() {
-        _cityResults = results;
-        _isSearchingCity = false;
+        _pickedImage = image;
+        _removeCurrentPhoto = false;
       });
     } catch (_) {
       if (!mounted) return;
-      setState(() {
-        _cityResults = [];
-        _isSearchingCity = false;
-      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not pick image.')),
+      );
     }
   }
 
-  void _onCityChanged(String value) {
-    _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 350), () {
-      _searchCities(value);
-    });
+  Future<void> _showImageSourcePicker() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      builder: (context) {
+        final hasAnyPhoto =
+            _pickedImage != null ||
+            (widget.profile.imageUrl?.trim().isNotEmpty ?? false);
+
+        return SafeArea(
+          child: Wrap(
+            children: [
+              ListTile(
+                leading: const Icon(Icons.photo_library_outlined),
+                title: const Text('Choose from gallery'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickProfileImage(ImageSource.gallery);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_camera_outlined),
+                title: const Text('Take photo'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickProfileImage(ImageSource.camera);
+                },
+              ),
+              if (hasAnyPhoto)
+                ListTile(
+                  leading: const Icon(Icons.delete_outline_rounded),
+                  title: const Text('Remove photo'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    setState(() {
+                      _pickedImage = null;
+                      _removeCurrentPhoto = true;
+                    });
+                  },
+                ),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
+    FocusScope.of(context).unfocus();
     setState(() => _isSubmitting = true);
 
-    final success = await ref.read(profileControllerProvider.notifier).updateProfile(
+    String? finalImageUrl =
+        _removeCurrentPhoto ? null : widget.profile.imageUrl;
+
+    if (_pickedImage != null) {
+      try {
+        finalImageUrl = await ref
+            .read(profileControllerProvider.notifier)
+            .uploadProfileImage(_pickedImage!);
+      } catch (_) {
+        if (!mounted) return;
+        setState(() => _isSubmitting = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to upload profile image.')),
+        );
+        return;
+      }
+    }
+
+    final success = await ref
+        .read(profileControllerProvider.notifier)
+        .updateProfile(
           firstName: _firstNameController.text.trim(),
           lastName: _lastNameController.text.trim(),
-          phoneNumber: _phoneController.text.trim().isEmpty
-              ? null
-              : _phoneController.text.trim(),
-          imageUrl: _imageUrlController.text.trim().isEmpty
-              ? null
-              : _imageUrlController.text.trim(),
-          cityId: _selectedCity?.cityId ?? widget.profile.cityId,
+          phoneNumber: _normalizePhone(_phoneController.text),
+          imageUrl: finalImageUrl,
         );
 
     if (!mounted) return;
@@ -126,8 +210,20 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    final hasNetworkImage =
+        !_removeCurrentPhoto &&
+        (widget.profile.imageUrl?.trim().isNotEmpty ?? false);
+
+    final ImageProvider? avatarImage = _pickedImage != null
+        ? FileImage(File(_pickedImage!.path))
+        : (hasNetworkImage
+            ? NetworkImage(widget.profile.imageUrl!.trim())
+            : null);
 
     return Scaffold(
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text('Edit profile'),
       ),
@@ -137,45 +233,98 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
             children: [
+              Container(
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF17191D) : Colors.white,
+                  borderRadius: BorderRadius.circular(22),
+                  border: Border.all(
+                    color: isDark
+                        ? const Color(0xFF2A303A)
+                        : const Color(0xFFE5EAF2),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 32,
+                      backgroundImage: avatarImage,
+                      child: avatarImage == null
+                          ? Text(
+                              widget.profile.fullName.isNotEmpty
+                                  ? widget.profile.fullName[0].toUpperCase()
+                                  : '?',
+                            )
+                          : null,
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            widget.profile.fullName,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 16,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            _emailController.text,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: theme.textTheme.bodySmall?.color,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          OutlinedButton.icon(
+                            onPressed: _isSubmitting ? null : _showImageSourcePicker,
+                            icon: const Icon(Icons.photo_camera_back_outlined),
+                            label: Text(
+                              _pickedImage != null
+                                  ? 'Change selected photo'
+                                  : 'Change photo',
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
               TextFormField(
                 controller: _firstNameController,
+                textCapitalization: TextCapitalization.words,
                 decoration: const InputDecoration(
                   labelText: 'First name',
                   border: OutlineInputBorder(),
                 ),
-                validator: (value) {
-                  if ((value ?? '').trim().isEmpty) {
-                    return 'First name is required';
-                  }
-                  return null;
-                },
+                validator: (value) => _validateName(value, 'First name'),
               ),
               const SizedBox(height: 16),
               TextFormField(
                 controller: _lastNameController,
+                textCapitalization: TextCapitalization.words,
                 decoration: const InputDecoration(
                   labelText: 'Last name',
                   border: OutlineInputBorder(),
                 ),
-                validator: (value) {
-                  if ((value ?? '').trim().isEmpty) {
-                    return 'Last name is required';
-                  }
-                  return null;
-                },
+                validator: (value) => _validateName(value, 'Last name'),
               ),
               const SizedBox(height: 16),
-              TextFormField(
-                initialValue: widget.profile.username,
-                enabled: false,
-                decoration: const InputDecoration(
-                  labelText: 'Username',
-                  border: OutlineInputBorder(),
+                TextFormField(
+                  controller: _usernameController,
+                  enabled: false,
+                  decoration: const InputDecoration(
+                    labelText: 'Username',
+                    border: OutlineInputBorder(),
+                  ),
                 ),
-              ),
               const SizedBox(height: 16),
               TextFormField(
-                initialValue: widget.profile.email,
+                controller: _emailController,
                 enabled: false,
                 decoration: const InputDecoration(
                   labelText: 'Email',
@@ -190,63 +339,8 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                   labelText: 'Phone number',
                   border: OutlineInputBorder(),
                 ),
+                validator: _validatePhone,
               ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _imageUrlController,
-                keyboardType: TextInputType.url,
-                decoration: const InputDecoration(
-                  labelText: 'Profile image URL',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _citySearchController,
-                onChanged: _onCityChanged,
-                decoration: InputDecoration(
-                  labelText: 'Search city',
-                  border: const OutlineInputBorder(),
-                  suffixIcon: _isSearchingCity
-                      ? const Padding(
-                          padding: EdgeInsets.all(12),
-                          child: SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          ),
-                        )
-                      : const Icon(Icons.search),
-                ),
-              ),
-              if (_selectedCity != null) ...[
-                const SizedBox(height: 8),
-                Text(
-                  'Selected city: ${_selectedCity!.displayLabel}',
-                  style: theme.textTheme.bodyMedium,
-                ),
-              ],
-              if (_cityResults.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                Card(
-                  margin: EdgeInsets.zero,
-                  child: Column(
-                    children: _cityResults.map((city) {
-                      return ListTile(
-                        title: Text(city.cityName),
-                        subtitle: Text(city.displayLabel),
-                        onTap: () {
-                          setState(() {
-                            _selectedCity = city;
-                            _citySearchController.text = city.displayLabel;
-                            _cityResults = [];
-                          });
-                        },
-                      );
-                    }).toList(),
-                  ),
-                ),
-              ],
               const SizedBox(height: 24),
               FilledButton(
                 onPressed: _isSubmitting ? null : _submit,

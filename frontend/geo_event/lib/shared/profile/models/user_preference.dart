@@ -13,11 +13,13 @@ class UserPreference {
     required this.lastUpdated,
   });
 
-  factory UserPreference.fromJson(Map<String, dynamic> json) => UserPreference(
-        prefId: json['prefId'] as int,
-        segmentId: json['segmentId'] as int?,
-        genreId: json['genreId'] as int?,
-        score: (json['score'] as num).toDouble(),
-        lastUpdated: DateTime.parse(json['lastUpdated'] as String),
-      );
+  factory UserPreference.fromJson(Map<String, dynamic> json) {
+    return UserPreference(
+      prefId: (json['prefId'] as num).toInt(),
+      segmentId: (json['segmentId'] as num?)?.toInt(),
+      genreId: (json['genreId'] as num?)?.toInt(),
+      score: (json['score'] as num?)?.toDouble() ?? 0,
+      lastUpdated: DateTime.parse((json['lastUpdated'] ?? '').toString()),
+    );
+  }
 }

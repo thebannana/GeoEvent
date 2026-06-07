@@ -17,6 +17,80 @@ public class EventRepository : IEventRepository
         _context = context;
     }
 
+    public async Task<Comment?> GetCommentByIdAsync(int commentId)
+    {
+        return await _context.Comments
+            .Include(c => c.Replies.Where(r => !r.IsDeleted))
+            .FirstOrDefaultAsync(c => c.CommentId == commentId);
+    }
+
+    public async Task<List<Comment>> GetEventCommentsAsync(int eventId)
+    {
+        return await _context.Comments
+            .AsNoTracking()
+            .Include(c => c.Replies.Where(r => !r.IsDeleted))
+            .Where(c => c.EventId == eventId && c.ParentCommentId == null && !c.IsDeleted)
+            .OrderByDescending(c => c.CreatedAt)
+            .ToListAsync();
+    }
+
+    public async Task<List<Comment>> GetRepliesAsync(int parentCommentId)
+    {
+        return await _context.Comments
+            .AsNoTracking()
+            .Where(c => c.ParentCommentId == parentCommentId && !c.IsDeleted)
+            .OrderBy(c => c.CreatedAt)
+            .ToListAsync();
+    }
+
+    public async Task<Comment> CreateCommentAsync(Comment comment)
+    {
+        _context.Comments.Add(comment);
+        await _context.SaveChangesAsync();
+        return comment;
+    }
+
+    public async Task UpdateCommentAsync(Comment comment)
+    {
+        _context.Comments.Update(comment);
+        await _context.SaveChangesAsync();
+    }
+
+    public async Task<bool> IsCommentLikedByUserAsync(int commentId, int userId)
+    {
+        return await _context.CommentLikes
+            .AnyAsync(l => l.CommentId == commentId && l.UserId == userId);
+    }
+
+    public async Task LikeCommentAsync(int commentId, int userId)
+    {
+        _context.CommentLikes.Add(new CommentLike
+        {
+            CommentId = commentId,
+            UserId = userId,
+            LikedAt = DateTime.UtcNow
+        });
+
+        await _context.SaveChangesAsync();
+
+        await _context.Comments
+            .Where(c => c.CommentId == commentId)
+            .ExecuteUpdateAsync(s => s.SetProperty(c => c.LikesCount, c => c.LikesCount + 1));
+    }
+
+    public async Task UnlikeCommentAsync(int commentId, int userId)
+    {
+        var deletedRows = await _context.CommentLikes
+            .Where(l => l.CommentId == commentId && l.UserId == userId)
+            .ExecuteDeleteAsync();
+
+        if (deletedRows > 0)
+        {
+            await _context.Comments
+                .Where(c => c.CommentId == commentId && c.LikesCount > 0)
+                .ExecuteUpdateAsync(s => s.SetProperty(c => c.LikesCount, c => c.LikesCount - 1));
+        }
+    }
     public async Task<Event?> GetByIdAsync(int eventId) =>
         await _context.Events
             .AsNoTracking()
@@ -136,6 +210,47 @@ public class EventRepository : IEventRepository
         };
     }
 
+    // Segments
+    public async Task<Segment> CreateSegmentAsync(Segment segment)
+    {
+        _context.Segments.Add(segment);
+        await _context.SaveChangesAsync();
+        return segment;
+    }
+
+    public async Task UpdateSegmentAsync(Segment segment)
+    {
+        _context.Segments.Update(segment);
+        await _context.SaveChangesAsync();
+    }
+
+    // Genres
+    public async Task<Genre> CreateGenreAsync(Genre genre)
+    {
+        _context.Genres.Add(genre);
+        await _context.SaveChangesAsync();
+        return genre;
+    }
+
+    public async Task UpdateGenreAsync(Genre genre)
+    {
+        _context.Genres.Update(genre);
+        await _context.SaveChangesAsync();
+    }
+
+    // SubGenres
+    public async Task<SubGenre> CreateSubGenreAsync(SubGenre subGenre)
+    {
+        _context.SubGenres.Add(subGenre);
+        await _context.SaveChangesAsync();
+        return subGenre;
+    }
+
+    public async Task UpdateSubGenreAsync(SubGenre subGenre)
+    {
+        _context.SubGenres.Update(subGenre);
+        await _context.SaveChangesAsync();
+    }
     public async Task<List<Event>> GetNearbyAsync(NearbyEventSearchDto dto)
     {
         var latitude = dto.Latitude!.Value;
@@ -237,19 +352,27 @@ public class EventRepository : IEventRepository
 
     public async Task LikeAsync(int eventId, int userId)
     {
-        await _context.EventLikes.AddAsync(new EventLike
+        try
         {
-            EventId = eventId,
-            UserId = userId,
-            LikedAt = DateTime.UtcNow
-        });
+            await _context.EventLikes.AddAsync(new EventLike
+            {
+                EventId = eventId,
+                UserId = userId,
+                LikedAt = DateTime.UtcNow
+            });
 
-        await _context.SaveChangesAsync();
+            await _context.SaveChangesAsync();
 
-        await _context.Events
-            .Where(e => e.EventId == eventId)
-            .ExecuteUpdateAsync(s =>
-                s.SetProperty(e => e.LikesCount, e => e.LikesCount + 1));
+            await _context.Events
+                .Where(e => e.EventId == eventId)
+                .ExecuteUpdateAsync(s =>
+                    s.SetProperty(e => e.LikesCount, e => e.LikesCount + 1));
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex.ToString());
+            throw;
+        }
     }
 
     public async Task UnlikeAsync(int eventId, int userId)
@@ -409,6 +532,13 @@ public class EventRepository : IEventRepository
             .OrderByDescending(b => b.SavedAt)
             .ToListAsync();
 
+    public async Task<List<EventLike>> GetLikedEventsByUserAsync(int userId) =>
+    await _context.EventLikes
+        .Include(x => x.Event)
+            .ThenInclude(e => e.Images)
+        .Where(x => x.UserId == userId)
+        .OrderByDescending(x => x.LikedAt)
+        .ToListAsync();
     public async Task<Bookmark> CreateBookmarkAsync(Bookmark bookmark)
     {
         _context.Bookmarks.Add(bookmark);
@@ -426,74 +556,5 @@ public class EventRepository : IEventRepository
     {
         _context.Bookmarks.Remove(bookmark);
         await _context.SaveChangesAsync();
-    }
-
-    public async Task<Comment?> GetCommentByIdAsync(int commentId) =>
-        await _context.Comments
-            .Include(c => c.Replies)
-            .FirstOrDefaultAsync(c => c.CommentId == commentId);
-
-    public async Task<List<Comment>> GetEventCommentsAsync(int eventId) =>
-        await _context.Comments
-            .AsNoTracking()
-            .Include(c => c.Replies)
-            .Where(c => c.EventId == eventId && c.ParentCommentId == null && !c.IsDeleted)
-            .OrderByDescending(c => c.CreatedAt)
-            .ToListAsync();
-
-    public async Task<Comment> CreateCommentAsync(Comment comment)
-    {
-        _context.Comments.Add(comment);
-        await _context.SaveChangesAsync();
-        return comment;
-    }
-
-    public async Task UpdateCommentAsync(Comment comment)
-    {
-        _context.Comments.Update(comment);
-        await _context.SaveChangesAsync();
-    }
-
-    public async Task<List<Comment>> GetRepliesAsync(int parentCommentId) =>
-        await _context.Comments
-            .AsNoTracking()
-            .Where(c => c.ParentCommentId == parentCommentId && !c.IsDeleted)
-            .OrderBy(c => c.CreatedAt)
-            .ToListAsync();
-
-    public async Task<bool> IsCommentLikedByUserAsync(int commentId, int userId) =>
-        await _context.CommentLikes
-            .AnyAsync(l => l.CommentId == commentId && l.UserId == userId);
-
-    public async Task LikeCommentAsync(int commentId, int userId)
-    {
-        _context.CommentLikes.Add(new CommentLike
-        {
-            CommentId = commentId,
-            UserId = userId,
-            LikedAt = DateTime.UtcNow
-        });
-
-        await _context.SaveChangesAsync();
-
-        await _context.Comments
-            .Where(c => c.CommentId == commentId)
-            .ExecuteUpdateAsync(s =>
-                s.SetProperty(c => c.LikesCount, c => c.LikesCount + 1));
-    }
-
-    public async Task UnlikeCommentAsync(int commentId, int userId)
-    {
-        var deletedRows = await _context.CommentLikes
-            .Where(l => l.CommentId == commentId && l.UserId == userId)
-            .ExecuteDeleteAsync();
-
-        if (deletedRows > 0)
-        {
-            await _context.Comments
-                .Where(c => c.CommentId == commentId && c.LikesCount > 0)
-                .ExecuteUpdateAsync(s =>
-                    s.SetProperty(c => c.LikesCount, c => c.LikesCount - 1));
-        }
     }
 }

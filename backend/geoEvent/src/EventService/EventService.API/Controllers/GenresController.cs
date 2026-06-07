@@ -1,4 +1,6 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using EventService.Application.DTOs;
 using EventService.Application.Interfaces.Services;
 
 namespace EventService.API.Controllers;
@@ -18,7 +20,8 @@ public class GenresController : ControllerBase
     public async Task<IActionResult> GetById(int genreId)
     {
         var result = await _eventService.GetGenreByIdAsync(genreId);
-        return result.Success ? Ok(result.Data)
+        return result.Success
+            ? Ok(result.Data)
             : StatusCode(result.StatusCode, new { error = result.Error });
     }
 
@@ -26,7 +29,28 @@ public class GenresController : ControllerBase
     public async Task<IActionResult> GetSubGenres(int genreId)
     {
         var result = await _eventService.GetSubGenresByGenreAsync(genreId);
-        return result.Success ? Ok(result.Data)
+        return result.Success
+            ? Ok(result.Data)
+            : StatusCode(result.StatusCode, new { error = result.Error });
+    }
+
+    [HttpPost]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> Create([FromBody] CreateGenreDto dto)
+    {
+        var result = await _eventService.CreateGenreAsync(dto);
+        return result.Success
+            ? CreatedAtAction(nameof(GetById), new { genreId = result.Data!.GenreId }, result.Data)
+            : StatusCode(result.StatusCode, new { error = result.Error });
+    }
+
+    [HttpPut("{genreId:int}")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> Update(int genreId, [FromBody] UpdateGenreDto dto)
+    {
+        var result = await _eventService.UpdateGenreAsync(genreId, dto);
+        return result.Success
+            ? Ok(result.Data)
             : StatusCode(result.StatusCode, new { error = result.Error });
     }
 }

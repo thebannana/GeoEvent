@@ -35,11 +35,7 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
     final state = ref.watch(reservationsControllerProvider);
     final ctrl = ref.read(reservationsControllerProvider.notifier);
 
-    final reservations = state.paged.valueOrNull?.items ?? <Reservation>[];
-    final filteredReservations = _applySearch(
-      reservations,
-      state.searchQuery,
-    );
+    final filteredReservations = state.filteredItems;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -136,7 +132,6 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
                       reservation: reservation,
                       onCancel: () => _confirmCancel(
                         context,
-                        ref,
                         reservation,
                       ),
                     );
@@ -152,30 +147,8 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
     );
   }
 
-  List<Reservation> _applySearch(List<Reservation> items, String query) {
-    final normalized = query.trim().toLowerCase();
-    if (normalized.isEmpty) return items;
-
-    return items.where((reservation) {
-      final ticketTypes =
-          reservation.tickets.map((e) => e.ticketType.toLowerCase()).join(' ');
-      final text = [
-        reservation.reservationId.toString(),
-        reservation.eventId.toString(),
-        reservation.status.toLowerCase(),
-        reservation.currency.toLowerCase(),
-        reservation.notes?.toLowerCase() ?? '',
-        reservation.paymentReference?.toLowerCase() ?? '',
-        ticketTypes,
-      ].join(' ');
-
-      return text.contains(normalized);
-    }).toList();
-  }
-
   Future<void> _confirmCancel(
     BuildContext context,
-    WidgetRef ref,
     Reservation reservation,
   ) async {
     final confirmed = await showDialog<bool>(
@@ -183,8 +156,9 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
       builder: (ctx) => AlertDialog(
         title: const Text('Cancel reservation?'),
         content: Text(
-          'Reservation #${reservation.reservationId} for ${reservation.quantity} '
-          'ticket${reservation.quantity > 1 ? 's' : ''} will be cancelled.',
+          'Reservation #${reservation.reservationId} for '
+          '${reservation.quantity} ticket${reservation.quantity > 1 ? 's' : ''} '
+          'will be cancelled.',
         ),
         actions: [
           TextButton(
@@ -209,6 +183,7 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
         .cancel(reservation.reservationId);
 
     if (!context.mounted) return;
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
@@ -350,9 +325,11 @@ class _EmptyState extends StatelessWidget {
 }
 
 class _ErrorState extends StatelessWidget {
-  final VoidCallback onRetry;
+  final Future<void> Function() onRetry;
 
-  const _ErrorState({required this.onRetry});
+  const _ErrorState({
+    required this.onRetry,
+  });
 
   @override
   Widget build(BuildContext context) {

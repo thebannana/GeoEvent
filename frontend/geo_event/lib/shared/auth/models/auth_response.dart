@@ -33,4 +33,13 @@ class AuthResponse {
               : null,
     );
   }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'accessToken': accessToken,
+      'refreshToken': refreshToken,
+      'expiresAt': expiresAt?.toUtc().toIso8601String(),
+      'user': user?.toJson(),
+    };
+  }
 }

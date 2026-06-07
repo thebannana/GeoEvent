@@ -8,7 +8,7 @@ class UserProfile {
   final String? imageUrl;
   final String role;
   final bool isVerified;
-  final DateTime createdAt;
+  final DateTime? createdAt;
   final int? cityId;
 
   const UserProfile({
@@ -25,21 +25,28 @@ class UserProfile {
     required this.cityId,
   });
 
-  String get fullName => '$firstName $lastName'.trim();
+  String get fullName {
+    final full = '$firstName $lastName'.trim();
+    return full.isEmpty ? username : full;
+  }
 
   factory UserProfile.fromJson(Map<String, dynamic> json) {
+    final createdAtRaw = json['createdAt']?.toString();
+
     return UserProfile(
-      userId: json['userId'] as int,
-      username: json['username'] as String? ?? '',
-      email: json['email'] as String? ?? '',
-      firstName: json['firstName'] as String? ?? '',
-      lastName: json['lastName'] as String? ?? '',
-      phoneNumber: json['phoneNumber'] as String?,
-      imageUrl: json['imageUrl'] as String?,
-      role: json['role'] as String? ?? 'User',
+      userId: (json['userId'] as num).toInt(),
+      username: (json['username'] ?? '').toString(),
+      email: (json['email'] ?? '').toString(),
+      firstName: (json['firstName'] ?? '').toString(),
+      lastName: (json['lastName'] ?? '').toString(),
+      phoneNumber: json['phoneNumber']?.toString(),
+      imageUrl: json['imageUrl']?.toString(),
+      role: (json['role'] ?? 'User').toString(),
       isVerified: json['isVerified'] as bool? ?? false,
-      createdAt: DateTime.parse(json['createdAt'] as String),
-      cityId: json['cityId'] as int?,
+      createdAt: createdAtRaw == null || createdAtRaw.isEmpty
+          ? null
+          : DateTime.tryParse(createdAtRaw),
+      cityId: (json['cityId'] as num?)?.toInt(),
     );
   }
 }
@@ -68,10 +75,10 @@ class CitySearchResult {
 
   factory CitySearchResult.fromJson(Map<String, dynamic> json) {
     return CitySearchResult(
-      cityId: json['cityId'] as int,
-      cityName: json['cityName'] as String? ?? '',
-      countryName: json['countryName'] as String?,
-      divisionName: json['divisionName'] as String?,
+      cityId: (json['cityId'] as num).toInt(),
+      cityName: (json['cityName'] ?? '').toString(),
+      countryName: json['countryName']?.toString(),
+      divisionName: json['divisionName']?.toString(),
     );
   }
 }

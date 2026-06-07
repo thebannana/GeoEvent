@@ -8,8 +8,17 @@ using TicketService.API.Middleware;
 using TicketService.Infrastructure;
 using TicketService.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using TicketService.API.Extensions;
+using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Services
+    .AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+    });
 
 // ── Infrastructure ─────────────────────────────────────────────
 builder.Services.AddInfrastructure(builder.Configuration);
@@ -81,7 +90,6 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddAuthorization();
 builder.Services.AddControllers();
-builder.Services.AddEndpointsApiExplorer();
 
 // ── Swagger with JWT support ───────────────────────────────────
 builder.Services.AddSwaggerGen(options =>
@@ -121,6 +129,7 @@ builder.Services.AddSwaggerGen(options =>
 
 var app = builder.Build();
 
+
 // ── Middleware pipeline ────────────────────────────────────────
 app.UseMiddleware<SecurityHeadersMiddleware>();
 app.UseMiddleware<ExceptionMiddleware>();
@@ -141,30 +150,9 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 
-using (var scope = app.Services.CreateScope())
-{
-    var db = scope.ServiceProvider.GetRequiredService<TicketDbContext>();
-    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
-
-    var retries = 10;
-    while (retries > 0)
-    {
-        try
-        {
-            logger.LogInformation("Applying migrations...");
-            db.Database.Migrate();
-            logger.LogInformation("Migrations applied successfully.");
-            break;
-        }
-        catch (Exception ex)
-        {
-            retries--;
-            logger.LogWarning("Migration failed. Retries left: {Retries}. Error: {Error}", retries, ex.Message);
-            if (retries == 0) throw;
-            Thread.Sleep(5000); // wait 5s before retry
-        }
-    }
-}
+await app.Services.InitializeDatabaseAsync<TicketDbContext>(
+    app.Configuration,
+    app.Environment);
 
 app.Run();
 

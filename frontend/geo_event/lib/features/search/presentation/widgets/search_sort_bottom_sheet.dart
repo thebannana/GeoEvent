@@ -16,23 +16,21 @@ class SearchSortBottomSheet extends StatelessWidget {
     final bg = isDark ? const Color(0xFF161A21) : Colors.white;
     final border = isDark ? const Color(0xFF2A303A) : const Color(0xFFE3EAF3);
 
-    Widget tile({
-      required String title,
-      required SortOption value,
-    }) {
+    Widget tile(SortOption value) {
       final active = selected.sortBy == value.sortBy &&
           selected.sortDescending == value.sortDescending;
 
       return ListTile(
         onTap: () => Navigator.pop(context, value),
         title: Text(
-          title,
+          value.label,
           style: TextStyle(
             fontWeight: active ? FontWeight.w700 : FontWeight.w500,
           ),
         ),
-        trailing:
-            active ? const Icon(Icons.check_rounded, color: Color(0xFF6B8FBF)) : null,
+        trailing: active
+            ? const Icon(Icons.check_rounded, color: Color(0xFF6B8FBF))
+            : null,
       );
     }
 
@@ -72,12 +70,7 @@ class SearchSortBottomSheet extends StatelessWidget {
                 ),
               ),
             ),
-            tile(title: 'Soonest', value: SortOption.soonest),
-            tile(title: 'Latest', value: SortOption.latest),
-            tile(title: 'Most liked', value: SortOption.mostLiked),
-            tile(title: 'Most viewed', value: SortOption.mostViewed),
-            tile(title: 'Lowest price', value: SortOption.lowestPrice),
-            tile(title: 'Highest price', value: SortOption.highestPrice),
+            ...SortOption.all.map(tile),
             const SizedBox(height: 10),
           ],
         ),

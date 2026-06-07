@@ -23,6 +23,7 @@ class SearchState {
 
   bool get hasQuery => query.trim().isNotEmpty;
   bool get hasActiveFilters => filter.hasActive;
+  bool get isEmpty => !loading && error == null && results.isEmpty;
 
   SearchState copyWith({
     String? query,

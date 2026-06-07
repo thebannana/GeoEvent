@@ -2,29 +2,52 @@ import '../models/auth_response.dart';
 import '../models/login_request.dart';
 import '../models/register_request.dart';
 import 'auth_api.dart';
+import 'auth_local_storage.dart';
 
 class AuthRepository {
   final AuthApi api;
+  final AuthLocalStorage localStorage;
 
-  AuthRepository(this.api);
+  AuthRepository({
+    required this.api,
+    required this.localStorage,
+  });
 
-  Future<AuthResponse> login(LoginRequest request) {
-    return api.login(request);
+  Future<AuthResponse> login(LoginRequest request) async {
+    final response = await api.login(request);
+    if (response.hasTokens) {
+      await localStorage.saveSession(response);
+    }
+    return response;
   }
 
-  Future<AuthResponse?> register(RegisterRequest request) {
-    return api.register(request);
+  Future<AuthResponse> register(RegisterRequest request) async {
+    final response = await api.register(request);
+    await localStorage.saveSession(response);
+    return response;
   }
 
   Future<void> forgotPassword(String email) {
     return api.forgotPassword(email);
   }
 
-  Future<AuthResponse> refresh(String refreshToken) {
-    return api.refresh(refreshToken);
+  Future<AuthResponse> refresh(String refreshToken) async {
+    final response = await api.refresh(refreshToken);
+    if (response.hasTokens) {
+      await localStorage.saveSession(response);
+    }
+    return response;
   }
 
-  Future<void> logout(String refreshToken) {
-    return api.logout(refreshToken);
+  Future<void> logout(String refreshToken) async {
+    try {
+      await api.logout(refreshToken);
+    } finally {
+      await localStorage.clearSession();
+    }
+  }
+
+  Future<void> clearSession() {
+    return localStorage.clearSession();
   }
 }

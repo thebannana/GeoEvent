@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../application/profile_controller.dart';
+import '../../../../shared/profile/providers/profile_providers.dart';
 
 class ChangePasswordScreen extends ConsumerStatefulWidget {
   const ChangePasswordScreen({super.key});
@@ -34,6 +34,9 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
     final password = value ?? '';
     if (password.isEmpty) return 'New password is required';
     if (password.length < 8) return 'Minimum 8 characters required';
+    if (password == _currentPasswordController.text) {
+      return 'New password must be different';
+    }
     if (!RegExp(r'[A-Z]').hasMatch(password)) {
       return 'Add at least one uppercase letter';
     }
@@ -52,14 +55,14 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
+    FocusScope.of(context).unfocus();
     setState(() => _submitting = true);
 
     try {
-      final repo = ref.read(profileRepositoryProvider);
-      await repo.changePassword(
-        currentPassword: _currentPasswordController.text,
-        newPassword: _newPasswordController.text,
-      );
+      await ref.read(profileRepositoryProvider).changePassword(
+            currentPassword: _currentPasswordController.text.trim(),
+            newPassword: _newPasswordController.text.trim(),
+          );
 
       if (!mounted) return;
 
@@ -82,7 +85,10 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text('Change password'),
       ),
@@ -92,6 +98,45 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
             children: [
+              Container(
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF17191D) : Colors.white,
+                  borderRadius: BorderRadius.circular(22),
+                  border: Border.all(
+                    color: isDark
+                        ? const Color(0xFF2A303A)
+                        : const Color(0xFFE5EAF2),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Icons.lock_outline_rounded,
+                      size: 30,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Update your password',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Choose a strong password that you do not use elsewhere.',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Theme.of(context).textTheme.bodySmall?.color,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
               TextFormField(
                 controller: _currentPasswordController,
                 obscureText: _obscureCurrent,
@@ -103,12 +148,14 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
                       setState(() => _obscureCurrent = !_obscureCurrent);
                     },
                     icon: Icon(
-                      _obscureCurrent ? Icons.visibility_off : Icons.visibility,
+                      _obscureCurrent
+                          ? Icons.visibility_off_rounded
+                          : Icons.visibility_rounded,
                     ),
                   ),
                 ),
                 validator: (value) {
-                  if ((value ?? '').isEmpty) {
+                  if ((value ?? '').trim().isEmpty) {
                     return 'Current password is required';
                   }
                   return null;
@@ -126,7 +173,9 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
                       setState(() => _obscureNew = !_obscureNew);
                     },
                     icon: Icon(
-                      _obscureNew ? Icons.visibility_off : Icons.visibility,
+                      _obscureNew
+                          ? Icons.visibility_off_rounded
+                          : Icons.visibility_rounded,
                     ),
                   ),
                 ),
@@ -144,12 +193,14 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
                       setState(() => _obscureConfirm = !_obscureConfirm);
                     },
                     icon: Icon(
-                      _obscureConfirm ? Icons.visibility_off : Icons.visibility,
+                      _obscureConfirm
+                          ? Icons.visibility_off_rounded
+                          : Icons.visibility_rounded,
                     ),
                   ),
                 ),
                 validator: (value) {
-                  if ((value ?? '').isEmpty) {
+                  if ((value ?? '').trim().isEmpty) {
                     return 'Please confirm your new password';
                   }
                   if (value != _newPasswordController.text) {

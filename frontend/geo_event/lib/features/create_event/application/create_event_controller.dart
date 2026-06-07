@@ -1,22 +1,24 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../shared/events/data/events_api.dart';
+import '../../../shared/events/data/events_repository.dart';
 import '../../../shared/events/models/create_event_models.dart';
 import '../../../shared/events/models/create_event_state.dart';
+import '../../../shared/events/models/my_event_response_dto.dart';
+import '../../../shared/events/providers/event_providers.dart';
 
 final createEventControllerProvider =
-    StateNotifierProvider<CreateEventController, CreateEventState>((ref) {
+    StateNotifierProvider.autoDispose<CreateEventController, CreateEventState>((ref) {
   return CreateEventController(
-    api: ref.watch(eventsApiProvider),
+    repository: ref.watch(eventsRepositoryProvider),
   );
 });
 
 class CreateEventController extends StateNotifier<CreateEventState> {
-  final EventsApi api;
+  final EventsRepository repository;
 
   CreateEventController({
-    required this.api,
+    required this.repository,
   }) : super(const CreateEventState());
 
   Future<void> loadInitial() async {
@@ -27,7 +29,7 @@ class CreateEventController extends StateNotifier<CreateEventState> {
     );
 
     try {
-      final segments = await api.getSegments();
+      final segments = await repository.getSegments();
       state = state.copyWith(
         loadingInitial: false,
         segments: segments,
@@ -51,6 +53,7 @@ class CreateEventController extends StateNotifier<CreateEventState> {
       genresLoading: id != null,
       subGenresLoading: false,
       clearErrorMessage: true,
+      clearSuccessMessage: true,
     );
 
     if (id == null) {
@@ -59,7 +62,7 @@ class CreateEventController extends StateNotifier<CreateEventState> {
     }
 
     try {
-      final genres = await api.getGenresBySegment(id);
+      final genres = await repository.getGenresBySegment(id);
       state = state.copyWith(
         genresLoading: false,
         genres: genres,
@@ -68,9 +71,48 @@ class CreateEventController extends StateNotifier<CreateEventState> {
       state = state.copyWith(
         genresLoading: false,
         errorMessage: _messageFromError(e),
+        clearSuccessMessage: true,
       );
     }
   }
+
+Future<MapboxPlace?> reverseGeocode({
+  required double latitude,
+  required double longitude,
+  required String accessToken,
+}) async {
+  final dio = Dio();
+
+  final response = await dio.get<Map<String, dynamic>>(
+    'https://api.mapbox.com/search/geocode/v6/reverse',
+    queryParameters: {
+      'longitude': longitude,
+      'latitude': latitude,
+      'access_token': accessToken,
+      'limit': 1,
+      'language': 'en',
+    },
+  );
+
+  final data = response.data ?? const <String, dynamic>{};
+  final features = data['features'];
+
+  if (features is! List || features.isEmpty) return null;
+
+  final item = Map<String, dynamic>.from(features.first as Map);
+
+  return MapboxPlace(
+    id: item['id']?.toString() ?? '$longitude,$latitude',
+    title: item['properties']?['name']?.toString() ??
+        item['name']?.toString() ??
+        'Selected location',
+    subtitle: item['full_address']?.toString() ??
+        item['place_formatted']?.toString() ??
+        '',
+    latitude: latitude,
+    longitude: longitude,
+  );
+}
 
   Future<void> selectGenre(int? id) async {
     state = state.copyWith(
@@ -79,6 +121,7 @@ class CreateEventController extends StateNotifier<CreateEventState> {
       subGenres: const [],
       subGenresLoading: id != null,
       clearErrorMessage: true,
+      clearSuccessMessage: true,
     );
 
     if (id == null) {
@@ -87,7 +130,7 @@ class CreateEventController extends StateNotifier<CreateEventState> {
     }
 
     try {
-      final subGenres = await api.getSubGenresByGenre(id);
+      final subGenres = await repository.getSubGenresByGenre(id);
       state = state.copyWith(
         subGenresLoading: false,
         subGenres: subGenres,
@@ -96,6 +139,7 @@ class CreateEventController extends StateNotifier<CreateEventState> {
       state = state.copyWith(
         subGenresLoading: false,
         errorMessage: _messageFromError(e),
+        clearSuccessMessage: true,
       );
     }
   }
@@ -104,13 +148,47 @@ class CreateEventController extends StateNotifier<CreateEventState> {
     state = state.copyWith(
       subGenreId: id,
       clearErrorMessage: true,
+      clearSuccessMessage: true,
     );
   }
+
+void hydrateForEdit(MyEventResponseDto event) {
+  final venueTitle = event.isOnline
+      ? 'Online event'
+      : ((event.venueName?.trim().isNotEmpty ?? false)
+          ? event.venueName!.trim()
+          : 'Selected location');
+
+  final subtitle = event.isOnline
+      ? (event.externalUrl?.trim().isNotEmpty ?? false)
+          ? event.externalUrl!.trim()
+          : 'Coordinates: ${event.latitude}, ${event.longitude}'
+      : '${event.latitude.toStringAsFixed(6)}, ${event.longitude.toStringAsFixed(6)}';
+
+  state = state.copyWith(
+    eventId: event.eventId,
+    segmentId: event.segmentId,
+    genreId: event.genreId,
+    subGenreId: event.subGenreId,
+    isOnline: event.isOnline,
+    isFree: event.price <= 0,
+    selectedLocation: MapboxPlace(
+      id: event.venueId?.toString() ?? 'event-${event.eventId}',
+      title: venueTitle,
+      subtitle: subtitle,
+      latitude: event.latitude,
+      longitude: event.longitude,
+    ),
+    clearErrorMessage: true,
+    clearSuccessMessage: true,
+  );
+}
 
   void setOnline(bool value) {
     state = state.copyWith(
       isOnline: value,
       clearErrorMessage: true,
+      clearSuccessMessage: true,
     );
   }
 
@@ -118,6 +196,7 @@ class CreateEventController extends StateNotifier<CreateEventState> {
     state = state.copyWith(
       isFree: value,
       clearErrorMessage: true,
+      clearSuccessMessage: true,
     );
   }
 
@@ -125,6 +204,7 @@ class CreateEventController extends StateNotifier<CreateEventState> {
     state = state.copyWith(
       selectedLocation: place,
       clearErrorMessage: true,
+      clearSuccessMessage: true,
     );
   }
 
@@ -132,6 +212,7 @@ class CreateEventController extends StateNotifier<CreateEventState> {
     state = state.copyWith(
       clearSelectedLocation: true,
       clearErrorMessage: true,
+      clearSuccessMessage: true,
     );
   }
 
@@ -139,6 +220,7 @@ class CreateEventController extends StateNotifier<CreateEventState> {
     state = state.copyWith(
       featuredImage: image,
       clearErrorMessage: true,
+      clearSuccessMessage: true,
     );
   }
 
@@ -146,6 +228,7 @@ class CreateEventController extends StateNotifier<CreateEventState> {
     state = state.copyWith(
       clearFeaturedImage: true,
       clearErrorMessage: true,
+      clearSuccessMessage: true,
     );
   }
 
@@ -158,6 +241,7 @@ class CreateEventController extends StateNotifier<CreateEventState> {
     state = state.copyWith(
       galleryImages: unique.values.toList(),
       clearErrorMessage: true,
+      clearSuccessMessage: true,
     );
   }
 
@@ -171,9 +255,12 @@ class CreateEventController extends StateNotifier<CreateEventState> {
       return existingPaths.add(image.localPath);
     }).toList();
 
+    if (uniqueNewImages.isEmpty) return;
+
     state = state.copyWith(
       galleryImages: [...state.galleryImages, ...uniqueNewImages],
       clearErrorMessage: true,
+      clearSuccessMessage: true,
     );
   }
 
@@ -184,12 +271,20 @@ class CreateEventController extends StateNotifier<CreateEventState> {
     state = state.copyWith(
       galleryImages: updated,
       clearErrorMessage: true,
+      clearSuccessMessage: true,
     );
   }
 
   void setFormError(String message) {
     state = state.copyWith(
       errorMessage: message,
+      clearSuccessMessage: true,
+    );
+  }
+
+  void clearMessages() {
+    state = state.copyWith(
+      clearErrorMessage: true,
       clearSuccessMessage: true,
     );
   }
@@ -230,6 +325,7 @@ class CreateEventController extends StateNotifier<CreateEventState> {
       final cleanExternalUrl = _cleanNullable(externalUrl);
       final cleanAccessibilityInfo = _cleanNullable(accessibilityInfo);
       final cleanPromoterName = _cleanNullable(promoterName);
+      final normalizedPrice = state.isFree ? 0.0 : price;
 
       if (cleanTitle.length < 3 || cleanTitle.length > 200) {
         throw Exception('Title must be between 3 and 200 characters.');
@@ -251,27 +347,31 @@ class CreateEventController extends StateNotifier<CreateEventState> {
         throw Exception('Capacity must be between 0 and 1,000,000.');
       }
 
-      if (price < 0 || price > 100000) {
+      if (normalizedPrice < 0 || normalizedPrice > 100000) {
         throw Exception('Price must be between 0 and 100000.');
       }
 
-      if (segmentId == null) {
-        throw Exception('Please select a segment.');
-      }
+      //if (segmentId == null) {
+      //throw Exception('Please select a segment.');
+      //}
 
-      if (genreId == null) {
-        throw Exception('Please select a genre.');
-      }
+      //if (genreId == null) {
+      //  throw Exception('Please select a genre.');
+      //}
 
-      if (subGenreId == null) {
-        throw Exception('Please select a subgenre.');
-      }
+      //if (subGenreId == null) {
+      //  throw Exception('Please select a subgenre.');
+      //}
 
-      if (isOnline) {
-        if (cleanExternalUrl == null || cleanExternalUrl.isEmpty) {
-          throw Exception('Please provide an external URL for an online event.');
-        }
-      }
+      //if (!isOnline && venueId == null && cityId == null) {
+      //  throw Exception('Please choose a venue or location for an offline event.');
+      //}
+
+      //if (isOnline) {
+      //  if (cleanExternalUrl == null || cleanExternalUrl.isEmpty) {
+      //    throw Exception('Please provide an external URL for an online event.');
+      //  }
+      //}
 
       final payload = CreateEventRequest(
         title: cleanTitle,
@@ -286,7 +386,7 @@ class CreateEventController extends StateNotifier<CreateEventState> {
         startDateTime: startDateTime,
         endDateTime: endDateTime,
         capacity: capacity,
-        price: price,
+        price: normalizedPrice,
         isOnline: isOnline,
         tags: cleanTags,
         externalUrl: cleanExternalUrl,
@@ -296,8 +396,8 @@ class CreateEventController extends StateNotifier<CreateEventState> {
       );
 
       final event = state.eventId == null
-          ? await api.createEvent(payload)
-          : await api.updateEvent(state.eventId!, payload);
+          ? await repository.createEvent(payload)
+          : await repository.updateEvent(state.eventId!, payload);
 
       final eventId = event.eventId;
 
@@ -313,7 +413,7 @@ class CreateEventController extends StateNotifier<CreateEventState> {
       }
 
       if (publish) {
-        await api.publishEvent(eventId);
+        await repository.publishEvent(eventId);
       }
 
       state = state.copyWith(
@@ -374,13 +474,13 @@ class CreateEventController extends StateNotifier<CreateEventState> {
     required EventImageUploadItem image,
     required bool isCover,
   }) async {
-    final imageUrl = await api.uploadImage(
+    final imageUrl = await repository.uploadImage(
       image.localPath,
       fileName: image.fileName,
       bytes: image.previewBytes,
     );
 
-    await api.addEventImage(
+    await repository.addEventImage(
       eventId: eventId,
       imageUrl: imageUrl,
       isCover: isCover,

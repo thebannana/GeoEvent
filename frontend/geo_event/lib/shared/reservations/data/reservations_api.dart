@@ -18,9 +18,10 @@ class ReservationsApi {
       queryParameters: {
         'page': page,
         'pageSize': pageSize,
-        if (status != null) 'status': status,
+        'status': ?status,
       },
     );
+
     return PagedResult.fromJson(response.data!, Reservation.fromJson);
   }
 

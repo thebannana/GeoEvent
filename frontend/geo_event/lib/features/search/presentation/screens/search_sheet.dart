@@ -3,13 +3,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../shared/events/data/events_api.dart';
+import '../../../../shared/events/models/create_event_models.dart';
+import '../../../../shared/events/providers/event_providers.dart';
 import '../../domain/filter_selection.dart';
-import '../../domain/sort_option.dart';
 import '../widgets/search_filter_bottom_sheet.dart';
 import '../widgets/search_result_card.dart';
 import '../widgets/search_sheet_chip.dart';
-import '../widgets/search_sort_bottom_sheet.dart';
 
 class SearchSheet extends ConsumerStatefulWidget {
   const SearchSheet({super.key});
@@ -22,7 +21,7 @@ class _SearchSheetState extends ConsumerState<SearchSheet> {
   final TextEditingController _textController = TextEditingController();
   Timer? _debounce;
 
-  List<dynamic> _results = [];
+  List<EventItem> _results = [];
   bool _loading = false;
   String? _error;
 
@@ -32,6 +31,8 @@ class _SearchSheetState extends ConsumerState<SearchSheet> {
 
   String _sortBy = 'StartDateTime';
   bool _sortDescending = false;
+
+  int _requestId = 0;
 
   bool get _hasActiveFilters =>
       _selectedSegmentId != null ||
@@ -68,6 +69,7 @@ class _SearchSheetState extends ConsumerState<SearchSheet> {
   void _onQueryChanged(String value) {
     setState(() {});
     _debounce?.cancel();
+
     _debounce = Timer(const Duration(milliseconds: 350), () async {
       final query = value.trim();
       if (query.isEmpty) {
@@ -78,26 +80,26 @@ class _SearchSheetState extends ConsumerState<SearchSheet> {
     });
   }
 
-  Map<int, double> _segmentWeights(List preferences) {
+  Map<int, double> _segmentWeights(List<dynamic> preferences) {
     final map = <int, double>{};
 
     for (final pref in preferences) {
-      final segmentId = pref.segmentId;
+      final segmentId = pref.segmentId as int?;
       if (segmentId != null) {
-        map[segmentId] = (map[segmentId] ?? 0) + pref.score;
+        map[segmentId] = (map[segmentId] ?? 0) + (pref.score as num).toDouble();
       }
     }
 
     return map;
   }
 
-  Map<int, double> _genreWeights(List preferences) {
+  Map<int, double> _genreWeights(List<dynamic> preferences) {
     final map = <int, double>{};
 
     for (final pref in preferences) {
-      final genreId = pref.genreId;
+      final genreId = pref.genreId as int?;
       if (genreId != null) {
-        map[genreId] = (map[genreId] ?? 0) + pref.score;
+        map[genreId] = (map[genreId] ?? 0) + (pref.score as num).toDouble();
       }
     }
 
@@ -105,7 +107,7 @@ class _SearchSheetState extends ConsumerState<SearchSheet> {
   }
 
   double _preferenceScore(
-    dynamic item,
+    EventItem item,
     Map<int, double> segmentWeights,
     Map<int, double> genreWeights,
   ) {
@@ -129,6 +131,8 @@ class _SearchSheetState extends ConsumerState<SearchSheet> {
   Future<void> _loadInitialResults({bool force = false}) async {
     if (!force && _results.isNotEmpty && _query.isEmpty) return;
 
+    final requestId = ++_requestId;
+
     setState(() {
       _loading = true;
       _error = null;
@@ -145,7 +149,7 @@ class _SearchSheetState extends ConsumerState<SearchSheet> {
             subGenreId: _selectedSubGenreId,
           );
 
-      final preferences = const [];
+      final preferences = <dynamic>[];
       final segmentWeights = _segmentWeights(preferences);
       final genreWeights = _genreWeights(preferences);
 
@@ -163,13 +167,15 @@ class _SearchSheetState extends ConsumerState<SearchSheet> {
           return bScore.compareTo(aScore);
         });
 
-      if (!mounted) return;
+      if (!mounted || requestId != _requestId) return;
+
       setState(() {
         _results = ranked;
         _loading = false;
       });
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || requestId != _requestId) return;
+
       setState(() {
         _results = [];
         _loading = false;
@@ -185,6 +191,8 @@ class _SearchSheetState extends ConsumerState<SearchSheet> {
       await _loadInitialResults(force: true);
       return;
     }
+
+    final requestId = ++_requestId;
 
     setState(() {
       _loading = true;
@@ -205,11 +213,11 @@ class _SearchSheetState extends ConsumerState<SearchSheet> {
 
       final q = trimmed.toLowerCase();
 
-      double score(dynamic item) {
+      double score(EventItem item) {
         var total = 0.0;
 
-        final title = (item.title ?? '').toLowerCase();
-        final description = (item.description ?? '').toLowerCase();
+        final title = item.title.toLowerCase();
+        final description = item.description.toLowerCase();
         final segment = (item.segmentName ?? '').toLowerCase();
         final genre = (item.genreName ?? '').toLowerCase();
         final subGenre = (item.subGenreName ?? '').toLowerCase();
@@ -232,13 +240,15 @@ class _SearchSheetState extends ConsumerState<SearchSheet> {
 
       final ranked = [...items]..sort((a, b) => score(b).compareTo(score(a)));
 
-      if (!mounted) return;
+      if (!mounted || requestId != _requestId) return;
+
       setState(() {
         _results = ranked;
         _loading = false;
       });
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || requestId != _requestId) return;
+
       setState(() {
         _results = [];
         _loading = false;
@@ -382,12 +392,12 @@ class _SearchSheetState extends ConsumerState<SearchSheet> {
 
     if (!mounted) return;
 
-    final result = await showModalBottomSheet<_FilterSelection>(
+    final result = await showModalBottomSheet<FilterSelection>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) {
-        return _FilterBottomSheet(
+        return SearchFilterBottomSheet(
           initialSegmentId: _selectedSegmentId,
           initialGenreId: _selectedGenreId,
           initialSubGenreId: _selectedSubGenreId,
@@ -409,27 +419,6 @@ class _SearchSheetState extends ConsumerState<SearchSheet> {
     } else {
       await _search(_query);
     }
-  }
-
-  Color _segmentColor(dynamic item) {
-    final name = (item.segmentName ?? '').toLowerCase();
-
-    if (name.contains('concert') || name.contains('music')) {
-      return const Color(0xFF5E7BFF);
-    }
-    if (name.contains('sport')) {
-      return const Color(0xFFFF5A76);
-    }
-    if (name.contains('education') || name.contains('seminar')) {
-      return const Color(0xFF68C95A);
-    }
-    return const Color(0xFF6B8FBF);
-  }
-
-  String _formatPrice(num price) {
-    if (price <= 0) return 'Free';
-    if (price % 1 == 0) return '${price.toInt()}\$';
-    return '${price.toStringAsFixed(2)}\$';
   }
 
   @override
@@ -455,6 +444,7 @@ class _SearchSheetState extends ConsumerState<SearchSheet> {
               suffixIcon: query.isNotEmpty
                   ? IconButton(
                       onPressed: () async {
+                        _debounce?.cancel();
                         _textController.clear();
                         setState(() {});
                         await _loadInitialResults(force: true);
@@ -470,14 +460,14 @@ class _SearchSheetState extends ConsumerState<SearchSheet> {
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Row(
             children: [
-              _SheetChip(
+              SearchSheetChip(
                 label: _hasActiveFilters ? 'Filtered' : 'Filter...',
                 isDark: isDark,
                 onTap: _openFilterSheet,
                 isSelected: _hasActiveFilters,
               ),
               const SizedBox(width: 8),
-              _SheetChip(
+              SearchSheetChip(
                 label: _sortLabel,
                 isDark: isDark,
                 onTap: _openSortSheet,
@@ -529,77 +519,6 @@ class _SearchSheetState extends ConsumerState<SearchSheet> {
   }
 }
 
-class _SheetChip extends StatelessWidget {
-  final String label;
-  final bool isDark;
-  final VoidCallback? onTap;
-  final bool isSelected;
-
-  const _SheetChip({
-    required this.label,
-    required this.isDark,
-    this.onTap,
-    this.isSelected = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final bgColor = isSelected
-        ? (isDark ? const Color(0xFF253041) : const Color(0xFFEAF2FF))
-        : (isDark ? const Color(0xFF1B2028) : Colors.white);
-
-    final borderColor = isSelected
-        ? const Color(0xFF6B8FBF)
-        : (isDark ? const Color(0xFF2A303A) : const Color(0xFFE3EAF3));
-
-    final textColor = isSelected
-        ? (isDark ? Colors.white : const Color(0xFF365D92))
-        : (isDark ? Colors.white70 : Colors.black54);
-
-    final iconColor = isSelected
-        ? (isDark ? Colors.white70 : const Color(0xFF365D92))
-        : (isDark ? Colors.white38 : Colors.black38);
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(10),
-        child: Ink(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          decoration: BoxDecoration(
-            color: bgColor,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: borderColor,
-              width: 1,
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                  color: textColor,
-                ),
-              ),
-              const SizedBox(width: 4),
-              Icon(
-                Icons.keyboard_arrow_down_rounded,
-                size: 16,
-                color: iconColor,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _SortOption {
   final String sortBy;
   final bool sortDescending;
@@ -608,319 +527,4 @@ class _SortOption {
     required this.sortBy,
     required this.sortDescending,
   });
-}
-
-class _FilterSelection {
-  final int? segmentId;
-  final int? genreId;
-  final int? subGenreId;
-
-  const _FilterSelection({
-    this.segmentId,
-    this.genreId,
-    this.subGenreId,
-  });
-}
-
-class _FilterBottomSheet extends ConsumerStatefulWidget {
-  final List<dynamic> segments;
-  final int? initialSegmentId;
-  final int? initialGenreId;
-  final int? initialSubGenreId;
-
-  const _FilterBottomSheet({
-    required this.segments,
-    required this.initialSegmentId,
-    required this.initialGenreId,
-    required this.initialSubGenreId,
-  });
-
-  @override
-  ConsumerState<_FilterBottomSheet> createState() => _FilterBottomSheetState();
-}
-
-class _FilterBottomSheetState extends ConsumerState<_FilterBottomSheet> {
-  int? _segmentId;
-  int? _genreId;
-  int? _subGenreId;
-
-  List<dynamic> _genres = [];
-  List<dynamic> _subGenres = [];
-  bool _loadingGenres = false;
-  bool _loadingSubGenres = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _segmentId = widget.initialSegmentId;
-    _genreId = widget.initialGenreId;
-    _subGenreId = widget.initialSubGenreId;
-
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (_segmentId != null) {
-        await _loadGenres(_segmentId!);
-      }
-      if (_genreId != null) {
-        await _loadSubGenres(_genreId!);
-      }
-    });
-  }
-
-  Future<void> _loadGenres(int segmentId) async {
-    setState(() {
-      _loadingGenres = true;
-      _genres = [];
-      _subGenres = [];
-      _genreId = null;
-      _subGenreId = null;
-    });
-
-    try {
-      final items = await ref.read(eventsApiProvider).getGenresBySegment(segmentId);
-      if (!mounted) return;
-      setState(() {
-        _genres = items;
-        _loadingGenres = false;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _loadingGenres = false;
-      });
-    }
-  }
-
-  Future<void> _loadSubGenres(int genreId) async {
-    setState(() {
-      _loadingSubGenres = true;
-      _subGenres = [];
-      _subGenreId = null;
-    });
-
-    try {
-      final items = await ref.read(eventsApiProvider).getSubGenresByGenre(genreId);
-      if (!mounted) return;
-      setState(() {
-        _subGenres = items;
-        _loadingSubGenres = false;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _loadingSubGenres = false;
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bg = isDark ? const Color(0xFF161A21) : Colors.white;
-    final border = isDark ? const Color(0xFF2A303A) : const Color(0xFFE3EAF3);
-
-    Widget buildChoiceChip({
-      required String label,
-      required bool selected,
-      required VoidCallback onTap,
-    }) {
-      return Padding(
-        padding: const EdgeInsets.only(right: 8, bottom: 8),
-        child: ChoiceChip(
-          label: Text(label),
-          selected: selected,
-          onSelected: (_) => onTap(),
-        ),
-      );
-    }
-
-    return SafeArea(
-      child: Container(
-        height: MediaQuery.of(context).size.height * 0.82,
-        margin: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: border),
-        ),
-        child: Column(
-          children: [
-            const SizedBox(height: 10),
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: isDark
-                    ? Colors.white24
-                    : Colors.black.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(99),
-              ),
-            ),
-            const Padding(
-              padding: EdgeInsets.fromLTRB(18, 16, 18, 8),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Filter events',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(18, 8, 18, 18),
-                children: [
-                  const Text(
-                    'Segment',
-                    style: TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                  const SizedBox(height: 10),
-                  Wrap(
-                    children: [
-                      buildChoiceChip(
-                        label: 'All',
-                        selected: _segmentId == null,
-                        onTap: () {
-                          setState(() {
-                            _segmentId = null;
-                            _genreId = null;
-                            _subGenreId = null;
-                            _genres = [];
-                            _subGenres = [];
-                          });
-                        },
-                      ),
-                      ...widget.segments.map(
-                        (segment) => buildChoiceChip(
-                          label: segment.name,
-                          selected: _segmentId == segment.segmentId,
-                          onTap: () async {
-                            setState(() {
-                              _segmentId = segment.segmentId;
-                            });
-                            await _loadGenres(segment.segmentId);
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 18),
-                  const Text(
-                    'Genre',
-                    style: TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                  const SizedBox(height: 10),
-                  if (_loadingGenres)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 8),
-                      child: CircularProgressIndicator(),
-                    )
-                  else
-                    Wrap(
-                      children: [
-                        buildChoiceChip(
-                          label: 'All',
-                          selected: _genreId == null,
-                          onTap: () {
-                            setState(() {
-                              _genreId = null;
-                              _subGenreId = null;
-                              _subGenres = [];
-                            });
-                          },
-                        ),
-                        ..._genres.map(
-                          (genre) => buildChoiceChip(
-                            label: genre.name,
-                            selected: _genreId == genre.genreId,
-                            onTap: () async {
-                              setState(() {
-                                _genreId = genre.genreId;
-                              });
-                              await _loadSubGenres(genre.genreId);
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                  const SizedBox(height: 18),
-                  const Text(
-                    'Subgenre',
-                    style: TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                  const SizedBox(height: 10),
-                  if (_loadingSubGenres)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 8),
-                      child: CircularProgressIndicator(),
-                    )
-                  else
-                    Wrap(
-                      children: [
-                        buildChoiceChip(
-                          label: 'All',
-                          selected: _subGenreId == null,
-                          onTap: () {
-                            setState(() {
-                              _subGenreId = null;
-                            });
-                          },
-                        ),
-                        ..._subGenres.map(
-                          (subGenre) => buildChoiceChip(
-                            label: subGenre.name,
-                            selected: _subGenreId == subGenre.subGenreId,
-                            onTap: () {
-                              setState(() {
-                                _subGenreId = subGenre.subGenreId;
-                              });
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(18, 8, 18, 18),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () {
-                        Navigator.pop(context, const _FilterSelection());
-                      },
-                      child: const Text('Reset'),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: FilledButton(
-                      onPressed: () {
-                        Navigator.pop(
-                          context,
-                          _FilterSelection(
-                            segmentId: _segmentId,
-                            genreId: _genreId,
-                            subGenreId: _subGenreId,
-                          ),
-                        );
-                      },
-                      child: const Text('Apply'),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }

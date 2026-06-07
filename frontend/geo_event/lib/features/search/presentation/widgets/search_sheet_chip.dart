@@ -5,6 +5,7 @@ class SearchSheetChip extends StatelessWidget {
   final bool isDark;
   final VoidCallback? onTap;
   final bool isSelected;
+  final bool showArrow;
 
   const SearchSheetChip({
     super.key,
@@ -12,6 +13,7 @@ class SearchSheetChip extends StatelessWidget {
     required this.isDark,
     this.onTap,
     this.isSelected = false,
+    this.showArrow = false,
   });
 
   @override
@@ -58,12 +60,14 @@ class SearchSheetChip extends StatelessWidget {
                   color: textColor,
                 ),
               ),
-              const SizedBox(width: 4),
-              Icon(
-                Icons.keyboard_arrow_down_rounded,
-                size: 16,
-                color: iconColor,
-              ),
+              if (showArrow) ...[
+                const SizedBox(width: 4),
+                Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  size: 16,
+                  color: iconColor,
+                ),
+              ],
             ],
           ),
         ),

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -7,29 +8,35 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 
 import '../../../../core/config/app_env.dart';
-import '../../application/map_settings_controller.dart';
 import '../../../../shared/events/models/event_map_pin_data.dart';
+import '../../../../shared/events/providers/event_providers.dart';
+import '../../../../shared/location/models/event_directions_request.dart';
+import '../../../../shared/location/providers/directions_providers.dart';
+import '../../../event/presentation/screens/event_detail_screen.dart';
+import '../../application/map_settings_controller.dart';
 import '../widgets/event_pin_marker.dart';
 import '../widgets/map_filter_panel.dart';
-import '../../../../shared/events/data/events_api.dart';
 
 class MapHomeScreen extends ConsumerStatefulWidget {
   final ValueChanged<MapboxMap>? onMapReady;
   final ValueChanged<double>? onBearingChanged;
+  final ValueChanged<int>? onEventSelected;
   final MapFilterSelection filterSelection;
 
   const MapHomeScreen({
     super.key,
     this.onMapReady,
     this.onBearingChanged,
+    this.onEventSelected,
     this.filterSelection = const MapFilterSelection(),
   });
 
   @override
-  ConsumerState<MapHomeScreen> createState() => _MapHomeScreenState();
+  ConsumerState<MapHomeScreen> createState() => MapHomeScreenState();
 }
 
-class _MapHomeScreenState extends ConsumerState<MapHomeScreen> {
+class MapHomeScreenState extends ConsumerState<MapHomeScreen>
+    with WidgetsBindingObserver {
   static const ui.Size _pinLogicalSize = ui.Size(190, 132);
   static const String _terrainSourceId = 'geoevent-terrain-source';
 
@@ -43,29 +50,40 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen> {
 
   MapboxMap? _mapboxMap;
   PointAnnotationManager? _pointAnnotationManager;
+  ProviderSubscription<MapSettingsState>? _settingsSubscription;
+  ProviderSubscription<EventDirectionsRequest?>? _pendingDirectionsSubscription;
+  Timer? _pinsRefreshTimer;
 
   bool _styleLoaded = false;
-  bool _eventPinsAdded = false;
   bool _captureReady = false;
   bool _terrainSourceAdded = false;
   bool _isLoadingMapPins = false;
+  bool _isSyncingPins = false;
+  bool _handlingPendingDirections = false;
+  bool _hasHandledInitialPendingDirections = false;
+
   final double _currentLatitude = _defaultLat;
   final double _currentLongitude = _defaultLng;
 
   final Map<String, GlobalKey> _pinKeys = {};
+  final Map<String, int> _annotationEventIds = {};
 
   late List<EventMapPinData> _events;
+  EventDirectionsRequest? _activeDirectionsRequest;
 
   @override
   void initState() {
     super.initState();
-
+    WidgetsBinding.instance.addObserver(this);
     AppEnv.validate();
     MapboxOptions.setAccessToken(AppEnv.mapboxToken);
 
     _events = [];
     _rebuildPinKeys();
+    _listenToMapSettings();
+    _listenToPendingDirections();
     _scheduleInitialLoad();
+    _startPinsAutoRefresh();
   }
 
   @override
@@ -74,6 +92,94 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen> {
 
     if (oldWidget.filterSelection != widget.filterSelection) {
       _reloadMapPins();
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _reloadMapPins();
+    }
+  }
+
+  void _startPinsAutoRefresh() {
+    _pinsRefreshTimer?.cancel();
+    _pinsRefreshTimer = Timer.periodic(
+      const Duration(minutes: 1),
+      (_) => _reloadMapPins(silent: true),
+    );
+  }
+
+  void _listenToMapSettings() {
+    _settingsSubscription?.close();
+    _settingsSubscription = ref.listenManual<MapSettingsState>(
+      mapSettingsControllerProvider,
+      (previous, next) async {
+        if (previous == null) return;
+
+        if (previous.map3D != next.map3D) {
+          await _applyStandardMapConfiguration(next);
+          await _animateCameraFor3D(next.map3D);
+        }
+
+        if (previous.terrain != next.terrain) {
+          await _applyTerrain(next.terrain);
+        }
+
+        if (previous.dayNightCycle != next.dayNightCycle) {
+          await _applyStandardMapConfiguration(next);
+        }
+
+        if (previous.mapPins != next.mapPins) {
+          await _applyStandardMapConfiguration(next);
+        }
+
+        if (previous.eventPins != next.eventPins) {
+          await _applyEventPinsVisibility(next.eventPins);
+        }
+      },
+    );
+  }
+
+  void _listenToPendingDirections() {
+    _pendingDirectionsSubscription?.close();
+    _pendingDirectionsSubscription =
+        ref.listenManual<EventDirectionsRequest?>(
+      pendingDirectionsProvider,
+      (previous, next) async {
+        if (next == null || _handlingPendingDirections) return;
+        await _tryHandlePendingDirections(next);
+      },
+    );
+  }
+
+  bool get _isReadyForPendingDirections =>
+      mounted && _mapboxMap != null && _styleLoaded && _captureReady;
+
+  Future<void> _tryHandlePendingDirections(
+    EventDirectionsRequest request,
+  ) async {
+    if (!_isReadyForPendingDirections) {
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      if (!_isReadyForPendingDirections || !mounted) return;
+    }
+
+    _handlingPendingDirections = true;
+    try {
+      await focusOnEventLocation(
+        latitude: request.latitude,
+        longitude: request.longitude,
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _activeDirectionsRequest = request;
+      });
+
+      ref.read(pendingDirectionsProvider.notifier).state = null;
+      _hasHandledInitialPendingDirections = true;
+    } finally {
+      _handlingPendingDirections = false;
     }
   }
 
@@ -89,6 +195,7 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen> {
     _hideBuiltInCompass();
     _prepareAnnotations();
     _tryAddEventPins();
+    _consumeInitialPendingDirectionsIfNeeded();
   }
 
   Future<void> _hideBuiltInCompass() async {
@@ -118,6 +225,16 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen> {
     await _pointAnnotationManager!.setTextAllowOverlap(true);
     await _pointAnnotationManager!.setIconIgnorePlacement(true);
     await _pointAnnotationManager!.setTextIgnorePlacement(true);
+
+    _pointAnnotationManager!.addOnPointAnnotationClickListener(
+      _MapPinClickListener(
+        onTap: (annotation) {
+          final eventId = _annotationEventIds[annotation.id];
+          if (eventId == null || !mounted) return;
+          _handleEventTap(eventId);
+        },
+      ),
+    );
   }
 
   Future<void> _onStyleLoaded(StyleLoadedEventData _) async {
@@ -136,39 +253,31 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen> {
     await _applyStandardMapConfiguration(settings);
     await _applyTerrain(settings.terrain);
     await _applyEventPinsVisibility(settings.eventPins);
+
+    await _reloadMapPins(
+      silent: true,
+      forceResync: true,
+    );
+
+    await _consumeInitialPendingDirectionsIfNeeded();
   }
 
   void _onCameraChange(CameraChangedEventData event) {
     widget.onBearingChanged?.call(event.cameraState.bearing);
   }
 
-void _scheduleInitialLoad() {
-  WidgetsBinding.instance.addPostFrameCallback((_) async {
-    if (!mounted) return;
-
-    setState(() {
-      _captureReady = true;
-      _isLoadingMapPins = true;
-    });
-
-    final pins = await _fetchMapPins();
-
-    if (!mounted) return;
-
-    setState(() {
-      _events = pins;
-      _isLoadingMapPins = false;
-      _rebuildPinKeys();
-    });
-
-    // Give the hidden marker layer one frame to render before capturing
+  void _scheduleInitialLoad() {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
-      await Future<void>.delayed(const Duration(milliseconds: 80));
-      await _tryAddEventPins();
+
+      setState(() {
+        _captureReady = true;
+      });
+
+      await _reloadMapPins();
+      await _consumeInitialPendingDirectionsIfNeeded();
     });
-  });
-}
+  }
 
   String _baseStyleUri() {
     return MapboxStyles.STANDARD;
@@ -295,11 +404,51 @@ void _scheduleInitialLoad() {
     );
   }
 
+  Future<void> focusOnEventLocation({
+    required double latitude,
+    required double longitude,
+  }) async {
+    if (_mapboxMap == null) return;
+
+    final settings = ref.read(mapSettingsControllerProvider);
+
+    await _mapboxMap!.easeTo(
+      CameraOptions(
+        center: Point(coordinates: Position(longitude, latitude)),
+        zoom: settings.map3D ? _cityZoom : 15.8,
+        pitch: settings.map3D ? _cityPitch : 0.0,
+        bearing: 0.0,
+        padding: MbxEdgeInsets(
+          top: 120,
+          left: 40,
+          right: 40,
+          bottom: 260,
+        ),
+      ),
+      MapAnimationOptions(
+        duration: 900,
+        startDelay: 0,
+      ),
+    );
+  }
+
+  Future<void> _consumeInitialPendingDirectionsIfNeeded() async {
+    if (_hasHandledInitialPendingDirections) return;
+
+    final request = ref.read(pendingDirectionsProvider);
+    if (request == null) {
+      _hasHandledInitialPendingDirections = true;
+      return;
+    }
+
+    await _tryHandlePendingDirections(request);
+  }
+
   Future<void> _applyEventPinsVisibility(bool visible) async {
     if (_pointAnnotationManager == null) return;
 
     await _pointAnnotationManager!.deleteAll();
-    _eventPinsAdded = false;
+    _annotationEventIds.clear();
 
     if (visible) {
       await _tryAddEventPins();
@@ -309,198 +458,269 @@ void _scheduleInitialLoad() {
     setState(() {});
   }
 
-  Future<void> _reloadMapPins() async {
-    if (_pointAnnotationManager == null) return;
+  Future<void> _reloadMapPins({
+    bool silent = false,
+    bool forceResync = false,
+  }) async {
+    if (!mounted || _isSyncingPins) return;
 
-    setState(() {
-      _isLoadingMapPins = true;
-      _eventPinsAdded = false;
-    });
-
-    await _pointAnnotationManager!.deleteAll();
+    if (!silent) {
+      setState(() {
+        _isLoadingMapPins = true;
+      });
+    }
 
     final pins = await _fetchMapPins();
-
     if (!mounted) return;
+
+    final oldSignature = _events
+        .map((e) => '${e.id}:${e.lat}:${e.lng}:${e.imageUrl}')
+        .join('|');
+    final newSignature = pins
+        .map((e) => '${e.id}:${e.lat}:${e.lng}:${e.imageUrl}')
+        .join('|');
+
+    final hasChanged = oldSignature != newSignature;
+
+    if (!hasChanged && !forceResync) {
+      if (!silent && mounted) {
+        setState(() {
+          _isLoadingMapPins = false;
+        });
+      }
+      return;
+    }
 
     setState(() {
       _events = pins;
       _rebuildPinKeys();
+      if (!silent) {
+        _isLoadingMapPins = false;
+      }
     });
 
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (!mounted) return;
-      await Future<void>.delayed(const Duration(milliseconds: 80));
-      await _tryAddEventPins();
-    });
+    await _precacheMarkerImages();
+    await WidgetsBinding.instance.endOfFrame;
+    await Future<void>.delayed(const Duration(milliseconds: 180));
+
+    if (!mounted) return;
+    await _syncEventPins();
   }
 
-Future<List<EventMapPinData>> _fetchMapPins() async {
-  try {
-    final items = await ref.read(eventsApiProvider).getNearbyEvents(
-      latitude: _currentLatitude,
-      longitude: _currentLongitude,
-      radiusKm: widget.filterSelection.radiusKm,
-      limit: 100,
-      segmentId: widget.filterSelection.segmentId,
-      genreId: widget.filterSelection.genreId,
-      subGenreId: widget.filterSelection.subGenreId,
-      minPrice: widget.filterSelection.minPrice,
-      maxPrice: widget.filterSelection.maxPrice,
-      freeOnly: widget.filterSelection.freeOnly,
-      todayOnly: widget.filterSelection.todayOnly,
-    );
+  Future<List<EventMapPinData>> _fetchMapPins() async {
+    try {
+      final items = await ref.read(eventsApiProvider).getNearbyEvents(
+            latitude: _currentLatitude,
+            longitude: _currentLongitude,
+            radiusKm: widget.filterSelection.radiusKm,
+            limit: 100,
+            segmentId: widget.filterSelection.segmentId,
+            genreId: widget.filterSelection.genreId,
+            subGenreId: widget.filterSelection.subGenreId,
+            minPrice: widget.filterSelection.minPrice,
+            maxPrice: widget.filterSelection.maxPrice,
+            freeOnly: widget.filterSelection.freeOnly,
+            todayOnly: widget.filterSelection.todayOnly,
+          );
 
-    return items
-        .map((e) => EventMapPinData(
-              id: e.eventId.toString(),
-              title: e.title,
-              imageUrl: e.coverImageUrl,
-              lng: e.longitude.toDouble(),
-              lat: e.latitude.toDouble(),
-            ))
-        .toList();
-  } catch (e) {
-    debugPrint('_fetchMapPins error: $e');
-    return [];
-  }
-}
-
-  Future<void> _tryAddEventPins() async {
-  final settings = ref.read(mapSettingsControllerProvider);
-
-  debugPrint('tryAddPins: events=${_events.length}, style=$_styleLoaded, '
-      'capture=$_captureReady, added=$_eventPinsAdded, manager=${_pointAnnotationManager != null}, '
-      'visible=${settings.eventPins}');
-
-  if (!settings.eventPins) return;
-  if (!_styleLoaded || !_captureReady || _eventPinsAdded) return;
-  if (_pointAnnotationManager == null) return;
-
-  final options = <PointAnnotationOptions>[];
-
-  for (final event in _events) {
-    final bytes = await _capturePinBytes(event.id);
-    debugPrint('capture ${event.id}: ${bytes?.lengthInBytes ?? 0} bytes');
-    if (bytes == null) continue;
-
-    options.add(
-      PointAnnotationOptions(
-        geometry: Point(
-          coordinates: Position(event.lng, event.lat),
-        ),
-        image: bytes,
-        iconAnchor: IconAnchor.BOTTOM,
-        iconOffset: [0.0, -6.0],
-      ),
-    );
-  }
-
-  debugPrint('options ready: ${options.length}');
-
-  if (options.isEmpty) return;
-
-  try {
-    await _pointAnnotationManager!.createMulti(options);
-    debugPrint('createMulti success');
-  } catch (e) {
-    debugPrint('createMulti failed: $e');
-    return;
-  }
-
-  if (!mounted) return;
-  setState(() {
-    _eventPinsAdded = true;
-  });
-}
-
-  Future<Uint8List?> _capturePinBytes(String eventId) async {
-  final key = _pinKeys[eventId];
-
-  for (var i = 0; i < 10; i++) {
-    await Future<void>.delayed(const Duration(milliseconds: 16));
-
-    final markerContext = key?.currentContext;
-    final boundary = markerContext?.findRenderObject() as RenderRepaintBoundary?;
-
-    if (boundary != null && boundary.debugNeedsPaint == false) {
-      final image = await boundary.toImage(pixelRatio: 3.0);
-      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-      image.dispose();
-      return byteData?.buffer.asUint8List();
+      return items.map(EventMapPinData.fromEventItem).toList();
+    } catch (e) {
+      debugPrint('_fetchMapPins error: $e');
+      return [];
     }
   }
 
-  debugPrint('Pin capture failed for eventId=$eventId');
-  return null;
-}
+  Future<void> _syncEventPins() async {
+    if (_pointAnnotationManager == null) return;
+
+    await _pointAnnotationManager!.deleteAll();
+    _annotationEventIds.clear();
+
+    await _tryAddEventPins();
+
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  Future<void> _tryAddEventPins() async {
+    final settings = ref.read(mapSettingsControllerProvider);
+
+    if (_isSyncingPins) return;
+    if (!settings.eventPins) return;
+    if (!_styleLoaded || !_captureReady) return;
+    if (_pointAnnotationManager == null) return;
+    if (_events.isEmpty) return;
+
+    _isSyncingPins = true;
+
+    try {
+      final eventIdsForOptions = <int>[];
+      final options = <PointAnnotationOptions>[];
+
+      for (final event in _events) {
+        final bytes = await _capturePinBytes(event.id);
+        if (bytes == null) continue;
+
+        final parsedEventId = int.tryParse(event.id);
+        if (parsedEventId == null) continue;
+
+        options.add(
+          PointAnnotationOptions(
+            geometry: Point(
+              coordinates: Position(event.lng, event.lat),
+            ),
+            image: bytes,
+            iconAnchor: IconAnchor.BOTTOM,
+            iconOffset: [0.0, -6.0],
+          ),
+        );
+        eventIdsForOptions.add(parsedEventId);
+      }
+
+      if (options.isEmpty) return;
+
+      final annotations = await _pointAnnotationManager!.createMulti(options);
+
+      for (var i = 0; i < annotations.length; i++) {
+        final annotation = annotations[i];
+        final annotationId = annotation?.id;
+        if (annotationId == null) continue;
+
+        _annotationEventIds[annotationId] = eventIdsForOptions[i];
+      }
+
+      if (!mounted) return;
+    } catch (e) {
+      debugPrint('_tryAddEventPins failed: $e');
+    } finally {
+      _isSyncingPins = false;
+    }
+  }
+
+  Future<void> _precacheMarkerImages() async {
+    for (final event in _events) {
+      final url = (event.imageUrl ?? '').trim();
+      if (url.isEmpty) continue;
+
+      try {
+        await precacheImage(
+          NetworkImage(url),
+          context,
+          onError: (_, __) {},
+        );
+      } catch (_) {}
+    }
+  }
+
+  Future<Uint8List?> _capturePinBytes(String eventId) async {
+    final key = _pinKeys[eventId];
+
+    for (var i = 0; i < 30; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 32));
+
+      final markerContext = key?.currentContext;
+      if (markerContext == null) continue;
+
+      final boundary = markerContext.findRenderObject() as RenderRepaintBoundary?;
+      if (boundary == null || boundary.debugNeedsPaint) continue;
+
+      try {
+        final image = await boundary.toImage(pixelRatio: 3.0);
+        final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+        image.dispose();
+
+        final bytes = byteData?.buffer.asUint8List();
+        if (bytes != null && bytes.isNotEmpty) {
+          return bytes;
+        }
+      } catch (_) {}
+    }
+
+    debugPrint('Pin capture failed for eventId=$eventId');
+    return null;
+  }
 
   Widget _buildHiddenMarkerLayer() {
-  return Positioned(
-    left: -10000,
-    top: 0,
-    child: IgnorePointer(
-      child: Material(
-        type: MaterialType.transparency,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: _events.map((event) {
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: RepaintBoundary(
-                key: _pinKeys[event.id],
-                child: EventPinMarker(
-                  title: event.title,
-                  imageUrl: event.imageUrl ?? '',
-                  color: event.categoryColor,
-                  width: _pinLogicalSize.width,
-                  height: _pinLogicalSize.height,
+    return Positioned(
+      left: -10000,
+      top: 0,
+      child: IgnorePointer(
+        child: Material(
+          type: MaterialType.transparency,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: _events.map((event) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: RepaintBoundary(
+                  key: _pinKeys[event.id],
+                  child: EventPinMarker(
+                    title: event.title,
+                    imageUrl: event.imageUrl ?? '',
+                    color: event.categoryColor,
+                    width: _pinLogicalSize.width,
+                    height: _pinLogicalSize.height,
+                  ),
                 ),
-              ),
-            );
-          }).toList(),
+              );
+            }).toList(),
+          ),
         ),
       ),
-    ),
-  );
-}
+    );
+  }
+
+  Future<void> _startDirections(EventDirectionsRequest request) async {
+    await focusOnEventLocation(
+      latitude: request.latitude,
+      longitude: request.longitude,
+    );
+
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Hook this button into your Mapbox route flow.'),
+      ),
+    );
+  }
+
+  void _returnToEventDetails(EventDirectionsRequest request) {
+    if (!mounted) return;
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => EventDetailsScreen(eventId: request.eventId),
+      ),
+    );
+  }
+
+  void _clearDirectionsCard() {
+    if (!mounted) return;
+    setState(() {
+      _activeDirectionsRequest = null;
+    });
+  }
+
+  void _handleEventTap(int eventId) {
+    final callback = widget.onEventSelected;
+    if (callback != null) {
+      callback(eventId);
+    }
+  }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _pinsRefreshTimer?.cancel();
+    _settingsSubscription?.close();
+    _pendingDirectionsSubscription?.close();
     _pointAnnotationManager?.deleteAll();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    ref.listen<MapSettingsState>(
-      mapSettingsControllerProvider,
-      (previous, next) async {
-        if (previous == null) return;
-
-        if (previous.map3D != next.map3D) {
-          await _applyStandardMapConfiguration(next);
-          await _animateCameraFor3D(next.map3D);
-        }
-
-        if (previous.terrain != next.terrain) {
-          await _applyTerrain(next.terrain);
-        }
-
-        if (previous.dayNightCycle != next.dayNightCycle) {
-          await _applyStandardMapConfiguration(next);
-        }
-
-        if (previous.mapPins != next.mapPins) {
-          await _applyStandardMapConfiguration(next);
-        }
-
-        if (previous.eventPins != next.eventPins) {
-          await _applyEventPinsVisibility(next.eventPins);
-        }
-      },
-    );
-
     final settings = ref.watch(mapSettingsControllerProvider);
 
     return Stack(
@@ -542,7 +762,124 @@ Future<List<EventMapPinData>> _fetchMapPins() async {
               ),
             ),
           ),
+        if (_activeDirectionsRequest != null)
+          Positioned(
+            left: 16,
+            right: 16,
+            bottom: 20,
+            child: SafeArea(
+              top: false,
+              child: _DirectionsActionCard(
+                title: _activeDirectionsRequest!.title,
+                onStartDirections: () =>
+                    _startDirections(_activeDirectionsRequest!),
+                onReturnToEventDetails: () =>
+                    _returnToEventDetails(_activeDirectionsRequest!),
+                onClose: _clearDirectionsCard,
+              ),
+            ),
+          ),
       ],
     );
+  }
+}
+
+class _DirectionsActionCard extends StatelessWidget {
+  final String title;
+  final VoidCallback onStartDirections;
+  final VoidCallback onReturnToEventDetails;
+  final VoidCallback onClose;
+
+  const _DirectionsActionCard({
+    required this.title,
+    required this.onStartDirections,
+    required this.onReturnToEventDetails,
+    required this.onClose,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: const Color(0xFF111317).withValues(alpha: 0.96),
+      borderRadius: BorderRadius.circular(20),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.navigation_rounded, color: Colors.white),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  onPressed: onClose,
+                  icon: const Icon(Icons.close, color: Colors.white70),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: ElevatedButton(
+                onPressed: onStartDirections,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF3B82C4),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+                child: const Text(
+                  'Start directions',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: OutlinedButton(
+                onPressed: onReturnToEventDetails,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.white,
+                  side: BorderSide(color: Colors.white.withValues(alpha: 0.16)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+                child: const Text(
+                  'Return to event details',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MapPinClickListener extends OnPointAnnotationClickListener {
+  final void Function(PointAnnotation annotation) onTap;
+
+  _MapPinClickListener({required this.onTap});
+
+  @override
+  void onPointAnnotationClick(PointAnnotation annotation) {
+    onTap(annotation);
   }
 }

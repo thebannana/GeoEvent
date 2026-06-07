@@ -20,6 +20,7 @@ public class EventTicketsController : ControllerBase
     public async Task<IActionResult> GetAll(int eventId)
     {
         var result = await _ticketService.GetEventTicketsAsync(eventId);
+
         return result.Success
             ? Ok(result.Data)
             : StatusCode(result.StatusCode, new { error = result.Error });
@@ -27,9 +28,9 @@ public class EventTicketsController : ControllerBase
 
     [HttpGet("{eventTicketId:int}")]
     [AllowAnonymous]
-    public async Task<IActionResult> GetById(int eventTicketId)
+    public async Task<IActionResult> GetById(int eventId, int eventTicketId)
     {
-        var result = await _ticketService.GetEventTicketAsync(eventTicketId);
+        var result = await _ticketService.GetEventTicketAsync(eventId, eventTicketId);
         return result.Success
             ? Ok(result.Data)
             : StatusCode(result.StatusCode, new { error = result.Error });

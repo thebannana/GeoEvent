@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../shared/reservations/models/reservation.dart';
+import 'reservation_status_badge.dart';
 import 'ticket_bottom_sheet.dart';
 
 class ReservationCard extends StatelessWidget {
@@ -18,7 +19,8 @@ class ReservationCard extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final theme = Theme.of(context);
     final status = reservation.status;
-    final canCancel = status == 'Pending' || status == 'Confirmed';
+    final normalized = status.toLowerCase();
+    final canCancel = normalized == 'pending' || normalized == 'confirmed';
 
     return Container(
       decoration: BoxDecoration(
@@ -38,7 +40,6 @@ class ReservationCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Header ──────────────────────────────────────────────────
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 14, 14, 0),
             child: Row(
@@ -80,38 +81,34 @@ class ReservationCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                _StatusBadge(status: status),
+                ReservationStatusBadge(status: status),
               ],
             ),
           ),
-
           const SizedBox(height: 12),
           Divider(
             height: 1,
             indent: 14,
             endIndent: 14,
-            color: isDark
-                ? const Color(0xFF2A303A)
-                : const Color(0xFFE3EAF3),
+            color:
+                isDark ? const Color(0xFF2A303A) : const Color(0xFFE3EAF3),
           ),
-
-          // ── Details ─────────────────────────────────────────────────
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-            child: Row(
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
               children: [
                 _DetailChip(
                   icon: Icons.confirmation_num_outlined,
                   label:
                       '${reservation.quantity} ticket${reservation.quantity > 1 ? 's' : ''}',
                 ),
-                const SizedBox(width: 8),
                 _DetailChip(
                   icon: Icons.payments_outlined,
                   label:
                       '${reservation.totalAmount.toStringAsFixed(2)} ${reservation.currency}',
                 ),
-                const SizedBox(width: 8),
                 _DetailChip(
                   icon: Icons.calendar_today_outlined,
                   label: _formatShortDate(reservation.createdAt),
@@ -119,9 +116,7 @@ class ReservationCard extends StatelessWidget {
               ],
             ),
           ),
-
-          // ── Expiry warning for pending ───────────────────────────────
-          if (status == 'Pending') ...[
+          if (normalized == 'pending') ...[
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
               child: Row(
@@ -143,8 +138,6 @@ class ReservationCard extends StatelessWidget {
               ),
             ),
           ],
-
-          // ── Actions ─────────────────────────────────────────────────
           if (reservation.tickets.isNotEmpty || canCancel)
             Padding(
               padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
@@ -206,69 +199,19 @@ class ReservationCard extends StatelessWidget {
   }
 }
 
-// ── Status badge ───────────────────────────────────────────────────────────
-
-class _StatusBadge extends StatelessWidget {
-  final String status;
-  const _StatusBadge({required this.status});
-
-  @override
-  Widget build(BuildContext context) {
-    final (color, bg) = switch (status) {
-      'Confirmed' => (
-          const Color(0xFF437A22),
-          const Color(0xFFD4DFCC),
-        ),
-      'Pending' => (
-          const Color(0xFFD19900),
-          const Color(0xFFE9E0C6),
-        ),
-      'Cancelled' => (
-          const Color(0xFFA12C7B),
-          const Color(0xFFE0CED7),
-        ),
-      'Expired' => (
-          const Color(0xFF7A7974),
-          const Color(0xFFF0EFED),
-        ),
-      'Refunded' => (
-          const Color(0xFF006494),
-          const Color(0xFFC6D8E4),
-        ),
-      _ => (
-          const Color(0xFF7A7974),
-          const Color(0xFFF0EFED),
-        ),
-    };
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        status,
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          color: color,
-        ),
-      ),
-    );
-  }
-}
-
-// ── Detail chip ────────────────────────────────────────────────────────────
-
 class _DetailChip extends StatelessWidget {
   final IconData icon;
   final String label;
-  const _DetailChip({required this.icon, required this.label});
+
+  const _DetailChip({
+    required this.icon,
+    required this.label,
+  });
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
       decoration: BoxDecoration(
@@ -278,8 +221,11 @@ class _DetailChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 13,
-              color: Theme.of(context).colorScheme.onSurfaceVariant),
+          Icon(
+            icon,
+            size: 13,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
           const SizedBox(width: 4),
           Text(
             label,

@@ -32,23 +32,23 @@ class Ticket {
   });
 
   factory Ticket.fromJson(Map<String, dynamic> json) => Ticket(
-        ticketId: json['ticketId'] as int,
-        reservationId: json['reservationId'] as int,
-        userId: json['userId'] as int,
-        eventId: json['eventId'] as int,
-        ticketType: json['ticketType'] as String,
-        qrCode: json['qrCode'] as String,
+        ticketId: (json['ticketId'] as num).toInt(),
+        reservationId: (json['reservationId'] as num).toInt(),
+        userId: (json['userId'] as num).toInt(),
+        eventId: (json['eventId'] as num).toInt(),
+        ticketType: (json['ticketType'] ?? '').toString(),
+        qrCode: (json['qrCode'] ?? '').toString(),
         amount: (json['amount'] as num).toDouble(),
-        currency: json['currency'] as String,
-        status: json['status'] as String,
-        issuedAt: DateTime.parse(json['issuedAt'] as String),
+        currency: (json['currency'] ?? '').toString(),
+        status: (json['status'] ?? '').toString(),
+        issuedAt: DateTime.parse((json['issuedAt'] ?? '').toString()),
         usedAt: json['usedAt'] != null
-            ? DateTime.parse(json['usedAt'] as String)
+            ? DateTime.parse(json['usedAt'].toString())
             : null,
         cancelledAt: json['cancelledAt'] != null
-            ? DateTime.parse(json['cancelledAt'] as String)
+            ? DateTime.parse(json['cancelledAt'].toString())
             : null,
-        seatNumber: json['seatNumber'] as String?,
-        section: json['section'] as String?,
+        seatNumber: json['seatNumber']?.toString(),
+        section: json['section']?.toString(),
       );
 }

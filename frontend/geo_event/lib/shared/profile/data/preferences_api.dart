@@ -4,13 +4,17 @@ import '../models/user_preference.dart';
 
 class PreferencesApi {
   final Dio _dio;
+
   PreferencesApi(this._dio);
 
   Future<List<UserPreference>> getPreferences() async {
     final response = await _dio.get('/api/preferences');
-    final list = response.data as List<dynamic>;
-    return list
-        .map((e) => UserPreference.fromJson(e as Map<String, dynamic>))
+    final data = response.data;
+
+    if (data is! List) return const [];
+
+    return data
+        .map((e) => UserPreference.fromJson(Map<String, dynamic>.from(e as Map)))
         .toList();
   }
 
@@ -19,12 +23,18 @@ class PreferencesApi {
     int? genreId,
     required double score,
   }) async {
-    final response = await _dio.put('/api/preferences', data: {
-      if (segmentId != null) 'segmentId': segmentId,
-      if (genreId != null) 'genreId': genreId,
-      'score': score,
-    });
-    return UserPreference.fromJson(response.data as Map<String, dynamic>);
+    final response = await _dio.put(
+      '/api/preferences',
+      data: {
+        'segmentId': ?segmentId,
+        'genreId': ?genreId,
+        'score': score,
+      },
+    );
+
+    return UserPreference.fromJson(
+      Map<String, dynamic>.from(response.data as Map),
+    );
   }
 
   Future<void> deletePreference(int prefId) async {

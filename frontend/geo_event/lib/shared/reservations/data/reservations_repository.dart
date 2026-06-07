@@ -12,7 +12,11 @@ class ReservationsRepository {
     int pageSize = 20,
     String? status,
   }) =>
-      _api.getMyReservations(page: page, pageSize: pageSize, status: status);
+      _api.getMyReservations(
+        page: page,
+        pageSize: pageSize,
+        status: status,
+      );
 
   Future<void> cancelReservation(int reservationId) =>
       _api.cancelReservation(reservationId);

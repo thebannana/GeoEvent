@@ -11,6 +11,7 @@ public record EventCreatedMessage(
     int? VenueId,
     decimal Price,
     bool IsFree,
+    int Capacity,
     DateTime StartDateTime,
     DateTime EndDateTime,
     DateTime PublishedAt

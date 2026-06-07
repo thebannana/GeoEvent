@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using EventService.API.Extensions;
 using EventService.Application.DTOs;
 using EventService.Application.Interfaces.Services;
+using System.Security.Claims;
 
 namespace EventService.API.Controllers;
 
@@ -20,7 +21,30 @@ public class CommentsController : ControllerBase
     [HttpGet("event/{eventId:int}")]
     public async Task<IActionResult> GetByEvent(int eventId)
     {
-        var result = await _eventService.GetEventCommentsAsync(eventId);
+        int? requesterId = null;
+        var userIdValue = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+        if (int.TryParse(userIdValue, out var parsedUserId))
+            requesterId = parsedUserId;
+
+        var result = await _eventService.GetEventCommentsAsync(eventId, requesterId);
+
+        return result.Success
+            ? Ok(result.Data)
+            : StatusCode(result.StatusCode, new { error = result.Error });
+    }
+
+    [HttpGet("{commentId:int}/replies")]
+    public async Task<IActionResult> GetReplies(int commentId)
+    {
+        int? requesterId = null;
+        var userIdValue = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+        if (int.TryParse(userIdValue, out var parsedUserId))
+            requesterId = parsedUserId;
+
+        var result = await _eventService.GetRepliesAsync(commentId, requesterId);
+
         return result.Success
             ? Ok(result.Data)
             : StatusCode(result.StatusCode, new { error = result.Error });
@@ -32,6 +56,7 @@ public class CommentsController : ControllerBase
     {
         var userId = User.GetUserId();
         var result = await _eventService.CreateCommentAsync(dto, userId);
+
         return result.Success
             ? CreatedAtAction(nameof(GetByEvent), new { eventId = dto.EventId }, result.Data)
             : StatusCode(result.StatusCode, new { error = result.Error });
@@ -43,6 +68,7 @@ public class CommentsController : ControllerBase
     {
         var userId = User.GetUserId();
         var result = await _eventService.UpdateCommentAsync(commentId, dto, userId);
+
         return result.Success
             ? Ok(result.Data)
             : StatusCode(result.StatusCode, new { error = result.Error });
@@ -54,17 +80,9 @@ public class CommentsController : ControllerBase
     {
         var userId = User.GetUserId();
         var result = await _eventService.DeleteCommentAsync(commentId, userId);
+
         return result.Success
             ? Ok(new { message = "Comment deleted." })
-            : StatusCode(result.StatusCode, new { error = result.Error });
-    }
-
-    [HttpGet("{commentId:int}/replies")]
-    public async Task<IActionResult> GetReplies(int commentId)
-    {
-        var result = await _eventService.GetRepliesAsync(commentId);
-        return result.Success
-            ? Ok(result.Data)
             : StatusCode(result.StatusCode, new { error = result.Error });
     }
 
@@ -73,6 +91,7 @@ public class CommentsController : ControllerBase
     public async Task<IActionResult> Like(int commentId)
     {
         var result = await _eventService.LikeCommentAsync(commentId, User.GetUserId());
+
         return result.Success
             ? Ok(new { message = "Comment liked." })
             : StatusCode(result.StatusCode, new { error = result.Error });
@@ -83,9 +102,25 @@ public class CommentsController : ControllerBase
     public async Task<IActionResult> Unlike(int commentId)
     {
         var result = await _eventService.UnlikeCommentAsync(commentId, User.GetUserId());
+
         return result.Success
             ? Ok(new { message = "Comment unliked." })
             : StatusCode(result.StatusCode, new { error = result.Error });
     }
 
+    [HttpGet("{commentId:int}")]
+    public async Task<IActionResult> GetById(int commentId)
+    {
+        int? requesterId = null;
+        var userIdValue = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+        if (int.TryParse(userIdValue, out var parsedUserId))
+            requesterId = parsedUserId;
+
+        var result = await _eventService.GetCommentByIdAsync(commentId, requesterId);
+
+        return result.Success
+            ? Ok(result.Data)
+            : StatusCode(result.StatusCode, new { error = result.Error });
+    }
 }

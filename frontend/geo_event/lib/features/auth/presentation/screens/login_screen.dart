@@ -1,10 +1,12 @@
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../application/auth_controller.dart';
+import '../widgets/auth_form_card.dart';
+import '../widgets/auth_header.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -73,15 +75,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             password: _passwordController.text,
           );
 
+      TextInput.finishAutofillContext();
+
       if (!mounted) return;
       context.go('/app');
     } catch (error) {
       if (!mounted) return;
 
-      final message = _friendlyError(error);
-
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message)),
+        SnackBar(content: Text(_friendlyError(error))),
       );
     }
   }
@@ -96,86 +98,99 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         centerTitle: true,
       ),
       body: SafeArea(
-        child: Padding(
+        child: ListView(
           padding: const EdgeInsets.all(24),
-          child: Form(
-            key: _formKey,
-            child: ListView(
-              children: [
-                const SizedBox(height: 24),
-                TextFormField(
-                  controller: _emailOrUsernameController,
-                  textInputAction: TextInputAction.next,
-                  autocorrect: false,
-                  enableSuggestions: false,
-                  decoration: const InputDecoration(
-                    labelText: 'Email or username',
-                    border: OutlineInputBorder(),
-                  ),
-                  validator: (value) {
-                    if ((value ?? '').trim().isEmpty) {
-                      return 'Email or username is required';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _passwordController,
-                  textInputAction: TextInputAction.done,
-                  obscureText: _obscurePassword,
-                  autofillHints: const [AutofillHints.password],
-                  onFieldSubmitted: (_) => _submit(),
-                  decoration: InputDecoration(
-                    labelText: 'Password',
-                    border: const OutlineInputBorder(),
-                    suffixIcon: IconButton(
-                      onPressed: () {
-                        setState(() {
-                          _obscurePassword = !_obscurePassword;
-                        });
-                      },
-                      icon: Icon(
-                        _obscurePassword
-                            ? Icons.visibility_off
-                            : Icons.visibility,
+          children: [
+            AuthFormCard(
+              child: AutofillGroup(
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const AuthHeader(
+                        title: 'Welcome back',
+                        subtitle:
+                            'Log in with your email or username to continue using GeoEvent.',
+                        icon: Icons.event_available_rounded,
                       ),
-                    ),
+                      TextFormField(
+                        controller: _emailOrUsernameController,
+                        textInputAction: TextInputAction.next,
+                        keyboardType: TextInputType.emailAddress,
+                        autocorrect: false,
+                        enableSuggestions: false,
+                        autofillHints: const [
+                          AutofillHints.username,
+                          AutofillHints.email,
+                        ],
+                        decoration: const InputDecoration(
+                          labelText: 'Email or username',
+                          border: OutlineInputBorder(),
+                        ),
+                        validator: (value) {
+                          if ((value ?? '').trim().isEmpty) {
+                            return 'Email or username is required';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: _passwordController,
+                        textInputAction: TextInputAction.done,
+                        obscureText: _obscurePassword,
+                        autofillHints: const [AutofillHints.password],
+                        onFieldSubmitted: (_) => _submit(),
+                        decoration: InputDecoration(
+                          labelText: 'Password',
+                          border: const OutlineInputBorder(),
+                          suffixIcon: IconButton(
+                            onPressed: () {
+                              setState(() {
+                                _obscurePassword = !_obscurePassword;
+                              });
+                            },
+                            icon: Icon(
+                              _obscurePassword
+                                  ? Icons.visibility_off
+                                  : Icons.visibility,
+                            ),
+                          ),
+                        ),
+                        validator: (value) {
+                          if ((value ?? '').isEmpty) {
+                            return 'Password is required';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 24),
+                      FilledButton(
+                        onPressed: authState.isLoading ? null : _submit,
+                        child: authState.isLoading
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Text('Login'),
+                      ),
+                      const SizedBox(height: 8),
+                      TextButton(
+                        onPressed: authState.isLoading
+                            ? null
+                            : () => context.push('/register'),
+                        child: const Text('Create account'),
+                      ),
+                    ],
                   ),
-                  validator: (value) {
-                    if ((value ?? '').isEmpty) {
-                      return 'Password is required';
-                    }
-                    return null;
-                  },
                 ),
-                const SizedBox(height: 24),
-                FilledButton(
-                  onPressed: authState.isLoading ? null : _submit,
-                  child: authState.isLoading
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Text('Login'),
-                ),
-                const SizedBox(height: 8),
-                TextButton(
-                  onPressed: authState.isLoading
-                      ? null
-                      : () => context.push('/forgot-password'),
-                  child: const Text('Forgot password?'),
-                ),
-                TextButton(
-                  onPressed: authState.isLoading
-                      ? null
-                      : () => context.push('/register'),
-                  child: const Text('Create account'),
-                ),
-              ],
+              ),
             ),
-          ),
+          ],
         ),
       ),
     );

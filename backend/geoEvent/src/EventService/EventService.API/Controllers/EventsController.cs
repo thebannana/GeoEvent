@@ -4,6 +4,7 @@ using EventService.API.Extensions;
 using EventService.Application.DTOs;
 using EventService.Application.Interfaces.Services;
 using System.ComponentModel.DataAnnotations;
+using System.Security.Claims;
 
 namespace EventService.API.Controllers;
 
@@ -79,6 +80,51 @@ public class EventsController : ControllerBase
         var result = await _eventService.PublishAsync(eventId, User.GetUserId());
         return result.Success
             ? Ok(new { message = "Event published." })
+            : StatusCode(result.StatusCode, new { error = result.Error });
+    }
+
+    [HttpGet("liked")]
+    [Authorize]
+    public async Task<IActionResult> GetLikedEvents()
+    {
+        var userIdValue = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!int.TryParse(userIdValue, out var userId))
+            return Unauthorized(new { error = "Invalid user token." });
+
+        var result = await _eventService.GetLikedEventsAsync(userId);
+
+        return result.Success
+            ? Ok(result.Data)
+            : StatusCode(result.StatusCode, new { error = result.Error });
+    }
+
+    [HttpPost("{eventId:int}/like")]
+    [Authorize]
+    public async Task<IActionResult> LikeEvent(int eventId)
+    {
+        var userIdValue = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!int.TryParse(userIdValue, out var userId))
+            return Unauthorized(new { error = "Invalid user token." });
+
+        var result = await _eventService.LikeAsync(eventId, userId);
+
+        return result.Success
+            ? Ok(new { message = "Event liked." })
+            : StatusCode(result.StatusCode, new { error = result.Error });
+    }
+
+    [HttpDelete("{eventId:int}/like")]
+    [Authorize]
+    public async Task<IActionResult> UnlikeEvent(int eventId)
+    {
+        var userIdValue = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!int.TryParse(userIdValue, out var userId))
+            return Unauthorized(new { error = "Invalid user token." });
+
+        var result = await _eventService.UnlikeAsync(eventId, userId);
+
+        return result.Success
+            ? Ok(new { message = "Event unliked." })
             : StatusCode(result.StatusCode, new { error = result.Error });
     }
 

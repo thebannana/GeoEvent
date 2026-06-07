@@ -1,9 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../auth/application/auth_controller.dart';
+import '../../../core/network/api_client.dart';
+import '../../../shared/events/models/paged_result.dart';
 import '../../../shared/reservations/data/reservations_api.dart';
 import '../../../shared/reservations/data/reservations_repository.dart';
-import '../../../shared/events/models/paged_result.dart';
 import '../../../shared/reservations/models/reservation.dart';
 
 final reservationsApiProvider = Provider<ReservationsApi>((ref) {
@@ -36,6 +36,22 @@ class ReservationsState {
           activeStatus != null ? activeStatus() : this.activeStatus,
       searchQuery: searchQuery ?? this.searchQuery,
     );
+  }
+
+  List<Reservation> get filteredItems {
+    final all = paged.valueOrNull?.items ?? const <Reservation>[];
+    final q = searchQuery.trim().toLowerCase();
+
+    if (q.isEmpty) return all;
+
+    return all.where((reservation) {
+      return reservation.reservationId.toString().contains(q) ||
+          reservation.eventId.toString().contains(q) ||
+          reservation.status.toLowerCase().contains(q) ||
+          reservation.currency.toLowerCase().contains(q) ||
+          (reservation.paymentReference?.toLowerCase().contains(q) ?? false) ||
+          (reservation.notes?.toLowerCase().contains(q) ?? false);
+    }).toList();
   }
 }
 

@@ -21,6 +21,10 @@ public static class DependencyInjection
         configuration.GetSection(SupabaseStorageSettings.SectionName));
 
         services.AddHttpClient<IImageStorageService, SupabaseImageStorageService>();
+        services.AddHttpClient<IUserProfileService, UserProfileService>(client =>
+        {
+            client.BaseAddress = new Uri("http://user-service:8080/");
+        });
 
         services.AddDbContext<EventDbContext>(options =>
             options.UseSqlServer(

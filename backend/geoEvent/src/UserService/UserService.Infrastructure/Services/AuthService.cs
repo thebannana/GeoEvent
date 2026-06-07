@@ -53,19 +53,21 @@ public class AuthService : IAuthService
             ImageUrl = string.Empty
         };
 
-        var verificationToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(64));
+        //var verificationToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(64));
 
         var user = new User
         {
-            Username = request.Username.ToLower(),
-            Email = request.Email.ToLower(),
+            Username = request.Username.Trim().ToLower(),
+            Email = request.Email.Trim().ToLower(),
             PasswordHash = hash,
             PasswordSalt = salt,
             CreatedAt = DateTime.UtcNow,
             ConsentGivenAt = DateTime.UtcNow,
             ConsentVersion = request.ConsentVersion,
-            EmailVerificationToken = verificationToken,
-            EmailVerificationTokenExpiresAt = DateTime.UtcNow.AddHours(24)
+            IsVerified = true,
+            EmailVerifiedAt = DateTime.UtcNow,
+            EmailVerificationToken = null,
+            EmailVerificationTokenExpiresAt = null
         };
 
         await _userRepository.CreateAsync(user, person);
@@ -73,12 +75,14 @@ public class AuthService : IAuthService
         await _publishEndpoint.Publish(new UserRegisteredMessage(
             user.PersonId, user.Email, user.Username, person.FirstName, DateTime.UtcNow));
 
-        await _publishEndpoint.Publish(new EmailVerificationRequestedMessage(
-            user.PersonId, user.Email, verificationToken,
-            user.EmailVerificationTokenExpiresAt!.Value));
+        return await BuildAuthResponseAsync(user, ipAddress);
+
+        //await _publishEndpoint.Publish(new EmailVerificationRequestedMessage(
+        //    user.PersonId, user.Email, verificationToken,
+        //    user.EmailVerificationTokenExpiresAt!.Value));
 
         // ← Do NOT call BuildAuthResponseAsync here — user is not verified yet
-        return ServiceResult<AuthResponseDto>.Ok(null!);
+        //return ServiceResult<AuthResponseDto>.Ok(null!);
 
         // Or return a dedicated RegisterResponseDto that only has a success message,
         // not tokens. Depends on your API contract.

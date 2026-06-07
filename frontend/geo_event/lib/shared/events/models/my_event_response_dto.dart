@@ -160,8 +160,7 @@ class MyEventResponseDto {
           ? asDateTime(json['updatedAt'] ?? json['UpdatedAt'], now)
           : null,
       imageUrls: asStringList(json['imageUrls'] ?? json['ImageUrls']),
-      coverImageUrl:
-          pick<String>('coverImageUrl', 'CoverImageUrl'),
+      coverImageUrl: pick<String>('coverImageUrl', 'CoverImageUrl'),
     );
   }
 

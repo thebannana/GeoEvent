@@ -15,7 +15,7 @@ class SegmentItem {
 
   factory SegmentItem.fromJson(Map<String, dynamic> json) {
     return SegmentItem(
-      segmentId: (json['segmentId'] as num).toInt(),
+      segmentId: (json['segmentId'] as num?)?.toInt() ?? 0,
       name: json['name']?.toString() ?? '',
       iconUrl: json['iconUrl']?.toString(),
       color: json['color']?.toString(),
@@ -39,7 +39,7 @@ class GenreItem {
 
   factory GenreItem.fromJson(Map<String, dynamic> json) {
     return GenreItem(
-      genreId: (json['genreId'] as num).toInt(),
+      genreId: (json['genreId'] as num?)?.toInt() ?? 0,
       name: json['name']?.toString() ?? '',
       segmentId: (json['segmentId'] as num?)?.toInt(),
       isActive: json['isActive'] as bool? ?? true,
@@ -62,7 +62,7 @@ class SubGenreItem {
 
   factory SubGenreItem.fromJson(Map<String, dynamic> json) {
     return SubGenreItem(
-      subGenreId: (json['subGenreId'] as num).toInt(),
+      subGenreId: (json['subGenreId'] as num?)?.toInt() ?? 0,
       name: json['name']?.toString() ?? '',
       genreId: (json['genreId'] as num?)?.toInt(),
       isActive: json['isActive'] as bool? ?? true,

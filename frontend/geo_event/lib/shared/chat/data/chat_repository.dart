@@ -1,80 +1,54 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-
-import '../../../features/auth/application/auth_controller.dart';
-import 'chat_api.dart';
+import '../models/chat_participant.dart';
+import '../models/chat_thread_details.dart';
 import '../models/conversation_summary.dart';
 import '../models/message_item.dart';
-
-final messagesApiProvider = Provider<ChatApi>((ref) {
-  return ChatApi(ref.watch(authorizedDioProvider));
-});
-
-final messagesRepositoryProvider = Provider<ChatRepository>((ref) {
-  return ChatRepository(ref.watch(messagesApiProvider));
-});
+import 'chat_api.dart';
 
 class ChatRepository {
-  final ChatApi _api;
+  final ChatApi api;
 
-  ChatRepository(this._api);
+  const ChatRepository(this.api);
 
-  Future<List<ConversationSummary>> getConversations() {
-    return _api.getConversations();
-  }
+  Future<List<ConversationSummary>> getThreads() => api.getThreads();
 
-  Future<int> getUnreadCount() {
-    return _api.getUnreadCount();
-  }
+  Future<int> getUnreadCount() => api.getUnreadCount();
 
-  Future<List<MessageItem>> getConversation({
+  Future<Map<String, dynamic>> openDirectThread({
     required int otherUserId,
-    int? eventId,
-  }) {
-    return _api.getConversation(
-      otherUserId: otherUserId,
-      eventId: eventId,
-    );
-  }
+  }) =>
+      api.openDirectThread(otherUserId: otherUserId);
 
-  Future<MessageItem> sendMessage({
-    required int recipientId,
+  Future<ChatThreadDetails> getThreadDetails(int threadId) =>
+      api.getThreadDetails(threadId);
+
+  Future<List<MessageItem>> getThreadMessages(int threadId) =>
+      api.getThreadMessages(threadId);
+
+  Future<MessageItem> sendThreadMessage({
+    required int threadId,
     required String content,
-    int? eventId,
-  }) {
-    return _api.sendMessage(
-      recipientId: recipientId,
-      content: content,
-      eventId: eventId,
-    );
-  }
+    int? replyToMessageId,
+  }) =>
+      api.sendThreadMessage(
+        threadId: threadId,
+        content: content,
+        replyToMessageId: replyToMessageId,
+      );
 
   Future<MessageItem> editMessage({
     required int messageId,
     required String content,
-  }) {
-    return _api.editMessage(
-      messageId: messageId,
-      content: content,
-    );
-  }
+  }) =>
+      api.editMessage(messageId: messageId, content: content);
 
-  Future<void> deleteMessage(int messageId) {
-    return _api.deleteMessage(messageId);
-  }
+  Future<void> deleteMessage(int messageId) => api.deleteMessage(messageId);
 
-  Future<MessageItem> likeMessage(int messageId) {
-    return _api.likeMessage(messageId);
-  }
+  Future<MessageItem> likeMessage(int messageId) => api.likeMessage(messageId);
 
-  Future<MessageItem> unlikeMessage(int messageId) {
-    return _api.unlikeMessage(messageId);
-  }
+  Future<MessageItem> unlikeMessage(int messageId) => api.unlikeMessage(messageId);
 
-  Future<MessageItem> markMessageAsRead(int messageId) {
-    return _api.markMessageAsRead(messageId);
-  }
+  Future<void> markThreadRead(int threadId) => api.markThreadRead(threadId);
 
-  Future<void> markConversationAsRead({required int otherUserId}) {
-    return _api.markConversationAsRead(otherUserId: otherUserId);
-  }
+  Future<List<ChatParticipant>> getThreadParticipants(int threadId) =>
+      api.getThreadParticipants(threadId);
 }

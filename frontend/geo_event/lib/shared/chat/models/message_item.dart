@@ -1,86 +1,120 @@
 class MessageItem {
   final int id;
+  final int threadId;
   final int senderId;
-  final int recipientId;
-  final int? eventId;
   final String content;
   final bool isRead;
   final int likesCount;
+  final bool isLikedByMe;
   final DateTime sentAt;
   final DateTime? readAt;
   final DateTime? editedAt;
-  final String senderDisplayName;
+  final String? senderDisplayName;
   final String? senderAvatarUrl;
-  final String recipientDisplayName;
-  final String? recipientAvatarUrl;
+  final int? replyToMessageId;
+  final String? replyPreview;
+  final String? replySenderName;
 
   const MessageItem({
     required this.id,
+    required this.threadId,
     required this.senderId,
-    required this.recipientId,
-    required this.eventId,
     required this.content,
     required this.isRead,
     required this.likesCount,
+    required this.isLikedByMe,
     required this.sentAt,
     required this.readAt,
     required this.editedAt,
     required this.senderDisplayName,
     required this.senderAvatarUrl,
-    required this.recipientDisplayName,
-    required this.recipientAvatarUrl,
+    required this.replyToMessageId,
+    required this.replyPreview,
+    required this.replySenderName,
   });
 
-  factory MessageItem.fromJson(Map<String, dynamic> json) {
-    return MessageItem(
-      id: json['id'] as int,
-      senderId: json['senderId'] as int,
-      recipientId: json['recipientId'] as int,
-      eventId: json['eventId'] as int?,
-      content: (json['content'] as String?) ?? '',
-      isRead: (json['isRead'] as bool?) ?? false,
-      likesCount: (json['likesCount'] as num?)?.toInt() ?? 0,
-      sentAt: DateTime.parse(json['sentAt'] as String),
-      readAt: json['readAt'] != null ? DateTime.parse(json['readAt'] as String) : null,
-      editedAt: json['editedAt'] != null ? DateTime.parse(json['editedAt'] as String) : null,
-      senderDisplayName: (json['senderDisplayName'] as String?) ?? '',
-      senderAvatarUrl: json['senderAvatarUrl'] as String?,
-      recipientDisplayName: (json['recipientDisplayName'] as String?) ?? '',
-      recipientAvatarUrl: json['recipientAvatarUrl'] as String?,
-    );
-  }
+factory MessageItem.fromJson(Map<String, dynamic> json) {
+  final replyTo = json['replyTo'];
+  final replyMap = replyTo is Map ? Map<String, dynamic>.from(replyTo) : null;
+
+  return MessageItem(
+    id: (json['id'] as num).toInt(),
+    threadId: (json['threadId'] as num).toInt(),
+    senderId: (json['senderId'] as num).toInt(),
+    content: json['content'] as String? ?? '',
+    isRead: json['isRead'] as bool? ?? false,
+    likesCount: (json['likesCount'] as num?)?.toInt() ?? 0,
+    isLikedByMe: json['isLikedByMe'] as bool? ?? false,
+    sentAt: DateTime.parse(json['sentAt'] as String),
+    readAt: json['readAt'] != null
+        ? DateTime.tryParse(json['readAt'] as String)
+        : null,
+    editedAt: json['editedAt'] != null
+        ? DateTime.tryParse(json['editedAt'] as String)
+        : null,
+    senderDisplayName: json['senderDisplayName'] as String?,
+    senderAvatarUrl: json['senderAvatarUrl'] as String?,
+    replyToMessageId: (json['replyToMessageId'] as num?)?.toInt()
+        ?? (replyMap?['messageId'] as num?)?.toInt()
+        ?? (replyMap?['id'] as num?)?.toInt(),
+    replyPreview: json['replyPreview'] as String?
+        ?? replyMap?['contentPreview'] as String?
+        ?? replyMap?['content'] as String?,
+    replySenderName: json['replySenderName'] as String?
+        ?? replyMap?['senderDisplayName'] as String?
+        ?? replyMap?['senderName'] as String?,
+  );
+}
 
   MessageItem copyWith({
     int? id,
+    int? threadId,
     int? senderId,
-    int? recipientId,
-    int? eventId,
     String? content,
     bool? isRead,
     int? likesCount,
+    bool? isLikedByMe,
     DateTime? sentAt,
     DateTime? readAt,
+    bool clearReadAt = false,
     DateTime? editedAt,
+    bool clearEditedAt = false,
     String? senderDisplayName,
+    bool clearSenderDisplayName = false,
     String? senderAvatarUrl,
-    String? recipientDisplayName,
-    String? recipientAvatarUrl,
+    bool clearSenderAvatarUrl = false,
+    int? replyToMessageId,
+    bool clearReplyToMessageId = false,
+    String? replyPreview,
+    bool clearReplyPreview = false,
+    String? replySenderName,
+    bool clearReplySenderName = false,
   }) {
     return MessageItem(
       id: id ?? this.id,
+      threadId: threadId ?? this.threadId,
       senderId: senderId ?? this.senderId,
-      recipientId: recipientId ?? this.recipientId,
-      eventId: eventId ?? this.eventId,
       content: content ?? this.content,
       isRead: isRead ?? this.isRead,
       likesCount: likesCount ?? this.likesCount,
+      isLikedByMe: isLikedByMe ?? this.isLikedByMe,
       sentAt: sentAt ?? this.sentAt,
-      readAt: readAt ?? this.readAt,
-      editedAt: editedAt ?? this.editedAt,
-      senderDisplayName: senderDisplayName ?? this.senderDisplayName,
-      senderAvatarUrl: senderAvatarUrl ?? this.senderAvatarUrl,
-      recipientDisplayName: recipientDisplayName ?? this.recipientDisplayName,
-      recipientAvatarUrl: recipientAvatarUrl ?? this.recipientAvatarUrl,
+      readAt: clearReadAt ? null : readAt ?? this.readAt,
+      editedAt: clearEditedAt ? null : editedAt ?? this.editedAt,
+      senderDisplayName: clearSenderDisplayName
+          ? null
+          : senderDisplayName ?? this.senderDisplayName,
+      senderAvatarUrl: clearSenderAvatarUrl
+          ? null
+          : senderAvatarUrl ?? this.senderAvatarUrl,
+      replyToMessageId: clearReplyToMessageId
+          ? null
+          : replyToMessageId ?? this.replyToMessageId,
+      replyPreview:
+          clearReplyPreview ? null : replyPreview ?? this.replyPreview,
+      replySenderName: clearReplySenderName
+          ? null
+          : replySenderName ?? this.replySenderName,
     );
   }
 }

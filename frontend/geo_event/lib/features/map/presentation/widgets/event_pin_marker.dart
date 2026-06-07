@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 class EventPinMarker extends StatelessWidget {
@@ -15,6 +16,12 @@ class EventPinMarker extends StatelessWidget {
     required this.width,
     required this.height,
   });
+
+  static const double _outerCircleSize = 82;
+  static const double _innerCircleSize = 64;
+  static const double _diamondSize = 22;
+  static const double _imageBorderWidth = 2.2;
+  static const double _rotation45deg = 0.785398;
 
   @override
   Widget build(BuildContext context) {
@@ -35,10 +42,10 @@ class EventPinMarker extends StatelessWidget {
                   Positioned(
                     bottom: 8,
                     child: Transform.rotate(
-                      angle: 0.785398,
+                      angle: _rotation45deg,
                       child: Container(
-                        width: 22,
-                        height: 22,
+                        width: _diamondSize,
+                        height: _diamondSize,
                         decoration: BoxDecoration(
                           color: color,
                           borderRadius: BorderRadius.circular(4),
@@ -56,8 +63,8 @@ class EventPinMarker extends StatelessWidget {
                   Positioned(
                     top: 0,
                     child: Container(
-                      width: 82,
-                      height: 82,
+                      width: _outerCircleSize,
+                      height: _outerCircleSize,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         color: color,
@@ -71,35 +78,17 @@ class EventPinMarker extends StatelessWidget {
                       ),
                       child: Center(
                         child: Container(
-                          width: 64,
-                          height: 64,
+                          width: _innerCircleSize,
+                          height: _innerCircleSize,
                           clipBehavior: Clip.antiAlias,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             border: Border.all(
                               color: Colors.white,
-                              width: 2.2,
+                              width: _imageBorderWidth,
                             ),
                           ),
-                          child: Image.network(
-                            imageUrl,
-                            fit: BoxFit.cover,
-                            width: 64,
-                            height: 64,
-                            errorBuilder: (context, error, stackTrace) {
-                              return Container(
-                                width: 64,
-                                height: 64,
-                                color: Colors.white.withValues(alpha: 0.18),
-                                alignment: Alignment.center,
-                                child: const Icon(
-                                  Icons.event,
-                                  color: Colors.white,
-                                  size: 26,
-                                ),
-                              );
-                            },
-                          ),
+                          child: _buildImage(),
                         ),
                       ),
                     ),
@@ -116,7 +105,7 @@ class EventPinMarker extends StatelessWidget {
                 borderRadius: BorderRadius.circular(999),
               ),
               child: Text(
-                title,
+                title.trim().isEmpty ? 'Event' : title.trim(),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.center,
@@ -130,6 +119,38 @@ class EventPinMarker extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildImage() {
+    final trimmed = imageUrl.trim();
+    if (trimmed.isEmpty) {
+      return _buildFallback();
+    }
+
+    return CachedNetworkImage(
+      imageUrl: trimmed,
+      fit: BoxFit.cover,
+      width: _innerCircleSize,
+      height: _innerCircleSize,
+      fadeInDuration: Duration.zero,
+      fadeOutDuration: Duration.zero,
+      placeholder: (_, __) => _buildFallback(),
+      errorWidget: (_, __, ___) => _buildFallback(),
+    );
+  }
+
+  Widget _buildFallback() {
+    return Container(
+      width: _innerCircleSize,
+      height: _innerCircleSize,
+      color: const Color(0xFFF5F5F5),
+      alignment: Alignment.center,
+      child: const Icon(
+        Icons.event,
+        color: Color(0xFF222222),
+        size: 26,
       ),
     );
   }

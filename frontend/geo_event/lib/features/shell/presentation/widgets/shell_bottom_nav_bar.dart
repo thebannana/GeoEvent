@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../domain/shell_tab.dart';
+import '../../../../shared/shell/models/shell_tab.dart';
 import 'shell_create_nav_item.dart';
 import 'shell_nav_item.dart';
 
@@ -63,7 +63,7 @@ class ShellBottomNavBar extends StatelessWidget {
               ),
               ShellNavItem(
                 label: 'Inbox',
-                icon: Icons.notifications_outlined,
+                icon: Icons.inbox_outlined,
                 selected: selectedTab == ShellTab.inbox,
                 onTap: () => onTap(ShellTab.inbox),
               ),

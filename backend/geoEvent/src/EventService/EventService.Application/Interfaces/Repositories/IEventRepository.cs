@@ -21,6 +21,7 @@ public interface IEventRepository
     Task<bool> IsLikedByUserAsync(int eventId, int userId);
     Task LikeAsync(int eventId, int userId);
     Task UnlikeAsync(int eventId, int userId);
+    Task<List<EventLike>> GetLikedEventsByUserAsync(int userId);
 
     // ── Images ────────────────────────────────────────────────
     Task AddImageAsync(EventImage image);
@@ -30,16 +31,23 @@ public interface IEventRepository
     Task SetCoverImageAsync(int eventId, int imageId);
 
     // ── Segments ──────────────────────────────────────────────
+    // Segments
     Task<List<Segment>> GetAllSegmentsAsync();
     Task<Segment?> GetSegmentByIdAsync(int segmentId);
+    Task<Segment> CreateSegmentAsync(Segment segment);
+    Task UpdateSegmentAsync(Segment segment);
 
-    // ── Genres ────────────────────────────────────────────────
+    // Genres
     Task<List<Genre>> GetGenresBySegmentAsync(int segmentId);
     Task<Genre?> GetGenreByIdAsync(int genreId);
+    Task<Genre> CreateGenreAsync(Genre genre);
+    Task UpdateGenreAsync(Genre genre);
 
-    // ── SubGenres ─────────────────────────────────────────────
+    // SubGenres
     Task<List<SubGenre>> GetSubGenresByGenreAsync(int genreId);
     Task<SubGenre?> GetSubGenreByIdAsync(int subGenreId);
+    Task<SubGenre> CreateSubGenreAsync(SubGenre subGenre);
+    Task UpdateSubGenreAsync(SubGenre subGenre);
 
     // ── Venues ────────────────────────────────────────────────
     Task<Venue?> GetVenueByIdAsync(int venueId);

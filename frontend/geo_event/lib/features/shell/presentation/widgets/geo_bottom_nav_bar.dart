@@ -1,6 +1,8 @@
 import 'dart:ui';
+
 import 'package:flutter/material.dart';
-import '../../domain/shell_tab.dart';
+
+import '../../../../shared/shell/models/shell_tab.dart';
 
 class GeoBottomNavBar extends StatelessWidget {
   final ShellTab? selectedTab;
@@ -72,15 +74,21 @@ class _NavItem extends StatelessWidget {
   IconData get _icon {
     switch (tab) {
       case ShellTab.chat:
-        return isSelected ? Icons.chat_bubble : Icons.chat_bubble_outline_rounded;
+        return isSelected
+            ? Icons.chat_bubble
+            : Icons.chat_bubble_outline_rounded;
       case ShellTab.reservations:
-        return isSelected ? Icons.confirmation_num : Icons.confirmation_num_outlined;
+        return isSelected
+            ? Icons.confirmation_num
+            : Icons.confirmation_num_outlined;
       case ShellTab.createEvent:
         return Icons.add_rounded;
       case ShellTab.inbox:
         return isSelected ? Icons.inbox_rounded : Icons.inbox_outlined;
       case ShellTab.profile:
-        return isSelected ? Icons.person_rounded : Icons.person_outline_rounded;
+        return isSelected
+            ? Icons.person_rounded
+            : Icons.person_outline_rounded;
     }
   }
 
@@ -106,7 +114,11 @@ class _NavItem extends StatelessWidget {
               ),
             ],
           ),
-          child: const Icon(Icons.add_rounded, color: Colors.white, size: 28),
+          child: const Icon(
+            Icons.add_rounded,
+            color: Colors.white,
+            size: 28,
+          ),
         ),
       );
     }

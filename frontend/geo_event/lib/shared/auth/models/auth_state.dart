@@ -6,6 +6,7 @@ class AuthState {
   final DateTime? expiresAt;
   final AuthUser? user;
   final bool isLoading;
+  final bool isInitialized;
 
   const AuthState({
     required this.accessToken,
@@ -13,6 +14,7 @@ class AuthState {
     required this.expiresAt,
     required this.user,
     required this.isLoading,
+    required this.isInitialized,
   });
 
   const AuthState.initial()
@@ -20,14 +22,15 @@ class AuthState {
         refreshToken = null,
         expiresAt = null,
         user = null,
-        isLoading = false;
+        isLoading = false,
+        isInitialized = false;
+
+  bool get hasAccessToken => accessToken != null && accessToken!.isNotEmpty;
+
+  bool get hasRefreshToken => refreshToken != null && refreshToken!.isNotEmpty;
 
   bool get isAuthenticated =>
-      accessToken != null &&
-      accessToken!.isNotEmpty &&
-      refreshToken != null &&
-      refreshToken!.isNotEmpty &&
-      user != null;
+      hasAccessToken && hasRefreshToken && user != null;
 
   AuthState copyWith({
     String? accessToken,
@@ -35,10 +38,18 @@ class AuthState {
     DateTime? expiresAt,
     AuthUser? user,
     bool? isLoading,
+    bool? isInitialized,
     bool clearTokens = false,
   }) {
     if (clearTokens) {
-      return const AuthState.initial();
+      return AuthState(
+        accessToken: null,
+        refreshToken: null,
+        expiresAt: null,
+        user: null,
+        isLoading: false,
+        isInitialized: true,
+      );
     }
 
     return AuthState(
@@ -47,6 +58,7 @@ class AuthState {
       expiresAt: expiresAt ?? this.expiresAt,
       user: user ?? this.user,
       isLoading: isLoading ?? this.isLoading,
+      isInitialized: isInitialized ?? this.isInitialized,
     );
   }
 }

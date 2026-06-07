@@ -30,9 +30,13 @@ final appRouterProvider = Provider<GoRouter>((ref) {
 
   return GoRouter(
     navigatorKey: _rootNavigatorKey,
-    initialLocation: '/onboarding',
+    initialLocation: '/startup',
     refreshListenable: refreshNotifier,
     routes: [
+      GoRoute(
+        path: '/startup',
+        builder: (context, state) => const _StartupScreen(),
+      ),
       GoRoute(
         path: '/onboarding',
         builder: (context, state) => const OnboardingScreen(),
@@ -61,9 +65,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     redirect: (context, state) {
       final authState = ref.read(authStateProvider);
       final isLoggedIn = authState.isAuthenticated;
+      final isInitialized = authState.isInitialized;
 
       final location = state.matchedLocation;
 
+      final isStartup = location == '/startup';
       final isOnboarding = location == '/onboarding';
       final isLogin = location == '/login';
       final isRegister = location == '/register';
@@ -72,6 +78,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
 
       final isAuthRoute = isLogin || isRegister || isForgotPassword;
       final isPublicRoute = isOnboarding || isAuthRoute || isPrivacy;
+
+      if (!isInitialized) {
+        return isStartup ? null : '/startup';
+      }
+
+      if (isStartup) {
+        return isLoggedIn ? '/app' : '/onboarding';
+      }
 
       if (!isLoggedIn && !isPublicRoute) {
         return '/login';
@@ -85,3 +99,16 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     },
   );
 });
+
+class _StartupScreen extends StatelessWidget {
+  const _StartupScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      body: Center(
+        child: CircularProgressIndicator(),
+      ),
+    );
+  }
+}

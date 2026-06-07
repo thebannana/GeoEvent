@@ -6,13 +6,15 @@ namespace MessageService.Infrastructure.Consumers;
 
 public class UserDeletedConsumer : IConsumer<UserDeletedMessage>
 {
-    private readonly IMessageService _messageService;
+    private readonly IChatService _chatService;
 
-    public UserDeletedConsumer(IMessageService messageService)
-        => _messageService = messageService;
+    public UserDeletedConsumer(IChatService chatService)
+    {
+        _chatService = chatService;
+    }
 
     public async Task Consume(ConsumeContext<UserDeletedMessage> context)
     {
-        await _messageService.SoftDeleteUserMessagesAsync(context.Message.UserId);
+        await _chatService.HandleDeletedUserAsync(context.Message.UserId);
     }
 }

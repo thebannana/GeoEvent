@@ -1,24 +1,30 @@
+using System.Text;
+using System.Threading.RateLimiting;
+using MessageService.API.Extensions;
 using MessageService.API.Hubs;
 using MessageService.API.Middleware;
 using MessageService.API.Realtime;
+using MessageService.Application.Interfaces.Repositories;
 using MessageService.Application.Interfaces.Services;
 using MessageService.Infrastructure;
 using MessageService.Infrastructure.Persistence;
+using MessageService.Infrastructure.Repositories;
+using MessageService.Infrastructure.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
-using System.Text;
-using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
+
 builder.Services.AddInfrastructure(builder.Configuration);
+
 builder.Services.AddSignalR();
-builder.Services.AddScoped<IMessageRealtimeNotifier, SignalRMessageRealtimeNotifier>();
+
+builder.Services.AddScoped<IChatRealtimeNotifier, SignalRChatRealtimeNotifier>();
 
 builder.Services.AddSwaggerGen(options =>
 {
@@ -93,7 +99,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 var path = context.HttpContext.Request.Path;
 
                 if (!string.IsNullOrEmpty(accessToken) &&
-                    path.StartsWithSegments("/hubs/messages"))
+                    path.StartsWithSegments("/hubs/chat"))
                 {
                     context.Token = accessToken;
                 }
@@ -153,30 +159,12 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
-app.MapHub<MessageHub>("/hubs/messages");
+app.MapHub<ChatHub>("/hubs/chat");
 
-using var scope = app.Services.CreateScope();
-var db = scope.ServiceProvider.GetRequiredService<MessageDbContext>();
-var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
-
-var retries = 10;
-while (retries > 0)
-{
-    try
-    {
-        logger.LogInformation("Applying migrations...");
-        db.Database.Migrate();
-        logger.LogInformation("Migrations applied successfully.");
-        break;
-    }
-    catch (Exception ex)
-    {
-        retries--;
-        logger.LogWarning("Migration failed. Retries left: {Retries}. Error: {Error}", retries, ex.Message);
-        if (retries == 0)
-            throw;
-        Thread.Sleep(5000);
-    }
-}
+await app.Services.InitializeDatabaseAsync<MessageDbContext>(
+    app.Configuration,
+    app.Environment);
 
 app.Run();
+
+public partial class Program { }

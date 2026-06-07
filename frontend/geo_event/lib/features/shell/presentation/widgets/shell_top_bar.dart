@@ -43,7 +43,9 @@ class ShellTopBar extends StatelessWidget {
                     onPressed: onFilter,
                   ),
                 ],
-              ),
+              )
+            else
+              const SizedBox(width: 102),
           ],
         ),
       ),

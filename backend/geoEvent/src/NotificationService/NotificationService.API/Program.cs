@@ -10,6 +10,7 @@ using NotificationService.API.Middleware;
 using NotificationService.Infrastructure;
 using NotificationService.Infrastructure.BackgroundServices;
 using NotificationService.Infrastructure.Persistence;
+using NotificationService.API.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -140,30 +141,9 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 
-using (var scope = app.Services.CreateScope())
-{
-    var db = scope.ServiceProvider.GetRequiredService<NotificationDbContext>();
-    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
-
-    var retries = 10;
-    while (retries > 0)
-    {
-        try
-        {
-            logger.LogInformation("Applying migrations...");
-            db.Database.Migrate();
-            logger.LogInformation("Migrations applied successfully.");
-            break;
-        }
-        catch (Exception ex)
-        {
-            retries--;
-            logger.LogWarning("Migration failed. Retries left: {Retries}. Error: {Error}", retries, ex.Message);
-            if (retries == 0) throw;
-            Thread.Sleep(5000); // wait 5s before retry
-        }
-    }
-}
+await app.Services.InitializeDatabaseAsync<NotificationDbContext>(
+    app.Configuration,
+    app.Environment);
 
 app.Run();
 

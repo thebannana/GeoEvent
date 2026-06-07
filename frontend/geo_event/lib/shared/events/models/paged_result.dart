@@ -20,16 +20,41 @@ class PagedResult<T> {
   factory PagedResult.fromJson(
     Map<String, dynamic> json,
     T Function(Map<String, dynamic>) fromItem,
-  ) =>
-      PagedResult(
-        items: (json['items'] as List<dynamic>)
-            .map((e) => fromItem(e as Map<String, dynamic>))
-            .toList(),
-        totalCount: json['totalCount'] as int,
-        page: json['page'] as int,
-        pageSize: json['pageSize'] as int,
-        totalPages: json['totalPages'] as int,
-        hasNextPage: json['hasNextPage'] as bool,
-        hasPreviousPage: json['hasPreviousPage'] as bool,
-      );
+  ) {
+    final rawItems = json['items'] ?? json['Items'] ?? const <dynamic>[];
+
+    return PagedResult<T>(
+      items: rawItems is List
+          ? rawItems
+              .whereType<Map>()
+              .map((e) => fromItem(Map<String, dynamic>.from(e)))
+              .toList()
+          : <T>[],
+      totalCount: _asInt(json['totalCount'] ?? json['TotalCount']),
+      page: _asInt(json['page'] ?? json['Page'], fallback: 1),
+      pageSize: _asInt(json['pageSize'] ?? json['PageSize'], fallback: 20),
+      totalPages: _asInt(json['totalPages'] ?? json['TotalPages'], fallback: 1),
+      hasNextPage: _asBool(json['hasNextPage'] ?? json['HasNextPage']),
+      hasPreviousPage:
+          _asBool(json['hasPreviousPage'] ?? json['HasPreviousPage']),
+    );
+  }
+
+  static int _asInt(dynamic value, {int fallback = 0}) {
+    if (value == null) return fallback;
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse(value.toString()) ?? fallback;
+  }
+
+  static bool _asBool(dynamic value, {bool fallback = false}) {
+    if (value == null) return fallback;
+    if (value is bool) return value;
+    if (value is String) {
+      final lower = value.toLowerCase();
+      if (lower == 'true') return true;
+      if (lower == 'false') return false;
+    }
+    return fallback;
+  }
 }

@@ -3,8 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 
 import '../../../../core/widgets/glass_scaffold.dart';
+import '../../../../shared/location/models/event_directions_request.dart';
+import '../../../../shared/shell/models/shell_overlay_page.dart';
+import '../../../../shared/shell/models/shell_tab.dart';
 import '../../../chat/presentation/screens/chat_screen.dart';
 import '../../../create_event/presentation/screens/create_event_screen.dart';
+import '../../../event/presentation/screens/event_detail_screen.dart';
 import '../../../inbox/presentation/screens/inbox_screen.dart';
 import '../../../map/presentation/screens/map_home_screen.dart';
 import '../../../map/presentation/widgets/map_filter_panel.dart';
@@ -13,15 +17,10 @@ import '../../../profile/presentation/screens/profile_tab_page.dart';
 import '../../../reservations/presentation/screens/reservations_screen.dart';
 import '../../../search/presentation/screens/search_sheet.dart';
 import '../../application/shell_controller.dart';
-import '../../domain/shell_tab.dart';
 import '../widgets/shell_bottom_nav_bar.dart';
 import '../widgets/shell_compass_button.dart';
 import '../widgets/shell_sheet_content.dart';
 import '../widgets/shell_top_bar.dart';
-
-enum ShellOverlayPage {
-  search,
-}
 
 class AppShell extends ConsumerStatefulWidget {
   const AppShell({super.key});
@@ -37,6 +36,8 @@ class _AppShellState extends ConsumerState<AppShell>
   static const double _upperSheetSize = 0.78;
   static const double _maxSheetSize = 1.0;
   static const double _fullScreenTrigger = 0.90;
+
+final GlobalKey<MapHomeScreenState> _mapKey = GlobalKey<MapHomeScreenState>();
 
   bool _isFullScreen = false;
   bool _showFilter = false;
@@ -114,9 +115,9 @@ class _AppShellState extends ConsumerState<AppShell>
     });
   }
 
-  void _handleMapReady(MapboxMap mapboxMap) {
-    _mapboxMap = mapboxMap;
-  }
+void _handleMapReady(MapboxMap mapboxMap) {
+  mapboxMap = mapboxMap;
+}
 
   void _handleBearingChanged(double bearing) {
     if (!mounted) return;
@@ -153,6 +154,115 @@ class _AppShellState extends ConsumerState<AppShell>
       case ShellTab.profile:
         return const ProfileTabPage();
     }
+  }
+
+  Future<void> _openEventDetails(int eventId) async {
+    final result = await Navigator.of(context).push<EventDirectionsRequest>(
+      MaterialPageRoute(
+        builder: (_) => EventDetailsScreen(eventId: eventId),
+      ),
+    );
+
+    if (result == null) return;
+
+    await _mapKey.currentState?.focusOnEventLocation(
+      latitude: result.latitude,
+      longitude: result.longitude,
+    );
+
+    if (!mounted) return;
+    await _showDirectionsPrompt(result);
+  }
+
+  Future<void> _showDirectionsPrompt(EventDirectionsRequest request) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: false,
+      builder: (sheetContext) {
+        final theme = Theme.of(sheetContext);
+
+        return SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surface,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: const [
+                  BoxShadow(
+                    blurRadius: 18,
+                    color: Colors.black26,
+                    offset: Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Directions preview',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    request.title,
+                    style: theme.textTheme.bodyMedium,
+                  ),
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () {
+                            Navigator.of(sheetContext).pop();
+                            _openEventDetails(request.eventId);
+                          },
+                          child: const Text('Return to details'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: FilledButton(
+                          onPressed: () {
+                            Navigator.of(sheetContext).pop();
+                            _startDirectionsPlaceholder(request);
+                          },
+                          child: const Text('Start directions'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _startDirectionsPlaceholder(EventDirectionsRequest request) {
+    // TODO: Replace this placeholder with real Mapbox route drawing.
+    // Suggested future flow:
+    // 1. Get current user location.
+    // 2. Request route geometry from Mapbox Directions API.
+    // 3. Draw route line on the map.
+    // 4. Optionally fit camera bounds to the full route.
+    // 5. Open navigation UI / turn-by-turn preview.
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Route drawing is not integrated yet for "${request.title}".',
+        ),
+      ),
+    );
   }
 
   void _handleSheetDragUpdate(
@@ -217,11 +327,11 @@ class _AppShellState extends ConsumerState<AppShell>
   }
 
   void _openDrawer() {
+    ref.read(shellControllerProvider.notifier).close();
     setState(() {
       _showDrawer = true;
       _showFilter = false;
       _overlayPage = null;
-      ref.read(shellControllerProvider.notifier).close();
       _isFullScreen = false;
       _sheetExtent = _midSheetSize;
     });
@@ -257,9 +367,11 @@ class _AppShellState extends ConsumerState<AppShell>
           children: [
             Positioned.fill(
               child: MapHomeScreen(
+                key: _mapKey,
                 filterSelection: _mapFilterSelection,
                 onMapReady: _handleMapReady,
                 onBearingChanged: _handleBearingChanged,
+                onEventSelected: _openEventDetails,
               ),
             ),
             if (_showDrawer)

@@ -7,33 +7,40 @@ namespace TicketService.Application.Interfaces.Repositories;
 
 public interface ITicketRepository
 {
-    // ── Reservations ──────────────────────────────────────────
+    Task<List<Reservation>> GetReservationsForEventAsync(int eventId);
+    Task<int> GetEventCapacityAsync(int eventId);
+    Task<int> GetEventReservedQuantityAsync(int eventId, ReservationStatus status);
+    Task<int> GetEventReservationCountAsync(int eventId);
+    // Reservations
     Task<Reservation?> GetReservationByIdAsync(int reservationId);
-    Task<PagedResult<Reservation>> GetUserReservationsAsync(int userId, ReservationFilterDto filter);  // use filter DTO
+    Task<PagedResult<Reservation>> GetUserReservationsAsync(int userId, ReservationFilterDto filter);
     Task<Reservation> CreateReservationAsync(Reservation reservation);
     Task UpdateReservationAsync(Reservation reservation);
     Task<List<Reservation>> GetExpiredReservationsAsync();
-    Task<bool> HasActiveReservationAsync(int userId, int eventTicketId);   // missing — prevent duplicate reservations
+    Task<bool> HasActiveReservationAsync(int userId, int eventTicketId);
     Task<List<Reservation>> GetActiveReservationsByUserAsync(int userId);
     Task<List<Reservation>> GetActiveReservationsByEventAsync(int eventId);
 
-
-    // ── Event Tickets ─────────────────────────────────────────
+    // Event tickets
+    Task<EventTicket> CreateEventTicketAsync(EventTicket eventTicket);
     Task<EventTicket?> GetEventTicketByIdAsync(int eventTicketId);
-    Task<List<EventTicket>> GetEventTicketsByEventAsync(int eventId);      // missing — list all ticket types for event
-    Task UpdateEventTicketAsync(EventTicket eventTicket);                  // missing — for Reserve/Release
+    Task<List<EventTicket>> GetEventTicketsByEventAsync(int eventId);
+    Task UpdateEventTicketAsync(EventTicket eventTicket);
 
-    // ── Issued Tickets ────────────────────────────────────────
+    // Issued tickets
     Task<Ticket?> GetTicketByIdAsync(int ticketId);
     Task<Ticket?> GetTicketByQrCodeAsync(string qrCode);
     Task<List<Ticket>> GetTicketsByReservationAsync(int reservationId);
-    Task<PagedResult<Ticket>> GetUserTicketsAsync(int userId, TicketFilterDto filter);     // use filter DTO
-    Task<PagedResult<Ticket>> GetEventTicketsAsync(int eventId, TicketFilterDto filter);   // use filter DTO
+    Task<PagedResult<Ticket>> GetUserTicketsAsync(int userId, TicketFilterDto filter);
+    Task<PagedResult<Ticket>> GetEventTicketsAsync(int eventId, TicketFilterDto filter);
     Task AddTicketsAsync(IEnumerable<Ticket> tickets);
     Task UpdateTicketAsync(Ticket ticket);
 
-    // ── Payments ──────────────────────────────────────────────
+    // Payments
     Task AddPaymentDetailAsync(PaymentDetail payment);
-    Task<List<PaymentDetail>> GetPaymentsByReservationAsync(int reservationId);   // missing — needed for refund flows
-    Task<PaymentDetail?> GetPaymentByTransactionIdAsync(string transactionId);    // missing — idempotency check
+    Task<List<PaymentDetail>> GetPaymentsByReservationAsync(int reservationId);
+    Task<PaymentDetail?> GetPaymentByTransactionIdAsync(string transactionId);
+
+    // Organizer/admin reservations
+    Task<PagedResult<Reservation>> GetEventReservationsAsync(int eventId, ReservationFilterDto filter);
 }

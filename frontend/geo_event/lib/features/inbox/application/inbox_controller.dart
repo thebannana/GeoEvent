@@ -1,5 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../auth/application/auth_controller.dart';
+import '../../../core/network/api_client.dart';
 import '../../../shared/notifications/data/notification_api.dart';
 import '../../../shared/notifications/data/notification_repository.dart';
 import '../../../shared/notifications/models/notification_item.dart';

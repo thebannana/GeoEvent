@@ -17,6 +17,54 @@ public class UserRepository : IUserRepository
         _context = context;
     }
 
+    public async Task<UserRating?> GetUserRatingAsync(int raterId, int ratedUserId) =>
+    await _context.Set<UserRating>()
+        .FirstOrDefaultAsync(x => x.RaterId == raterId && x.RatedUserId == ratedUserId);
+
+    public async Task<UserRating> CreateUserRatingAsync(UserRating rating)
+    {
+        _context.Set<UserRating>().Add(rating);
+        await _context.SaveChangesAsync();
+        return rating;
+    }
+
+    public async Task UpdateUserRatingAsync(UserRating rating)
+    {
+        _context.Set<UserRating>().Update(rating);
+        await _context.SaveChangesAsync();
+    }
+
+    public async Task DeleteUserRatingAsync(UserRating rating)
+    {
+        _context.Set<UserRating>().Remove(rating);
+        await _context.SaveChangesAsync();
+    }
+
+    public async Task<(double AverageRating, int RatingsCount)> GetUserRatingSummaryAsync(int userId)
+    {
+        var query = _context.Set<UserRating>().Where(x => x.RatedUserId == userId);
+
+        var count = await query.CountAsync();
+        if (count == 0)
+            return (0, 0);
+
+        var avg = await query.AverageAsync(x => x.Value);
+        return (Math.Round(avg, 2), count);
+    }
+
+    public async Task<List<UserRating>> GetUserReviewsAsync(int ratedUserId, int page, int pageSize) =>
+        await _context.Set<UserRating>()
+            .Include(x => x.Rater)
+            .ThenInclude(x => x!.Person)
+            .Where(x => x.RatedUserId == ratedUserId && !string.IsNullOrWhiteSpace(x.Comment))
+            .OrderByDescending(x => x.UpdatedAt ?? x.CreatedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+    public async Task<int> GetUserReviewsCountAsync(int ratedUserId) =>
+        await _context.Set<UserRating>()
+            .CountAsync(x => x.RatedUserId == ratedUserId && !string.IsNullOrWhiteSpace(x.Comment));
     public async Task<User?> GetByIdAsync(int userId) =>
         await _context.Users.Include(u => u.Person).FirstOrDefaultAsync(u => u.PersonId == userId);
 
@@ -216,6 +264,13 @@ public class UserRepository : IUserRepository
         _context.Reports.Update(report);
         await _context.SaveChangesAsync();
     }
+
+    public async Task<bool> HasOpenReportAsync(int reporterId, ReportTargetType targetType, int targetId) =>
+    await _context.Reports.AnyAsync(r =>
+        r.ReporterId == reporterId &&
+        r.TargetType == targetType &&
+        r.TargetId == targetId &&
+        (r.Status == ReportStatus.Pending || r.Status == ReportStatus.UnderReview));
 
     public async Task<User?> GetPublicByIdAsync(int userId) =>
         await _context.Users.Include(u => u.Person).FirstOrDefaultAsync(u => u.PersonId == userId);

@@ -14,6 +14,7 @@ public class UserDbContext : DbContext
     public DbSet<ActivityLog> ActivityLogs => Set<ActivityLog>();
     public DbSet<UserPreference> UserPreferences => Set<UserPreference>();
     public DbSet<Report> Reports => Set<Report>();
+    public DbSet<UserRating> UserRatings => Set<UserRating>();
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(UserDbContext).Assembly);

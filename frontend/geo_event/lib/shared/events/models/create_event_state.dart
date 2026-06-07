@@ -1,4 +1,5 @@
 import 'create_event_models.dart';
+import 'event_taxonomy_models.dart';
 
 class CreateEventState {
   final bool loadingInitial;

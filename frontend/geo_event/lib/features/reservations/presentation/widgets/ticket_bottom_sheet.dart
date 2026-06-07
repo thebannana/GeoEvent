@@ -31,7 +31,6 @@ class TicketBottomSheet extends StatelessWidget {
           ),
           child: Column(
             children: [
-              // ── Handle + title ─────────────────────────────────────
               Padding(
                 padding: const EdgeInsets.fromLTRB(18, 12, 10, 0),
                 child: Column(
@@ -71,12 +70,9 @@ class TicketBottomSheet extends StatelessWidget {
               ),
               Divider(
                 height: 1,
-                color: Theme.of(context)
-                    .dividerColor
-                    .withValues(alpha: 0.35),
+                color:
+                    Theme.of(context).dividerColor.withValues(alpha: 0.35),
               ),
-
-              // ── Ticket list ────────────────────────────────────────
               Expanded(
                 child: ListView.separated(
                   controller: scrollController,
@@ -95,13 +91,14 @@ class TicketBottomSheet extends StatelessWidget {
   }
 }
 
-// ── Single ticket item ─────────────────────────────────────────────────────
-
 class _TicketItem extends StatelessWidget {
   final Ticket ticket;
   final bool isDark;
 
-  const _TicketItem({required this.ticket, required this.isDark});
+  const _TicketItem({
+    required this.ticket,
+    required this.isDark,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -111,13 +108,11 @@ class _TicketItem extends StatelessWidget {
         color: isDark ? const Color(0xFF1B2028) : Colors.white,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(
-          color:
-              isDark ? const Color(0xFF2A303A) : const Color(0xFFE3EAF3),
+          color: isDark ? const Color(0xFF2A303A) : const Color(0xFFE3EAF3),
         ),
         boxShadow: [
           BoxShadow(
-            color:
-                Colors.black.withValues(alpha: isDark ? 0.10 : 0.04),
+            color: Colors.black.withValues(alpha: isDark ? 0.10 : 0.04),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -125,7 +120,6 @@ class _TicketItem extends StatelessWidget {
       ),
       child: Row(
         children: [
-          // ── QR code ───────────────────────────────────────────────
           Container(
             width: 80,
             height: 80,
@@ -141,8 +135,6 @@ class _TicketItem extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 14),
-
-          // ── Info ──────────────────────────────────────────────────
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -169,8 +161,7 @@ class _TicketItem extends StatelessWidget {
                     '${ticket.section != null ? ' · ${ticket.section}' : ''}',
                     style: TextStyle(
                       fontSize: 12,
-                      color:
-                          Theme.of(context).colorScheme.onSurfaceVariant,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                   ),
                 ],
@@ -182,7 +173,9 @@ class _TicketItem extends StatelessWidget {
                     Text(
                       ticket.status,
                       style: const TextStyle(
-                          fontSize: 12, fontWeight: FontWeight.w600),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                     const Spacer(),
                     Text(
@@ -205,22 +198,31 @@ class _TicketItem extends StatelessWidget {
 
 class _StatusDot extends StatelessWidget {
   final String status;
-  const _StatusDot({required this.status});
+
+  const _StatusDot({
+    required this.status,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final color = switch (status) {
-      'Active' => const Color(0xFF437A22),
-      'Used' => const Color(0xFF006494),
-      'Cancelled' => const Color(0xFFA12C7B),
-      'Expired' => const Color(0xFF7A7974),
-      'Refunded' => const Color(0xFFD19900),
+    final normalized = status.toLowerCase();
+
+    final color = switch (normalized) {
+      'active' => const Color(0xFF437A22),
+      'used' => const Color(0xFF006494),
+      'cancelled' => const Color(0xFFA12C7B),
+      'expired' => const Color(0xFF7A7974),
+      'refunded' => const Color(0xFFD19900),
       _ => const Color(0xFF7A7974),
     };
+
     return Container(
       width: 8,
       height: 8,
-      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+      decoration: BoxDecoration(
+        color: color,
+        shape: BoxShape.circle,
+      ),
     );
   }
 }

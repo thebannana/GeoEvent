@@ -19,27 +19,26 @@ public class TicketsController : ControllerBase
     }
 
     [HttpGet("{ticketId:int}")]
-    [Authorize]
     public async Task<IActionResult> GetById(int ticketId)
     {
         var userId = User.GetUserId();
         var result = await _ticketService.GetTicketAsync(ticketId, userId);
+
         return result.Success
             ? Ok(result.Data)
             : StatusCode(result.StatusCode, new { error = result.Error });
     }
 
     [HttpGet("my")]
-    [Authorize]
     public async Task<IActionResult> GetMyTickets([FromQuery] TicketFilterDto filter)
     {
         var userId = User.GetUserId();
         var result = await _ticketService.GetUserTicketsAsync(userId, filter);
+
         return result.Success
             ? Ok(result.Data)
             : StatusCode(result.StatusCode, new { error = result.Error });
     }
-
 
     [HttpPost("validate")]
     [Authorize(Roles = "Admin,Organizer,Staff")]
@@ -50,20 +49,20 @@ public class TicketsController : ControllerBase
 
         var validatorUserId = User.GetUserId();
         var result = await _ticketService.ValidateTicketAsync(qrCode, validatorUserId);
+
         return result.Success
             ? Ok(result.Data)
             : StatusCode(result.StatusCode, new { error = result.Error });
     }
 
     [HttpPatch("{ticketId:int}/cancel")]
-    [Authorize]
     public async Task<IActionResult> Cancel(int ticketId)
     {
         var userId = User.GetUserId();
         var result = await _ticketService.CancelTicketAsync(ticketId, userId);
+
         return result.Success
             ? NoContent()
             : StatusCode(result.StatusCode, new { error = result.Error });
     }
-
 }

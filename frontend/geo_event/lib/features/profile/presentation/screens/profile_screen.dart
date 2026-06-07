@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../shared/profile/models/user_profile.dart';
 import '../../../../core/theme/theme_mode_controller.dart';
+import '../../../../shared/profile/models/user_profile.dart';
 import '../widgets/profile_section.dart';
 
 class ProfileScreen extends ConsumerWidget {
@@ -30,204 +30,162 @@ class ProfileScreen extends ConsumerWidget {
   });
 
   @override
-Widget build(BuildContext context, WidgetRef ref) {
-  final theme = Theme.of(context);
-  final colors = theme.colorScheme;
-  final themeMode = ref.watch(themeModeControllerProvider);
-  final themeController = ref.read(themeModeControllerProvider.notifier);
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final themeMode = ref.watch(themeModeControllerProvider);
+    final themeController = ref.read(themeModeControllerProvider.notifier);
 
-  return SingleChildScrollView(
-    padding: const EdgeInsets.fromLTRB(18, 0, 18, 28),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _ProfileHeader(profile: profile),
-        const SizedBox(height: 24),
-        ProfileSection(
-          title: 'Account',
-          subtitle: 'Your personal and account information.',
-          children: [
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.person_outline_rounded),
-              title: const Text('Full name'),
-              subtitle: Text(
-                profile.fullName.isEmpty ? 'Not set' : profile.fullName,
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(18, 0, 18, 28),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _ProfileHeader(profile: profile),
+          const SizedBox(height: 24),
+          ProfileSection(
+            title: 'Account',
+            subtitle: 'Your personal and account information.',
+            children: [
+              _ProfileInfoTile(
+                icon: Icons.person_outline_rounded,
+                title: 'Full name',
+                subtitle: profile.fullName.trim().isEmpty
+                    ? 'Not set'
+                    : profile.fullName,
               ),
-            ),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.alternate_email_rounded),
-              title: const Text('Username'),
-              subtitle: Text('@${profile.username}'),
-            ),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.mail_outline_rounded),
-              title: const Text('Email'),
-              subtitle: Text(profile.email),
-            ),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.phone_outlined),
-              title: const Text('Phone number'),
-              subtitle: Text(
-                (profile.phoneNumber ?? '').trim().isEmpty
+              _ProfileInfoTile(
+                icon: Icons.alternate_email_rounded,
+                title: 'Username',
+                subtitle: '@${profile.username}',
+              ),
+              _ProfileInfoTile(
+                icon: Icons.mail_outline_rounded,
+                title: 'Email',
+                subtitle: profile.email,
+              ),
+              _ProfileInfoTile(
+                icon: Icons.phone_outlined,
+                title: 'Phone number',
+                subtitle: (profile.phoneNumber ?? '').trim().isEmpty
                     ? 'Not set'
                     : profile.phoneNumber!,
               ),
-            ),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.badge_outlined),
-              title: const Text('Role'),
-              subtitle: Text(profile.role),
-            ),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: Icon(
-                profile.isVerified
-                    ? Icons.verified_user_outlined
-                    : Icons.error_outline_rounded,
-                color: profile.isVerified ? colors.primary : colors.error,
+              _ProfileInfoTile(
+                icon: Icons.badge_outlined,
+                title: 'Role',
+                subtitle: profile.role,
               ),
-              title: const Text('Verification'),
-              subtitle: Text(
-                profile.isVerified ? 'Verified account' : 'Email not verified',
+              _ProfileActionTile(
+                icon: Icons.edit_outlined,
+                title: 'Edit profile',
+                subtitle: 'Update your personal details and image.',
+                onTap: onEditProfile,
               ),
-            ),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.edit_outlined),
-              title: const Text('Edit profile'),
-              subtitle: const Text('Update your personal details and image.'),
-              trailing: const Icon(Icons.chevron_right_rounded),
-              onTap: onEditProfile,
-            ),
-          ],
-        ),
-        ProfileSection(
-          title: 'Library',
-          subtitle: 'Your saved and created content.',
-          children: [
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.bookmark_border_rounded),
-              title: const Text('Bookmarks'),
-              subtitle: const Text('Saved events and places.'),
-              trailing: const Icon(Icons.chevron_right_rounded),
-              onTap: onOpenBookmarks,
-            ),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.event_note_rounded),
-              title: const Text('My events'),
-              subtitle: const Text('Events you created or manage.'),
-              trailing: const Icon(Icons.chevron_right_rounded),
-              onTap: onOpenMyEvents,
-            ),
-          ],
-        ),
-        ProfileSection(
-          title: 'Security',
-          subtitle: 'Password and session management.',
-          children: [
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.lock_outline_rounded),
-              title: const Text('Change password'),
-              subtitle: const Text('Update your account password securely.'),
-              trailing: const Icon(Icons.chevron_right_rounded),
-              onTap: onChangePassword,
-            ),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.devices_outlined),
-              title: const Text('Revoke all sessions'),
-              subtitle: const Text('Sign out from all other devices.'),
-              trailing: const Icon(Icons.chevron_right_rounded),
-              onTap: onRevokeAllSessions,
-            ),
-          ],
-        ),
-        ProfileSection(
-          title: 'Preferences',
-          subtitle: 'Notifications, appearance, and activity.',
-          children: [
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.tune_rounded),
-              title: const Text('Preferences'),
-              subtitle: const Text('Manage your app settings and notifications.'),
-              trailing: const Icon(Icons.chevron_right_rounded),
-              onTap: onOpenPreferences,
-            ),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.palette_outlined),
-              title: const Text('Appearance'),
-              subtitle: Text(_themeModeLabel(themeMode)),
-            ),
-            Padding(
-              padding: const EdgeInsets.only(top: 4, bottom: 8),
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: SegmentedButton<ThemeMode>(
-                  segments: const [
-                    ButtonSegment<ThemeMode>(
-                      value: ThemeMode.system,
-                      icon: Icon(Icons.brightness_auto_rounded),
-                      label: Text('System'),
-                    ),
-                    ButtonSegment<ThemeMode>(
-                      value: ThemeMode.light,
-                      icon: Icon(Icons.light_mode_rounded),
-                      label: Text('Light'),
-                    ),
-                    ButtonSegment<ThemeMode>(
-                      value: ThemeMode.dark,
-                      icon: Icon(Icons.dark_mode_rounded),
-                      label: Text('Dark'),
-                    ),
-                  ],
-                  selected: {themeMode},
-                  onSelectionChanged: (selection) {
-                    themeController.setThemeMode(selection.first);
-                  },
-                  showSelectedIcon: false,
+            ],
+          ),
+          ProfileSection(
+            title: 'Library',
+            subtitle: 'Your saved and created content.',
+            children: [
+              _ProfileActionTile(
+                icon: Icons.bookmark_border_rounded,
+                title: 'Bookmarks',
+                subtitle: 'Saved events and places.',
+                onTap: onOpenBookmarks,
+              ),
+              _ProfileActionTile(
+                icon: Icons.event_note_rounded,
+                title: 'My events',
+                subtitle: 'Events you created or manage.',
+                onTap: onOpenMyEvents,
+              ),
+            ],
+          ),
+          ProfileSection(
+            title: 'Security',
+            subtitle: 'Password and session management.',
+            children: [
+              _ProfileActionTile(
+                icon: Icons.lock_outline_rounded,
+                title: 'Change password',
+                subtitle: 'Update your account password securely.',
+                onTap: onChangePassword,
+              ),
+              _ProfileActionTile(
+                icon: Icons.devices_outlined,
+                title: 'Revoke all sessions',
+                subtitle: 'Sign out from all other devices.',
+                onTap: onRevokeAllSessions,
+              ),
+            ],
+          ),
+          ProfileSection(
+            title: 'Preferences',
+            subtitle: 'Notifications, appearance, and activity.',
+            children: [
+              _ProfileActionTile(
+                icon: Icons.tune_rounded,
+                title: 'Preferences',
+                subtitle: 'Manage your app settings and notifications.',
+                onTap: onOpenPreferences,
+              ),
+              _ProfileInfoTile(
+                icon: Icons.palette_outlined,
+                title: 'Appearance',
+                subtitle: _themeModeLabel(themeMode),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(top: 4, bottom: 8),
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: SegmentedButton<ThemeMode>(
+                    segments: const [
+                      ButtonSegment<ThemeMode>(
+                        value: ThemeMode.system,
+                        icon: Icon(Icons.brightness_auto_rounded),
+                        label: Text('System'),
+                      ),
+                      ButtonSegment<ThemeMode>(
+                        value: ThemeMode.light,
+                        icon: Icon(Icons.light_mode_rounded),
+                        label: Text('Light'),
+                      ),
+                      ButtonSegment<ThemeMode>(
+                        value: ThemeMode.dark,
+                        icon: Icon(Icons.dark_mode_rounded),
+                        label: Text('Dark'),
+                      ),
+                    ],
+                    selected: {themeMode},
+                    onSelectionChanged: (selection) {
+                      if (selection.isEmpty) return;
+                      themeController.setThemeMode(selection.first);
+                    },
+                    showSelectedIcon: false,
+                  ),
                 ),
               ),
-            ),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.history_rounded),
-              title: const Text('Activity log'),
-              subtitle: const Text('Review your recent account activity.'),
-              trailing: const Icon(Icons.chevron_right_rounded),
-              onTap: onOpenActivityLogs,
-            ),
-          ],
-        ),
-        ProfileSection(
-          title: 'Session',
-          subtitle: 'Current account session controls.',
-          children: [
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: Icon(Icons.logout_rounded, color: colors.error),
-              title: Text(
-                'Log out',
-                style: TextStyle(color: colors.error),
+            ],
+          ),
+          ProfileSection(
+            title: 'Session',
+            subtitle: 'Current account session controls.',
+            children: [
+              _ProfileActionTile(
+                icon: Icons.logout_rounded,
+                iconColor: colors.error,
+                title: 'Log out',
+                titleColor: colors.error,
+                subtitle: 'End your current session.',
+                onTap: onLogout,
               ),
-              subtitle: const Text('End your current session.'),
-              onTap: onLogout,
-            ),
-          ],
-        ),
-      ],
-    ),
-  );
-}
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 
   String _themeModeLabel(ThemeMode mode) {
     switch (mode) {
@@ -250,6 +208,8 @@ class _ProfileHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
+    final imageUrl = profile.imageUrl?.trim();
+    final hasImage = imageUrl != null && imageUrl.isNotEmpty;
 
     return SizedBox(
       width: double.infinity,
@@ -258,24 +218,35 @@ class _ProfileHeader extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            CircleAvatar(
-              radius: 38,
-              backgroundColor: colors.surfaceContainerHighest,
-              backgroundImage:
-                  (profile.imageUrl != null && profile.imageUrl!.trim().isNotEmpty)
-                      ? NetworkImage(profile.imageUrl!)
-                      : null,
-              child: (profile.imageUrl == null || profile.imageUrl!.trim().isEmpty)
-                  ? Icon(
-                      Icons.person_rounded,
-                      size: 38,
-                      color: colors.primary,
-                    )
-                  : null,
+            Container(
+              width: 84,
+              height: 84,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: colors.surfaceContainerHighest,
+                border: Border.all(
+                  color: colors.outlineVariant,
+                ),
+              ),
+              child: ClipOval(
+                child: hasImage
+                    ? Image.network(
+                        imageUrl,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => _ProfileAvatarFallback(
+                          color: colors.primary,
+                        ),
+                      )
+                    : _ProfileAvatarFallback(
+                        color: colors.primary,
+                      ),
+              ),
             ),
             const SizedBox(height: 14),
             Text(
-              profile.fullName.isEmpty ? profile.username : profile.fullName,
+              profile.fullName.trim().isEmpty
+                  ? profile.username
+                  : profile.fullName,
               style: theme.textTheme.titleLarge?.copyWith(
                 fontWeight: FontWeight.w700,
               ),
@@ -295,24 +266,92 @@ class _ProfileHeader extends StatelessWidget {
               alignment: WrapAlignment.center,
               children: [
                 _InfoChip(
-                  icon: profile.isVerified
-                      ? Icons.verified_rounded
-                      : Icons.info_outline_rounded,
-                  label: profile.isVerified ? 'Verified' : 'Unverified',
-                ),
-                _InfoChip(
                   icon: Icons.shield_outlined,
                   label: profile.role,
                 ),
                 _InfoChip(
                   icon: Icons.calendar_today_outlined,
-                  label: 'Joined ${profile.createdAt.year}',
+                  label: 'Joined ${profile.createdAt?.year}',
                 ),
               ],
             ),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _ProfileAvatarFallback extends StatelessWidget {
+  final Color color;
+
+  const _ProfileAvatarFallback({
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Icon(
+        Icons.person_rounded,
+        size: 38,
+        color: color,
+      ),
+    );
+  }
+}
+
+class _ProfileInfoTile extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+
+  const _ProfileInfoTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: Icon(icon),
+      title: Text(title),
+      subtitle: Text(subtitle),
+    );
+  }
+}
+
+class _ProfileActionTile extends StatelessWidget {
+  final IconData icon;
+  final Color? iconColor;
+  final String title;
+  final Color? titleColor;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  const _ProfileActionTile({
+    required this.icon,
+    this.iconColor,
+    required this.title,
+    this.titleColor,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: Icon(icon, color: iconColor),
+      title: Text(
+        title,
+        style: titleColor != null ? TextStyle(color: titleColor) : null,
+      ),
+      subtitle: Text(subtitle),
+      trailing: const Icon(Icons.chevron_right_rounded),
+      onTap: onTap,
     );
   }
 }

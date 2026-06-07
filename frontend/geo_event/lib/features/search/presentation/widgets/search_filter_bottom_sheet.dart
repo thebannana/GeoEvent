@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../shared/events/data/events_api.dart';
+import '../../../../shared/events/models/event_taxonomy_models.dart';
+import '../../../../shared/events/providers/event_providers.dart';
 import '../../domain/filter_selection.dart';
 
 class SearchFilterBottomSheet extends ConsumerStatefulWidget {
-  final List<dynamic> segments;
+  final List<SegmentItem> segments;
   final int? initialSegmentId;
   final int? initialGenreId;
   final int? initialSubGenreId;
@@ -29,8 +30,8 @@ class _SearchFilterBottomSheetState
   int? _genreId;
   int? _subGenreId;
 
-  List<dynamic> _genres = [];
-  List<dynamic> _subGenres = [];
+  List<GenreItem> _genres = [];
+  List<SubGenreItem> _subGenres = [];
   bool _loadingGenres = false;
   bool _loadingSubGenres = false;
 
@@ -43,54 +44,93 @@ class _SearchFilterBottomSheetState
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (_segmentId != null) {
-        await _loadGenres(_segmentId!);
+        await _loadGenres(
+          _segmentId!,
+          preserveSelection: true,
+        );
       }
       if (_genreId != null) {
-        await _loadSubGenres(_genreId!);
+        await _loadSubGenres(
+          _genreId!,
+          preserveSelection: true,
+        );
       }
     });
   }
 
-  Future<void> _loadGenres(int segmentId) async {
+  Future<void> _loadGenres(
+    int segmentId, {
+    bool preserveSelection = false,
+  }) async {
     setState(() {
       _loadingGenres = true;
       _genres = [];
       _subGenres = [];
-      _genreId = null;
-      _subGenreId = null;
+
+      if (!preserveSelection) {
+        _genreId = null;
+        _subGenreId = null;
+      }
     });
 
     try {
-      final items = await ref.read(eventsApiProvider).getGenresBySegment(segmentId);
+      final items =
+          await ref.read(eventsApiProvider).getGenresBySegment(segmentId);
+
       if (!mounted) return;
+
       setState(() {
         _genres = items;
         _loadingGenres = false;
+
+        if (preserveSelection &&
+            _genreId != null &&
+            !_genres.any((e) => e.genreId == _genreId)) {
+          _genreId = null;
+          _subGenreId = null;
+        }
       });
     } catch (_) {
       if (!mounted) return;
+
       setState(() {
         _loadingGenres = false;
       });
     }
   }
 
-  Future<void> _loadSubGenres(int genreId) async {
+  Future<void> _loadSubGenres(
+    int genreId, {
+    bool preserveSelection = false,
+  }) async {
     setState(() {
       _loadingSubGenres = true;
       _subGenres = [];
-      _subGenreId = null;
+
+      if (!preserveSelection) {
+        _subGenreId = null;
+      }
     });
 
     try {
-      final items = await ref.read(eventsApiProvider).getSubGenresByGenre(genreId);
+      final items =
+          await ref.read(eventsApiProvider).getSubGenresByGenre(genreId);
+
       if (!mounted) return;
+
       setState(() {
         _subGenres = items;
         _loadingSubGenres = false;
+
+        if (preserveSelection &&
+            _subGenreId != null &&
+            !_subGenres.any((e) => e.subGenreId == _subGenreId)) {
+          _subGenreId = null;
+        }
       });
     } catch (_) {
       if (!mounted) return;
+
       setState(() {
         _loadingSubGenres = false;
       });
@@ -185,9 +225,12 @@ class _SearchFilterBottomSheetState
                           label: segment.name,
                           selected: _segmentId == segment.segmentId,
                           onTap: () async {
+                            if (_segmentId == segment.segmentId) return;
+
                             setState(() {
                               _segmentId = segment.segmentId;
                             });
+
                             await _loadGenres(segment.segmentId);
                           },
                         ),
@@ -203,7 +246,9 @@ class _SearchFilterBottomSheetState
                   if (_loadingGenres)
                     const Padding(
                       padding: EdgeInsets.symmetric(vertical: 8),
-                      child: CircularProgressIndicator(),
+                      child: Center(
+                        child: CircularProgressIndicator(),
+                      ),
                     )
                   else
                     Wrap(
@@ -224,9 +269,12 @@ class _SearchFilterBottomSheetState
                             label: genre.name,
                             selected: _genreId == genre.genreId,
                             onTap: () async {
+                              if (_genreId == genre.genreId) return;
+
                               setState(() {
                                 _genreId = genre.genreId;
                               });
+
                               await _loadSubGenres(genre.genreId);
                             },
                           ),
@@ -242,7 +290,9 @@ class _SearchFilterBottomSheetState
                   if (_loadingSubGenres)
                     const Padding(
                       padding: EdgeInsets.symmetric(vertical: 8),
-                      child: CircularProgressIndicator(),
+                      child: Center(
+                        child: CircularProgressIndicator(),
+                      ),
                     )
                   else
                     Wrap(

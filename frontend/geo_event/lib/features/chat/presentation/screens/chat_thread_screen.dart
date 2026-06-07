@@ -1,9 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../auth/application/auth_controller.dart';
-import '../../application/chat_thread_controller.dart';
+import '../../../../shared/chat/models/chat_participant.dart';
+import '../../../../shared/chat/models/chat_thread_args.dart';
+import '../../../../shared/chat/models/chat_thread_type.dart';
 import '../../../../shared/chat/models/message_item.dart';
+import '../../../auth/application/auth_controller.dart';
+import '../../../event/presentation/screens/event_detail_screen.dart';
+import '../../application/chat_thread_controller.dart';
+import '../../application/messages_controller.dart';
+import '../widgets/attendees_sheet.dart';
+import '../widgets/chat_reply_preview.dart';
+import '../widgets/event_chat_info_card.dart';
 
 class ChatThreadScreen extends ConsumerStatefulWidget {
   final ChatThreadArgs args;
@@ -19,23 +27,36 @@ class ChatThreadScreen extends ConsumerStatefulWidget {
 
 class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
   final _messageController = TextEditingController();
+  bool _eventCardDismissed = false;
 
   @override
   void initState() {
     super.initState();
     Future.microtask(() async {
+      if (!mounted) return;
+
       final controller =
           ref.read(chatThreadControllerProvider(widget.args).notifier);
-      await controller.connectRealtime();
-      await controller.markConversationRead();
+
+      try {
+        await controller.connectRealtime();
+        if (!mounted) return;
+
+        await controller.markThreadRead();
+        if (!mounted) return;
+
+        ref
+            .read(messagesInboxControllerProvider.notifier)
+            .markThreadLocallyRead(widget.args.threadId);
+      } catch (e, st) {
+        debugPrint('ChatThreadScreen init error: $e');
+        debugPrintStack(stackTrace: st);
+      }
     });
   }
 
   @override
   void dispose() {
-    ref
-        .read(chatThreadControllerProvider(widget.args).notifier)
-        .disposeRealtime();
     _messageController.dispose();
     super.dispose();
   }
@@ -50,12 +71,76 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.args.title),
+        titleSpacing: 0,
+        title: state.details.when(
+          data: (details) => Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                details.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              if (details.type == ChatThreadType.direct &&
+                  details.participants.isNotEmpty)
+                Text(
+                  _presenceLabel(details.participants),
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+            ],
+          ),
+          error: (_, __) => Text(widget.args.title),
+          loading: () => Text(widget.args.title),
+        ),
+        actions: [
+          state.details.maybeWhen(
+            data: (details) {
+              if (details.type != ChatThreadType.eventGroup) {
+                return const SizedBox.shrink();
+              }
+
+              return IconButton(
+                tooltip: 'Attendees',
+                onPressed: details.participants.isEmpty
+                    ? null
+                    : () => _showAttendeesSheet(context, details.participants),
+                icon: const Icon(Icons.group_outlined),
+              );
+            },
+            orElse: () => const SizedBox.shrink(),
+          ),
+        ],
       ),
       body: Column(
         children: [
+          state.details.maybeWhen(
+            data: (details) {
+              final eventInfo = details.eventInfo;
+              if (eventInfo == null || _eventCardDismissed) {
+                return const SizedBox.shrink();
+              }
+
+              return EventChatInfoCard(
+                info: eventInfo,
+                onClose: () {
+                  setState(() => _eventCardDismissed = true);
+                },
+                onOpenEvent: () {
+                  final int? eventId = eventInfo.eventId;
+                  if (eventId == null) return;
+
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => EventDetailsScreen(eventId: eventId),
+                    ),
+                  );
+                },
+              );
+            },
+            orElse: () => const SizedBox.shrink(),
+          ),
           Expanded(
-            child: state.thread.when(
+            child: state.messages.when(
               data: (items) {
                 if (items.isEmpty) {
                   return ListView(
@@ -96,20 +181,14 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
                     final isMine =
                         myUserId != null && message.senderId == myUserId;
 
-                    if (!isMine && !message.isRead) {
-                      Future.microtask(
-                        () => controller.markMessageRead(message.id),
-                      );
-                    }
-
                     return _MessageBubbleCard(
                       message: message,
                       isMine: isMine,
                       isDark: isDark,
+                      onReply: () => controller.setReplyingTo(message),
                       onDelete:
                           isMine ? () => controller.deleteMessage(message.id) : null,
-                      onLike:
-                          !isMine ? () => controller.likeMessage(message.id) : null,
+                      onLike: () => controller.toggleLike(message),
                       onEdit: isMine
                           ? () => _showEditDialog(context, controller, message)
                           : null,
@@ -172,66 +251,91 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
                   ),
                 ),
               ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Expanded(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: isDark
-                            ? const Color(0xFF17191D)
-                            : Theme.of(context).colorScheme.surface,
-                        borderRadius: BorderRadius.circular(22),
-                        border: Border.all(
-                          color: isDark
-                              ? const Color(0xFF2A303A)
-                              : const Color(0xFFE5EAF2),
-                        ),
-                      ),
-                      child: TextField(
-                        controller: _messageController,
-                        minLines: 1,
-                        maxLines: 5,
-                        decoration: const InputDecoration(
-                          hintText: 'Write a message...',
-                          border: InputBorder.none,
-                          contentPadding:
-                              EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                        ),
+                  if (state.replyingTo != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: ChatReplyPreview(
+                        message: state.replyingTo!,
+                        onClose: controller.clearReplyingTo,
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 10),
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.primary,
-                      shape: BoxShape.circle,
-                    ),
-                    child: IconButton(
-                      onPressed: state.sending
-                          ? null
-                          : () async {
-                              final ok = await controller.sendMessage(
-                                _messageController.text,
-                              );
-                              if (ok) _messageController.clear();
-                            },
-                      icon: state.sending
-                          ? SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Theme.of(context).colorScheme.onPrimary,
-                              ),
-                            )
-                          : Icon(
-                              Icons.send_rounded,
-                              color: Theme.of(context).colorScheme.onPrimary,
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Expanded(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? const Color(0xFF17191D)
+                                : Theme.of(context).colorScheme.surface,
+                            borderRadius: BorderRadius.circular(22),
+                            border: Border.all(
+                              color: isDark
+                                  ? const Color(0xFF2A303A)
+                                  : const Color(0xFFE5EAF2),
                             ),
-                    ),
+                          ),
+                          child: TextField(
+                            controller: _messageController,
+                            minLines: 1,
+                            maxLines: 5,
+                            textInputAction: TextInputAction.send,
+                            onSubmitted: state.sending
+                                ? null
+                                : (_) async {
+                                    final ok = await controller.sendMessage(
+                                      _messageController.text,
+                                    );
+                                    if (ok) _messageController.clear();
+                                  },
+                            decoration: const InputDecoration(
+                              hintText: 'Write a message...',
+                              border: InputBorder.none,
+                              contentPadding: EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 12,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Container(
+                        width: 48,
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.primary,
+                          shape: BoxShape.circle,
+                        ),
+                        child: IconButton(
+                          onPressed: state.sending
+                              ? null
+                              : () async {
+                                  final ok = await controller.sendMessage(
+                                    _messageController.text,
+                                  );
+                                  if (ok) _messageController.clear();
+                                },
+                          icon: state.sending
+                              ? SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color:
+                                        Theme.of(context).colorScheme.onPrimary,
+                                  ),
+                                )
+                              : Icon(
+                                  Icons.send_rounded,
+                                  color: Theme.of(context).colorScheme.onPrimary,
+                                ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -271,8 +375,47 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
       ),
     );
 
+    textController.dispose();
+
     if (result == null || result.isEmpty) return;
     await controller.editMessage(messageId: message.id, content: result);
+  }
+
+  void _showAttendeesSheet(
+    BuildContext context,
+    List<ChatParticipant> participants,
+  ) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (_) => AttendeesSheet(participants: participants),
+    );
+  }
+
+  String _presenceLabel(List<ChatParticipant> participants) {
+    final other = participants.cast<ChatParticipant?>().firstWhere(
+          (p) => p != null && p.userId == widget.args.otherUserId,
+          orElse: () => null,
+        );
+
+    if (other == null) return 'Chat';
+
+    if (other.isOnline) return 'Online';
+    if (other.lastActiveAt != null) {
+      return 'Active ${_relativeTime(other.lastActiveAt!)}';
+    }
+
+    return 'Offline';
+  }
+
+  String _relativeTime(DateTime value) {
+    final diff = DateTime.now().difference(value.toLocal());
+
+    if (diff.inMinutes < 1) return 'just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    return '${diff.inDays}d ago';
   }
 }
 
@@ -283,6 +426,7 @@ class _MessageBubbleCard extends StatelessWidget {
   final VoidCallback? onDelete;
   final VoidCallback? onLike;
   final VoidCallback? onEdit;
+  final VoidCallback onReply;
 
   const _MessageBubbleCard({
     required this.message,
@@ -291,13 +435,20 @@ class _MessageBubbleCard extends StatelessWidget {
     this.onDelete,
     this.onLike,
     this.onEdit,
+    required this.onReply,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final avatarUrl = message.senderAvatarUrl;
-    final senderName = message.senderDisplayName;
+
+    final senderName = (message.senderDisplayName?.trim().isNotEmpty ?? false)
+        ? message.senderDisplayName!.trim()
+        : 'User ${message.senderId}';
+
+    final avatarUrl = (message.senderAvatarUrl?.trim().isNotEmpty ?? false)
+        ? message.senderAvatarUrl!.trim()
+        : null;
 
     return Align(
       alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
@@ -311,13 +462,11 @@ class _MessageBubbleCard extends StatelessWidget {
               CircleAvatar(
                 radius: 16,
                 backgroundImage:
-                    avatarUrl != null && avatarUrl.isNotEmpty
-                        ? NetworkImage(avatarUrl)
-                        : null,
-                child: avatarUrl == null || avatarUrl.isEmpty
+                    avatarUrl != null ? NetworkImage(avatarUrl) : null,
+                child: avatarUrl == null
                     ? Text(
                         senderName.isNotEmpty
-                            ? senderName[0].toUpperCase()
+                            ? senderName.characters.first.toUpperCase()
                             : '?',
                       )
                     : null,
@@ -356,6 +505,14 @@ class _MessageBubbleCard extends StatelessWidget {
                           builder: (_) => SafeArea(
                             child: Wrap(
                               children: [
+                                ListTile(
+                                  leading: const Icon(Icons.reply_rounded),
+                                  title: const Text('Reply'),
+                                  onTap: () {
+                                    Navigator.pop(context);
+                                    onReply();
+                                  },
+                                ),
                                 if (onEdit != null)
                                   ListTile(
                                     leading: const Icon(Icons.edit_rounded),
@@ -367,9 +524,14 @@ class _MessageBubbleCard extends StatelessWidget {
                                   ),
                                 if (onLike != null)
                                   ListTile(
-                                    leading:
-                                        const Icon(Icons.favorite_border_rounded),
-                                    title: const Text('Like'),
+                                    leading: Icon(
+                                      message.isLikedByMe
+                                          ? Icons.favorite_rounded
+                                          : Icons.favorite_border_rounded,
+                                    ),
+                                    title: Text(
+                                      message.isLikedByMe ? 'Unlike' : 'Like',
+                                    ),
                                     onTap: () {
                                       Navigator.pop(context);
                                       onLike?.call();
@@ -407,6 +569,40 @@ class _MessageBubbleCard extends StatelessWidget {
                               ? CrossAxisAlignment.end
                               : CrossAxisAlignment.start,
                           children: [
+                            if ((message.replyPreview?.trim().isNotEmpty ?? false))
+                              Container(
+                                width: double.infinity,
+                                margin: const EdgeInsets.only(bottom: 8),
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: theme.colorScheme.primary
+                                      .withValues(alpha: 0.08),
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      message.replySenderName ?? 'Reply',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700,
+                                        color: theme.colorScheme.primary,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      message.replyPreview!,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        height: 1.25,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             Text(
                               message.content,
                               style: const TextStyle(

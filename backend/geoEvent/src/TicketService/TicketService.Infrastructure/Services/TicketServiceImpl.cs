@@ -2,6 +2,7 @@
 using MassTransit;
 using Microsoft.AspNetCore.Http;
 using Shared.Contracts.Events;
+using Shared.Contracts.Reservations;
 using Shared.Contracts.Tickets;
 using TicketService.Application.Common;
 using TicketService.Application.DTOs;
@@ -16,19 +17,137 @@ public class TicketServiceImpl : ITicketService
 {
     private readonly ITicketRepository _repository;
     private readonly IPublishEndpoint _publishEndpoint;
+    private readonly IUserDirectoryService _userDirectoryService;
 
     public TicketServiceImpl(
         ITicketRepository repository,
-        IPublishEndpoint publishEndpoint)
+        IPublishEndpoint publishEndpoint,
+        IUserDirectoryService userDirectoryService)
     {
         _repository = repository;
         _publishEndpoint = publishEndpoint;
+        _userDirectoryService = userDirectoryService;
+    }
+
+    public async Task CancelUserReservationsAsync(int userId)
+    {
+        var reservations = await _repository.GetActiveReservationsByUserAsync(userId);
+
+        foreach (var reservation in reservations)
+        {
+            if (reservation.EventTicketId.HasValue)
+            {
+                var eventTicket = await _repository.GetEventTicketByIdAsync(
+                    reservation.EventTicketId.Value);
+
+                if (eventTicket is not null)
+                {
+                    eventTicket.Release(reservation.Quantity);
+                    await _repository.UpdateEventTicketAsync(eventTicket);
+                }
+            }
+
+            var tickets = await _repository.GetTicketsByReservationAsync(reservation.ReservationId);
+
+            foreach (var ticket in tickets.Where(t => t.CanBeCancelled()))
+            {
+                ticket.Cancel();
+                await _repository.UpdateTicketAsync(ticket);
+
+                await _publishEndpoint.Publish(new TicketCancelledMessage(
+                    ticket.TicketId,
+                    reservation.EventId,
+                    reservation.UserId,
+                    "User account action",
+                    DateTime.UtcNow));
+            }
+
+            if (reservation.CanBeCancelled())
+            {
+                reservation.Cancel();
+                await _repository.UpdateReservationAsync(reservation);
+            }
+        }
+    }
+
+    public async Task<ServiceResult<List<EventAttendeePreviewDto>>> GetPublicEventAttendeesAsync(int eventId)
+    {
+        var reservations = await _repository.GetReservationsForEventAsync(eventId);
+
+        var attendees = reservations
+            .Where(r => r.Status == ReservationStatus.Confirmed)
+            .GroupBy(r => r.UserId)
+            .Select(g => new EventAttendeePreviewDto
+            {
+                UserId = g.Key,
+                Quantity = g.Sum(x => x.Quantity)
+            })
+            .ToList();
+
+        if (attendees.Count == 0)
+            return ServiceResult<List<EventAttendeePreviewDto>>.Ok(attendees);
+
+        var profiles = await _userDirectoryService.GetPublicProfilesAsync(
+            attendees.Select(a => a.UserId).Distinct().ToList());
+
+        var profilesById = profiles.ToDictionary(x => x.UserId);
+
+        foreach (var attendee in attendees)
+        {
+            if (!profilesById.TryGetValue(attendee.UserId, out var profile))
+                continue;
+
+            attendee.Username = profile.Username;
+            attendee.AvatarUrl = profile.ImageUrl;
+        }
+
+        return ServiceResult<List<EventAttendeePreviewDto>>.Ok(attendees);
+    }
+
+    public async Task CancelTicketsByEventAsync(int eventId)
+    {
+        var reservations = await _repository.GetActiveReservationsByEventAsync(eventId);
+
+        foreach (var reservation in reservations)
+        {
+            if (reservation.EventTicketId.HasValue)
+            {
+                var eventTicket = await _repository.GetEventTicketByIdAsync(
+                    reservation.EventTicketId.Value);
+
+                if (eventTicket is not null)
+                {
+                    eventTicket.Release(reservation.Quantity);
+                    await _repository.UpdateEventTicketAsync(eventTicket);
+                }
+            }
+
+            var tickets = await _repository.GetTicketsByReservationAsync(reservation.ReservationId);
+
+            foreach (var ticket in tickets.Where(t => t.CanBeCancelled()))
+            {
+                ticket.Cancel();
+                await _repository.UpdateTicketAsync(ticket);
+
+                await _publishEndpoint.Publish(new TicketCancelledMessage(
+                    ticket.TicketId,
+                    eventId,
+                    reservation.UserId,
+                    "Event cancelled",
+                    DateTime.UtcNow));
+            }
+
+            if (reservation.CanBeCancelled())
+            {
+                reservation.Cancel();
+                await _repository.UpdateReservationAsync(reservation);
+            }
+        }
     }
 
     public async Task<ServiceResult<ReservationResponseDto>> CreateReservationAsync(
         CreateReservationDto dto, int userId)
     {
-        // Quantity guard — prevent abuse (e.g. bulk-buying all seats)
         if (dto.Quantity <= 0 || dto.Quantity > 10)
             return ServiceResult<ReservationResponseDto>.Fail(
                 "Quantity must be between 1 and 10.");
@@ -39,7 +158,8 @@ public class TicketServiceImpl : ITicketService
 
         if (!eventTicket.IsAvailable())
             return ServiceResult<ReservationResponseDto>.Fail(
-                "This ticket type is not available.", StatusCodes.Status409Conflict);
+                "This ticket type is not available.",
+                StatusCodes.Status409Conflict);
 
         if (dto.Quantity > eventTicket.AvailableQuantity)
             return ServiceResult<ReservationResponseDto>.Fail(
@@ -101,18 +221,15 @@ public class TicketServiceImpl : ITicketService
                     ? "Reservation has expired."
                     : "Reservation is no longer pending.");
 
-        // Amount integrity check — prevent client-side price tampering
         var expectedAmount = reservation.TotalAmount;
         if (dto.Amount != expectedAmount)
             return ServiceResult<ReservationResponseDto>.Fail(
                 $"Payment amount mismatch. Expected {expectedAmount} {reservation.Currency}.");
 
-        // Currency integrity check
         if (!string.Equals(dto.Currency, reservation.Currency, StringComparison.OrdinalIgnoreCase))
             return ServiceResult<ReservationResponseDto>.Fail(
                 $"Currency mismatch. Expected {reservation.Currency}.");
 
-        // Idempotency — prevent duplicate payments
         var existing = await _repository.GetPaymentByTransactionIdAsync(dto.PaymentReference);
         if (existing is not null)
             return ServiceResult<ReservationResponseDto>.Conflict(
@@ -129,25 +246,27 @@ public class TicketServiceImpl : ITicketService
             TransactionId = dto.PaymentReference,
             Currency = dto.Currency
         };
+
         await _repository.AddPaymentDetailAsync(payment);
 
         reservation.Confirm(dto.PaymentReference);
         await _repository.UpdateReservationAsync(reservation);
 
-        // Issue one ticket per quantity
         var amountPerTicket = reservation.TotalAmount / reservation.Quantity;
-        var tickets = Enumerable.Range(0, reservation.Quantity).Select(_ => new Ticket
-        {
-            ReservationId = reservation.ReservationId,
-            UserId = userId,
-            EventId = reservation.EventId,
-            TicketType = reservation.EventTicket?.TicketType ?? "General",
-            QrCode = GenerateQrCode(),
-            Amount = amountPerTicket,
-            Currency = reservation.Currency,
-            Status = TicketStatus.Active,
-            IssuedAt = DateTime.UtcNow
-        }).ToList();
+        var tickets = Enumerable.Range(0, reservation.Quantity)
+            .Select(_ => new Ticket
+            {
+                ReservationId = reservation.ReservationId,
+                UserId = userId,
+                EventId = reservation.EventId,
+                TicketType = reservation.EventTicket?.TicketType ?? "General",
+                QrCode = GenerateQrCode(),
+                Amount = amountPerTicket,
+                Currency = reservation.Currency,
+                Status = TicketStatus.Active,
+                IssuedAt = DateTime.UtcNow
+            })
+            .ToList();
 
         await _repository.AddTicketsAsync(tickets);
 
@@ -160,7 +279,6 @@ public class TicketServiceImpl : ITicketService
             payment.TransactionId!,
             payment.PaidAt));
 
-        // Publish one TicketPurchasedMessage per issued ticket
         foreach (var ticket in tickets)
         {
             await _publishEndpoint.Publish(new TicketPurchasedMessage(
@@ -191,11 +309,9 @@ public class TicketServiceImpl : ITicketService
         if (!reservation.CanBeCancelled())
             return ServiceResult<bool>.Fail("Reservation cannot be cancelled in its current state.");
 
-        // Release inventory
         if (reservation.EventTicketId.HasValue)
         {
-            var eventTicket = await _repository.GetEventTicketByIdAsync(
-                reservation.EventTicketId.Value);
+            var eventTicket = await _repository.GetEventTicketByIdAsync(reservation.EventTicketId.Value);
             if (eventTicket is not null)
             {
                 eventTicket.Release(reservation.Quantity);
@@ -203,7 +319,6 @@ public class TicketServiceImpl : ITicketService
             }
         }
 
-        // Cancel all issued tickets
         var tickets = await _repository.GetTicketsByReservationAsync(reservationId);
         foreach (var ticket in tickets.Where(t => t.CanBeCancelled()))
         {
@@ -221,7 +336,7 @@ public class TicketServiceImpl : ITicketService
         reservation.Cancel();
         await _repository.UpdateReservationAsync(reservation);
 
-        await _publishEndpoint.Publish(new ReservationExpiredMessage(
+        await _publishEndpoint.Publish(new ReservationCancelledIntegrationMessage(
             reservation.ReservationId,
             reservation.EventId,
             reservation.UserId,
@@ -286,7 +401,6 @@ public class TicketServiceImpl : ITicketService
     public async Task<ServiceResult<TicketResponseDto>> ValidateTicketAsync(
         string qrCode, int validatorUserId)
     {
-        // Sanitize input — QR codes should only contain URL-safe base64 chars
         if (string.IsNullOrWhiteSpace(qrCode) || qrCode.Length > 64)
             return ServiceResult<TicketResponseDto>.Fail("Invalid QR code format.");
 
@@ -312,8 +426,7 @@ public class TicketServiceImpl : ITicketService
         {
             if (reservation.EventTicketId.HasValue)
             {
-                var eventTicket = await _repository.GetEventTicketByIdAsync(
-                    reservation.EventTicketId.Value);
+                var eventTicket = await _repository.GetEventTicketByIdAsync(reservation.EventTicketId.Value);
                 if (eventTicket is not null)
                 {
                     eventTicket.Release(reservation.Quantity);
@@ -341,10 +454,16 @@ public class TicketServiceImpl : ITicketService
             tickets.Select(MapToEventTicketResponse).ToList());
     }
 
-    public async Task<ServiceResult<EventTicketResponseDto>> GetEventTicketAsync(int eventTicketId)
+    public async Task<ServiceResult<EventTicketResponseDto>> GetEventTicketAsync(int eventId, int eventTicketId)
     {
+        if (eventId <= 0)
+            return ServiceResult<EventTicketResponseDto>.Fail("Invalid event id.");
+
+        if (eventTicketId <= 0)
+            return ServiceResult<EventTicketResponseDto>.Fail("Invalid event ticket id.");
+
         var ticket = await _repository.GetEventTicketByIdAsync(eventTicketId);
-        if (ticket is null)
+        if (ticket is null || ticket.EventId != eventId)
             return ServiceResult<EventTicketResponseDto>.NotFound("Ticket type not found.");
 
         return ServiceResult<EventTicketResponseDto>.Ok(MapToEventTicketResponse(ticket));
@@ -405,72 +524,215 @@ public class TicketServiceImpl : ITicketService
         return ServiceResult<bool>.Ok(true);
     }
 
-    // ── Consumers (called by MassTransit, not HTTP) ───────────────
-
-    public async Task CancelUserReservationsAsync(int userId)
+    public async Task<ServiceResult<PagedResult<OrganizerReservationResponseDto>>> GetEventReservationsAsync(
+    int eventId,
+    int requesterId,
+    string requesterRole,
+    ReservationFilterDto filter)
     {
-        var reservations = await _repository.GetActiveReservationsByUserAsync(userId);
-        foreach (var reservation in reservations)
+        if (eventId <= 0)
+            return ServiceResult<PagedResult<OrganizerReservationResponseDto>>.Fail("Invalid event id.");
+
+        var isAdmin = string.Equals(requesterRole, "Admin", StringComparison.OrdinalIgnoreCase);
+        var isOrganizer = string.Equals(requesterRole, "Organizer", StringComparison.OrdinalIgnoreCase);
+
+        if (!isAdmin && !isOrganizer)
         {
-            if (reservation.EventTicketId.HasValue)
-            {
-                var eventTicket = await _repository.GetEventTicketByIdAsync(
-                    reservation.EventTicketId.Value);
-                if (eventTicket is not null)
-                {
-                    eventTicket.Release(reservation.Quantity);
-                    await _repository.UpdateEventTicketAsync(eventTicket);
-                }
-            }
-
-            var tickets = await _repository.GetTicketsByReservationAsync(reservation.ReservationId);
-            foreach (var ticket in tickets.Where(t => t.CanBeCancelled()))
-            {
-                ticket.Cancel();
-                await _repository.UpdateTicketAsync(ticket);
-            }
-
-            reservation.Cancel();
-            await _repository.UpdateReservationAsync(reservation);
+            return ServiceResult<PagedResult<OrganizerReservationResponseDto>>.Forbidden(
+                "You are not allowed to view event reservations.");
         }
+
+        var paged = await _repository.GetEventReservationsAsync(eventId, filter);
+
+        var items = paged.Items.Select(MapToOrganizerReservationResponse).ToList();
+        await EnrichParticipantPreviewAsync(items);
+
+        return ServiceResult<PagedResult<OrganizerReservationResponseDto>>.Ok(
+            new PagedResult<OrganizerReservationResponseDto>
+            {
+                Items = items,
+                TotalCount = paged.TotalCount,
+                Page = paged.Page,
+                PageSize = paged.PageSize
+            });
     }
 
-    public async Task CancelTicketsByEventAsync(int eventId)
+    public async Task<ServiceResult<ReservationResponseDto>> CompleteCheckoutAsync(
+    CompleteCheckoutDto dto,
+    int userId)
     {
-        var reservations = await _repository.GetActiveReservationsByEventAsync(eventId);
-        foreach (var reservation in reservations)
+        var eventTicket = await _repository.GetEventTicketByIdAsync(dto.EventTicketId);
+        if (eventTicket is null)
+            return ServiceResult<ReservationResponseDto>.NotFound("Ticket type not found.");
+
+        if (!eventTicket.IsAvailable() || dto.Quantity > eventTicket.AvailableQuantity)
+            return ServiceResult<ReservationResponseDto>.Fail(
+                "Ticket no longer available.",
+                StatusCodes.Status409Conflict);
+
+        var expectedAmount = eventTicket.Price * dto.Quantity;
+        if (dto.Amount != expectedAmount)
         {
-            if (reservation.EventTicketId.HasValue)
-            {
-                var eventTicket = await _repository.GetEventTicketByIdAsync(
-                    reservation.EventTicketId.Value);
-                if (eventTicket is not null)
-                {
-                    eventTicket.Release(reservation.Quantity);
-                    await _repository.UpdateEventTicketAsync(eventTicket);
-                }
-            }
-
-            var tickets = await _repository.GetTicketsByReservationAsync(reservation.ReservationId);
-            foreach (var ticket in tickets.Where(t => t.CanBeCancelled()))
-            {
-                ticket.Cancel();
-                await _repository.UpdateTicketAsync(ticket);
-
-                await _publishEndpoint.Publish(new TicketCancelledMessage(
-                    ticket.TicketId,
-                    eventId,
-                    reservation.UserId,
-                    "Event cancelled",
-                    DateTime.UtcNow));
-            }
-
-            reservation.Cancel();
-            await _repository.UpdateReservationAsync(reservation);
+            return ServiceResult<ReservationResponseDto>.Fail(
+                $"Payment amount mismatch. Expected {expectedAmount} {dto.Currency}.");
         }
+
+        var existingPayment = await _repository.GetPaymentByTransactionIdAsync(dto.PaymentReference);
+        if (existingPayment is not null)
+            return ServiceResult<ReservationResponseDto>.Conflict(
+                "This payment reference has already been processed.");
+
+        eventTicket.Reserve(dto.Quantity);
+        await _repository.UpdateEventTicketAsync(eventTicket);
+
+        var reservation = new Reservation
+        {
+            ReservedAt = DateTime.UtcNow,
+            EventId = dto.EventId,
+            UserId = userId,
+            EventTicketId = dto.EventTicketId,
+            Quantity = dto.Quantity,
+            TotalAmount = eventTicket.Price * dto.Quantity,
+            Currency = dto.Currency,
+            Status = ReservationStatus.Pending,
+            CreatedAt = DateTime.UtcNow,
+            ExpiresAt = DateTime.UtcNow.AddMinutes(15)
+        };
+
+        var created = await _repository.CreateReservationAsync(reservation);
+
+        var payment = new PaymentDetail
+        {
+            PaidAt = DateTime.UtcNow,
+            ReservationId = created.ReservationId,
+            UserId = userId,
+            Status = PaymentStatus.Completed,
+            Method = dto.PaymentMethod,
+            Amount = dto.Amount,
+            TransactionId = dto.PaymentReference,
+            Currency = dto.Currency
+        };
+
+        await _repository.AddPaymentDetailAsync(payment);
+
+        created.Confirm(dto.PaymentReference);
+        await _repository.UpdateReservationAsync(created);
+
+        var amountPerTicket = created.TotalAmount / created.Quantity;
+        var tickets = Enumerable.Range(0, created.Quantity)
+            .Select(_ => new Ticket
+            {
+                ReservationId = created.ReservationId,
+                UserId = userId,
+                EventId = created.EventId,
+                TicketType = eventTicket.TicketType,
+                QrCode = GenerateQrCode(),
+                Amount = amountPerTicket,
+                Currency = created.Currency,
+                Status = TicketStatus.Active,
+                IssuedAt = DateTime.UtcNow
+            })
+            .ToList();
+
+        await _repository.AddTicketsAsync(tickets);
+
+        await _publishEndpoint.Publish(new ReservationConfirmedMessage(
+            created.ReservationId,
+            created.EventId,
+            created.UserId,
+            created.Quantity,
+            DateTime.UtcNow
+        ));
+
+        await _publishEndpoint.Publish(new PaymentSucceededMessage(
+            payment.PaymentId,
+            created.ReservationId,
+            userId,
+            payment.Amount,
+            payment.Currency,
+            payment.TransactionId!,
+            payment.PaidAt
+        ));
+
+        foreach (var ticket in tickets)
+        {
+            await _publishEndpoint.Publish(new TicketPurchasedMessage(
+                ticket.TicketId,
+                created.ReservationId,
+                created.EventId,
+                userId,
+                ticket.TicketType,
+                ticket.Amount,
+                ticket.Currency,
+                ticket.IssuedAt
+            ));
+        }
+
+        var updated = await _repository.GetReservationByIdAsync(created.ReservationId);
+        return ServiceResult<ReservationResponseDto>.Ok(MapToReservationResponse(updated!));
+    }
+    public async Task<ServiceResult<EventReservationSummaryResponseDto>> GetEventReservationSummaryAsync(
+    int eventId,
+    int requesterId,
+    string requesterRole)
+    {
+        if (eventId <= 0)
+            return ServiceResult<EventReservationSummaryResponseDto>.Fail("Invalid event id.", 400);
+
+        var isAdmin = string.Equals(requesterRole, "Admin", StringComparison.OrdinalIgnoreCase);
+        var isOrganizer = string.Equals(requesterRole, "Organizer", StringComparison.OrdinalIgnoreCase);
+
+        if (!isAdmin && !isOrganizer)
+        {
+            return ServiceResult<EventReservationSummaryResponseDto>.Forbidden(
+                "You are not allowed to view event reservation summary.");
+        }
+
+        var capacity = await _repository.GetEventCapacityAsync(eventId);
+        var pendingCount = await _repository.GetEventReservedQuantityAsync(eventId, ReservationStatus.Pending);
+        var confirmedCount = await _repository.GetEventReservedQuantityAsync(eventId, ReservationStatus.Confirmed);
+        var reservedCount = pendingCount + confirmedCount;
+        var reservationCount = await _repository.GetEventReservationCountAsync(eventId);
+        var availableCount = Math.Max(0, capacity - reservedCount);
+
+        var response = new EventReservationSummaryResponseDto
+        {
+            EventId = eventId,
+            Capacity = capacity,
+            PendingCount = pendingCount,
+            ConfirmedCount = confirmedCount,
+            ReservedCount = reservedCount,
+            AvailableCount = availableCount,
+            ReservationCount = reservationCount,
+            IsSoldOut = capacity > 0 && availableCount <= 0
+        };
+
+        return ServiceResult<EventReservationSummaryResponseDto>.Ok(response);
     }
 
-    // ── Helpers ───────────────────────────────────────────────────
+    private async Task EnrichParticipantPreviewAsync(List<OrganizerReservationResponseDto> items)
+    {
+        var userIds = items
+            .Select(x => x.UserId)
+            .Where(x => x > 0)
+            .Distinct()
+            .ToList();
+
+        if (userIds.Count == 0)
+            return;
+
+        var profiles = await _userDirectoryService.GetPublicProfilesAsync(userIds);
+        var byId = profiles.ToDictionary(x => x.UserId);
+
+        foreach (var item in items)
+        {
+            if (!byId.TryGetValue(item.UserId, out var profile))
+                continue;
+
+            item.ParticipantUsername = profile.Username;
+            item.ParticipantAvatarUrl = profile.ImageUrl;
+        }
+    }
 
     private static string GenerateQrCode()
     {
@@ -478,8 +740,6 @@ public class TicketServiceImpl : ITicketService
         RandomNumberGenerator.Fill(bytes);
         return Convert.ToBase64String(bytes).Replace("+", "-").Replace("/", "_").TrimEnd('=');
     }
-
-    // ── Mappers ───────────────────────────────────────────────────
 
     private static ReservationResponseDto MapToReservationResponse(Reservation r) => new()
     {
@@ -547,5 +807,24 @@ public class TicketServiceImpl : ITicketService
         Currency = p.Currency,
         TransactionId = p.TransactionId,
         PaidAt = p.PaidAt
+    };
+
+    private static OrganizerReservationResponseDto MapToOrganizerReservationResponse(Reservation r) => new()
+    {
+        ReservationId = r.ReservationId,
+        UserId = r.UserId,
+        EventId = r.EventId,
+        EventTicketId = r.EventTicketId,
+        Quantity = r.Quantity,
+        TotalAmount = r.TotalAmount,
+        Currency = r.Currency,
+        Status = r.Status.ToString(),
+        CreatedAt = r.CreatedAt,
+        ConfirmedAt = r.ConfirmedAt,
+        CancelledAt = r.CancelledAt,
+        ExpiredAt = r.ExpiredAt,
+        ExpiresAt = r.ExpiresAt,
+        PaymentReference = r.PaymentReference,
+        Notes = r.Notes
     };
 }

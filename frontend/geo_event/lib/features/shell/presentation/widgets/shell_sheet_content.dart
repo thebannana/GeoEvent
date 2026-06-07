@@ -115,8 +115,9 @@ class ShellSheetContent extends StatelessWidget {
                     ),
                     Divider(
                       height: 1,
-                      color:
-                          Theme.of(context).dividerColor.withValues(alpha: 0.35),
+                      color: Theme.of(context)
+                          .dividerColor
+                          .withValues(alpha: 0.35),
                     ),
                   ],
                 ),

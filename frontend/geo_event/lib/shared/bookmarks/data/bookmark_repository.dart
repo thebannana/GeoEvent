@@ -3,10 +3,32 @@ import 'bookmark_api.dart';
 
 class BookmarkRepository {
   final BookmarkApi _api;
-  BookmarkRepository(this._api);
+
+  const BookmarkRepository(this._api);
 
   Future<List<Bookmark>> getBookmarks() => _api.getBookmarks();
 
-  Future<void> deleteBookmark(int bookmarkId) =>
-      _api.deleteBookmark(bookmarkId);
+  Future<Bookmark> createBookmark({
+    required int eventId,
+    String? memo,
+  }) {
+    return _api.createBookmark(
+      eventId: eventId,
+      memo: memo,
+    );
+  }
+
+  Future<Bookmark> updateBookmark({
+    required int bookmarkId,
+    String? memo,
+  }) {
+    return _api.updateBookmark(
+      bookmarkId: bookmarkId,
+      memo: memo,
+    );
+  }
+
+  Future<void> deleteBookmark(int bookmarkId) {
+    return _api.deleteBookmark(bookmarkId);
+  }
 }

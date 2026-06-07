@@ -1,5 +1,6 @@
-services:
+name: geoevent
 
+services:
   # ── RabbitMQ ────────────────────────────────────────────────────
   rabbitmq:
     image: rabbitmq:3.13-management
@@ -21,7 +22,7 @@ services:
     networks:
       - geoevent-network
 
-  # ── SQL Server Instances ─────────────────────────────────────────
+  # ── SQL Server Instances ────────────────────────────────────────
   sqlserver-user:
     image: mcr.microsoft.com/mssql/server:2022-CU14-ubuntu-22.04
     container_name: geoevent-sqlserver-user
@@ -34,10 +35,10 @@ services:
     volumes:
       - sqlserver_user_data:/var/opt/mssql
     healthcheck:
-      test: ["CMD", "/opt/mssql-tools18/bin/sqlcmd", "-S", "localhost", "-U", "sa", "-P", "${DB_PASSWORD}", "-Q", "SELECT 1", "-No"]
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P \"$${MSSQL_SA_PASSWORD}\" -Q \"SELECT 1\" -b -o /dev/null || exit 1"]
       interval: 15s
       timeout: 10s
-      retries: 15
+      retries: 20
       start_period: 120s
     networks:
       - geoevent-network
@@ -54,10 +55,10 @@ services:
     volumes:
       - sqlserver_event_data:/var/opt/mssql
     healthcheck:
-      test: ["CMD", "/opt/mssql-tools18/bin/sqlcmd", "-S", "localhost", "-U", "sa", "-P", "${DB_PASSWORD}", "-Q", "SELECT 1", "-No"]
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P \"$${MSSQL_SA_PASSWORD}\" -Q \"SELECT 1\" -b -o /dev/null || exit 1"]
       interval: 15s
       timeout: 10s
-      retries: 15
+      retries: 20
       start_period: 120s
     networks:
       - geoevent-network
@@ -74,10 +75,10 @@ services:
     volumes:
       - sqlserver_ticket_data:/var/opt/mssql
     healthcheck:
-      test: ["CMD", "/opt/mssql-tools18/bin/sqlcmd", "-S", "localhost", "-U", "sa", "-P", "${DB_PASSWORD}", "-Q", "SELECT 1", "-No"]
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P \"$${MSSQL_SA_PASSWORD}\" -Q \"SELECT 1\" -b -o /dev/null || exit 1"]
       interval: 15s
       timeout: 10s
-      retries: 15
+      retries: 20
       start_period: 120s
     networks:
       - geoevent-network
@@ -94,10 +95,10 @@ services:
     volumes:
       - sqlserver_notification_data:/var/opt/mssql
     healthcheck:
-      test: ["CMD", "/opt/mssql-tools18/bin/sqlcmd", "-S", "localhost", "-U", "sa", "-P", "${DB_PASSWORD}", "-Q", "SELECT 1", "-No"]
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P \"$${MSSQL_SA_PASSWORD}\" -Q \"SELECT 1\" -b -o /dev/null || exit 1"]
       interval: 15s
       timeout: 10s
-      retries: 15
+      retries: 20
       start_period: 120s
     networks:
       - geoevent-network
@@ -114,10 +115,10 @@ services:
     volumes:
       - sqlserver_message_data:/var/opt/mssql
     healthcheck:
-      test: ["CMD", "/opt/mssql-tools18/bin/sqlcmd", "-S", "localhost", "-U", "sa", "-P", "${DB_PASSWORD}", "-Q", "SELECT 1", "-No"]
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P \"$${MSSQL_SA_PASSWORD}\" -Q \"SELECT 1\" -b -o /dev/null || exit 1"]
       interval: 15s
       timeout: 10s
-      retries: 15
+      retries: 20
       start_period: 120s
     networks:
       - geoevent-network
@@ -134,15 +135,15 @@ services:
     volumes:
       - sqlserver_location_data:/var/opt/mssql
     healthcheck:
-      test: ["CMD", "/opt/mssql-tools18/bin/sqlcmd", "-S", "localhost", "-U", "sa", "-P", "${DB_PASSWORD}", "-Q", "SELECT 1", "-No"]
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P \"$${MSSQL_SA_PASSWORD}\" -Q \"SELECT 1\" -b -o /dev/null || exit 1"]
       interval: 15s
       timeout: 10s
-      retries: 15
+      retries: 20
       start_period: 120s
     networks:
       - geoevent-network
 
-  # ── Services ─────────────────────────────────────────────────────
+  # ── Services ────────────────────────────────────────────────────
   user-service:
     build:
       context: .
@@ -160,11 +161,14 @@ services:
       Jwt__Secret: ${JWT_SECRET}
       Jwt__Issuer: ${JWT_ISSUER}
       Jwt__Audience: ${JWT_AUDIENCE}
+      Services__EventServiceBaseUrl: http://event-service:8080
     depends_on:
       sqlserver-user:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      event-service:
+        condition: service_started
     networks:
       - geoevent-network
 
@@ -315,7 +319,6 @@ services:
     networks:
       - geoevent-network
 
-# ── Volumes ───────────────────────────────────────────────────────
 volumes:
   rabbitmq_data:
   sqlserver_user_data:
@@ -325,7 +328,6 @@ volumes:
   sqlserver_message_data:
   sqlserver_location_data:
 
-# ── Network ───────────────────────────────────────────────────────
 networks:
   geoevent-network:
     driver: bridge

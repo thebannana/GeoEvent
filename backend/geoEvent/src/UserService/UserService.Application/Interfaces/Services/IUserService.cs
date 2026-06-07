@@ -7,6 +7,8 @@ namespace UserService.Application.Interfaces.Services;
 public interface IUserService
 {
     Task<ServiceResult<UserProfileDto>> GetProfileAsync(int userId);
+    Task<List<CommentUserProfileDto>> GetCommentUserProfilesAsync(IEnumerable<int> ids);
+
     Task<ServiceResult<UserProfileDto>> UpdateProfileAsync(int userId, UpdateProfileDto request);
     Task<ServiceResult<bool>> DeleteAccountAsync(int userId);
     Task<ServiceResult<bool>> BanUserAsync(int userId, string reason = "Policy violation");
@@ -32,8 +34,12 @@ public interface IUserService
     Task<ServiceResult<ReportResponseDto>> CreateReportAsync(CreateReportDto dto, int reporterId);
     Task<ServiceResult<List<ReportResponseDto>>> GetUserReportsAsync(int userId);
     Task<ServiceResult<PagedResult<ReportResponseDto>>> GetAllReportsAsync(ReportStatus? status, int page, int pageSize);
+    Task<ServiceResult<ReportResponseDto>> GetReportByIdAsync(int reportId);
     Task<ServiceResult<ReportResponseDto>> ResolveReportAsync(int reportId, ResolveReportDto dto, int resolvedById);
 
-    Task<ServiceResult<PublicUserProfileDto>> GetPublicProfileAsync(int userId);
+    Task<ServiceResult<PublicUserProfileDto>> GetPublicProfileAsync(int userId, int? requesterId = null);
     Task<ServiceResult<List<PublicUserProfileDto>>> GetPublicProfilesAsync(IEnumerable<int> userIds);
+    Task<ServiceResult<PagedResult<UserReviewResponseDto>>> GetUserReviewsAsync(int userId, int page, int pageSize);
+    Task<ServiceResult<bool>> RateUserAsync(int ratedUserId, int raterId, RateUserDto dto);
+    Task<ServiceResult<bool>> DeleteUserReviewAsync(int ratedUserId, int raterId);
 }

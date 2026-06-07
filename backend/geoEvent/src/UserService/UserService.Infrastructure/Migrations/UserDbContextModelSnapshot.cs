@@ -199,6 +199,9 @@ namespace UserService.Infrastructure.Migrations
                         .HasMaxLength(2000)
                         .HasColumnType("nvarchar(2000)");
 
+                    b.Property<string>("ModeratorAction")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("Reason")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -206,6 +209,9 @@ namespace UserService.Infrastructure.Migrations
 
                     b.Property<int?>("ReporterId")
                         .HasColumnType("int");
+
+                    b.Property<string>("ResolutionNote")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<DateTime?>("ResolvedAt")
                         .HasColumnType("datetime2");
@@ -376,6 +382,46 @@ namespace UserService.Infrastructure.Migrations
                     b.ToTable("UserPreferences");
                 });
 
+            modelBuilder.Entity("UserService.Domain.Entities.UserRating", b =>
+                {
+                    b.Property<int>("RatingId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("RatingId"));
+
+                    b.Property<string>("Comment")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("RatedUserId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("RaterId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("Value")
+                        .HasColumnType("int");
+
+                    b.HasKey("RatingId");
+
+                    b.HasIndex("RatedUserId");
+
+                    b.HasIndex("RaterId", "RatedUserId")
+                        .IsUnique();
+
+                    b.ToTable("UserRatings", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_UserRatings_Value", "[Value] >= 1 AND [Value] <= 5");
+                        });
+                });
+
             modelBuilder.Entity("UserService.Domain.Entities.ActivityLog", b =>
                 {
                     b.HasOne("UserService.Domain.Entities.User", "User")
@@ -432,6 +478,25 @@ namespace UserService.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade);
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("UserService.Domain.Entities.UserRating", b =>
+                {
+                    b.HasOne("UserService.Domain.Entities.User", "RatedUser")
+                        .WithMany()
+                        .HasForeignKey("RatedUserId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.HasOne("UserService.Domain.Entities.User", "Rater")
+                        .WithMany()
+                        .HasForeignKey("RaterId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.Navigation("RatedUser");
+
+                    b.Navigation("Rater");
                 });
 
             modelBuilder.Entity("UserService.Domain.Entities.Person", b =>

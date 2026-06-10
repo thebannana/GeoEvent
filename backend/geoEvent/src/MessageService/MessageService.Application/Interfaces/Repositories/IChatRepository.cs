@@ -5,6 +5,7 @@ namespace MessageService.Application.Interfaces.Repositories;
 
 public interface IChatRepository
 {
+    Task<int> GetThreadUnreadCountAsync(long threadId, int userId);
     Task<int> GetUnreadCountAsync(int userId);
     Task<ChatThread?> GetThreadByIdAsync(long threadId);
     Task<ChatThread?> GetDirectThreadAsync(int userA, int userB);

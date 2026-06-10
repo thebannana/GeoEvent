@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 
 import '../../../../core/widgets/glass_scaffold.dart';
-import '../../../../shared/location/models/event_directions_request.dart';
 import '../../../../shared/shell/models/shell_overlay_page.dart';
 import '../../../../shared/shell/models/shell_tab.dart';
+import '../../../../shared/shell/providers/shell_overlay_providers.dart';
 import '../../../chat/presentation/screens/chat_screen.dart';
 import '../../../create_event/presentation/screens/create_event_screen.dart';
 import '../../../event/presentation/screens/event_detail_screen.dart';
@@ -36,25 +35,18 @@ class _AppShellState extends ConsumerState<AppShell>
   static const double _upperSheetSize = 0.78;
   static const double _maxSheetSize = 1.0;
   static const double _fullScreenTrigger = 0.90;
+  bool _hasActiveNavigation = false;
 
-final GlobalKey<MapHomeScreenState> _mapKey = GlobalKey<MapHomeScreenState>();
+  final GlobalKey<MapHomeScreenState> _mapKey = GlobalKey<MapHomeScreenState>();
 
   bool _isFullScreen = false;
   bool _showFilter = false;
   bool _showDrawer = false;
-  ShellOverlayPage? _overlayPage;
 
   double _sheetExtent = _midSheetSize;
   double _mapBearing = 0.0;
 
   MapFilterSelection _mapFilterSelection = MapFilterSelection.defaults();
-  MapboxMap? _mapboxMap;
-
-  bool get _hasSheetPage =>
-      ref.read(shellControllerProvider) != null || _overlayPage != null;
-
-  bool get _anyOverlay =>
-      _showFilter || _showDrawer || _overlayPage != null;
 
   void _handleTabTap(ShellTab tab) {
     final current = ref.read(shellControllerProvider);
@@ -64,8 +56,9 @@ final GlobalKey<MapHomeScreenState> _mapKey = GlobalKey<MapHomeScreenState>();
       return;
     }
 
+    ref.read(shellOverlayPageProvider.notifier).state = null;
+
     setState(() {
-      _overlayPage = null;
       _showFilter = false;
       _showDrawer = false;
       _isFullScreen = false;
@@ -77,19 +70,32 @@ final GlobalKey<MapHomeScreenState> _mapKey = GlobalKey<MapHomeScreenState>();
 
   void _closeSheet() {
     ref.read(shellControllerProvider.notifier).close();
+    ref.read(shellOverlayPageProvider.notifier).state = null;
+
     if (!mounted) return;
 
     setState(() {
       _isFullScreen = false;
-      _overlayPage = null;
+      _sheetExtent = _midSheetSize;
+    });
+  }
+
+  void _closeSearchOverlayOnly() {
+    ref.read(shellOverlayPageProvider.notifier).state = null;
+
+    if (!mounted) return;
+
+    setState(() {
+      _isFullScreen = false;
       _sheetExtent = _midSheetSize;
     });
   }
 
   void _openSearchSheet() {
     ref.read(shellControllerProvider.notifier).close();
+    ref.read(shellOverlayPageProvider.notifier).state = ShellOverlayPage.search;
+
     setState(() {
-      _overlayPage = ShellOverlayPage.search;
       _showFilter = false;
       _showDrawer = false;
       _isFullScreen = false;
@@ -97,34 +103,19 @@ final GlobalKey<MapHomeScreenState> _mapKey = GlobalKey<MapHomeScreenState>();
     });
   }
 
-  Future<void> _resetMapNorth() async {
-    if (_mapboxMap == null) return;
-
-    await _mapboxMap!.setCamera(
-      CameraOptions(
-        bearing: 0.0,
-        pitch: 0.0,
-      ),
-    );
-
-    final after = await _mapboxMap!.getCameraState();
-
-    if (!mounted) return;
-    setState(() {
-      _mapBearing = after.bearing;
-    });
-  }
-
-void _handleMapReady(MapboxMap mapboxMap) {
-  mapboxMap = mapboxMap;
-}
-
   void _handleBearingChanged(double bearing) {
     if (!mounted) return;
     setState(() {
       _mapBearing = bearing;
     });
   }
+
+  void _handleNavigationUiVisibilityChanged(bool hasActiveNavigation) {
+  if (!mounted) return;
+  setState(() {
+    _hasActiveNavigation = hasActiveNavigation;
+  });
+}
 
   String _titleForTab(ShellTab tab) {
     switch (tab) {
@@ -157,113 +148,15 @@ void _handleMapReady(MapboxMap mapboxMap) {
   }
 
   Future<void> _openEventDetails(int eventId) async {
-    final result = await Navigator.of(context).push<EventDirectionsRequest>(
-      MaterialPageRoute(
-        builder: (_) => EventDetailsScreen(eventId: eventId),
+  await Navigator.of(context).push<void>(
+    MaterialPageRoute(
+      builder: (_) => EventDetailsScreen(
+        eventId: eventId,
+        onCloseParentSearchSheet: _closeSearchOverlayOnly,
       ),
-    );
-
-    if (result == null) return;
-
-    await _mapKey.currentState?.focusOnEventLocation(
-      latitude: result.latitude,
-      longitude: result.longitude,
-    );
-
-    if (!mounted) return;
-    await _showDirectionsPrompt(result);
-  }
-
-  Future<void> _showDirectionsPrompt(EventDirectionsRequest request) async {
-    await showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: false,
-      builder: (sheetContext) {
-        final theme = Theme.of(sheetContext);
-
-        return SafeArea(
-          top: false,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            child: Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surface,
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: const [
-                  BoxShadow(
-                    blurRadius: 18,
-                    color: Colors.black26,
-                    offset: Offset(0, 8),
-                  ),
-                ],
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Directions preview',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    request.title,
-                    style: theme.textTheme.bodyMedium,
-                  ),
-                  const SizedBox(height: 14),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: () {
-                            Navigator.of(sheetContext).pop();
-                            _openEventDetails(request.eventId);
-                          },
-                          child: const Text('Return to details'),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: FilledButton(
-                          onPressed: () {
-                            Navigator.of(sheetContext).pop();
-                            _startDirectionsPlaceholder(request);
-                          },
-                          child: const Text('Start directions'),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  void _startDirectionsPlaceholder(EventDirectionsRequest request) {
-    // TODO: Replace this placeholder with real Mapbox route drawing.
-    // Suggested future flow:
-    // 1. Get current user location.
-    // 2. Request route geometry from Mapbox Directions API.
-    // 3. Draw route line on the map.
-    // 4. Optionally fit camera bounds to the full route.
-    // 5. Open navigation UI / turn-by-turn preview.
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Route drawing is not integrated yet for "${request.title}".',
-        ),
-      ),
-    );
-  }
+    ),
+  );
+}
 
   void _handleSheetDragUpdate(
     DragUpdateDetails details,
@@ -281,7 +174,10 @@ void _handleMapReady(MapboxMap mapboxMap) {
     });
   }
 
-  void _handleSheetDragEnd(DragEndDetails details) {
+  void _handleSheetDragEnd(
+    DragEndDetails details,
+    ShellOverlayPage? overlayPage,
+  ) {
     final velocity = details.primaryVelocity ?? 0;
 
     final targets = [
@@ -304,12 +200,8 @@ void _handleMapReady(MapboxMap mapboxMap) {
 
     if (velocity > 700) {
       if (_sheetExtent <= _midSheetSize) {
-        if (_overlayPage != null) {
-          setState(() {
-            _overlayPage = null;
-            _isFullScreen = false;
-            _sheetExtent = _midSheetSize;
-          });
+        if (overlayPage != null) {
+          _closeSearchOverlayOnly();
         } else {
           _closeSheet();
         }
@@ -328,16 +220,19 @@ void _handleMapReady(MapboxMap mapboxMap) {
 
   void _openDrawer() {
     ref.read(shellControllerProvider.notifier).close();
+    ref.read(shellOverlayPageProvider.notifier).state = null;
+
     setState(() {
       _showDrawer = true;
       _showFilter = false;
-      _overlayPage = null;
       _isFullScreen = false;
       _sheetExtent = _midSheetSize;
     });
   }
 
   void _toggleFilter() {
+    ref.read(shellOverlayPageProvider.notifier).state = null;
+
     setState(() {
       _showFilter = !_showFilter;
       _showDrawer = false;
@@ -347,13 +242,17 @@ void _handleMapReady(MapboxMap mapboxMap) {
   @override
   Widget build(BuildContext context) {
     final selectedTab = ref.watch(shellControllerProvider);
+    final overlayPage = ref.watch(shellOverlayPageProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final screenHeight = MediaQuery.of(context).size.height;
+
+    final hasSheetPage = selectedTab != null || overlayPage != null;
+    final anyOverlay = _showFilter || _showDrawer || overlayPage != null;
 
     final showTopBar =
         !_showDrawer &&
         !_isFullScreen &&
-        _overlayPage == null &&
+        overlayPage == null &&
         selectedTab == null;
 
     final showFilterOnly = _showDrawer;
@@ -369,9 +268,10 @@ void _handleMapReady(MapboxMap mapboxMap) {
               child: MapHomeScreen(
                 key: _mapKey,
                 filterSelection: _mapFilterSelection,
-                onMapReady: _handleMapReady,
                 onBearingChanged: _handleBearingChanged,
                 onEventSelected: _openEventDetails,
+                onCloseSearchOverlay: _closeSearchOverlayOnly,
+                onNavigationUiVisibilityChanged: _handleNavigationUiVisibilityChanged,
               ),
             ),
             if (_showDrawer)
@@ -415,6 +315,10 @@ void _handleMapReady(MapboxMap mapboxMap) {
                   onMenu: _openDrawer,
                   onSearch: _openSearchSheet,
                   onFilter: _toggleFilter,
+                  onDirections: _hasActiveNavigation
+                      ? () => _mapKey.currentState?.openActiveNavigationUi()
+                      : null,
+                  showDirectionsButton: _hasActiveNavigation,
                 ),
               ),
             if (showFilterOnly)
@@ -432,27 +336,23 @@ void _handleMapReady(MapboxMap mapboxMap) {
                   ),
                 ),
               ),
-            if (!_anyOverlay && !_isFullScreen && selectedTab == null)
+            if (!anyOverlay && !_isFullScreen && selectedTab == null)
               Positioned(
                 right: 16,
                 bottom: 140,
                 child: ShellCompassButton(
                   bearing: _mapBearing,
-                  onTap: _resetMapNorth,
+                  onTap: () => _mapKey.currentState?.centerOnUserPuck(),
                 ),
               ),
-            if (_hasSheetPage)
+            if (hasSheetPage)
               Positioned.fill(
                 child: IgnorePointer(
                   ignoring: _isFullScreen,
                   child: GestureDetector(
                     onTap: () {
-                      if (_overlayPage != null) {
-                        setState(() {
-                          _overlayPage = null;
-                          _isFullScreen = false;
-                          _sheetExtent = _midSheetSize;
-                        });
+                      if (overlayPage != null) {
+                        _closeSearchOverlayOnly();
                       } else {
                         _closeSheet();
                       }
@@ -465,7 +365,7 @@ void _handleMapReady(MapboxMap mapboxMap) {
                   ),
                 ),
               ),
-            if (_hasSheetPage)
+            if (hasSheetPage)
               Positioned(
                 left: 0,
                 right: 0,
@@ -479,9 +379,11 @@ void _handleMapReady(MapboxMap mapboxMap) {
                         final String title;
                         final Widget body;
 
-                        if (_overlayPage == ShellOverlayPage.search) {
+                        if (overlayPage == ShellOverlayPage.search) {
                           title = 'Search';
-                          body = const SearchSheet();
+                          body = SearchSheet(
+                            onCloseSheet: _closeSearchOverlayOnly,
+                          );
                         } else {
                           title = _titleForTab(selectedTab!);
                           body = _bodyForTab(selectedTab);
@@ -490,19 +392,16 @@ void _handleMapReady(MapboxMap mapboxMap) {
                         return ShellSheetContent(
                           title: title,
                           onClose: () {
-                            if (_overlayPage != null) {
-                              setState(() {
-                                _overlayPage = null;
-                                _isFullScreen = false;
-                                _sheetExtent = _midSheetSize;
-                              });
+                            if (overlayPage != null) {
+                              _closeSearchOverlayOnly();
                             } else {
                               _closeSheet();
                             }
                           },
                           onDragUpdate: (details) =>
                               _handleSheetDragUpdate(details, screenHeight),
-                          onDragEnd: _handleSheetDragEnd,
+                          onDragEnd: (details) =>
+                              _handleSheetDragEnd(details, overlayPage),
                           body: body,
                           isDark: isDark,
                           isFullScreen: _isFullScreen,

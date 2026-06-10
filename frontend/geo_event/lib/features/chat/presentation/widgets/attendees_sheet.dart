@@ -19,12 +19,16 @@ class AttendeesSheet extends StatelessWidget {
         separatorBuilder: (_, __) => const SizedBox(height: 10),
         itemBuilder: (context, index) {
           final item = participants[index];
+          final username = item.username.trim();
+
           return ListTile(
             contentPadding: EdgeInsets.zero,
             leading: CircleAvatar(
-              backgroundImage:
-                  item.avatarUrl != null ? NetworkImage(item.avatarUrl!) : null,
-              child: item.avatarUrl == null
+              backgroundImage: item.avatarUrl != null &&
+                      item.avatarUrl!.trim().isNotEmpty
+                  ? NetworkImage(item.avatarUrl!.trim())
+                  : null,
+              child: item.avatarUrl == null || item.avatarUrl!.trim().isEmpty
                   ? Text(
                       item.displayName.isNotEmpty
                           ? item.displayName.characters.first.toUpperCase()
@@ -34,9 +38,16 @@ class AttendeesSheet extends StatelessWidget {
             ),
             title: Text(item.displayName),
             subtitle: Text(
-              item.joinedAt != null
-                  ? 'Joined ${_format(item.joinedAt!)}'
-                  : 'Attendee',
+              [
+                if (username.isNotEmpty) '@$username',
+                if (item.joinedAt != null) 'Joined ${_format(item.joinedAt!)}',
+              ].join(' • ').isEmpty
+                  ? 'Attendee'
+                  : [
+                      if (username.isNotEmpty) '@$username',
+                      if (item.joinedAt != null)
+                        'Joined ${_format(item.joinedAt!)}',
+                    ].join(' • '),
             ),
             trailing: Icon(
               Icons.circle,
@@ -51,9 +62,6 @@ class AttendeesSheet extends StatelessWidget {
 
   static String _format(DateTime value) {
     final local = value.toLocal();
-    return '${local.day.toString().padLeft(2, '0')}.'
-        '${local.month.toString().padLeft(2, '0')} '
-        '${local.hour.toString().padLeft(2, '0')}:'
-        '${local.minute.toString().padLeft(2, '0')}';
+    return '${local.day.toString().padLeft(2, '0')}.${local.month.toString().padLeft(2, '0')}';
   }
 }

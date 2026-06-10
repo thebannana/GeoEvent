@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'app_empty_state.dart';
 import 'app_error_view.dart';
-import 'app_loading_indicator.dart';
+import 'app_loading_sheet.dart';
 
 class AppAsyncView<T> extends StatelessWidget {
   final AsyncValue<T> value;
@@ -40,8 +40,9 @@ class AppAsyncView<T> extends StatelessWidget {
       },
       loading: () {
         return loading ??
-            const AppLoadingIndicator(
-              message: 'Loading...',
+            const AppLoadingSheet(
+              title: 'Loading',
+              message: 'Please wait while we prepare your content.',
             );
       },
       error: (error, stackTrace) {

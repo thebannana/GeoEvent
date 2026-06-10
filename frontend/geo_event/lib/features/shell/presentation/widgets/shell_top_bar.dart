@@ -5,6 +5,8 @@ class ShellTopBar extends StatelessWidget {
   final VoidCallback onMenu;
   final VoidCallback onSearch;
   final VoidCallback onFilter;
+  final VoidCallback? onDirections;
+  final bool showDirectionsButton;
 
   const ShellTopBar({
     super.key,
@@ -12,6 +14,8 @@ class ShellTopBar extends StatelessWidget {
     required this.onMenu,
     required this.onSearch,
     required this.onFilter,
+    required this.onDirections,
+    required this.showDirectionsButton,
   });
 
   @override
@@ -33,6 +37,13 @@ class ShellTopBar extends StatelessWidget {
             if (showAll)
               Row(
                 children: [
+                  if (showDirectionsButton) ...[
+                    _CircleActionButton(
+                      icon: Icons.navigation_rounded,
+                      onPressed: onDirections ?? () {},
+                    ),
+                    const SizedBox(width: 10),
+                  ],
                   _CircleActionButton(
                     icon: Icons.search_rounded,
                     onPressed: onSearch,

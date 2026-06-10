@@ -49,17 +49,38 @@ public class ChatRepository : IChatRepository
     }
 
     public async Task<int> GetUnreadCountAsync(int userId)
-{
-    return await
-        (from p in _context.ChatThreadParticipants
-         join m in _context.ChatMessages on p.ThreadId equals m.ThreadId
-         where p.UserId == userId
-               && p.LeftAt == null
-               && m.SenderId != userId
-               && m.DeletedAt == null
-         select m.Id)
-        .CountAsync();
-}
+    {
+        return await
+            (from p in _context.ChatThreadParticipants
+             join m in _context.ChatMessages on p.ThreadId equals m.ThreadId
+             where p.UserId == userId
+                   && p.LeftAt == null
+                   && m.SenderId != userId
+                   && m.DeletedAt == null
+                   && (p.LastReadAt == null || m.SentAt > p.LastReadAt)
+             select m.Id)
+            .CountAsync();
+    }
+
+    public async Task<int> GetThreadUnreadCountAsync(long threadId, int userId)
+    {
+        var participant = await _context.ChatThreadParticipants
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.ThreadId == threadId && x.UserId == userId && x.LeftAt == null);
+
+        if (participant == null)
+            return 0;
+
+        return await _context.ChatMessages
+            .AsNoTracking()
+            .Where(m =>
+                m.ThreadId == threadId &&
+                m.SenderId != userId &&
+                m.DeletedAt == null &&
+                (participant.LastReadAt == null || m.SentAt > participant.LastReadAt))
+            .CountAsync();
+    }
+
     public async Task<List<ChatMessage>> GetMessagesBySenderAsync(int userId)
     {
         return await _context.ChatMessages
@@ -109,7 +130,7 @@ public class ChatRepository : IChatRepository
     {
         var query = _context.ChatMessages
             .Include(x => x.ReplyToMessage)
-            .Where(x => x.ThreadId == threadId)
+            .Where(x => x.ThreadId == threadId && x.DeletedAt == null)
             .OrderByDescending(x => x.SentAt);
 
         var total = await query.CountAsync();

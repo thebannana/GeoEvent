@@ -288,6 +288,11 @@ public class TicketRepository : ITicketRepository
         return await query.CountAsync();
     }
 
+    public async Task<Ticket?> GetTicketForValidationAsync(string qrCode) =>
+    await _context.IssuedTickets
+        .Include(t => t.Reservation)
+        .FirstOrDefaultAsync(t => t.QrCode == qrCode);
+
     public async Task<int> GetEventReservedQuantityAsync(int eventId, params ReservationStatus[] statuses)
     {
         var query = _context.Reservations.Where(r => r.EventId == eventId);

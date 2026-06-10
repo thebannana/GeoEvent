@@ -9,6 +9,7 @@ class AppBottomSheetContainer extends StatelessWidget {
   final EdgeInsetsGeometry margin;
   final double maxHeightFactor;
   final bool showHandle;
+  final bool scrollable;
 
   const AppBottomSheetContainer({
     super.key,
@@ -18,12 +19,25 @@ class AppBottomSheetContainer extends StatelessWidget {
     this.margin = const EdgeInsets.fromLTRB(12, 0, 12, 96),
     this.maxHeightFactor = 0.82,
     this.showHandle = true,
+    this.scrollable = true,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+
+    Widget content = Padding(
+      padding: padding,
+      child: child,
+    );
+
+    if (scrollable) {
+      content = SingleChildScrollView(
+        physics: const BouncingScrollPhysics(),
+        child: content,
+      );
+    }
 
     return Align(
       alignment: Alignment.bottomCenter,
@@ -61,13 +75,8 @@ class AppBottomSheetContainer extends StatelessWidget {
                       ),
                     ),
                   ],
-                  ?header,
-                  Flexible(
-                    child: Padding(
-                      padding: padding,
-                      child: child,
-                    ),
-                  ),
+                  if (header != null) header!,
+                  Flexible(child: content),
                 ],
               ),
             ),

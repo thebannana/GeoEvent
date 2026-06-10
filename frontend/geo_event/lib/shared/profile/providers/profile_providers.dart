@@ -6,6 +6,8 @@ import '../data/preferences_api.dart';
 import '../data/preferences_repository.dart';
 import '../data/profile_api.dart';
 import '../data/profile_repository.dart';
+import '../data/ticket_scanner_api.dart';
+import '../data/ticket_scanner_repository.dart';
 import '../models/activity_log.dart';
 import '../models/mapbox_city_search.dart';
 import '../models/user_preference.dart';
@@ -46,6 +48,14 @@ final mapboxCitySearchProvider =
   if (trimmed.length < 2) return const [];
 
   return ref.read(mapboxPlacesServiceProvider).searchCities(trimmed);
+});
+
+final ticketScannerApiProvider = Provider<TicketScannerApi>((ref) {
+  return TicketScannerApi(ref.watch(authorizedDioProvider));
+});
+
+final ticketScannerRepositoryProvider = Provider<TicketScannerRepository>((ref) {
+  return TicketScannerRepository(ref.watch(ticketScannerApiProvider));
 });
 
 final myActivityLogsProvider = FutureProvider.autoDispose

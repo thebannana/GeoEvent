@@ -75,6 +75,10 @@ Future<List<MessageItem>> getThreadMessages(int threadId) async {
     );
   }
 
+  Future<void> leaveThread(int threadId) async {
+  await dio.delete('/api/messages/threads/$threadId/membership');
+}
+
   Future<MessageItem> editMessage({
     required int messageId,
     required String content,

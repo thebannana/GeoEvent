@@ -10,6 +10,7 @@ import 'edit_profile_screen.dart';
 import 'my_events_screen.dart';
 import 'preferences_screen.dart';
 import 'profile_screen.dart';
+import 'ticket_scanner_entry_screen.dart';
 
 class ProfileTabPage extends ConsumerWidget {
   const ProfileTabPage({super.key});
@@ -68,6 +69,13 @@ class ProfileTabPage extends ConsumerWidget {
             await Navigator.of(context).push(
               MaterialPageRoute(
                 builder: (_) => const ActivityLogsScreen(),
+              ),
+            );
+          },
+          onOpenTicketScanner: () async {
+            await Navigator.of(context, rootNavigator: true).push(
+              MaterialPageRoute(
+                builder: (_) => const TicketScannerEntryScreen(),
               ),
             );
           },

@@ -15,19 +15,21 @@ class ProfileScreen extends ConsumerWidget {
   final VoidCallback onOpenActivityLogs;
   final VoidCallback onRevokeAllSessions;
   final VoidCallback onLogout;
+  final VoidCallback onOpenTicketScanner;
 
-  const ProfileScreen({
-    super.key,
-    required this.profile,
-    required this.onEditProfile,
-    required this.onChangePassword,
-    required this.onOpenBookmarks,
-    required this.onOpenMyEvents,
-    required this.onOpenPreferences,
-    required this.onOpenActivityLogs,
-    required this.onRevokeAllSessions,
-    required this.onLogout,
-  });
+const ProfileScreen({
+  super.key,
+  required this.profile,
+  required this.onEditProfile,
+  required this.onChangePassword,
+  required this.onOpenBookmarks,
+  required this.onOpenMyEvents,
+  required this.onOpenTicketScanner,
+  required this.onOpenPreferences,
+  required this.onOpenActivityLogs,
+  required this.onRevokeAllSessions,
+  required this.onLogout,
+});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -71,11 +73,6 @@ class ProfileScreen extends ConsumerWidget {
                     ? 'Not set'
                     : profile.phoneNumber!,
               ),
-              _ProfileInfoTile(
-                icon: Icons.badge_outlined,
-                title: 'Role',
-                subtitle: profile.role,
-              ),
               _ProfileActionTile(
                 icon: Icons.edit_outlined,
                 title: 'Edit profile',
@@ -88,6 +85,12 @@ class ProfileScreen extends ConsumerWidget {
             title: 'Library',
             subtitle: 'Your saved and created content.',
             children: [
+              _ProfileActionTile(
+                icon: Icons.qr_code_scanner_rounded,
+                title: 'Ticket scanner',
+                subtitle: 'Scan and validate reservations for your events.',
+                onTap: onOpenTicketScanner,
+              ),
               _ProfileActionTile(
                 icon: Icons.bookmark_border_rounded,
                 title: 'Bookmarks',
@@ -137,33 +140,42 @@ class ProfileScreen extends ConsumerWidget {
               ),
               Padding(
                 padding: const EdgeInsets.only(top: 4, bottom: 8),
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: SegmentedButton<ThemeMode>(
-                    segments: const [
-                      ButtonSegment<ThemeMode>(
-                        value: ThemeMode.system,
-                        icon: Icon(Icons.brightness_auto_rounded),
-                        label: Text('System'),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    return SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(minWidth: constraints.maxWidth),
+                        child: Center(
+                          child: SegmentedButton<ThemeMode>(
+                            segments: const [
+                              ButtonSegment<ThemeMode>(
+                                value: ThemeMode.system,
+                                icon: Icon(Icons.brightness_auto_rounded),
+                                label: Text('System'),
+                              ),
+                              ButtonSegment<ThemeMode>(
+                                value: ThemeMode.light,
+                                icon: Icon(Icons.light_mode_rounded),
+                                label: Text('Light'),
+                              ),
+                              ButtonSegment<ThemeMode>(
+                                value: ThemeMode.dark,
+                                icon: Icon(Icons.dark_mode_rounded),
+                                label: Text('Dark'),
+                              ),
+                            ],
+                            selected: {themeMode},
+                            onSelectionChanged: (selection) {
+                              if (selection.isEmpty) return;
+                              themeController.setThemeMode(selection.first);
+                            },
+                            showSelectedIcon: false,
+                          ),
+                        ),
                       ),
-                      ButtonSegment<ThemeMode>(
-                        value: ThemeMode.light,
-                        icon: Icon(Icons.light_mode_rounded),
-                        label: Text('Light'),
-                      ),
-                      ButtonSegment<ThemeMode>(
-                        value: ThemeMode.dark,
-                        icon: Icon(Icons.dark_mode_rounded),
-                        label: Text('Dark'),
-                      ),
-                    ],
-                    selected: {themeMode},
-                    onSelectionChanged: (selection) {
-                      if (selection.isEmpty) return;
-                      themeController.setThemeMode(selection.first);
-                    },
-                    showSelectedIcon: false,
-                  ),
+                    );
+                  },
                 ),
               ),
             ],
@@ -265,10 +277,6 @@ class _ProfileHeader extends StatelessWidget {
               runSpacing: 8,
               alignment: WrapAlignment.center,
               children: [
-                _InfoChip(
-                  icon: Icons.shield_outlined,
-                  label: profile.role,
-                ),
                 _InfoChip(
                   icon: Icons.calendar_today_outlined,
                   label: 'Joined ${profile.createdAt?.year}',

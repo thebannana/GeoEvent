@@ -41,14 +41,19 @@ public class TicketsController : ControllerBase
     }
 
     [HttpPost("validate")]
-    [Authorize(Roles = "Admin,Organizer,Staff")]
-    public async Task<IActionResult> Validate([FromQuery] string qrCode)
+    [Authorize(Roles = "Admin,User")]
+    public async Task<IActionResult> Validate([FromBody] ValidateTicketScanDto dto)
     {
-        if (string.IsNullOrWhiteSpace(qrCode))
+        if (dto == null || string.IsNullOrWhiteSpace(dto.QrCode))
             return BadRequest(new { error = "QR code is required." });
 
         var validatorUserId = User.GetUserId();
-        var result = await _ticketService.ValidateTicketAsync(qrCode, validatorUserId);
+        var validatorRole = User.GetRole();
+
+        var result = await _ticketService.ValidateTicketScanAsync(
+            dto,
+            validatorUserId,
+            validatorRole);
 
         return result.Success
             ? Ok(result.Data)

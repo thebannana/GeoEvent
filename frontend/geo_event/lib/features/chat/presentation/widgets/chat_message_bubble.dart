@@ -1,0 +1,328 @@
+import 'package:flutter/material.dart';
+import '../../../../shared/chat/models/message_item.dart';
+
+class ChatMessageBubble extends StatefulWidget {
+  final MessageItem message;
+  final bool isMine;
+  final bool isDark;
+  final VoidCallback? onDelete;
+  final VoidCallback? onLike;
+  final VoidCallback? onEdit;
+  final VoidCallback onReply;
+
+  const ChatMessageBubble({
+    super.key,
+    required this.message,
+    required this.isMine,
+    required this.isDark,
+    this.onDelete,
+    this.onLike,
+    this.onEdit,
+    required this.onReply,
+  });
+
+  @override
+  State<ChatMessageBubble> createState() => _ChatMessageBubbleState();
+}
+
+class _ChatMessageBubbleState extends State<ChatMessageBubble>
+    with SingleTickerProviderStateMixin {
+  double _dragDx = 0;
+
+  static const double _replyTrigger = 72;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    final senderName =
+        (widget.message.senderDisplayName?.trim().isNotEmpty ?? false)
+            ? widget.message.senderDisplayName!.trim()
+            : 'User ${widget.message.senderId}';
+
+    final avatarUrl =
+        (widget.message.senderAvatarUrl?.trim().isNotEmpty ?? false)
+            ? widget.message.senderAvatarUrl!.trim()
+            : null;
+
+    final replySender =
+        (widget.message.replySenderName?.trim().isNotEmpty ?? false)
+            ? widget.message.replySenderName!.trim()
+            : 'Reply';
+
+    return Align(
+      alignment:
+          widget.isMine ? Alignment.centerRight : Alignment.centerLeft,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 330),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            if (!widget.isMine) ...[
+              CircleAvatar(
+                radius: 16,
+                backgroundImage:
+                    avatarUrl != null ? NetworkImage(avatarUrl) : null,
+                child: avatarUrl == null
+                    ? Text(
+                        senderName.isNotEmpty
+                            ? senderName.characters.first.toUpperCase()
+                            : '?',
+                      )
+                    : null,
+              ),
+              const SizedBox(width: 8),
+            ],
+            Flexible(
+              child: Column(
+                crossAxisAlignment: widget.isMine
+                    ? CrossAxisAlignment.end
+                    : CrossAxisAlignment.start,
+                children: [
+                  if (!widget.isMine)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 4, bottom: 4),
+                      child: Text(
+                        senderName,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: theme.textTheme.bodySmall?.color,
+                        ),
+                      ),
+                    ),
+                  Stack(
+                    alignment: widget.isMine
+                        ? Alignment.centerLeft
+                        : Alignment.centerRight,
+                    children: [
+                      Positioned(
+                        left: widget.isMine ? 8 : null,
+                        right: widget.isMine ? null : 8,
+                        child: AnimatedOpacity(
+                          duration: const Duration(milliseconds: 140),
+                          opacity:
+                              _dragDx.abs() > 18 ? 1 : 0,
+                          child: Icon(
+                            Icons.reply_rounded,
+                            size: 18,
+                            color: theme.colorScheme.primary,
+                          ),
+                        ),
+                      ),
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 120),
+                        curve: Curves.easeOut,
+                        transform: Matrix4.translationValues(_dragDx, 0, 0),
+                        child: GestureDetector(
+                          onDoubleTap: widget.onLike,
+                          onHorizontalDragUpdate: (details) {
+                            setState(() {
+                              if (widget.isMine) {
+                                _dragDx = (_dragDx + details.delta.dx)
+                                    .clamp(-_replyTrigger, 0);
+                              } else {
+                                _dragDx = (_dragDx + details.delta.dx)
+                                    .clamp(0, _replyTrigger);
+                              }
+                            });
+                          },
+                          onHorizontalDragEnd: (_) {
+                            final reachedReply = _dragDx.abs() >= _replyTrigger * 0.72;
+                            setState(() => _dragDx = 0);
+                            if (reachedReply) {
+                              widget.onReply();
+                            }
+                          },
+                          onHorizontalDragCancel: () {
+                            setState(() => _dragDx = 0);
+                          },
+                          onLongPress: () async {
+                            await showModalBottomSheet<void>(
+                              context: context,
+                              builder: (_) => SafeArea(
+                                child: Wrap(
+                                  children: [
+                                    ListTile(
+                                      leading:
+                                          const Icon(Icons.reply_rounded),
+                                      title: const Text('Reply'),
+                                      onTap: () {
+                                        Navigator.pop(context);
+                                        widget.onReply();
+                                      },
+                                    ),
+                                    if (widget.onEdit != null)
+                                      ListTile(
+                                        leading:
+                                            const Icon(Icons.edit_rounded),
+                                        title: const Text('Edit'),
+                                        onTap: () {
+                                          Navigator.pop(context);
+                                          widget.onEdit?.call();
+                                        },
+                                      ),
+                                    if (widget.onLike != null)
+                                      ListTile(
+                                        leading: Icon(
+                                          widget.message.isLikedByMe
+                                              ? Icons.favorite_rounded
+                                              : Icons.favorite_border_rounded,
+                                        ),
+                                        title: Text(
+                                          widget.message.isLikedByMe
+                                              ? 'Unlike'
+                                              : 'Like',
+                                        ),
+                                        onTap: () {
+                                          Navigator.pop(context);
+                                          widget.onLike?.call();
+                                        },
+                                      ),
+                                    if (widget.onDelete != null)
+                                      ListTile(
+                                        leading: const Icon(
+                                          Icons.delete_outline_rounded,
+                                        ),
+                                        title: const Text('Delete'),
+                                        onTap: () {
+                                          Navigator.pop(context);
+                                          widget.onDelete?.call();
+                                        },
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                          child: Material(
+                            color: widget.isMine
+                                ? theme.colorScheme.primary.withValues(alpha: 0.14)
+                                : (widget.isDark
+                                    ? const Color(0xFF17191D)
+                                    : theme.colorScheme.surface),
+                            borderRadius: BorderRadius.circular(22),
+                            child: Container(
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(22),
+                                border: Border.all(
+                                  color: widget.isMine
+                                      ? theme.colorScheme.primary
+                                          .withValues(alpha: 0.18)
+                                      : widget.isDark
+                                          ? const Color(0xFF2A303A)
+                                          : const Color(0xFFE5EAF2),
+                                ),
+                              ),
+                              padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
+                              child: Column(
+                                crossAxisAlignment: widget.isMine
+                                    ? CrossAxisAlignment.end
+                                    : CrossAxisAlignment.start,
+                                children: [
+                                  if (widget.message.replyPreview?.trim().isNotEmpty ??
+                                      false)
+                                    Container(
+                                      width: double.infinity,
+                                      margin: const EdgeInsets.only(bottom: 8),
+                                      padding: const EdgeInsets.all(10),
+                                      decoration: BoxDecoration(
+                                        color: theme.colorScheme.primary
+                                            .withValues(alpha: 0.08),
+                                        borderRadius: BorderRadius.circular(14),
+                                      ),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            replySender,
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w700,
+                                              color: theme.colorScheme.primary,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            widget.message.replyPreview!,
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                              height: 1.25,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  Text(
+                                    widget.message.content,
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      height: 1.3,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      if (widget.message.likesCount > 0) ...[
+                                        Icon(
+                                          Icons.favorite_rounded,
+                                          size: 13,
+                                          color: theme.colorScheme.primary,
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          widget.message.likesCount.toString(),
+                                          style: const TextStyle(fontSize: 11),
+                                        ),
+                                        const SizedBox(width: 8),
+                                      ],
+                                      if (widget.message.editedAt != null) ...[
+                                        Text(
+                                          'edited',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color:
+                                                theme.textTheme.bodySmall?.color,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                      ],
+                                      Text(
+                                        _formatTime(widget.message.sentAt),
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color:
+                                              theme.textTheme.bodySmall?.color,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  static String _formatTime(DateTime value) {
+    final local = value.toLocal();
+    final h = local.hour.toString().padLeft(2, '0');
+    final m = local.minute.toString().padLeft(2, '0');
+    return '$h:$m';
+  }
+}

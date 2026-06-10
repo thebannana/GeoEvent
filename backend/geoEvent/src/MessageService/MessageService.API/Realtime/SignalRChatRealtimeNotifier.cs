@@ -30,12 +30,24 @@ public class SignalRChatRealtimeNotifier : IChatRealtimeNotifier
     {
         await _hub.Clients.Group(ChatHub.ThreadGroup(message.ThreadId))
             .SendAsync("MessageUpdated", message);
+
+        foreach (var userId in participantUserIds)
+        {
+            await _hub.Clients.Group(ChatHub.UserGroup(userId))
+                .SendAsync("ThreadUpdated", new { threadId = message.ThreadId });
+        }
     }
 
     public async Task MessageDeletedAsync(long threadId, long messageId, IReadOnlyCollection<int> participantUserIds)
     {
         await _hub.Clients.Group(ChatHub.ThreadGroup(threadId))
             .SendAsync("MessageDeleted", new { threadId, messageId });
+
+        foreach (var userId in participantUserIds)
+        {
+            await _hub.Clients.Group(ChatHub.UserGroup(userId))
+                .SendAsync("ThreadUpdated", new { threadId });
+        }
     }
 
     public async Task MessageLikedAsync(ChatMessageDto message)
@@ -44,9 +56,15 @@ public class SignalRChatRealtimeNotifier : IChatRealtimeNotifier
             .SendAsync("MessageLiked", message);
     }
 
-    public async Task ThreadReadAsync(long threadId, int userId)
+    public async Task ThreadReadAsync(long threadId, int userId, IReadOnlyCollection<int> participantUserIds)
     {
         await _hub.Clients.Group(ChatHub.ThreadGroup(threadId))
             .SendAsync("ThreadRead", new { threadId, userId });
+
+        foreach (var participantUserId in participantUserIds)
+        {
+            await _hub.Clients.Group(ChatHub.UserGroup(participantUserId))
+                .SendAsync("ThreadUpdated", new { threadId });
+        }
     }
 }

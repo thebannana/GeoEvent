@@ -90,17 +90,23 @@ public class ChatServiceImpl : IChatService
             return ServiceResult<ChatThreadDetailDto>.Forbidden("You are not a participant of this thread.");
 
         EventChatInfoDto? eventInfo = null;
+        string? imageUrl = null;
+
         if (thread.EventId.HasValue)
         {
             var evt = await _eventDirectoryClient.GetEventAsync(thread.EventId.Value);
             if (evt != null)
             {
+                imageUrl = evt.CoverImageUrl;
+
                 eventInfo = new EventChatInfoDto
                 {
                     EventId = evt.EventId,
                     EventTitle = evt.Title,
                     StartDateTime = evt.StartDateTime,
+                    EndDateTime = evt.EndDateTime,
                     VenueName = evt.VenueName,
+                    CoverImageUrl = evt.CoverImageUrl,
                     IsOnline = evt.IsOnline
                 };
             }
@@ -108,14 +114,51 @@ public class ChatServiceImpl : IChatService
 
         var participants = await BuildParticipantsAsync(threadId);
 
+        int? otherUserId = null;
+        string? otherUserDisplayName = null;
+        string? otherUserUsername = null;
+        string? otherUserAvatarUrl = null;
+        bool? otherUserIsOnline = null;
+        DateTime? otherUserLastActiveAt = null;
+
+        if (thread.Type == ChatThreadType.Direct)
+        {
+            otherUserId = thread.Participants
+                .Where(x => x.UserId != userId && x.LeftAt == null)
+                .Select(x => (int?)x.UserId)
+                .FirstOrDefault();
+
+            if (otherUserId.HasValue)
+            {
+                var users = await _userDirectoryClient.GetPublicUsersAsync(new[] { otherUserId.Value });
+                users.TryGetValue(otherUserId.Value, out var otherUser);
+
+                otherUserDisplayName = otherUser?.DisplayName;
+                otherUserUsername = otherUser?.Username;
+                otherUserAvatarUrl = otherUser?.ImageUrl;
+                otherUserIsOnline = await _presenceTracker.IsOnlineAsync(otherUserId.Value);
+                otherUserLastActiveAt = await _presenceTracker.GetLastActiveAtAsync(otherUserId.Value);
+                imageUrl = otherUser?.ImageUrl;
+            }
+        }
+
         return ServiceResult<ChatThreadDetailDto>.Ok(new ChatThreadDetailDto
         {
             ThreadId = thread.Id,
-            Title = string.IsNullOrWhiteSpace(thread.Title)
-                ? await ResolveDirectTitleAsync(thread, userId)
+            Title = thread.Type == ChatThreadType.Direct
+                ? (!string.IsNullOrWhiteSpace(otherUserUsername)
+                    ? otherUserUsername!
+                    : otherUserDisplayName ?? $"User {otherUserId}")
                 : thread.Title,
             ThreadType = thread.Type.ToString(),
             EventId = thread.EventId,
+            ImageUrl = imageUrl,
+            OtherUserId = otherUserId,
+            OtherUserDisplayName = otherUserDisplayName,
+            OtherUserUsername = otherUserUsername,
+            OtherUserAvatarUrl = otherUserAvatarUrl,
+            OtherUserIsOnline = otherUserIsOnline,
+            OtherUserLastActiveAt = otherUserLastActiveAt,
             EventInfo = eventInfo,
             Participants = participants
         });
@@ -298,7 +341,12 @@ public class ChatServiceImpl : IChatService
 
         participant.LastReadAt = DateTime.UtcNow;
         await _repository.UpdateParticipantAsync(participant);
-        await _realtimeNotifier.ThreadReadAsync(threadId, userId);
+
+        var participantIds = (await _repository.GetParticipantsAsync(threadId))
+            .Select(x => x.UserId)
+            .ToList();
+
+        await _realtimeNotifier.ThreadReadAsync(threadId, userId, participantIds);
 
         return ServiceResult<bool>.Ok(true);
     }
@@ -415,6 +463,10 @@ public class ChatServiceImpl : IChatService
     }
     private async Task<ChatThreadSummaryDto> MapThreadSummaryAsync(ChatThread thread, int currentUserId)
     {
+        var unreadCount = await _repository.GetThreadUnreadCountAsync(thread.Id, currentUserId);
+        var paged = await _repository.GetMessagesAsync(thread.Id, 1, 1);
+        var last = paged.Items.FirstOrDefault();
+
         if (thread.Type == ChatThreadType.Direct)
         {
             var otherUserId = thread.Participants
@@ -425,15 +477,15 @@ public class ChatServiceImpl : IChatService
             var users = await _userDirectoryClient.GetPublicUsersAsync(new[] { otherUserId });
             users.TryGetValue(otherUserId, out var otherUser);
 
-            var messages = await _repository.GetMessagesAsync(thread.Id, 1, 1);
-            var last = messages.Items.FirstOrDefault();
-
             return new ChatThreadSummaryDto
             {
                 ThreadId = thread.Id,
-                Title = otherUser?.DisplayName ?? $"User {otherUserId}",
+                Title = !string.IsNullOrWhiteSpace(otherUser?.Username)
+                    ? otherUser.Username
+                    : otherUser?.DisplayName ?? $"User {otherUserId}",
                 ThreadType = thread.Type.ToString(),
                 EventId = thread.EventId,
+                ImageUrl = otherUser?.ImageUrl,
                 IsGroup = false,
                 OtherUserId = otherUserId,
                 OtherUserDisplayName = otherUser?.DisplayName,
@@ -442,12 +494,16 @@ public class ChatServiceImpl : IChatService
                 OtherUserLastActiveAt = await _presenceTracker.GetLastActiveAtAsync(otherUserId),
                 LastMessageContent = last?.Content,
                 LastMessageSentAt = last?.SentAt,
-                UnreadCount = 0
+                UnreadCount = unreadCount
             };
         }
 
-        var paged = await _repository.GetMessagesAsync(thread.Id, 1, 1);
-        var lastMessage = paged.Items.FirstOrDefault();
+        string? groupImageUrl = null;
+        if (thread.EventId.HasValue)
+        {
+            var evt = await _eventDirectoryClient.GetEventAsync(thread.EventId.Value);
+            groupImageUrl = evt?.CoverImageUrl;
+        }
 
         return new ChatThreadSummaryDto
         {
@@ -455,10 +511,11 @@ public class ChatServiceImpl : IChatService
             Title = thread.Title,
             ThreadType = thread.Type.ToString(),
             EventId = thread.EventId,
+            ImageUrl = groupImageUrl,
             IsGroup = true,
-            LastMessageContent = lastMessage?.Content,
-            LastMessageSentAt = lastMessage?.SentAt,
-            UnreadCount = 0
+            LastMessageContent = last?.Content,
+            LastMessageSentAt = last?.SentAt,
+            UnreadCount = unreadCount
         };
     }
 
@@ -470,9 +527,7 @@ public class ChatServiceImpl : IChatService
             .FirstOrDefault();
 
         var users = await _userDirectoryClient.GetPublicUsersAsync(new[] { otherUserId });
-        return users.TryGetValue(otherUserId, out var user)
-            ? user.DisplayName
-            : $"User {otherUserId}";
+        return users.TryGetValue(otherUserId, out var user) ? (!string.IsNullOrWhiteSpace(user.Username) ? user.Username : user.DisplayName) : $"User {otherUserId}";
     }
 
     private async Task<List<ChatMessageDto>> MapMessagesAsync(IEnumerable<ChatMessage> messages, int currentUserId)
@@ -489,7 +544,6 @@ public class ChatServiceImpl : IChatService
     private async Task<ChatMessageDto> MapMessageAsync(ChatMessage message, int currentUserId)
     {
         var users = await _userDirectoryClient.GetPublicUsersAsync(new[] { message.SenderId });
-
         users.TryGetValue(message.SenderId, out var sender);
 
         var isLiked = await _repository.HasMessageLikeAsync(message.Id, currentUserId);
@@ -504,7 +558,9 @@ public class ChatServiceImpl : IChatService
             {
                 MessageId = message.ReplyToMessage.Id,
                 SenderId = message.ReplyToMessage.SenderId,
-                SenderDisplayName = replySender?.DisplayName ?? $"User {message.ReplyToMessage.SenderId}",
+                SenderDisplayName = !string.IsNullOrWhiteSpace(replySender?.Username)
+                    ? replySender.Username
+                    : replySender?.DisplayName ?? $"User {message.ReplyToMessage.SenderId}",
                 Content = message.ReplyToMessage.Content
             };
         }
@@ -514,7 +570,9 @@ public class ChatServiceImpl : IChatService
             Id = message.Id,
             ThreadId = message.ThreadId,
             SenderId = message.SenderId,
-            SenderDisplayName = sender?.DisplayName ?? $"User {message.SenderId}",
+            SenderDisplayName = !string.IsNullOrWhiteSpace(sender?.Username)
+                ? sender.Username
+                : sender?.DisplayName ?? $"User {message.SenderId}",
             SenderAvatarUrl = sender?.ImageUrl,
             Content = message.Content,
             SentAt = message.SentAt,

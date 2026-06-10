@@ -1,6 +1,7 @@
 class ChatParticipant {
   final int userId;
   final String displayName;
+  final String username;
   final String? avatarUrl;
   final bool isOnline;
   final DateTime? lastActiveAt;
@@ -9,6 +10,7 @@ class ChatParticipant {
   const ChatParticipant({
     required this.userId,
     required this.displayName,
+    required this.username,
     required this.avatarUrl,
     required this.isOnline,
     required this.lastActiveAt,
@@ -19,6 +21,7 @@ class ChatParticipant {
     return ChatParticipant(
       userId: (json['userId'] as num).toInt(),
       displayName: json['displayName'] as String? ?? '',
+      username: json['username'] as String? ?? '',
       avatarUrl: json['avatarUrl'] as String?,
       isOnline: json['isOnline'] as bool? ?? false,
       lastActiveAt: json['lastActiveAt'] != null

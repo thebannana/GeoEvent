@@ -35,6 +35,7 @@ public interface ITicketRepository
     Task<PagedResult<Ticket>> GetEventTicketsAsync(int eventId, TicketFilterDto filter);
     Task AddTicketsAsync(IEnumerable<Ticket> tickets);
     Task UpdateTicketAsync(Ticket ticket);
+    Task<Ticket?> GetTicketForValidationAsync(string qrCode);
 
     // Payments
     Task AddPaymentDetailAsync(PaymentDetail payment);

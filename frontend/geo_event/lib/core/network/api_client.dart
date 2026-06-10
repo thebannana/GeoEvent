@@ -1,11 +1,11 @@
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/auth/application/auth_controller.dart';
 import '../../shared/auth/providers/auth_providers.dart';
 import '../config/app_config.dart';
 import '../errors/error_mapper.dart';
+import '../utils/logger.dart';
 import 'auth_interceptor.dart';
 import 'network_info.dart';
 
@@ -116,26 +116,24 @@ final authorizedDioProvider = Provider<Dio>((ref) {
 });
 
 void _logRequest(RequestOptions options) {
-  debugPrint('➡️ ${options.method} ${options.baseUrl}${options.path}');
-  debugPrint('Headers: ${options.headers}');
-  debugPrint('Query: ${options.queryParameters}');
-  debugPrint('Body: ${options.data}');
+  AppLogger.debug(
+    '${options.method} ${options.baseUrl}${options.path} | query=${options.queryParameters} | body=${options.data}',
+    tag: 'HTTP',
+  );
 }
 
 void _logResponse(Response response) {
-  debugPrint(
-    '✅ ${response.statusCode} ${response.requestOptions.method} '
-    '${response.requestOptions.baseUrl}${response.requestOptions.path}',
+  AppLogger.info(
+    '${response.statusCode} ${response.requestOptions.method} ${response.requestOptions.baseUrl}${response.requestOptions.path}',
+    tag: 'HTTP',
   );
-  debugPrint('Response: ${response.data}');
 }
 
 void _logError(DioException error) {
-  debugPrint(
-    '❌ ${error.response?.statusCode} ${error.requestOptions.method} '
-    '${error.requestOptions.baseUrl}${error.requestOptions.path}',
+  AppLogger.error(
+    '${error.response?.statusCode} ${error.requestOptions.method} ${error.requestOptions.baseUrl}${error.requestOptions.path}',
+    tag: 'HTTP',
+    error: error.response?.data ?? error,
+    stackTrace: error.stackTrace,
   );
-  debugPrint('Query: ${error.requestOptions.queryParameters}');
-  debugPrint('Body: ${error.requestOptions.data}');
-  debugPrint('Response: ${error.response?.data}');
 }

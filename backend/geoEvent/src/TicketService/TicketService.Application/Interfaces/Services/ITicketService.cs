@@ -51,8 +51,10 @@ public interface ITicketService
     Task<ServiceResult<List<TicketResponseDto>>> GetTicketsByReservationAsync(
         int reservationId, int userId);
 
-    Task<ServiceResult<TicketResponseDto>> ValidateTicketAsync(
-        string qrCode, int validatorUserId);
+    Task<ServiceResult<TicketScanResultDto>> ValidateTicketScanAsync(
+    ValidateTicketScanDto dto,
+    int validatorUserId,
+    string validatorRole);
 
     Task<ServiceResult<bool>> CancelTicketAsync(int ticketId, int userId);
 

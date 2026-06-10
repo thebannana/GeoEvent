@@ -18,15 +18,18 @@ public class TicketServiceImpl : ITicketService
     private readonly ITicketRepository _repository;
     private readonly IPublishEndpoint _publishEndpoint;
     private readonly IUserDirectoryService _userDirectoryService;
+    private readonly IEventAuthorizationService _eventAuthorizationService;
 
     public TicketServiceImpl(
         ITicketRepository repository,
         IPublishEndpoint publishEndpoint,
-        IUserDirectoryService userDirectoryService)
+        IUserDirectoryService userDirectoryService,
+        IEventAuthorizationService eventAuthorization)
     {
         _repository = repository;
         _publishEndpoint = publishEndpoint;
         _userDirectoryService = userDirectoryService;
+        _eventAuthorizationService = eventAuthorization;
     }
 
     public async Task CancelUserReservationsAsync(int userId)
@@ -398,24 +401,138 @@ public class TicketServiceImpl : ITicketService
             });
     }
 
-    public async Task<ServiceResult<TicketResponseDto>> ValidateTicketAsync(
-        string qrCode, int validatorUserId)
+    public async Task<ServiceResult<TicketScanResultDto>> ValidateTicketScanAsync(
+    ValidateTicketScanDto dto,
+    int validatorUserId,
+    string validatorRole)
     {
-        if (string.IsNullOrWhiteSpace(qrCode) || qrCode.Length > 64)
-            return ServiceResult<TicketResponseDto>.Fail("Invalid QR code format.");
+        if (dto.EventId <= 0)
+            return ServiceResult<TicketScanResultDto>.Fail("Invalid event id.");
 
-        var ticket = await _repository.GetTicketByQrCodeAsync(qrCode);
+        if (string.IsNullOrWhiteSpace(dto.QrCode) || dto.QrCode.Length > 128)
+            return ServiceResult<TicketScanResultDto>.Fail("Invalid QR code format.");
+
+        var allowed = await _eventAuthorizationService.CanManageEventAsync(
+            dto.EventId,
+            validatorUserId,
+            validatorRole);
+
+        if (!allowed)
+        {
+            return ServiceResult<TicketScanResultDto>.Forbidden(
+                "You are not allowed to scan tickets for this event.");
+        }
+
+        var ticket = await _repository.GetTicketForValidationAsync(dto.QrCode);
         if (ticket is null)
-            return ServiceResult<TicketResponseDto>.NotFound("Ticket not found.");
+        {
+            return ServiceResult<TicketScanResultDto>.Ok(new TicketScanResultDto
+            {
+                IsValid = false,
+                Status = "invalid",
+                Message = "Ticket not found.",
+                EventId = dto.EventId,
+                ScannedAt = DateTime.UtcNow
+            });
+        }
+
+        if (ticket.EventId != dto.EventId)
+        {
+            return ServiceResult<TicketScanResultDto>.Ok(new TicketScanResultDto
+            {
+                IsValid = false,
+                Status = "wrong_event",
+                Message = "This ticket belongs to another event.",
+                TicketId = ticket.TicketId,
+                ReservationId = ticket.ReservationId,
+                EventId = ticket.EventId,
+                UserId = ticket.UserId,
+                TicketType = ticket.TicketType,
+                IssuedAt = ticket.IssuedAt,
+                UsedAt = ticket.UsedAt,
+                ScannedAt = DateTime.UtcNow
+            });
+        }
+
+        if (ticket.Status == TicketStatus.Used)
+        {
+            var usedResult = await BuildScanResultAsync(
+                ticket,
+                false,
+                "already_used",
+                "Ticket has already been used.");
+
+            return ServiceResult<TicketScanResultDto>.Ok(usedResult);
+        }
+
+        if (ticket.Status == TicketStatus.Cancelled)
+        {
+            var cancelledResult = await BuildScanResultAsync(
+                ticket,
+                false,
+                "cancelled",
+                "Ticket has been cancelled.");
+
+            return ServiceResult<TicketScanResultDto>.Ok(cancelledResult);
+        }
 
         if (!ticket.CanBeUsed())
-            return ServiceResult<TicketResponseDto>.Fail(
+        {
+            var invalidResult = await BuildScanResultAsync(
+                ticket,
+                false,
+                "invalid",
                 $"Ticket is not valid — current status: {ticket.Status}.");
+
+            return ServiceResult<TicketScanResultDto>.Ok(invalidResult);
+        }
 
         ticket.MarkAsUsed();
         await _repository.UpdateTicketAsync(ticket);
 
-        return ServiceResult<TicketResponseDto>.Ok(MapToTicketResponse(ticket));
+        var validResult = await BuildScanResultAsync(
+            ticket,
+            true,
+            "valid",
+            "Ticket is valid and has been checked in.");
+
+        return ServiceResult<TicketScanResultDto>.Ok(validResult);
+    }
+
+    private async Task<TicketScanResultDto> BuildScanResultAsync(
+    Ticket ticket,
+    bool isValid,
+    string status,
+    string message)
+    {
+        string? username = null;
+        string? avatarUrl = null;
+
+        var profiles = await _userDirectoryService.GetPublicProfilesAsync(new[] { ticket.UserId });
+        var profile = profiles.FirstOrDefault();
+
+        if (profile is not null)
+        {
+            username = profile.Username;
+            avatarUrl = profile.ImageUrl;
+        }
+
+        return new TicketScanResultDto
+        {
+            IsValid = isValid,
+            Status = status,
+            Message = message,
+            TicketId = ticket.TicketId,
+            ReservationId = ticket.ReservationId,
+            EventId = ticket.EventId,
+            UserId = ticket.UserId,
+            TicketType = ticket.TicketType,
+            ParticipantUsername = username,
+            ParticipantAvatarUrl = avatarUrl,
+            IssuedAt = ticket.IssuedAt,
+            UsedAt = ticket.UsedAt,
+            ScannedAt = DateTime.UtcNow
+        };
     }
 
     public async Task<ServiceResult<bool>> ExpireReservationsAsync()

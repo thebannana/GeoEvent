@@ -1,16 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
 
-class _DirectionsActionCard extends StatelessWidget {
+class ActiveNavigationCard extends StatelessWidget {
   final String title;
-  final VoidCallback onStartDirections;
-  final VoidCallback onReturnToEventDetails;
+  final VoidCallback onStopNavigation;
+  final VoidCallback onViewEventDetails;
   final VoidCallback onClose;
 
-  const _DirectionsActionCard({
+  const ActiveNavigationCard({
+    super.key,
     required this.title,
-    required this.onStartDirections,
-    required this.onReturnToEventDetails,
+    required this.onStopNavigation,
+    required this.onViewEventDetails,
     required this.onClose,
   });
 
@@ -50,16 +51,16 @@ class _DirectionsActionCard extends StatelessWidget {
               width: double.infinity,
               height: 48,
               child: ElevatedButton(
-                onPressed: onStartDirections,
+                onPressed: onStopNavigation,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF3B82C4),
+                  backgroundColor: const Color(0xFFB3261E),
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(14),
                   ),
                 ),
                 child: const Text(
-                  'Start directions',
+                  'Stop navigation',
                   style: TextStyle(fontWeight: FontWeight.w700),
                 ),
               ),
@@ -69,7 +70,7 @@ class _DirectionsActionCard extends StatelessWidget {
               width: double.infinity,
               height: 48,
               child: OutlinedButton(
-                onPressed: onReturnToEventDetails,
+                onPressed: onViewEventDetails,
                 style: OutlinedButton.styleFrom(
                   foregroundColor: Colors.white,
                   side: BorderSide(color: Colors.white.withValues(alpha: 0.16)),
@@ -78,7 +79,7 @@ class _DirectionsActionCard extends StatelessWidget {
                   ),
                 ),
                 child: const Text(
-                  'Return to event details',
+                  'View event details',
                   style: TextStyle(fontWeight: FontWeight.w700),
                 ),
               ),

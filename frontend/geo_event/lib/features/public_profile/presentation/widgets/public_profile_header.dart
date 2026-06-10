@@ -58,14 +58,6 @@ class PublicProfileHeader extends StatelessWidget {
                   ),
                 ),
               ),
-              if (user.isVerified) ...[
-                const SizedBox(width: 6),
-                Icon(
-                  Icons.verified_rounded,
-                  size: 20,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
-              ],
             ],
           ),
           const SizedBox(height: 4),

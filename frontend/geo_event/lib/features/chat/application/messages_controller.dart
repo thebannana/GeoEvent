@@ -65,9 +65,7 @@ class MessagesInboxController extends Notifier<MessagesInboxState> {
     );
 
     final conversationsResult =
-        await AsyncValue.guard<List<ConversationSummary>>(
-        _repo.getThreads,
-    );
+        await AsyncValue.guard<List<ConversationSummary>>(_repo.getThreads);
 
     int unreadCount = state.unreadCount;
     try {
@@ -90,13 +88,28 @@ class MessagesInboxController extends Notifier<MessagesInboxState> {
     state = state.copyWith(unreadOnly: value);
   }
 
+void removeThreadLocally(int threadId) {
+  final current = state.conversations.valueOrNull ?? const <ConversationSummary>[];
+
+  int removedUnread = 0;
+  final updated = current.where((c) {
+    final keep = c.threadId != threadId;
+    if (!keep) removedUnread = c.unreadCount;
+    return keep;
+  }).toList(growable: false);
+
+  state = state.copyWith(
+    conversations: AsyncData(updated),
+    unreadCount: (state.unreadCount - removedUnread).clamp(0, 1 << 30),
+  );
+}
+
   void markThreadLocallyRead(int threadId) {
     final current = state.conversations.valueOrNull ?? const <ConversationSummary>[];
 
     var removedUnread = 0;
     final updated = current.map((conversation) {
       if (conversation.threadId != threadId) return conversation;
-
       removedUnread = conversation.unreadCount;
       return conversation.copyWith(unreadCount: 0);
     }).toList(growable: false);
@@ -105,6 +118,28 @@ class MessagesInboxController extends Notifier<MessagesInboxState> {
       conversations: AsyncData(updated),
       unreadCount: (state.unreadCount - removedUnread).clamp(0, 1 << 30),
     );
+  }
+
+  void updateConversationFromMessage({
+    required int threadId,
+    required String preview,
+    required DateTime sentAt,
+    required bool isMine,
+  }) {
+    final current = state.conversations.valueOrNull ?? const <ConversationSummary>[];
+
+    final updated = current.map((conversation) {
+      if (conversation.threadId != threadId) return conversation;
+      return conversation.copyWith(
+        lastMessageContent: preview,
+        lastMessageSentAt: sentAt,
+        isLastMessageFromMe: isMine,
+      );
+    }).toList(growable: false);
+
+    updated.sort((a, b) => b.lastMessageSentAt.compareTo(a.lastMessageSentAt));
+
+    state = state.copyWith(conversations: AsyncData(updated));
   }
 }
 

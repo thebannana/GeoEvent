@@ -44,6 +44,17 @@ class Failure {
 
   bool get isCancelled => type == FailureType.cancelled;
 
+  bool get isRetryable =>
+      type == FailureType.network ||
+      type == FailureType.timeout ||
+      type == FailureType.server;
+
+  bool get isClientFailure =>
+      type == FailureType.validation ||
+      type == FailureType.conflict ||
+      type == FailureType.notFound ||
+      type == FailureType.forbidden;
+
   factory Failure.network({
     String message = 'No internet connection.',
     Object? cause,
@@ -215,86 +226,41 @@ class Failure {
   }
 
   factory Failure.fromException(AppException exception) {
-    switch (exception.type) {
+    return Failure(
+      type: _mapExceptionType(exception.type),
+      message: exception.message,
+      statusCode: exception.statusCode,
+      cause: exception.error,
+      stackTrace: exception.stackTrace,
+    );
+  }
+
+  static FailureType _mapExceptionType(AppExceptionType type) {
+    switch (type) {
       case AppExceptionType.network:
-        return Failure.network(
-          message: exception.message,
-          cause: exception.error,
-          stackTrace: exception.stackTrace,
-        );
+        return FailureType.network;
       case AppExceptionType.timeout:
-        return Failure.timeout(
-          message: exception.message,
-          cause: exception.error,
-          stackTrace: exception.stackTrace,
-        );
+        return FailureType.timeout;
       case AppExceptionType.unauthorized:
-        return Failure.unauthorized(
-          message: exception.message,
-          statusCode: exception.statusCode,
-          cause: exception.error,
-          stackTrace: exception.stackTrace,
-        );
+        return FailureType.unauthorized;
       case AppExceptionType.forbidden:
-        return Failure.forbidden(
-          message: exception.message,
-          statusCode: exception.statusCode,
-          cause: exception.error,
-          stackTrace: exception.stackTrace,
-        );
+        return FailureType.forbidden;
       case AppExceptionType.notFound:
-        return Failure.notFound(
-          message: exception.message,
-          statusCode: exception.statusCode,
-          cause: exception.error,
-          stackTrace: exception.stackTrace,
-        );
+        return FailureType.notFound;
       case AppExceptionType.validation:
-        return Failure.validation(
-          message: exception.message,
-          statusCode: exception.statusCode,
-          cause: exception.error,
-          stackTrace: exception.stackTrace,
-        );
+        return FailureType.validation;
       case AppExceptionType.conflict:
-        return Failure.conflict(
-          message: exception.message,
-          statusCode: exception.statusCode,
-          cause: exception.error,
-          stackTrace: exception.stackTrace,
-        );
+        return FailureType.conflict;
       case AppExceptionType.server:
-        return Failure.server(
-          message: exception.message,
-          statusCode: exception.statusCode,
-          cause: exception.error,
-          stackTrace: exception.stackTrace,
-        );
+        return FailureType.server;
       case AppExceptionType.cancelled:
-        return Failure.cancelled(
-          message: exception.message,
-          cause: exception.error,
-          stackTrace: exception.stackTrace,
-        );
+        return FailureType.cancelled;
       case AppExceptionType.parsing:
-        return Failure.parsing(
-          message: exception.message,
-          cause: exception.error,
-          stackTrace: exception.stackTrace,
-        );
+        return FailureType.parsing;
       case AppExceptionType.cache:
-        return Failure.cache(
-          message: exception.message,
-          cause: exception.error,
-          stackTrace: exception.stackTrace,
-        );
+        return FailureType.cache;
       case AppExceptionType.unknown:
-        return Failure.unknown(
-          message: exception.message,
-          statusCode: exception.statusCode,
-          cause: exception.error,
-          stackTrace: exception.stackTrace,
-        );
+        return FailureType.unknown;
     }
   }
 

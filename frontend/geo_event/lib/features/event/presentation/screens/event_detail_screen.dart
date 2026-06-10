@@ -4,13 +4,14 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 
-import '../../../../core/widgets/app_loading_indicator.dart';
+import '../../../../core/widgets/app_loading_sheet.dart';
 import '../../../../shared/bookmarks/providers/bookmark_providers.dart';
 import '../../../../shared/chat/models/chat_thread_args.dart';
 import '../../../../shared/chat/models/chat_thread_type.dart';
 import '../../../../shared/chat/providers/chat_providers.dart';
 import '../../../../shared/events/models/create_event_models.dart';
 import '../../../../shared/location/models/event_directions_request.dart';
+import '../../../../shared/location/providers/directions_providers.dart';
 import '../../../../shared/payment/models/payment_summary.dart';
 import '../../../../shared/reports/models/report_target_type.dart';
 import '../../../../shared/tickets/models/ticket_models.dart';
@@ -31,10 +32,12 @@ import '../widgets/event_share.dart';
 
 class EventDetailsScreen extends ConsumerStatefulWidget {
   final int eventId;
+  final VoidCallback? onCloseParentSearchSheet;
 
   const EventDetailsScreen({
     super.key,
     required this.eventId,
+    this.onCloseParentSearchSheet,
   });
 
   @override
@@ -283,16 +286,25 @@ class _EventDetailsScreenState extends ConsumerState<EventDetailsScreen> {
 
   String two(int value) => value.toString().padLeft(2, '0');
 
-  void openDirections(EventItem item) {
-    Navigator.of(context).pop(
-      EventDirectionsRequest(
-        eventId: item.eventId,
-        latitude: item.latitude,
-        longitude: item.longitude,
-        title: item.title,
-      ),
-    );
+void openDirections(EventItem item, WidgetRef ref) {
+  final activeNavigation = ref.read(activeNavigationProvider);
+
+  if (activeNavigation?.eventId == item.eventId) {
+    widget.onCloseParentSearchSheet?.call();
+    Navigator.of(context).maybePop();
+    return;
   }
+
+  ref.read(pendingDirectionsProvider.notifier).state = EventDirectionsRequest(
+    eventId: item.eventId,
+    latitude: item.latitude,
+    longitude: item.longitude,
+    title: item.title,
+  );
+
+  widget.onCloseParentSearchSheet?.call();
+  Navigator.of(context).maybePop();
+}
 
   Future<void> openDirectChat({
     required BuildContext context,
@@ -934,7 +946,7 @@ class _EventDetailsScreenState extends ConsumerState<EventDetailsScreen> {
                           tags: item.tags,
                           accessibilityInfo: item.accessibilityInfo,
                           onDirectionsTap:
-                              item.isOnline ? null : () => openDirections(item),
+                              item.isOnline ? null : () => openDirections(item, ref),
                         ),
                         const SizedBox(height: 12),
                         Container(
@@ -1022,7 +1034,7 @@ class _EventDetailsScreenState extends ConsumerState<EventDetailsScreen> {
                     ref: ref,
                     otherUserId: item.organizerId!,),
                   onReserveTap: () => reserve(item),
-                  onDirectionsTap: item.isOnline ? null : () => openDirections(item),
+                  onDirectionsTap: item.isOnline ? null : () => openDirections(item, ref),
                 ),
               ],
             ),

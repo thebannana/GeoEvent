@@ -5,13 +5,20 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../shared/events/models/create_event_models.dart';
 import '../../../../shared/events/providers/event_providers.dart';
+import '../../../../shared/location/models/event_directions_request.dart';
+import '../../../../shared/location/providers/directions_providers.dart';
 import '../../domain/filter_selection.dart';
 import '../widgets/search_filter_bottom_sheet.dart';
 import '../widgets/search_result_card.dart';
 import '../widgets/search_sheet_chip.dart';
 
 class SearchSheet extends ConsumerStatefulWidget {
-  const SearchSheet({super.key});
+  final VoidCallback? onCloseSheet;
+
+  const SearchSheet({
+    super.key,
+    this.onCloseSheet,
+  });
 
   @override
   ConsumerState<SearchSheet> createState() => _SearchSheetState();
@@ -65,6 +72,30 @@ class _SearchSheetState extends ConsumerState<SearchSheet> {
     _textController.dispose();
     super.dispose();
   }
+
+  void _closeParentSearchSheet() {
+    widget.onCloseSheet?.call();
+  }
+
+  Future<void> _openDirections(EventItem item) async {
+  final activeNavigation = ref.read(activeNavigationProvider);
+
+  if (activeNavigation?.eventId == item.eventId) {
+    await Navigator.of(context).maybePop();
+    _closeParentSearchSheet();
+    return;
+  }
+
+  ref.read(pendingDirectionsProvider.notifier).state = EventDirectionsRequest(
+    eventId: item.eventId,
+    latitude: item.latitude,
+    longitude: item.longitude,
+    title: item.title,
+  );
+
+  await Navigator.of(context).maybePop();
+  _closeParentSearchSheet();
+}
 
   void _onQueryChanged(String value) {
     setState(() {});
@@ -513,7 +544,13 @@ class _SearchSheetState extends ConsumerState<SearchSheet> {
             ),
           )
         else
-          ..._results.map((item) => SearchResultCard(item: item)),
+          ..._results.map(
+            (item) => SearchResultCard(
+              item: item,
+              onOpenDirections: _openDirections,
+              onCloseParentSearchSheet: _closeParentSearchSheet,
+            ),
+          ),
       ],
     );
   }

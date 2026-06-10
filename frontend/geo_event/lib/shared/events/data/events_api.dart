@@ -130,39 +130,76 @@ class EventsApi {
     return imageUrl;
   }
 
-  Future<List<EventItem>> getNearbyEvents({
-    required double latitude,
-    required double longitude,
-    double radiusKm = 10,
-    int limit = 100,
-    int? segmentId,
-    int? genreId,
-    int? subGenreId,
-    double? minPrice,
-    double? maxPrice,
-    bool? freeOnly,
-    bool? todayOnly,
-  }) async {
-    final response = await dio.get(
-      '/api/public/events/nearby',
-      queryParameters: {
-        'latitude': latitude,
-        'longitude': longitude,
-        'radiusKm': radiusKm,
-        'limit': limit,
-        'segmentId': ?segmentId,
-        'genreId': ?genreId,
-        'subGenreId': ?subGenreId,
-        if (freeOnly == true) 'maxPrice': 0,
-        if (freeOnly != true && minPrice != null) 'minPrice': minPrice,
-        if (freeOnly != true && maxPrice != null) 'maxPrice': maxPrice,
-        if (todayOnly == true) 'todayOnly': true,
-      },
-    );
+Future<List<EventItem>> getNearbyEvents({
+  required double latitude,
+  required double longitude,
+  double radiusKm = 10,
+  int limit = 100,
+  int? segmentId,
+  int? genreId,
+  int? subGenreId,
+  double? minPrice,
+  double? maxPrice,
+  bool? freeOnly,
+  bool? todayOnly,
+}) async {
+  final response = await dio.get(
+    '/api/public/events/nearby',
+    queryParameters: {
+      'latitude': latitude,
+      'longitude': longitude,
+      'radiusKm': radiusKm,
+      'limit': limit,
+      if (segmentId != null) 'segmentId': segmentId,
+      if (genreId != null) 'genreId': genreId,
+      if (subGenreId != null) 'subGenreId': subGenreId,
+      if (freeOnly == true) 'maxPrice': 0,
+      if (freeOnly != true && minPrice != null) 'minPrice': minPrice,
+      if (freeOnly != true && maxPrice != null) 'maxPrice': maxPrice,
+      if (todayOnly == true) 'todayOnly': true,
+    },
+  );
 
-    final items = _extractList(response.data);
-    return items.map(EventItem.fromJson).toList();
-  }
+  final items = _extractList(response.data);
+  return items.map(EventItem.fromJson).toList();
+}
+
+Future<List<EventItem>> getGlobalEvents({
+  String? searchTerm,
+  int page = 1,
+  int pageSize = 100,
+  String sortBy = 'StartDateTime',
+  bool sortDescending = false,
+  int? segmentId,
+  int? genreId,
+  int? subGenreId,
+  double? minPrice,
+  double? maxPrice,
+  bool? freeOnly,
+  bool? todayOnly,
+}) async {
+  final response = await dio.get(
+    '/api/public/events',
+    queryParameters: {
+      if (searchTerm != null && searchTerm.trim().isNotEmpty)
+        'searchTerm': searchTerm.trim(),
+      'page': page,
+      'pageSize': pageSize,
+      'sortBy': sortBy,
+      'sortDescending': sortDescending,
+      if (segmentId != null) 'segmentId': segmentId,
+      if (genreId != null) 'genreId': genreId,
+      if (subGenreId != null) 'subGenreId': subGenreId,
+      if (freeOnly == true) 'maxPrice': 0,
+      if (freeOnly != true && minPrice != null) 'minPrice': minPrice,
+      if (freeOnly != true && maxPrice != null) 'maxPrice': maxPrice,
+      if (todayOnly == true) 'todayOnly': true,
+    },
+  );
+
+  final items = _extractList(response.data);
+  return items.map(EventItem.fromJson).toList();
+}
 
   Future<PagedResult<EventItem>> searchEventsPaged({
     String? searchTerm,

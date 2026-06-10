@@ -13,6 +13,12 @@ class ChatReplyPreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final sender = (message.senderDisplayName?.trim().isNotEmpty ?? false)
+        ? message.senderDisplayName!.trim()
+        : (message.replySenderName?.trim().isNotEmpty ?? false)
+            ? message.replySenderName!.trim()
+            : 'Replying';
+
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
@@ -27,7 +33,7 @@ class ChatReplyPreview extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  message.senderDisplayName ?? 'Replying',
+                  sender,
                   style: const TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w700,

@@ -49,6 +49,8 @@ class ChatRepository {
 
   Future<void> markThreadRead(int threadId) => api.markThreadRead(threadId);
 
+Future<void> leaveThread(int threadId) => api.leaveThread(threadId);
+
   Future<List<ChatParticipant>> getThreadParticipants(int threadId) =>
       api.getThreadParticipants(threadId);
 }

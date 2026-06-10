@@ -5,10 +5,14 @@ import '../../../event/presentation/screens/event_detail_screen.dart';
 
 class SearchResultCard extends StatelessWidget {
   final EventItem item;
+  final ValueChanged<EventItem>? onOpenDirections;
+  final VoidCallback? onCloseParentSearchSheet;
 
   const SearchResultCard({
     super.key,
     required this.item,
+    this.onOpenDirections,
+    this.onCloseParentSearchSheet,
   });
 
   Color _segmentColor(EventItem item) {
@@ -57,7 +61,10 @@ class SearchResultCard extends StatelessWidget {
           onTap: () {
             Navigator.of(context).push(
               MaterialPageRoute(
-                builder: (_) => EventDetailsScreen(eventId: item.eventId),
+                builder: (_) => EventDetailsScreen(
+                  eventId: item.eventId,
+                  onCloseParentSearchSheet: onCloseParentSearchSheet,
+                ),
               ),
             );
           },
@@ -87,7 +94,7 @@ class SearchResultCard extends StatelessWidget {
                   ),
                   child: SizedBox(
                     width: 82,
-                    height: 82,
+                    height: 96,
                     child: imageUrl != null && imageUrl.isNotEmpty
                         ? Image.network(
                             imageUrl,
@@ -155,34 +162,54 @@ class SearchResultCard extends StatelessWidget {
                             ),
                           ],
                         ),
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Align(
+                                alignment: Alignment.centerLeft,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 5,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: isDark
+                                        ? Colors.white.withValues(alpha: 0.06)
+                                        : const Color(0xFFF3F6FA),
+                                    borderRadius: BorderRadius.circular(9),
+                                  ),
+                                  child: Text(
+                                    _formatPrice(item.price),
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                              IconButton(
+                                tooltip: 'Open directions',
+                                onPressed: onOpenDirections != null
+                                    ? () => onOpenDirections!(item)
+                                    : null,
+                                icon: const Icon(Icons.directions_rounded),
+                                style: IconButton.styleFrom(
+                                  backgroundColor: isDark
+                                      ? Colors.white.withValues(alpha: 0.06)
+                                      : const Color(0xFFF3F6FA),
+                                  foregroundColor: accent,
+                                  disabledForegroundColor: theme.colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                          ],
+                        ),
                       ],
                     ),
                   ),
                 ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(0, 10, 12, 10),
-                  child: Align(
-                    alignment: Alignment.bottomRight,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 5,
-                      ),
-                      decoration: BoxDecoration(
-                        color: isDark
-                            ? Colors.white.withValues(alpha: 0.06)
-                            : const Color(0xFFF3F6FA),
-                        borderRadius: BorderRadius.circular(9),
-                      ),
-                      child: Text(
-                        _formatPrice(item.price),
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
+                const SizedBox(width: 4),
               ],
             ),
           ),

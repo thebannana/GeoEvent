@@ -5,8 +5,10 @@ enum ChatThreadType {
 
 extension ChatThreadTypeX on ChatThreadType {
   static ChatThreadType fromJson(String? value) {
-    switch (value) {
-      case 'eventGroup':
+    switch ((value ?? '').trim().toLowerCase()) {
+      case 'eventgroup':
+      case 'event_group':
+      case 'group':
         return ChatThreadType.eventGroup;
       case 'direct':
       default:

@@ -12,6 +12,7 @@ class MapFilterSelection {
   final bool freeOnly;
   final bool todayOnly;
   final bool usePreferences;
+  final bool showGlobalEvents;
   final double? minPrice;
   final double? maxPrice;
 
@@ -23,6 +24,7 @@ class MapFilterSelection {
     this.freeOnly = false,
     this.todayOnly = false,
     this.usePreferences = true,
+    this.showGlobalEvents = false,
     this.minPrice,
     this.maxPrice,
   });
@@ -35,6 +37,7 @@ class MapFilterSelection {
     bool? freeOnly,
     bool? todayOnly,
     bool? usePreferences,
+    bool? showGlobalEvents,
     double? minPrice,
     double? maxPrice,
     bool clearSegment = false,
@@ -51,6 +54,7 @@ class MapFilterSelection {
       freeOnly: freeOnly ?? this.freeOnly,
       todayOnly: todayOnly ?? this.todayOnly,
       usePreferences: usePreferences ?? this.usePreferences,
+      showGlobalEvents: showGlobalEvents ?? this.showGlobalEvents,
       minPrice: clearMinPrice ? null : (minPrice ?? this.minPrice),
       maxPrice: clearMaxPrice ? null : (maxPrice ?? this.maxPrice),
     );
@@ -64,6 +68,7 @@ class MapFilterSelection {
       todayOnly ||
       radiusKm != 10 ||
       !usePreferences ||
+      showGlobalEvents ||
       minPrice != null ||
       maxPrice != null;
 
@@ -81,6 +86,7 @@ class MapFilterSelection {
         other.freeOnly == freeOnly &&
         other.todayOnly == todayOnly &&
         other.usePreferences == usePreferences &&
+        other.showGlobalEvents == showGlobalEvents &&
         other.minPrice == minPrice &&
         other.maxPrice == maxPrice;
   }
@@ -94,6 +100,7 @@ class MapFilterSelection {
         freeOnly,
         todayOnly,
         usePreferences,
+        showGlobalEvents,
         minPrice,
         maxPrice,
       );
@@ -660,23 +667,32 @@ class _MapFilterPanelState extends ConsumerState<MapFilterPanel>
                                 ],
                               ),
                               const SizedBox(height: 18),
-                              _DrawerSection(
-                                title: 'Distance',
-                                children: [
-                                  _SliderCard(
-                                    label: 'Radius: ${_selection.radiusKm.round()} km',
-                                    value: _selection.radiusKm,
-                                    min: 1,
-                                    max: 50,
-                                    divisions: 49,
-                                    onChanged: (value) {
-                                      setState(() {
-                                        _selection = _selection.copyWith(radiusKm: value);
-                                      });
-                                    },
-                                  ),
-                                ],
-                              ),
+                                _DrawerSection(
+                                  title: 'Distance',
+                                  children: [
+                                    _SliderCard(
+                                      label: _selection.showGlobalEvents
+                                          ? 'Global events enabled'
+                                          : 'Radius ${_selection.radiusKm.round()} km',
+                                      value: _selection.radiusKm,
+                                      min: 1,
+                                      max: 500,
+                                      divisions: 99,
+                                      enabled: !_selection.showGlobalEvents,
+                                      onChanged: (value) => setState(
+                                        () => _selection = _selection.copyWith(radiusKm: value),
+                                      ),
+                                    ),
+                                    _ToggleCard(
+                                      label: 'Show global events',
+                                      subtitle: 'Disable distance filtering and show events from anywhere.',
+                                      value: _selection.showGlobalEvents,
+                                      onChanged: (v) => setState(
+                                        () => _selection = _selection.copyWith(showGlobalEvents: v),
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               const SizedBox(height: 18),
                               _DrawerSection(
                                 title: 'Price',
@@ -958,7 +974,8 @@ class _SliderCard extends StatelessWidget {
   final double min;
   final double max;
   final int divisions;
-  final ValueChanged<double> onChanged;
+  final bool enabled;
+  final ValueChanged<double>? onChanged;
 
   const _SliderCard({
     required this.label,
@@ -967,6 +984,7 @@ class _SliderCard extends StatelessWidget {
     required this.max,
     required this.divisions,
     required this.onChanged,
+    this.enabled = true,
   });
 
   @override
@@ -984,25 +1002,28 @@ class _SliderCard extends StatelessWidget {
           color: isDark ? const Color(0xFF2A303A) : const Color(0xFFE3EAF3),
         ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: theme.textTheme.titleSmall?.copyWith(
-              fontWeight: FontWeight.w700,
+      child: Opacity(
+        opacity: enabled ? 1 : 0.55,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
             ),
-          ),
-          const SizedBox(height: 6),
-          Slider(
-            value: value.clamp(min, max),
-            min: min,
-            max: max,
-            divisions: divisions,
-            onChanged: onChanged,
-            activeColor: theme.colorScheme.primary,
-          ),
-        ],
+            const SizedBox(height: 6),
+            Slider(
+              value: value.clamp(min, max),
+              min: min,
+              max: max,
+              divisions: divisions,
+              onChanged: enabled ? onChanged : null,
+              activeColor: theme.colorScheme.primary,
+            ),
+          ],
+        ),
       ),
     );
   }

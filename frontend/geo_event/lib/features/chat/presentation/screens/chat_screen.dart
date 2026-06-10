@@ -5,7 +5,7 @@ import '../../../../shared/chat/models/chat_thread_args.dart';
 import '../../../../shared/chat/models/chat_thread_type.dart';
 import '../../../../shared/chat/models/conversation_summary.dart';
 import '../../application/messages_controller.dart';
-import '../widgets/chat_presence_dot.dart';
+import '../widgets/chat_avatar.dart';
 import 'chat_thread_screen.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
@@ -88,14 +88,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             ),
             if (state.conversations.isLoading)
               const SliverPadding(
-                padding: EdgeInsets.fromLTRB(18, 16, 18, 24),
+                padding: EdgeInsets.fromLTRB(18, 10, 18, 24),
                 sliver: SliverToBoxAdapter(
-                  child: Center(
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(vertical: 28),
-                      child: CircularProgressIndicator(),
-                    ),
-                  ),
+                  child: _ChatLoadingState(),
                 ),
               )
             else if (state.conversations.hasError)
@@ -176,6 +171,7 @@ class _ConversationCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final subtitlePrefix = item.isLastMessageFromMe ? 'You: ' : '';
+    final resolvedTitle = _displayTitle(item);
 
     return Material(
       color: isDark ? const Color(0xFF17191D) : Colors.white,
@@ -196,11 +192,12 @@ class _ConversationCard extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _ConversationAvatar(
-                title: item.title,
+              ChatAvatar(
+                title: resolvedTitle,
                 imageUrl: item.imageUrl,
-                isDark: isDark,
+                size: 46,
                 type: item.type,
+                showPresence: item.type == ChatThreadType.direct,
                 isOnline: item.type == ChatThreadType.direct && item.isOnline,
               ),
               const SizedBox(width: 12),
@@ -211,7 +208,7 @@ class _ConversationCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        item.title,
+                        resolvedTitle,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
@@ -251,6 +248,7 @@ class _ConversationCard extends StatelessWidget {
                   const SizedBox(height: 8),
                   if (item.unreadCount > 0)
                     Container(
+                      constraints: const BoxConstraints(minWidth: 22),
                       padding: const EdgeInsets.symmetric(
                         horizontal: 8,
                         vertical: 4,
@@ -261,6 +259,7 @@ class _ConversationCard extends StatelessWidget {
                       ),
                       child: Text(
                         item.unreadCount.toString(),
+                        textAlign: TextAlign.center,
                         style: TextStyle(
                           color: theme.colorScheme.onPrimary,
                           fontSize: 11,
@@ -283,6 +282,17 @@ class _ConversationCard extends StatelessWidget {
     );
   }
 
+  static String _displayTitle(ConversationSummary item) {
+    final value = item.title.trim();
+    if (value.isNotEmpty) return value;
+
+    if (item.type == ChatThreadType.direct && item.otherUserId != null) {
+      return 'User ${item.otherUserId}';
+    }
+
+    return 'Chat';
+  }
+
   static String _formatTime(DateTime value) {
     final now = DateTime.now();
     final local = value.toLocal();
@@ -293,78 +303,6 @@ class _ConversationCard extends StatelessWidget {
     }
 
     return '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
-  }
-}
-
-class _ConversationAvatar extends StatelessWidget {
-  final String title;
-  final String? imageUrl;
-  final bool isDark;
-  final ChatThreadType type;
-  final bool isOnline;
-
-  const _ConversationAvatar({
-    required this.title,
-    required this.imageUrl,
-    required this.isDark,
-    required this.type,
-    required this.isOnline,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final baseColor = Theme.of(context).colorScheme.primary;
-
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        Container(
-          width: 46,
-          height: 46,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: baseColor.withValues(alpha: isDark ? 0.22 : 0.15),
-            image: imageUrl != null && imageUrl!.trim().isNotEmpty
-                ? DecorationImage(
-                    image: NetworkImage(imageUrl!.trim()),
-                    fit: BoxFit.cover,
-                  )
-                : null,
-          ),
-          child: imageUrl == null || imageUrl!.trim().isEmpty
-              ? Center(
-                  child: Text(
-                    _initials(title),
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: baseColor,
-                    ),
-                  ),
-                )
-              : null,
-        ),
-        if (type == ChatThreadType.direct)
-          Positioned(
-            right: -1,
-            bottom: -1,
-            child: ChatPresenceDot(isOnline: isOnline),
-          ),
-      ],
-    );
-  }
-
-  static String _initials(String value) {
-    final parts = value
-        .trim()
-        .split(RegExp(r'\s+'))
-        .where((e) => e.isNotEmpty)
-        .toList();
-
-    if (parts.isEmpty) return '?';
-    if (parts.length == 1) return parts.first.characters.first.toUpperCase();
-    return (parts[0].characters.first + parts[1].characters.first)
-        .toUpperCase();
   }
 }
 
@@ -393,7 +331,9 @@ class _TopFilterChip extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
           color: selected
-              ? theme.colorScheme.primary.withValues(alpha: isDark ? 0.22 : 0.12)
+              ? theme.colorScheme.primary.withValues(
+                  alpha: isDark ? 0.22 : 0.12,
+                )
               : Colors.transparent,
           borderRadius: BorderRadius.circular(999),
           border: Border.all(
@@ -438,6 +378,99 @@ class _TopFilterChip extends StatelessWidget {
             ],
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _ChatLoadingState extends StatelessWidget {
+  const _ChatLoadingState();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: const [
+        _ChatSkeletonCard(),
+        SizedBox(height: 10),
+        _ChatSkeletonCard(),
+        SizedBox(height: 10),
+        _ChatSkeletonCard(),
+      ],
+    );
+  }
+}
+
+class _ChatSkeletonCard extends StatelessWidget {
+  const _ChatSkeletonCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final base = isDark ? const Color(0xFF17191D) : Colors.white;
+    final line = isDark ? const Color(0xFF2A303A) : const Color(0xFFE5EAF2);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: base,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: line),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 46,
+            height: 46,
+            decoration: BoxDecoration(
+              color: line,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 120,
+                  height: 12,
+                  decoration: BoxDecoration(
+                    color: line,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Container(
+                  width: double.infinity,
+                  height: 10,
+                  decoration: BoxDecoration(
+                    color: line,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  width: 160,
+                  height: 10,
+                  decoration: BoxDecoration(
+                    color: line,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          Container(
+            width: 24,
+            height: 24,
+            decoration: BoxDecoration(
+              color: line,
+              borderRadius: BorderRadius.circular(999),
+            ),
+          ),
+        ],
       ),
     );
   }

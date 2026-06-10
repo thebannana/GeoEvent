@@ -8,22 +8,24 @@ class ReservationsApi {
 
   ReservationsApi(this._dio);
 
-  Future<PagedResult<Reservation>> getMyReservations({
-    int page = 1,
-    int pageSize = 20,
-    String? status,
-  }) async {
-    final response = await _dio.get<Map<String, dynamic>>(
-      '/api/reservations/my',
-      queryParameters: {
-        'page': page,
-        'pageSize': pageSize,
-        'status': ?status,
-      },
-    );
+Future<PagedResult<Reservation>> getMyReservations({
+  int page = 1,
+  int pageSize = 20,
+  String? status,
+}) async {
+  final queryParameters = <String, dynamic>{
+    'page': page,
+    'pageSize': pageSize,
+    'status': status,
+  }..removeWhere((key, value) => value == null);
 
-    return PagedResult.fromJson(response.data!, Reservation.fromJson);
-  }
+  final response = await _dio.get<Map<String, dynamic>>(
+    '/api/reservations/my',
+    queryParameters: queryParameters,
+  );
+
+  return PagedResult.fromJson(response.data!, Reservation.fromJson);
+}
 
   Future<void> cancelReservation(int reservationId) async {
     await _dio.patch<void>('/api/reservations/$reservationId/cancel');

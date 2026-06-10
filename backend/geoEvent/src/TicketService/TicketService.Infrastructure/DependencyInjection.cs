@@ -27,6 +27,7 @@ public static class DependencyInjection
 
         services.AddScoped<ITicketRepository, TicketRepository>();
         services.AddScoped<ITicketService, TicketServiceImpl>();
+        services.AddScoped<IEventAuthorizationService, EventAuthorizationService>();
 
         var userServiceUrl = configuration["Services:UserService"];
         if (string.IsNullOrWhiteSpace(userServiceUrl))

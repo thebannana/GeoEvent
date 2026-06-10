@@ -30,24 +30,46 @@ class ConversationSummary {
   });
 
   factory ConversationSummary.fromJson(Map<String, dynamic> json) {
+    DateTime parseDate(dynamic value) {
+      if (value == null) return DateTime.fromMillisecondsSinceEpoch(0);
+      return DateTime.tryParse(value.toString()) ??
+          DateTime.fromMillisecondsSinceEpoch(0);
+    }
+
+    DateTime? parseNullableDate(dynamic value) {
+      if (value == null) return null;
+      return DateTime.tryParse(value.toString());
+    }
+
+    final resolvedTitle =
+        (json['title'] ??
+                json['otherUserDisplayName'] ??
+                json['otherUserUsername'] ??
+                '') as String;
+
+    final resolvedImageUrl =
+        (json['imageUrl'] ?? json['otherUserAvatarUrl']) as String?;
+
+    final resolvedIsOnline =
+        (json['isOnline'] ?? json['otherUserIsOnline']) as bool? ?? false;
+
+    final resolvedLastActiveAt = parseNullableDate(
+      json['lastActiveAt'] ?? json['otherUserLastActiveAt'],
+    );
+
     return ConversationSummary(
       threadId: (json['threadId'] as num).toInt(),
       type: ChatThreadTypeX.fromJson(json['type'] as String?),
-      title: json['title'] as String? ?? '',
-      imageUrl: json['imageUrl'] as String?,
+      title: resolvedTitle,
+      imageUrl: resolvedImageUrl,
       otherUserId: (json['otherUserId'] as num?)?.toInt(),
       eventId: (json['eventId'] as num?)?.toInt(),
       lastMessageContent: json['lastMessageContent'] as String? ?? '',
-      lastMessageSentAt: DateTime.tryParse(
-            json['lastMessageSentAt'] as String? ?? '',
-          ) ??
-          DateTime.fromMillisecondsSinceEpoch(0),
+      lastMessageSentAt: parseDate(json['lastMessageSentAt']),
       unreadCount: (json['unreadCount'] as num?)?.toInt() ?? 0,
       isLastMessageFromMe: json['isLastMessageFromMe'] as bool? ?? false,
-      isOnline: json['isOnline'] as bool? ?? false,
-      lastActiveAt: json['lastActiveAt'] != null
-          ? DateTime.tryParse(json['lastActiveAt'] as String)
-          : null,
+      isOnline: resolvedIsOnline,
+      lastActiveAt: resolvedLastActiveAt,
     );
   }
 

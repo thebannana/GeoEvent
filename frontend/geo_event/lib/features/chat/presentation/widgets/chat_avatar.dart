@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../../../../shared/chat/models/chat_thread_type.dart';
 import 'chat_presence_dot.dart';
 
@@ -22,8 +23,10 @@ class ChatAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     final hasImage = imageUrl != null && imageUrl!.trim().isNotEmpty;
-    final baseColor = Theme.of(context).colorScheme.primary;
+    final baseColor = colorScheme.primary;
     final shouldShowPresence =
         showPresence && type == ChatThreadType.direct;
 

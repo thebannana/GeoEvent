@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../../core/config/app_env.dart';
+import '../../../../core/widgets/app_spinner.dart';
 import '../../../../shared/events/models/create_event_models.dart';
 import '../../../../shared/events/models/create_event_state.dart';
 import '../../application/create_event_controller.dart';
@@ -27,7 +28,6 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
   final capacityCtrl = TextEditingController();
   final priceCtrl = TextEditingController();
   final tagsCtrl = TextEditingController();
-  final externalUrlCtrl = TextEditingController();
   final accessibilityCtrl = TextEditingController();
   final promoterCtrl = TextEditingController();
   final imagePicker = ImagePicker();
@@ -53,7 +53,6 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     capacityCtrl.dispose();
     priceCtrl.dispose();
     tagsCtrl.dispose();
-    externalUrlCtrl.dispose();
     accessibilityCtrl.dispose();
     promoterCtrl.dispose();
     super.dispose();
@@ -65,9 +64,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     final controller = ref.read(createEventControllerProvider.notifier);
     final theme = Theme.of(context);
 
-    if (state.isFree && priceCtrl.text != '0') {
-      priceCtrl.text = '0';
-    }
+    _syncFreePrice(state);
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(18, 18, 18, 24),
@@ -92,7 +89,8 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
           const LinearProgressIndicator(),
           const SizedBox(height: 12),
         ],
-        if (state.errorMessage != null && state.errorMessage!.trim().isNotEmpty) ...[
+        if (state.errorMessage != null &&
+            state.errorMessage!.trim().isNotEmpty) ...[
           InlineBanner(
             message: state.errorMessage!,
             isError: true,
@@ -114,7 +112,6 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
           capacityCtrl: capacityCtrl,
           priceCtrl: priceCtrl,
           tagsCtrl: tagsCtrl,
-          externalUrlCtrl: externalUrlCtrl,
           accessibilityCtrl: accessibilityCtrl,
           promoterCtrl: promoterCtrl,
           startAt: startAt,
@@ -139,12 +136,6 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
             controller.setFree(value);
             if (value) {
               priceCtrl.text = '0';
-            }
-          },
-          onOnlineChanged: (value) {
-            controller.setOnline(value);
-            if (value) {
-              controller.clearSelectedLocation();
             }
           },
         ),
@@ -205,11 +196,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 13),
                   child: state.submitting
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
+                      ? const AppSpinner(size: 18, strokeWidth: 2)
                       : const Text('Save draft'),
                 ),
               ),
@@ -223,11 +210,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 13),
                   child: state.submitting
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
+                      ? const AppSpinner(size: 18, strokeWidth: 2)
                       : const Text('Publish'),
                 ),
               ),
@@ -236,6 +219,22 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         ),
       ],
     );
+  }
+
+  void _syncFreePrice(CreateEventState state) {
+    if (!state.isFree) return;
+    if (priceCtrl.text == '0') return;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (priceCtrl.text == '0') return;
+
+      priceCtrl.value = priceCtrl.value.copyWith(
+        text: '0',
+        selection: const TextSelection.collapsed(offset: 1),
+        composing: TextRange.empty,
+      );
+    });
   }
 
   Future<void> pickFeaturedImage(CreateEventController controller) async {
@@ -307,7 +306,6 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     final description = descriptionCtrl.text.trim();
     final capacity = int.tryParse(capacityCtrl.text.trim());
     final price = state.isFree ? 0.0 : double.tryParse(priceCtrl.text.trim());
-    final externalUrl = nullableString(externalUrlCtrl.text);
     final selectedLocation = state.selectedLocation;
 
     if (title.length < 3 || title.length > 200) {
@@ -347,22 +345,8 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
       return;
     }
 
-    if (state.isOnline && (externalUrl == null || externalUrl.isEmpty)) {
-      controller.setFormError(
-        'Please provide an external URL for an online event.',
-      );
-      return;
-    }
-
-    if (!state.isOnline && selectedLocation == null) {
+    if (selectedLocation == null) {
       controller.setFormError('Please choose a location.');
-      return;
-    }
-
-    if (state.isOnline && selectedLocation == null) {
-      controller.setFormError(
-        'Online events still need a location until the API accepts null coordinates.',
-      );
       return;
     }
 
@@ -374,15 +358,15 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
       subGenreId: state.subGenreId,
       venueId: null,
       cityId: null,
-      latitude: selectedLocation!.latitude,
+      latitude: selectedLocation.latitude,
       longitude: selectedLocation.longitude,
       startDateTime: startAt!,
       endDateTime: endAt!,
       capacity: capacity,
       price: price,
-      isOnline: state.isOnline,
+      isOnline: false,
       tags: nullableString(tagsCtrl.text),
-      externalUrl: externalUrl,
+      externalUrl: null,
       accessibilityInfo: nullableString(accessibilityCtrl.text),
       promoterName: nullableString(promoterCtrl.text),
       locale: 'bs-BA',

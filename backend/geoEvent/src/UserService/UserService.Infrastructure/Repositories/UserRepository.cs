@@ -34,6 +34,42 @@ public class UserRepository : IUserRepository
         await _context.SaveChangesAsync();
     }
 
+    public async Task<List<UserPreference>> GetUserPreferencesAsync(int userId)
+    => await _context.UserPreferences
+        .Where(p => p.UserId == userId)
+        .OrderByDescending(p => p.Score)
+        .ToListAsync();
+
+    public async Task<UserPreference> CreatePreferenceAsync(UserPreference preference)
+    {
+        _context.UserPreferences.Add(preference);
+        await _context.SaveChangesAsync();
+        return preference;
+    }
+
+    public async Task UpdatePreferenceAsync(UserPreference preference)
+    {
+        _context.UserPreferences.Update(preference);
+        await _context.SaveChangesAsync();
+    }
+
+    public async Task DeletePreferenceAsync(UserPreference preference)
+    {
+        _context.UserPreferences.Remove(preference);
+        await _context.SaveChangesAsync();
+    }
+
+    public async Task<UserPreference?> GetPreferenceAsync(
+    int userId,
+    int? segmentId,
+    int? genreId,
+    int? subGenreId)
+    => await _context.UserPreferences.FirstOrDefaultAsync(p =>
+        p.UserId == userId &&
+        p.SegmentId == segmentId &&
+        p.GenreId == genreId &&
+        p.SubGenreId == subGenreId);
+
     public async Task DeleteUserRatingAsync(UserRating rating)
     {
         _context.Set<UserRating>().Remove(rating);
@@ -195,31 +231,6 @@ public class UserRepository : IUserRepository
         _context.ActivityLogs.Add(log);
         await _context.SaveChangesAsync();
         return log;
-    }
-
-    public async Task<List<UserPreference>> GetUserPreferencesAsync(int userId) =>
-        await _context.UserPreferences.Where(p => p.UserId == userId).OrderByDescending(p => p.Score).ToListAsync();
-
-    public async Task<UserPreference?> GetPreferenceAsync(int userId, int? segmentId, int? genreId) =>
-        await _context.UserPreferences.FirstOrDefaultAsync(p => p.UserId == userId && p.SegmentId == segmentId && p.GenreId == genreId);
-
-    public async Task<UserPreference> CreatePreferenceAsync(UserPreference preference)
-    {
-        _context.UserPreferences.Add(preference);
-        await _context.SaveChangesAsync();
-        return preference;
-    }
-
-    public async Task UpdatePreferenceAsync(UserPreference preference)
-    {
-        _context.UserPreferences.Update(preference);
-        await _context.SaveChangesAsync();
-    }
-
-    public async Task DeletePreferenceAsync(UserPreference preference)
-    {
-        _context.UserPreferences.Remove(preference);
-        await _context.SaveChangesAsync();
     }
 
     public async Task<Report?> GetReportByIdAsync(int reportId) =>

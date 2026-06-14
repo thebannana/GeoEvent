@@ -1,76 +1,55 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/utils/color_utils.dart';
 import 'create_event_models.dart';
+
+enum EventPinPriority {
+  high,
+  medium,
+  low,
+}
 
 class EventMapPinData {
   final String id;
+  final double lat;
+  final double lng;
   final String title;
   final String? imageUrl;
-  final double lng;
-  final double lat;
   final Color categoryColor;
+  final int recommendationScore;
+  final EventPinPriority priority;
 
   const EventMapPinData({
     required this.id,
+    required this.lat,
+    required this.lng,
     required this.title,
     required this.imageUrl,
-    required this.lng,
-    required this.lat,
-    this.categoryColor = const Color(0xFFF8FAFC),
+    required this.categoryColor,
+    required this.recommendationScore,
+    required this.priority,
   });
 
-  factory EventMapPinData.fromEventItem(EventItem e) {
-    final String? resolvedImageUrl =
-        (e.coverImageUrl != null && e.coverImageUrl!.isNotEmpty)
-            ? e.coverImageUrl
-            : (e.imageUrls.isNotEmpty ? e.imageUrls.first : null);
+  factory EventMapPinData.fromEventItem(
+    EventItem item, {
+    int recommendationScore = 0,
+  }) {
+    final priority = recommendationScore >= 60
+        ? EventPinPriority.high
+        : recommendationScore >= 35
+            ? EventPinPriority.medium
+            : EventPinPriority.low;
 
     return EventMapPinData(
-      id: e.eventId.toString(),
-      title: e.title,
-      imageUrl: resolvedImageUrl,
-      lng: e.longitude,
-      lat: e.latitude,
-      categoryColor: resolveCategoryColor(e),
+      id: item.eventId.toString(),
+      lat: item.latitude,
+      lng: item.longitude,
+      title: item.title,
+      imageUrl: item.coverImageUrl ??
+          (item.imageUrls.isNotEmpty ? item.imageUrls.first : null),
+      categoryColor: parseHexColor(item.segmentColor),
+      recommendationScore: recommendationScore,
+      priority: priority,
     );
-  }
-
-  static Color resolveCategoryColor(EventItem e) {
-    final segment = (e.segmentName ?? '').trim().toLowerCase();
-    final genre = (e.genreName ?? '').trim().toLowerCase();
-    final subGenre = (e.subGenreName ?? '').trim().toLowerCase();
-
-    final type = '$segment $genre $subGenre';
-
-    if (type.contains('concert') ||
-        type.contains('music') ||
-        type.contains('live')) {
-      return const Color(0xFF8B5CF6);
-    }
-
-    if (type.contains('festival')) {
-      return const Color(0xFFF59E0B);
-    }
-
-    if (type.contains('theatre') ||
-        type.contains('theater') ||
-        type.contains('art') ||
-        type.contains('culture')) {
-      return const Color(0xFF4F46E5);
-    }
-
-    if (type.contains('sport') ||
-        type.contains('football') ||
-        type.contains('basketball')) {
-      return const Color(0xFF16A34A);
-    }
-
-    if (type.contains('nightlife') ||
-        type.contains('party') ||
-        type.contains('club')) {
-      return const Color(0xFFEF4444);
-    }
-
-    return const Color(0xFFF8FAFC);
   }
 }

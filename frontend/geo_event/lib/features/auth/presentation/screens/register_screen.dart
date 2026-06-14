@@ -162,236 +162,243 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    final authState = ref.watch(authStateProvider);
+Widget build(BuildContext context) {
+  final theme = Theme.of(context);
+  final authState = ref.watch(authStateProvider);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Register'),
-        centerTitle: true,
-      ),
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(24),
-          children: [
-            AuthFormCard(
-              child: AutofillGroup(
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const AuthHeader(
-                        title: 'Create your account',
-                        subtitle:
-                            'Join GeoEvent to discover events, manage your profile, and stay connected.',
-                        icon: Icons.person_add_alt_1_rounded,
+  return Scaffold(
+    backgroundColor: theme.scaffoldBackgroundColor,
+    appBar: AppBar(
+      title: const Text('Register'),
+      centerTitle: true,
+      backgroundColor: theme.scaffoldBackgroundColor,
+      surfaceTintColor: Colors.transparent,
+      elevation: 0,
+      scrolledUnderElevation: 0,
+    ),
+    body: SafeArea(
+      child: ListView(
+        padding: const EdgeInsets.all(24),
+        children: [
+          AuthFormCard(
+            child: AutofillGroup(
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const AuthHeader(
+                      title: 'Create your account',
+                      subtitle:
+                          'Join GeoEvent to discover events, manage your profile, and stay connected.',
+                      icon: Icons.person_add_alt_1_rounded,
+                    ),
+                    TextFormField(
+                      controller: _firstNameController,
+                      textInputAction: TextInputAction.next,
+                      autofillHints: const [AutofillHints.givenName],
+                      decoration: const InputDecoration(
+                        labelText: 'First name',
+                        border: OutlineInputBorder(),
                       ),
-                      TextFormField(
-                        controller: _firstNameController,
-                        textInputAction: TextInputAction.next,
-                        autofillHints: const [AutofillHints.givenName],
-                        decoration: const InputDecoration(
-                          labelText: 'First name',
-                          border: OutlineInputBorder(),
-                        ),
-                        validator: (value) {
-                          if ((value ?? '').trim().length < 2) {
-                            return 'First name must be at least 2 characters';
-                          }
-                          return null;
-                        },
+                      validator: (value) {
+                        if ((value ?? '').trim().length < 2) {
+                          return 'First name must be at least 2 characters';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _lastNameController,
+                      textInputAction: TextInputAction.next,
+                      autofillHints: const [AutofillHints.familyName],
+                      decoration: const InputDecoration(
+                        labelText: 'Last name',
+                        border: OutlineInputBorder(),
                       ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _lastNameController,
-                        textInputAction: TextInputAction.next,
-                        autofillHints: const [AutofillHints.familyName],
-                        decoration: const InputDecoration(
-                          labelText: 'Last name',
-                          border: OutlineInputBorder(),
-                        ),
-                        validator: (value) {
-                          if ((value ?? '').trim().length < 2) {
-                            return 'Last name must be at least 2 characters';
-                          }
-                          return null;
-                        },
+                      validator: (value) {
+                        if ((value ?? '').trim().length < 2) {
+                          return 'Last name must be at least 2 characters';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _usernameController,
+                      textInputAction: TextInputAction.next,
+                      autocorrect: false,
+                      enableSuggestions: false,
+                      autofillHints: const [AutofillHints.username],
+                      decoration: const InputDecoration(
+                        labelText: 'Username',
+                        border: OutlineInputBorder(),
                       ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _usernameController,
-                        textInputAction: TextInputAction.next,
-                        autocorrect: false,
-                        enableSuggestions: false,
-                        autofillHints: const [AutofillHints.username],
-                        decoration: const InputDecoration(
-                          labelText: 'Username',
-                          border: OutlineInputBorder(),
-                        ),
-                        validator: (value) {
-                          if ((value ?? '').trim().length < 3) {
-                            return 'Username must be at least 3 characters';
-                          }
-                          return null;
-                        },
+                      validator: (value) {
+                        if ((value ?? '').trim().length < 3) {
+                          return 'Username must be at least 3 characters';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _emailController,
+                      textInputAction: TextInputAction.next,
+                      keyboardType: TextInputType.emailAddress,
+                      autofillHints: const [AutofillHints.email],
+                      decoration: const InputDecoration(
+                        labelText: 'Email',
+                        border: OutlineInputBorder(),
                       ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _emailController,
-                        textInputAction: TextInputAction.next,
-                        keyboardType: TextInputType.emailAddress,
-                        autofillHints: const [AutofillHints.email],
-                        decoration: const InputDecoration(
-                          labelText: 'Email',
-                          border: OutlineInputBorder(),
-                        ),
-                        validator: (value) {
-                          final email = (value ?? '').trim();
-                          if (email.isEmpty) return 'Email is required';
-                          if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
-                              .hasMatch(email)) {
-                            return 'Enter a valid email';
-                          }
-                          return null;
-                        },
+                      validator: (value) {
+                        final email = (value ?? '').trim();
+                        if (email.isEmpty) return 'Email is required';
+                        if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email)) {
+                          return 'Enter a valid email';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _phoneController,
+                      textInputAction: TextInputAction.next,
+                      keyboardType: TextInputType.phone,
+                      autofillHints: const [AutofillHints.telephoneNumber],
+                      decoration: const InputDecoration(
+                        labelText: 'Phone number',
+                        border: OutlineInputBorder(),
                       ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _phoneController,
-                        textInputAction: TextInputAction.next,
-                        keyboardType: TextInputType.phone,
-                        autofillHints: const [AutofillHints.telephoneNumber],
-                        decoration: const InputDecoration(
-                          labelText: 'Phone number',
-                          border: OutlineInputBorder(),
-                        ),
-                        validator: (value) {
-                          if ((value ?? '').trim().isEmpty) {
-                            return 'Phone number is required';
-                          }
-                          return null;
-                        },
+                      validator: (value) {
+                        if ((value ?? '').trim().isEmpty) {
+                          return 'Phone number is required';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _birthDateController,
+                      readOnly: true,
+                      onTap: authState.isLoading ? null : _pickBirthDate,
+                      decoration: const InputDecoration(
+                        labelText: 'Birth date',
+                        border: OutlineInputBorder(),
+                        suffixIcon: Icon(Icons.calendar_today),
                       ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _birthDateController,
-                        readOnly: true,
-                        onTap: authState.isLoading ? null : _pickBirthDate,
-                        decoration: const InputDecoration(
-                          labelText: 'Birth date',
-                          border: OutlineInputBorder(),
-                          suffixIcon: Icon(Icons.calendar_today),
-                        ),
-                        validator: (value) {
-                          if ((value ?? '').trim().isEmpty) {
-                            return 'Birth date is required';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _passwordController,
-                        textInputAction: TextInputAction.next,
-                        obscureText: _obscurePassword,
-                        autofillHints: const [AutofillHints.newPassword],
-                        decoration: InputDecoration(
-                          labelText: 'Password',
-                          border: const OutlineInputBorder(),
-                          suffixIcon: IconButton(
-                            onPressed: () {
-                              setState(() {
-                                _obscurePassword = !_obscurePassword;
-                              });
-                            },
-                            icon: Icon(
-                              _obscurePassword
-                                  ? Icons.visibility_off
-                                  : Icons.visibility,
-                            ),
+                      validator: (value) {
+                        if ((value ?? '').trim().isEmpty) {
+                          return 'Birth date is required';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _passwordController,
+                      textInputAction: TextInputAction.next,
+                      obscureText: _obscurePassword,
+                      autofillHints: const [AutofillHints.newPassword],
+                      decoration: InputDecoration(
+                        labelText: 'Password',
+                        border: const OutlineInputBorder(),
+                        suffixIcon: IconButton(
+                          onPressed: () {
+                            setState(() {
+                              _obscurePassword = !_obscurePassword;
+                            });
+                          },
+                          icon: Icon(
+                            _obscurePassword
+                                ? Icons.visibility_off
+                                : Icons.visibility,
                           ),
                         ),
-                        validator: _validatePassword,
                       ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _confirmPasswordController,
-                        textInputAction: TextInputAction.done,
-                        obscureText: _obscureConfirmPassword,
-                        autofillHints: const [AutofillHints.newPassword],
-                        onFieldSubmitted: (_) => _submit(),
-                        decoration: InputDecoration(
-                          labelText: 'Confirm password',
-                          border: const OutlineInputBorder(),
-                          suffixIcon: IconButton(
-                            onPressed: () {
-                              setState(() {
-                                _obscureConfirmPassword =
-                                    !_obscureConfirmPassword;
-                              });
-                            },
-                            icon: Icon(
-                              _obscureConfirmPassword
-                                  ? Icons.visibility_off
-                                  : Icons.visibility,
-                            ),
+                      validator: _validatePassword,
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _confirmPasswordController,
+                      textInputAction: TextInputAction.done,
+                      obscureText: _obscureConfirmPassword,
+                      autofillHints: const [AutofillHints.newPassword],
+                      onFieldSubmitted: (_) => _submit(),
+                      decoration: InputDecoration(
+                        labelText: 'Confirm password',
+                        border: const OutlineInputBorder(),
+                        suffixIcon: IconButton(
+                          onPressed: () {
+                            setState(() {
+                              _obscureConfirmPassword =
+                                  !_obscureConfirmPassword;
+                            });
+                          },
+                          icon: Icon(
+                            _obscureConfirmPassword
+                                ? Icons.visibility_off
+                                : Icons.visibility,
                           ),
                         ),
-                        validator: (value) {
-                          if ((value ?? '').isEmpty) {
-                            return 'Confirm password is required';
-                          }
-                          if (value != _passwordController.text) {
-                            return 'Passwords do not match';
-                          }
-                          return null;
-                        },
                       ),
-                      const SizedBox(height: 12),
-                      CheckboxListTile(
-                        contentPadding: EdgeInsets.zero,
-                        value: _consentGiven,
-                        onChanged: authState.isLoading
-                            ? null
-                            : (value) {
-                                setState(() {
-                                  _consentGiven = value ?? false;
-                                });
-                              },
-                        title: const Text(
-                          'I agree to the app consent and data usage',
-                        ),
-                        controlAffinity: ListTileControlAffinity.leading,
+                      validator: (value) {
+                        if ((value ?? '').isEmpty) {
+                          return 'Confirm password is required';
+                        }
+                        if (value != _passwordController.text) {
+                          return 'Passwords do not match';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    CheckboxListTile(
+                      contentPadding: EdgeInsets.zero,
+                      value: _consentGiven,
+                      onChanged: authState.isLoading
+                          ? null
+                          : (value) {
+                              setState(() {
+                                _consentGiven = value ?? false;
+                              });
+                            },
+                      title: const Text(
+                        'I agree to the app consent and data usage',
                       ),
-                      const SizedBox(height: 20),
-                      FilledButton(
-                        onPressed: authState.isLoading ? null : _submit,
-                        child: authState.isLoading
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child:
-                                    CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Text('Create Account'),
-                      ),
-                      const SizedBox(height: 8),
-                      TextButton(
-                        onPressed: authState.isLoading
-                            ? null
-                            : () => context.go('/login'),
-                        child: const Text('Already have an account? Login'),
-                      ),
-                    ],
-                  ),
+                      controlAffinity: ListTileControlAffinity.leading,
+                    ),
+                    const SizedBox(height: 20),
+                    FilledButton(
+                      onPressed: authState.isLoading ? null : _submit,
+                      child: authState.isLoading
+                          ? SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: theme.colorScheme.onPrimary,
+                              ),
+                            )
+                          : const Text('Create Account'),
+                    ),
+                    const SizedBox(height: 8),
+                    TextButton(
+                      onPressed: authState.isLoading
+                          ? null
+                          : () => context.go('/login'),
+                      child: const Text('Already have an account? Login'),
+                    ),
+                  ],
                 ),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
-    );
-  }
+    ),
+  );
+}
 }

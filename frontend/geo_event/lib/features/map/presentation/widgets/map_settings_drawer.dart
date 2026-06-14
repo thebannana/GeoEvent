@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/widgets/app_icon_circle_button.dart';
+import '../../../../core/widgets/app_surface_card.dart';
 import '../../application/map_settings_controller.dart';
 
 class MapSettingsDrawer extends ConsumerStatefulWidget {
@@ -19,7 +21,6 @@ class _MapSettingsDrawerState extends ConsumerState<MapSettingsDrawer>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
   late final Animation<Offset> _slide;
-
   bool _closing = false;
 
   @override
@@ -63,7 +64,6 @@ class _MapSettingsDrawerState extends ConsumerState<MapSettingsDrawer>
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
     final settings = ref.watch(mapSettingsControllerProvider);
     final controller = ref.read(mapSettingsControllerProvider.notifier);
     final width = MediaQuery.of(context).size.width * 0.78;
@@ -88,20 +88,14 @@ class _MapSettingsDrawerState extends ConsumerState<MapSettingsDrawer>
                     maxHeight: 620,
                   ),
                   decoration: BoxDecoration(
-                    color: isDark
-                        ? const Color(0xFF161A21)
-                        : const Color(0xFFF9FBFD),
+                    color: theme.colorScheme.surface,
                     borderRadius: BorderRadius.circular(28),
                     border: Border.all(
-                      color: isDark
-                          ? const Color(0xFF2A303A)
-                          : const Color(0xFFE3EAF3),
+                      color: theme.colorScheme.outline.withValues(alpha: 0.35),
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withValues(
-                          alpha: isDark ? 0.22 : 0.08,
-                        ),
+                        color: theme.colorScheme.shadow.withValues(alpha: 0.10),
                         blurRadius: 28,
                         offset: const Offset(0, 10),
                       ),
@@ -135,18 +129,17 @@ class _MapSettingsDrawerState extends ConsumerState<MapSettingsDrawer>
                                 ],
                               ),
                             ),
-                            IconButton(
+                            AppIconCircleButton(
                               onPressed: _close,
-                              icon: const Icon(Icons.close_rounded),
+                              tooltip: 'Close map settings',
+                              icon: Icons.close_rounded,
                             ),
                           ],
                         ),
                       ),
                       Divider(
                         height: 1,
-                        color: isDark
-                            ? const Color(0xFF2A303A)
-                            : const Color(0xFFE3EAF3),
+                        color: theme.colorScheme.outline.withValues(alpha: 0.24),
                       ),
                       Expanded(
                         child: SingleChildScrollView(
@@ -212,9 +205,7 @@ class _MapSettingsDrawerState extends ConsumerState<MapSettingsDrawer>
                       ),
                       Divider(
                         height: 1,
-                        color: isDark
-                            ? const Color(0xFF2A303A)
-                            : const Color(0xFFE3EAF3),
+                        color: theme.colorScheme.outline.withValues(alpha: 0.24),
                       ),
                       Padding(
                         padding: const EdgeInsets.fromLTRB(20, 14, 20, 18),
@@ -293,18 +284,10 @@ class _ToggleCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
 
-    return Container(
+    return AppSurfaceCard(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.fromLTRB(14, 14, 10, 14),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1B2028) : Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: isDark ? const Color(0xFF2A303A) : const Color(0xFFE3EAF3),
-        ),
-      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

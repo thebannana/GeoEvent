@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+
+import '../../../../shared/chat/models/chat_thread_type.dart';
 import '../../../../shared/chat/models/message_item.dart';
+import 'chat_avatar.dart';
 
 class ChatMessageBubble extends StatefulWidget {
   final MessageItem message;
   final bool isMine;
-  final bool isDark;
   final VoidCallback? onDelete;
   final VoidCallback? onLike;
   final VoidCallback? onEdit;
@@ -14,7 +16,6 @@ class ChatMessageBubble extends StatefulWidget {
     super.key,
     required this.message,
     required this.isMine,
-    required this.isDark,
     this.onDelete,
     this.onLike,
     this.onEdit,
@@ -34,6 +35,8 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble>
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final textMuted = theme.textTheme.bodySmall?.color;
 
     final senderName =
         (widget.message.senderDisplayName?.trim().isNotEmpty ?? false)
@@ -50,6 +53,14 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble>
             ? widget.message.replySenderName!.trim()
             : 'Reply';
 
+    final bubbleColor = widget.isMine
+        ? colorScheme.primary.withValues(alpha: 0.14)
+        : colorScheme.surface;
+
+    final bubbleBorderColor = widget.isMine
+        ? colorScheme.primary.withValues(alpha: 0.18)
+        : colorScheme.outline.withValues(alpha: 0.28);
+
     return Align(
       alignment:
           widget.isMine ? Alignment.centerRight : Alignment.centerLeft,
@@ -60,17 +71,12 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble>
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             if (!widget.isMine) ...[
-              CircleAvatar(
-                radius: 16,
-                backgroundImage:
-                    avatarUrl != null ? NetworkImage(avatarUrl) : null,
-                child: avatarUrl == null
-                    ? Text(
-                        senderName.isNotEmpty
-                            ? senderName.characters.first.toUpperCase()
-                            : '?',
-                      )
-                    : null,
+              ChatAvatar(
+                title: senderName,
+                imageUrl: avatarUrl,
+                size: 32,
+                type: ChatThreadType.direct,
+                showPresence: false,
               ),
               const SizedBox(width: 8),
             ],
@@ -88,7 +94,7 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble>
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
-                          color: theme.textTheme.bodySmall?.color,
+                          color: textMuted,
                         ),
                       ),
                     ),
@@ -102,12 +108,11 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble>
                         right: widget.isMine ? null : 8,
                         child: AnimatedOpacity(
                           duration: const Duration(milliseconds: 140),
-                          opacity:
-                              _dragDx.abs() > 18 ? 1 : 0,
+                          opacity: _dragDx.abs() > 18 ? 1 : 0,
                           child: Icon(
                             Icons.reply_rounded,
                             size: 18,
-                            color: theme.colorScheme.primary,
+                            color: colorScheme.primary,
                           ),
                         ),
                       ),
@@ -129,7 +134,8 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble>
                             });
                           },
                           onHorizontalDragEnd: (_) {
-                            final reachedReply = _dragDx.abs() >= _replyTrigger * 0.72;
+                            final reachedReply =
+                                _dragDx.abs() >= _replyTrigger * 0.72;
                             setState(() => _dragDx = 0);
                             if (reachedReply) {
                               widget.onReply();
@@ -145,8 +151,7 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble>
                                 child: Wrap(
                                   children: [
                                     ListTile(
-                                      leading:
-                                          const Icon(Icons.reply_rounded),
+                                      leading: const Icon(Icons.reply_rounded),
                                       title: const Text('Reply'),
                                       onTap: () {
                                         Navigator.pop(context);
@@ -197,40 +202,36 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble>
                             );
                           },
                           child: Material(
-                            color: widget.isMine
-                                ? theme.colorScheme.primary.withValues(alpha: 0.14)
-                                : (widget.isDark
-                                    ? const Color(0xFF17191D)
-                                    : theme.colorScheme.surface),
+                            color: bubbleColor,
                             borderRadius: BorderRadius.circular(22),
                             child: Container(
                               decoration: BoxDecoration(
                                 borderRadius: BorderRadius.circular(22),
                                 border: Border.all(
-                                  color: widget.isMine
-                                      ? theme.colorScheme.primary
-                                          .withValues(alpha: 0.18)
-                                      : widget.isDark
-                                          ? const Color(0xFF2A303A)
-                                          : const Color(0xFFE5EAF2),
+                                  color: bubbleBorderColor,
                                 ),
                               ),
-                              padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
+                              padding:
+                                  const EdgeInsets.fromLTRB(14, 12, 14, 10),
                               child: Column(
                                 crossAxisAlignment: widget.isMine
                                     ? CrossAxisAlignment.end
                                     : CrossAxisAlignment.start,
                                 children: [
-                                  if (widget.message.replyPreview?.trim().isNotEmpty ??
+                                  if (widget.message.replyPreview
+                                          ?.trim()
+                                          .isNotEmpty ??
                                       false)
                                     Container(
                                       width: double.infinity,
-                                      margin: const EdgeInsets.only(bottom: 8),
+                                      margin:
+                                          const EdgeInsets.only(bottom: 8),
                                       padding: const EdgeInsets.all(10),
                                       decoration: BoxDecoration(
-                                        color: theme.colorScheme.primary
+                                        color: colorScheme.primary
                                             .withValues(alpha: 0.08),
-                                        borderRadius: BorderRadius.circular(14),
+                                        borderRadius:
+                                            BorderRadius.circular(14),
                                       ),
                                       child: Column(
                                         crossAxisAlignment:
@@ -241,7 +242,7 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble>
                                             style: TextStyle(
                                               fontSize: 11,
                                               fontWeight: FontWeight.w700,
-                                              color: theme.colorScheme.primary,
+                                              color: colorScheme.primary,
                                             ),
                                           ),
                                           const SizedBox(height: 4),
@@ -272,12 +273,14 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble>
                                         Icon(
                                           Icons.favorite_rounded,
                                           size: 13,
-                                          color: theme.colorScheme.primary,
+                                          color: colorScheme.primary,
                                         ),
                                         const SizedBox(width: 4),
                                         Text(
-                                          widget.message.likesCount.toString(),
-                                          style: const TextStyle(fontSize: 11),
+                                          widget.message.likesCount
+                                              .toString(),
+                                          style:
+                                              const TextStyle(fontSize: 11),
                                         ),
                                         const SizedBox(width: 8),
                                       ],
@@ -286,8 +289,7 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble>
                                           'edited',
                                           style: TextStyle(
                                             fontSize: 11,
-                                            color:
-                                                theme.textTheme.bodySmall?.color,
+                                            color: textMuted,
                                           ),
                                         ),
                                         const SizedBox(width: 8),
@@ -296,8 +298,7 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble>
                                         _formatTime(widget.message.sentAt),
                                         style: TextStyle(
                                           fontSize: 11,
-                                          color:
-                                              theme.textTheme.bodySmall?.color,
+                                          color: textMuted,
                                         ),
                                       ),
                                     ],

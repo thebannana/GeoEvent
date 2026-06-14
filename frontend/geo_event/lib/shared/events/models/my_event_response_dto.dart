@@ -69,6 +69,37 @@ class MyEventResponseDto {
     required this.coverImageUrl,
   });
 
+  String get normalizedStatus => status.trim().toLowerCase();
+
+  bool get isCompletedByTime {
+    final now = DateTime.now();
+    final localEnd = endDateTime.toLocal();
+    return localEnd.isBefore(now) || localEnd.isAtSameMomentAs(now);
+  }
+
+  String get displayStatus {
+    if (isCompletedByTime) return 'Completed';
+
+    switch (normalizedStatus) {
+      case 'draft':
+        return 'Draft';
+      case 'completed':
+        return 'Completed';
+      case 'active':
+      case 'published':
+      case 'cancelled':
+      case 'postponed':
+      default:
+        return 'Published';
+    }
+  }
+
+  bool get canViewReservations {
+    if (normalizedStatus == 'draft') return false;
+    if (normalizedStatus == 'cancelled') return false;
+    return true;
+  }
+
   factory MyEventResponseDto.fromJson(Map<String, dynamic> json) {
     T? pick<T>(String camel, String pascal) {
       final value = json[camel] ?? json[pascal];
@@ -101,9 +132,9 @@ class MyEventResponseDto {
     }
 
     DateTime asDateTime(dynamic value, DateTime fallback) {
-      if (value == null) return fallback;
-      if (value is DateTime) return value;
-      return DateTime.tryParse(value.toString()) ?? fallback;
+      if (value == null) return fallback.toLocal();
+      if (value is DateTime) return value.toLocal();
+      return (DateTime.tryParse(value.toString()) ?? fallback).toLocal();
     }
 
     List<String> asStringList(dynamic value) {

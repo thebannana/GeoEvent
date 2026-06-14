@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import '../../../../core/widgets/app_chip.dart';
 import 'event_meta_row.dart';
 
 class EventInfoSection extends StatelessWidget {
@@ -31,11 +33,25 @@ class EventInfoSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final textTheme = theme.textTheme;
+
     final capacityText = participantCount != null
         ? '$participantCount / $capacity going'
         : isOnline
             ? 'Online event'
             : 'Capacity: $capacity people';
+
+    final tagItems = (tags ?? '')
+        .split(',')
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+
+    final headingColor = scheme.onSurface;
+    final bodyColor =
+        textTheme.bodyMedium?.color ?? scheme.onSurface.withValues(alpha: 0.72);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -75,30 +91,27 @@ class EventInfoSection extends StatelessWidget {
           ),
         ],
         const SizedBox(height: 18),
-        const Text(
+        Text(
           'Description',
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 18,
+          style: textTheme.titleMedium?.copyWith(
+            color: headingColor,
             fontWeight: FontWeight.w700,
           ),
         ),
         const SizedBox(height: 8),
         Text(
           description,
-          style: const TextStyle(
-            color: Colors.white70,
+          style: textTheme.bodyMedium?.copyWith(
+            color: bodyColor,
             height: 1.55,
-            fontSize: 14,
           ),
         ),
-        if (tags != null && tags!.trim().isNotEmpty) ...[
+        if (tagItems.isNotEmpty) ...[
           const SizedBox(height: 16),
-          const Text(
+          Text(
             'Tags',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 16,
+            style: textTheme.titleMedium?.copyWith(
+              color: headingColor,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -106,22 +119,9 @@ class EventInfoSection extends StatelessWidget {
           Wrap(
             spacing: 8,
             runSpacing: 8,
-            children: tags!
-                .split(',')
-                .map((e) => e.trim())
-                .where((e) => e.isNotEmpty)
+            children: tagItems
                 .map(
-                  (tag) => Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: Text(
-                      tag,
-                      style: const TextStyle(color: Colors.white70),
-                    ),
-                  ),
+                  (tag) => AppChip(label: tag),
                 )
                 .toList(),
           ),

@@ -5,6 +5,11 @@ namespace TicketService.Application.Interfaces.Services;
 
 public interface ITicketService
 {
+    Task<ServiceResult<bool>> RemoveAttendeeReservationAsync(
+    int eventId,
+    int reservationId,
+    int requesterId,
+    string requesterRole);
     // Reservations
     Task<ServiceResult<ReservationResponseDto>> CreateReservationAsync(
         CreateReservationDto dto, int userId);

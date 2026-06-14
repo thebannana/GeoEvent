@@ -4,6 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../../../core/widgets/app_bottom_sheet_container.dart';
+import '../../../../core/widgets/app_spinner.dart';
+import '../../../../core/widgets/app_surface_card.dart';
+import '../../../../core/widgets/glass_scaffold.dart';
 import '../../../../shared/profile/models/user_profile.dart';
 import '../../application/profile_controller.dart';
 
@@ -38,7 +42,8 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     super.initState();
     _firstNameController = TextEditingController(text: widget.profile.firstName);
     _lastNameController = TextEditingController(text: widget.profile.lastName);
-    _phoneController = TextEditingController(text: widget.profile.phoneNumber ?? '');
+    _phoneController =
+        TextEditingController(text: widget.profile.phoneNumber ?? '');
     _usernameController = TextEditingController(text: widget.profile.username);
     _emailController = TextEditingController(text: widget.profile.email);
     _imagePicker = ImagePicker();
@@ -115,13 +120,30 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   Future<void> _showImageSourcePicker() async {
     await showModalBottomSheet<void>(
       context: context,
+      backgroundColor: Colors.transparent,
       builder: (context) {
         final hasAnyPhoto =
             _pickedImage != null ||
             (widget.profile.imageUrl?.trim().isNotEmpty ?? false);
 
-        return SafeArea(
-          child: Wrap(
+        return AppBottomSheetContainer(
+          header: Padding(
+            padding: const EdgeInsets.fromLTRB(18, 10, 18, 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Profile photo',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
                 leading: const Icon(Icons.photo_library_outlined),
@@ -210,7 +232,6 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
 
     final hasNetworkImage =
         !_removeCurrentPhoto &&
@@ -222,28 +243,19 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
             ? NetworkImage(widget.profile.imageUrl!.trim())
             : null);
 
-    return Scaffold(
-      backgroundColor: theme.scaffoldBackgroundColor,
+    return GlassScaffold(
       appBar: AppBar(
         title: const Text('Edit profile'),
+        backgroundColor: Colors.transparent,
       ),
-      body: SafeArea(
+      child: SafeArea(
         child: Form(
           key: _formKey,
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
             children: [
-              Container(
+              AppSurfaceCard(
                 padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF17191D) : Colors.white,
-                  borderRadius: BorderRadius.circular(22),
-                  border: Border.all(
-                    color: isDark
-                        ? const Color(0xFF2A303A)
-                        : const Color(0xFFE5EAF2),
-                  ),
-                ),
                 child: Row(
                   children: [
                     CircleAvatar(
@@ -279,7 +291,8 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                           ),
                           const SizedBox(height: 10),
                           OutlinedButton.icon(
-                            onPressed: _isSubmitting ? null : _showImageSourcePicker,
+                            onPressed:
+                                _isSubmitting ? null : _showImageSourcePicker,
                             icon: const Icon(Icons.photo_camera_back_outlined),
                             label: Text(
                               _pickedImage != null
@@ -314,14 +327,14 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                 validator: (value) => _validateName(value, 'Last name'),
               ),
               const SizedBox(height: 16),
-                TextFormField(
-                  controller: _usernameController,
-                  enabled: false,
-                  decoration: const InputDecoration(
-                    labelText: 'Username',
-                    border: OutlineInputBorder(),
-                  ),
+              TextFormField(
+                controller: _usernameController,
+                enabled: false,
+                decoration: const InputDecoration(
+                  labelText: 'Username',
+                  border: OutlineInputBorder(),
                 ),
+              ),
               const SizedBox(height: 16),
               TextFormField(
                 controller: _emailController,
@@ -345,10 +358,10 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
               FilledButton(
                 onPressed: _isSubmitting ? null : _submit,
                 child: _isSubmitting
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
+                    ? const AppSpinner(
+                        size: 18,
+                        strokeWidth: 2,
+                        color: Colors.white,
                       )
                     : const Text('Save changes'),
               ),

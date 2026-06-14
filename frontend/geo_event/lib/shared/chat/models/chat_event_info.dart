@@ -25,10 +25,10 @@ class ChatEventInfo {
       return int.tryParse(value.toString()) ?? 0;
     }
 
-    DateTime? parseDate(dynamic value) {
-      if (value == null) return null;
-      return DateTime.tryParse(value.toString());
-    }
+DateTime? parseDate(dynamic value) {
+  if (value == null) return null;
+  return DateTime.tryParse(value.toString())?.toLocal();
+}
 
     return ChatEventInfo(
       eventId: parseInt(rawEventId),

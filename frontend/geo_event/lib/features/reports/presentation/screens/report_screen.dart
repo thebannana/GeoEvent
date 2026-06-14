@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/widgets/glass_scaffold.dart';
 import '../../../../shared/reports/models/report_state.dart';
 import '../../../../shared/reports/models/report_target_type.dart';
 import '../../application/report_controller.dart';
@@ -57,32 +58,34 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
     final provider = reportControllerProvider(_initialState);
     final state = ref.watch(provider);
     final ctrl = ref.read(provider.notifier);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
 
-    return Scaffold(
-      backgroundColor:
-          isDark ? const Color(0xFF101215) : const Color(0xFFF6F8FC),
+    return GlassScaffold(
       appBar: AppBar(
         title: Text('Report ${widget.targetType.displayName}'),
         backgroundColor: Colors.transparent,
         elevation: 0,
       ),
-      body: SafeArea(
+      child: SafeArea(
         child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(
+            parent: ClampingScrollPhysics(),
+          ),
           padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
           children: [
             Text(
               'What is the reason for your report?',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
+              style: theme.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
             ),
             const SizedBox(height: 8),
             Text(
               'Choose the option that best describes the issue. You can add more details below.',
               style: TextStyle(
                 fontSize: 13,
-                color: Theme.of(context).textTheme.bodySmall?.color,
+                color: colorScheme.onSurfaceVariant,
               ),
             ),
             const SizedBox(height: 18),
@@ -104,12 +107,35 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
             ),
             if (state.errorMessage != null) ...[
               const SizedBox(height: 12),
-              Text(
-                state.errorMessage!,
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.error,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
+                  color: colorScheme.errorContainer.withValues(alpha: 0.65),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Icons.error_outline_rounded,
+                      size: 18,
+                      color: colorScheme.error,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        state.errorMessage!,
+                        style: TextStyle(
+                          color: colorScheme.onErrorContainer,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],

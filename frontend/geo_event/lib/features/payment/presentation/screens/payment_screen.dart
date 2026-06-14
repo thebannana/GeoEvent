@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/widgets/app_async_view.dart';
+import '../../../../core/widgets/app_empty_state.dart';
+import '../../../../core/widgets/app_error_view.dart';
+import '../../../../core/widgets/app_loading_indicator.dart';
+import '../../../../core/widgets/glass_scaffold.dart';
 import '../../../../shared/payment/models/payment_method.dart';
 import '../../../../shared/payment/models/payment_summary.dart';
 import '../../../../shared/payment/providers/payment_providers.dart';
@@ -31,7 +36,8 @@ class PaymentScreen extends ConsumerWidget {
     final provider = paymentControllerProvider(summary);
     final state = ref.watch(provider);
     final ctrl = ref.read(provider.notifier);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
 
     final ticketsAsync = ref.watch(_eventTicketsProvider(eventId));
     final ownerProfileState = organizerId != null
@@ -46,8 +52,7 @@ class PaymentScreen extends ConsumerWidget {
         ) ??
         summary.ownerName;
 
-    return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF101215) : const Color(0xFFF6F8FC),
+    return GlassScaffold(
       appBar: AppBar(
         title: Text(
           state.selectedMethod == PaymentMethod.cash
@@ -57,23 +62,17 @@ class PaymentScreen extends ConsumerWidget {
         backgroundColor: Colors.transparent,
         elevation: 0,
       ),
-      body: SafeArea(
-        child: ticketsAsync.when(
-          loading: () => const Center(
-            child: CircularProgressIndicator(),
+      child: SafeArea(
+        child: AppAsyncView<List<EventTicketItem>>(
+          value: ticketsAsync,
+          loading: const AppLoadingIndicator(
+            title: 'Loading payment details',
+            message: 'Checking ticket availability...',
           ),
-          error: (error, _) => Center(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Text(
-                'Could not load ticket availability.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.error,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
+          errorBuilder: (error, _) => AppErrorState(
+            title: 'Could not load ticket availability',
+            message: 'Please try again.',
+            onRetry: () => ref.refresh(_eventTicketsProvider(eventId).future),
           ),
           data: (tickets) {
             final matchingTickets = tickets
@@ -81,50 +80,21 @@ class PaymentScreen extends ConsumerWidget {
                 .toList();
 
             if (matchingTickets.isEmpty) {
-              return const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(24),
-                  child: Text(
-                    'Selected ticket is no longer available.',
-                    textAlign: TextAlign.center,
-                  ),
-                ),
+              return const AppEmptyState(
+                icon: Icons.confirmation_num_outlined,
+                title: 'Selected ticket is no longer available',
+                message: 'Please go back and choose another ticket.',
               );
             }
 
-            final EventTicketItem ticket = matchingTickets.first;
+            final ticket = matchingTickets.first;
 
             if (!ticket.isAvailable || ticket.availableQuantity <= 0) {
-              return Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.confirmation_num_outlined,
-                        size: 56,
-                        color: isDark ? Colors.white70 : Colors.black54,
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'No tickets available',
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                              fontWeight: FontWeight.w800,
-                            ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'This event currently has no tickets available for reservation.',
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: isDark ? Colors.white70 : Colors.black54,
-                            ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
-                  ),
-                ),
+              return const AppEmptyState(
+                icon: Icons.confirmation_num_outlined,
+                title: 'No tickets available',
+                message:
+                    'This event currently has no tickets available for reservation.',
               );
             }
 
@@ -144,6 +114,7 @@ class PaymentScreen extends ConsumerWidget {
             }
 
             return ListView(
+              physics: const ClampingScrollPhysics(),
               padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
               children: [
                 PaymentOrderSummary(summary: effectiveSummary),
@@ -164,10 +135,10 @@ class PaymentScreen extends ConsumerWidget {
                 const SizedBox(height: 8),
                 Text(
                   'Available now: ${ticket.availableQuantity}',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: isDark ? Colors.white60 : Colors.black54,
-                        fontWeight: FontWeight.w600,
-                      ),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
                 const SizedBox(height: 16),
                 PaymentMethodSelector(
@@ -176,12 +147,35 @@ class PaymentScreen extends ConsumerWidget {
                 ),
                 if (state.errorMessage != null) ...[
                   const SizedBox(height: 12),
-                  Text(
-                    state.errorMessage!,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: colorScheme.errorContainer.withValues(alpha: 0.65),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          Icons.error_outline_rounded,
+                          size: 18,
+                          color: colorScheme.error,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            state.errorMessage!,
+                            style: TextStyle(
+                              color: colorScheme.onErrorContainer,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
@@ -199,14 +193,16 @@ class PaymentScreen extends ConsumerWidget {
                           return true;
                         }
 
-                        // TODO: Replace this with your real PayPal screen.
                         final result = await Navigator.of(context).push<bool>(
                           MaterialPageRoute(
                             builder: (_) => Scaffold(
-                              appBar: AppBar(title: const Text('PayPal Checkout')),
+                              appBar: AppBar(
+                                title: const Text('PayPal Checkout'),
+                              ),
                               body: Center(
                                 child: FilledButton(
-                                  onPressed: () => Navigator.of(context).pop(true),
+                                  onPressed: () =>
+                                      Navigator.of(context).pop(true),
                                   child: const Text('Mock PayPal success'),
                                 ),
                               ),

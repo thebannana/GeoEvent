@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 
-class AppLoadingSheet extends StatelessWidget {
+class AppLoadingIndicator extends StatelessWidget {
   final String title;
   final String? message;
   final EdgeInsetsGeometry padding;
   final bool centered;
   final Widget? leading;
 
-  const AppLoadingSheet({
+  const AppLoadingIndicator({
     super.key,
     this.title = 'Loading',
     this.message,
@@ -27,7 +27,7 @@ class AppLoadingSheet extends StatelessWidget {
         constraints: const BoxConstraints(maxWidth: 420),
         child: DecoratedBox(
           decoration: BoxDecoration(
-            color: theme.cardColor.withValues(alpha: 0.76),
+            color: colorScheme.surface,
             borderRadius: BorderRadius.circular(28),
             border: Border.all(
               color: colorScheme.outline.withValues(alpha: 0.45),
@@ -65,7 +65,9 @@ class AppLoadingSheet extends StatelessWidget {
                   Text(
                     message!,
                     textAlign: TextAlign.center,
-                    style: theme.textTheme.bodyMedium,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ],
                 const SizedBox(height: 18),

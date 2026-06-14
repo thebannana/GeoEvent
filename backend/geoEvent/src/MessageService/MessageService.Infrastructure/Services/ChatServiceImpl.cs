@@ -1,11 +1,14 @@
-﻿using MessageService.Application.Common;
+﻿using MassTransit;
+using MessageService.Application.Common;
 using MessageService.Application.DTOs;
 using MessageService.Application.Interfaces.Repositories;
 using MessageService.Application.Interfaces.Services;
 using MessageService.Domain.Entities;
 using MessageService.Domain.Enums;
+using Shared.Contracts.Chat;
 
 namespace MessageService.Infrastructure.Services;
+
 
 public class ChatServiceImpl : IChatService
 {
@@ -14,19 +17,23 @@ public class ChatServiceImpl : IChatService
     private readonly IEventDirectoryClient _eventDirectoryClient;
     private readonly IUserPresenceTracker _presenceTracker;
     private readonly IChatRealtimeNotifier _realtimeNotifier;
+    private readonly IPublishEndpoint _publishEndpoint;
+
 
     public ChatServiceImpl(
         IChatRepository repository,
         IUserDirectoryClient userDirectoryClient,
         IEventDirectoryClient eventDirectoryClient,
         IUserPresenceTracker presenceTracker,
-        IChatRealtimeNotifier realtimeNotifier)
+        IChatRealtimeNotifier realtimeNotifier,
+        IPublishEndpoint publishEndpoint)
     {
         _repository = repository;
         _userDirectoryClient = userDirectoryClient;
         _eventDirectoryClient = eventDirectoryClient;
         _presenceTracker = presenceTracker;
         _realtimeNotifier = realtimeNotifier;
+        _publishEndpoint = publishEndpoint;
     }
 
     public async Task<ServiceResult<ChatThreadSummaryDto>> OpenDirectThreadAsync(int userId, int otherUserId)
@@ -34,7 +41,8 @@ public class ChatServiceImpl : IChatService
         if (userId == otherUserId)
             return ServiceResult<ChatThreadSummaryDto>.Fail("You cannot open a chat with yourself.");
 
-        var thread = await _repository.GetDirectThreadAsync(userId, otherUserId);
+        var thread = await _repository.GetDirectThreadIncludingInactiveAsync(userId, otherUserId);
+
         if (thread == null)
         {
             thread = new ChatThread
@@ -44,13 +52,31 @@ public class ChatServiceImpl : IChatService
                 CreatedByUserId = userId,
                 CreatedAt = DateTime.UtcNow,
                 Participants =
-                {
-                    new ChatThreadParticipant { UserId = userId, JoinedAt = DateTime.UtcNow },
-                    new ChatThreadParticipant { UserId = otherUserId, JoinedAt = DateTime.UtcNow }
-                }
+            {
+                new ChatThreadParticipant { UserId = userId, JoinedAt = DateTime.UtcNow },
+                new ChatThreadParticipant { UserId = otherUserId, JoinedAt = DateTime.UtcNow }
+            }
             };
 
             thread = await _repository.AddThreadAsync(thread);
+        }
+        else
+        {
+            var currentParticipant = thread.Participants.FirstOrDefault(x => x.UserId == userId);
+            if (currentParticipant != null && currentParticipant.LeftAt != null)
+            {
+                currentParticipant.LeftAt = null;
+                currentParticipant.JoinedAt = DateTime.UtcNow;
+                await _repository.UpdateParticipantAsync(currentParticipant);
+            }
+
+            var otherParticipant = thread.Participants.FirstOrDefault(x => x.UserId == otherUserId);
+            if (otherParticipant != null && otherParticipant.LeftAt != null)
+            {
+                otherParticipant.LeftAt = null;
+                otherParticipant.JoinedAt = DateTime.UtcNow;
+                await _repository.UpdateParticipantAsync(otherParticipant);
+            }
         }
 
         var dto = await MapThreadSummaryAsync(thread, userId);
@@ -80,6 +106,21 @@ public class ChatServiceImpl : IChatService
         return ServiceResult<List<ChatThreadSummaryDto>>.Ok(result);
     }
 
+    public async Task<ServiceResult<bool>> LeaveThreadAsync(long threadId, int userId)
+    {
+        var thread = await _repository.GetThreadByIdAsync(threadId);
+        if (thread == null)
+            return ServiceResult<bool>.NotFound("Thread not found.");
+
+        var participant = await _repository.GetParticipantAsync(threadId, userId);
+        if (participant == null || participant.LeftAt != null)
+            return ServiceResult<bool>.Forbidden("You are not a participant of this thread.");
+
+        participant.LeftAt = DateTime.UtcNow;
+        await _repository.UpdateParticipantAsync(participant);
+
+        return ServiceResult<bool>.Ok(true);
+    }
     public async Task<ServiceResult<ChatThreadDetailDto>> GetThreadDetailAsync(long threadId, int userId)
     {
         var thread = await _repository.GetThreadByIdAsync(threadId);
@@ -103,8 +144,8 @@ public class ChatServiceImpl : IChatService
                 {
                     EventId = evt.EventId,
                     EventTitle = evt.Title,
-                    StartDateTime = evt.StartDateTime,
-                    EndDateTime = evt.EndDateTime,
+                    StartDateTime = EnsureUtc(evt.StartDateTime),
+                    EndDateTime = EnsureUtc(evt.EndDateTime),
                     VenueName = evt.VenueName,
                     CoverImageUrl = evt.CoverImageUrl,
                     IsOnline = evt.IsOnline
@@ -137,7 +178,7 @@ public class ChatServiceImpl : IChatService
                 otherUserUsername = otherUser?.Username;
                 otherUserAvatarUrl = otherUser?.ImageUrl;
                 otherUserIsOnline = await _presenceTracker.IsOnlineAsync(otherUserId.Value);
-                otherUserLastActiveAt = await _presenceTracker.GetLastActiveAtAsync(otherUserId.Value);
+                otherUserLastActiveAt = EnsureUtc(await _presenceTracker.GetLastActiveAtAsync(otherUserId.Value));
                 imageUrl = otherUser?.ImageUrl;
             }
         }
@@ -231,8 +272,67 @@ public class ChatServiceImpl : IChatService
         }
 
         var mapped = await MapMessageAsync(message, userId);
-        var participantIds = (await _repository.GetParticipantsAsync(threadId)).Select(x => x.UserId).ToList();
+        var participants = await _repository.GetParticipantsAsync(threadId);
+        var participantIds = participants.Select(x => x.UserId).ToList();
+
         await _realtimeNotifier.MessageCreatedAsync(mapped, participantIds);
+
+        if (thread != null)
+        {
+            var senderUsers = await _userDirectoryClient.GetPublicUsersAsync(new[] { userId });
+            senderUsers.TryGetValue(userId, out var sender);
+
+            var senderDisplayName =
+                !string.IsNullOrWhiteSpace(sender?.Username)
+                    ? sender!.Username
+                    : sender?.DisplayName ?? $"User {userId}";
+
+            string threadTitle;
+            string? threadImageUrl;
+
+            if (thread.Type == ChatThreadType.Direct)
+            {
+                threadTitle = senderDisplayName;
+                threadImageUrl = sender?.ImageUrl;
+            }
+            else
+            {
+                string? eventImageUrl = null;
+
+                if (thread.EventId.HasValue)
+                {
+                    var evt = await _eventDirectoryClient.GetEventAsync(thread.EventId.Value);
+                    if (evt != null)
+                    {
+                        threadTitle = evt.Title;
+                        eventImageUrl = evt.CoverImageUrl;
+                    }
+                    else
+                    {
+                        threadTitle = thread.Title;
+                    }
+                }
+                else
+                {
+                    threadTitle = thread.Title;
+                }
+
+                threadImageUrl = eventImageUrl;
+            }
+
+            await _publishEndpoint.Publish(new ChatMessageSentIntegrationEvent
+            {
+                ThreadId = thread.Id,
+                ThreadTitle = threadTitle,
+                ThreadImageUrl = threadImageUrl,
+                SenderUserId = userId,
+                SenderDisplayName = senderDisplayName,
+                SenderAvatarUrl = sender?.ImageUrl,
+                RecipientUserIds = participantIds.Where(x => x != userId).ToArray(),
+                IsGroupThread = thread.Type != ChatThreadType.Direct,
+                MessagePreview = BuildPreview(message.Content)
+            });
+        }
 
         return ServiceResult<ChatMessageDto>.Created(mapped);
     }
@@ -307,7 +407,66 @@ public class ChatServiceImpl : IChatService
         var mapped = await MapMessageAsync(message, userId);
         await _realtimeNotifier.MessageLikedAsync(mapped);
 
+        var likerUsers = await _userDirectoryClient.GetPublicUsersAsync(new[] { userId });
+        likerUsers.TryGetValue(userId, out var liker);
+
+        var likedByDisplayName =
+            !string.IsNullOrWhiteSpace(liker?.Username)
+                ? liker!.Username
+                : liker?.DisplayName ?? $"User {userId}";
+
+        var thread = await _repository.GetThreadByIdAsync(message.ThreadId);
+
+        string threadTitle = string.Empty;
+        string? threadImageUrl = null;
+
+        if (thread != null)
+        {
+            if (thread.Type == ChatThreadType.Direct)
+            {
+                threadTitle = string.Empty;
+            }
+            else
+            {
+                threadTitle = thread.Title;
+
+                if (thread.EventId.HasValue)
+                {
+                    var evt = await _eventDirectoryClient.GetEventAsync(thread.EventId.Value);
+                    if (evt != null)
+                    {
+                        threadTitle = evt.Title;
+                        threadImageUrl = evt.CoverImageUrl;
+                    }
+                }
+            }
+        }
+
+        await _publishEndpoint.Publish(new ChatMessageLikedIntegrationEvent
+        {
+            ThreadId = message.ThreadId,
+            ThreadTitle = threadTitle,
+            ThreadImageUrl = threadImageUrl,
+            MessageId = message.Id,
+            MessageOwnerUserId = message.SenderId,
+            LikedByUserId = userId,
+            LikedByDisplayName = likedByDisplayName,
+            LikedByAvatarUrl = liker?.ImageUrl,
+            MessagePreview = BuildPreview(message.Content)
+        });
+
         return ServiceResult<ChatMessageDto>.Ok(mapped);
+    }
+
+    private static string BuildPreview(string? content, int maxLength = 120)
+    {
+        if (string.IsNullOrWhiteSpace(content))
+            return string.Empty;
+
+        var normalized = content.Trim();
+        return normalized.Length <= maxLength
+            ? normalized
+            : normalized[..maxLength];
     }
 
     public async Task<ServiceResult<ChatMessageDto>> UnlikeMessageAsync(long messageId, int userId)
@@ -370,14 +529,13 @@ public class ChatServiceImpl : IChatService
             await _presenceTracker.SetOfflineAsync(userId);
     }
 
-    public async Task AddUserToEventThreadAsync(int eventId, int userId)
+    public async Task AddUserToEventThreadAsync(int eventId, int userId, int? addedByUserId = null)
     {
         var thread = await _repository.GetEventGroupThreadAsync(eventId);
+        var evt = await _eventDirectoryClient.GetEventAsync(eventId);
 
         if (thread == null)
         {
-            var evt = await _eventDirectoryClient.GetEventAsync(eventId);
-
             thread = new ChatThread
             {
                 Type = ChatThreadType.EventGroup,
@@ -391,16 +549,28 @@ public class ChatServiceImpl : IChatService
 
             if (evt?.OrganizerId is int organizerId)
             {
-                await _repository.AddParticipantAsync(new ChatThreadParticipant
+                var organizerParticipant = await _repository.GetParticipantAsync(thread.Id, organizerId);
+                if (organizerParticipant == null)
                 {
-                    ThreadId = thread.Id,
-                    UserId = organizerId,
-                    JoinedAt = DateTime.UtcNow
-                });
+                    await _repository.AddParticipantAsync(new ChatThreadParticipant
+                    {
+                        ThreadId = thread.Id,
+                        UserId = organizerId,
+                        JoinedAt = DateTime.UtcNow
+                    });
+                }
+                else if (organizerParticipant.LeftAt != null)
+                {
+                    organizerParticipant.LeftAt = null;
+                    organizerParticipant.JoinedAt = DateTime.UtcNow;
+                    await _repository.UpdateParticipantAsync(organizerParticipant);
+                }
             }
         }
 
         var existing = await _repository.GetParticipantAsync(thread.Id, userId);
+        var wasAdded = false;
+
         if (existing == null)
         {
             await _repository.AddParticipantAsync(new ChatThreadParticipant
@@ -409,13 +579,48 @@ public class ChatServiceImpl : IChatService
                 UserId = userId,
                 JoinedAt = DateTime.UtcNow
             });
+
+            wasAdded = true;
         }
         else if (existing.LeftAt != null)
         {
             existing.LeftAt = null;
             existing.JoinedAt = DateTime.UtcNow;
             await _repository.UpdateParticipantAsync(existing);
+
+            wasAdded = true;
         }
+
+        if (!wasAdded)
+            return;
+
+        string addedByDisplayName = string.Empty;
+        string? addedByAvatarUrl = null;
+
+        if (addedByUserId.HasValue)
+        {
+            var users = await _userDirectoryClient.GetPublicUsersAsync(new[] { addedByUserId.Value });
+            users.TryGetValue(addedByUserId.Value, out var addedByUser);
+
+            addedByDisplayName =
+                !string.IsNullOrWhiteSpace(addedByUser?.Username)
+                    ? addedByUser!.Username
+                    : addedByUser?.DisplayName ?? $"User {addedByUserId.Value}";
+
+            addedByAvatarUrl = addedByUser?.ImageUrl;
+        }
+
+        await _publishEndpoint.Publish(new ChatUserAddedToGroupIntegrationEvent
+        {
+            ThreadId = thread.Id,
+            AddedUserId = userId,
+            AddedByUserId = addedByUserId,
+            AddedByDisplayName = addedByDisplayName,
+            AddedByAvatarUrl = addedByAvatarUrl,
+            RelatedEventId = eventId,
+            GroupTitle = evt?.Title ?? thread.Title,
+            GroupImageUrl = evt?.CoverImageUrl
+        });
     }
 
     private async Task<List<ChatParticipantDto>> BuildParticipantsAsync(long threadId)
@@ -435,9 +640,9 @@ public class ChatServiceImpl : IChatService
                 DisplayName = user?.DisplayName ?? $"User {p.UserId}",
                 Username = user?.Username ?? string.Empty,
                 AvatarUrl = user?.ImageUrl,
-                JoinedAt = p.JoinedAt,
+                JoinedAt = EnsureUtc(p.JoinedAt),
                 IsOnline = await _presenceTracker.IsOnlineAsync(p.UserId),
-                LastActiveAt = await _presenceTracker.GetLastActiveAtAsync(p.UserId)
+                LastActiveAt = EnsureUtc(await _presenceTracker.GetLastActiveAtAsync(p.UserId))
             });
         }
 
@@ -491,9 +696,9 @@ public class ChatServiceImpl : IChatService
                 OtherUserDisplayName = otherUser?.DisplayName,
                 OtherUserAvatarUrl = otherUser?.ImageUrl,
                 OtherUserIsOnline = await _presenceTracker.IsOnlineAsync(otherUserId),
-                OtherUserLastActiveAt = await _presenceTracker.GetLastActiveAtAsync(otherUserId),
+                OtherUserLastActiveAt = EnsureUtc(await _presenceTracker.GetLastActiveAtAsync(otherUserId)),
                 LastMessageContent = last?.Content,
-                LastMessageSentAt = last?.SentAt,
+                LastMessageSentAt = EnsureUtc(last?.SentAt),
                 UnreadCount = unreadCount
             };
         }
@@ -514,7 +719,7 @@ public class ChatServiceImpl : IChatService
             ImageUrl = groupImageUrl,
             IsGroup = true,
             LastMessageContent = last?.Content,
-            LastMessageSentAt = last?.SentAt,
+            LastMessageSentAt = EnsureUtc(last?.SentAt),
             UnreadCount = unreadCount
         };
     }
@@ -575,12 +780,23 @@ public class ChatServiceImpl : IChatService
                 : sender?.DisplayName ?? $"User {message.SenderId}",
             SenderAvatarUrl = sender?.ImageUrl,
             Content = message.Content,
-            SentAt = message.SentAt,
-            EditedAt = message.EditedAt,
-            DeletedAt = message.DeletedAt,
+            SentAt = EnsureUtc(message.SentAt),
+            EditedAt = EnsureUtc(message.EditedAt),
+            DeletedAt = EnsureUtc(message.DeletedAt),
             LikesCount = message.LikesCount,
             IsLikedByMe = isLiked,
             ReplyTo = reply
         };
     }
+
+    private static DateTime EnsureUtc(DateTime value) =>
+    value.Kind switch
+    {
+        DateTimeKind.Utc => value,
+        DateTimeKind.Local => value.ToUniversalTime(),
+        _ => DateTime.SpecifyKind(value, DateTimeKind.Utc)
+    };
+
+    private static DateTime? EnsureUtc(DateTime? value) =>
+        value.HasValue ? EnsureUtc(value.Value) : null;
 }

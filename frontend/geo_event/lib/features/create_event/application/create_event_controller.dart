@@ -8,11 +8,13 @@ import '../../../shared/events/models/my_event_response_dto.dart';
 import '../../../shared/events/providers/event_providers.dart';
 
 final createEventControllerProvider =
-    StateNotifierProvider.autoDispose<CreateEventController, CreateEventState>((ref) {
-  return CreateEventController(
-    repository: ref.watch(eventsRepositoryProvider),
-  );
-});
+    StateNotifierProvider.autoDispose<CreateEventController, CreateEventState>((
+      ref,
+    ) {
+      return CreateEventController(
+        repository: ref.watch(eventsRepositoryProvider),
+      );
+    });
 
 class CreateEventController extends StateNotifier<CreateEventState> {
   final EventsRepository repository;
@@ -76,43 +78,45 @@ class CreateEventController extends StateNotifier<CreateEventState> {
     }
   }
 
-Future<MapboxPlace?> reverseGeocode({
-  required double latitude,
-  required double longitude,
-  required String accessToken,
-}) async {
-  final dio = Dio();
+  Future<MapboxPlace?> reverseGeocode({
+    required double latitude,
+    required double longitude,
+    required String accessToken,
+  }) async {
+    final dio = Dio();
 
-  final response = await dio.get<Map<String, dynamic>>(
-    'https://api.mapbox.com/search/geocode/v6/reverse',
-    queryParameters: {
-      'longitude': longitude,
-      'latitude': latitude,
-      'access_token': accessToken,
-      'limit': 1,
-      'language': 'en',
-    },
-  );
+    final response = await dio.get<Map<String, dynamic>>(
+      'https://api.mapbox.com/search/geocode/v6/reverse',
+      queryParameters: {
+        'longitude': longitude,
+        'latitude': latitude,
+        'access_token': accessToken,
+        'limit': 1,
+        'language': 'en',
+      },
+    );
 
-  final data = response.data ?? const <String, dynamic>{};
-  final features = data['features'];
+    final data = response.data ?? const <String, dynamic>{};
+    final features = data['features'];
 
-  if (features is! List || features.isEmpty) return null;
+    if (features is! List || features.isEmpty) return null;
 
-  final item = Map<String, dynamic>.from(features.first as Map);
+    final item = Map<String, dynamic>.from(features.first as Map);
 
-  return MapboxPlace(
-    id: item['id']?.toString() ?? '$longitude,$latitude',
-    title: item['properties']?['name']?.toString() ??
-        item['name']?.toString() ??
-        'Selected location',
-    subtitle: item['full_address']?.toString() ??
-        item['place_formatted']?.toString() ??
-        '',
-    latitude: latitude,
-    longitude: longitude,
-  );
-}
+    return MapboxPlace(
+      id: item['id']?.toString() ?? '$longitude,$latitude',
+      title:
+          item['properties']?['name']?.toString() ??
+          item['name']?.toString() ??
+          'Selected location',
+      subtitle:
+          item['full_address']?.toString() ??
+          item['place_formatted']?.toString() ??
+          '',
+      latitude: latitude,
+      longitude: longitude,
+    );
+  }
 
   Future<void> selectGenre(int? id) async {
     state = state.copyWith(
@@ -152,41 +156,34 @@ Future<MapboxPlace?> reverseGeocode({
     );
   }
 
-void hydrateForEdit(MyEventResponseDto event) {
-  final venueTitle = event.isOnline
-      ? 'Online event'
-      : ((event.venueName?.trim().isNotEmpty ?? false)
-          ? event.venueName!.trim()
-          : 'Selected location');
+  void hydrateForEdit(MyEventResponseDto event) {
+    final title = (event.venueName?.trim().isNotEmpty ?? false)
+        ? event.venueName!.trim()
+        : 'Selected location';
 
-  final subtitle = event.isOnline
-      ? (event.externalUrl?.trim().isNotEmpty ?? false)
-          ? event.externalUrl!.trim()
-          : 'Coordinates: ${event.latitude}, ${event.longitude}'
-      : '${event.latitude.toStringAsFixed(6)}, ${event.longitude.toStringAsFixed(6)}';
+    final subtitle =
+        '${event.latitude.toStringAsFixed(6)}, ${event.longitude.toStringAsFixed(6)}';
 
-  state = state.copyWith(
-    eventId: event.eventId,
-    segmentId: event.segmentId,
-    genreId: event.genreId,
-    subGenreId: event.subGenreId,
-    isOnline: event.isOnline,
-    isFree: event.price <= 0,
-    selectedLocation: MapboxPlace(
-      id: event.venueId?.toString() ?? 'event-${event.eventId}',
-      title: venueTitle,
-      subtitle: subtitle,
-      latitude: event.latitude,
-      longitude: event.longitude,
-    ),
-    clearErrorMessage: true,
-    clearSuccessMessage: true,
-  );
-}
+    state = state.copyWith(
+      eventId: event.eventId,
+      segmentId: event.segmentId,
+      genreId: event.genreId,
+      subGenreId: event.subGenreId,
+      isFree: event.price <= 0,
+      selectedLocation: MapboxPlace(
+        id: event.venueId?.toString() ?? 'event-${event.eventId}',
+        title: title,
+        subtitle: subtitle,
+        latitude: event.latitude,
+        longitude: event.longitude,
+      ),
+      clearErrorMessage: true,
+      clearSuccessMessage: true,
+    );
+  }
 
   void setOnline(bool value) {
     state = state.copyWith(
-      isOnline: value,
       clearErrorMessage: true,
       clearSuccessMessage: true,
     );
@@ -322,7 +319,6 @@ void hydrateForEdit(MyEventResponseDto event) {
       final cleanDescription = description.trim();
       final cleanLocale = locale.trim().isEmpty ? 'bs-BA' : locale.trim();
       final cleanTags = _cleanNullable(tags);
-      final cleanExternalUrl = _cleanNullable(externalUrl);
       final cleanAccessibilityInfo = _cleanNullable(accessibilityInfo);
       final cleanPromoterName = _cleanNullable(promoterName);
       final normalizedPrice = state.isFree ? 0.0 : price;
@@ -351,28 +347,6 @@ void hydrateForEdit(MyEventResponseDto event) {
         throw Exception('Price must be between 0 and 100000.');
       }
 
-      //if (segmentId == null) {
-      //throw Exception('Please select a segment.');
-      //}
-
-      //if (genreId == null) {
-      //  throw Exception('Please select a genre.');
-      //}
-
-      //if (subGenreId == null) {
-      //  throw Exception('Please select a subgenre.');
-      //}
-
-      //if (!isOnline && venueId == null && cityId == null) {
-      //  throw Exception('Please choose a venue or location for an offline event.');
-      //}
-
-      //if (isOnline) {
-      //  if (cleanExternalUrl == null || cleanExternalUrl.isEmpty) {
-      //    throw Exception('Please provide an external URL for an online event.');
-      //  }
-      //}
-
       final payload = CreateEventRequest(
         title: cleanTitle,
         description: cleanDescription,
@@ -387,9 +361,9 @@ void hydrateForEdit(MyEventResponseDto event) {
         endDateTime: endDateTime,
         capacity: capacity,
         price: normalizedPrice,
-        isOnline: isOnline,
+        isOnline: false,
         tags: cleanTags,
-        externalUrl: cleanExternalUrl,
+        externalUrl: null,
         accessibilityInfo: cleanAccessibilityInfo,
         promoterName: cleanPromoterName,
         locale: cleanLocale,
@@ -401,15 +375,10 @@ void hydrateForEdit(MyEventResponseDto event) {
 
       final eventId = event.eventId;
 
+      String? imageWarning;
       final imageError = await _attachSelectedImagesToEvent(eventId: eventId);
       if (imageError != null) {
-        state = state.copyWith(
-          submitting: false,
-          eventId: eventId,
-          errorMessage: imageError,
-          clearSuccessMessage: true,
-        );
-        return;
+        imageWarning = 'Event saved, but some images could not be uploaded: $imageError';
       }
 
       if (publish) {
@@ -421,9 +390,11 @@ void hydrateForEdit(MyEventResponseDto event) {
         eventId: eventId,
         clearFeaturedImage: true,
         galleryImages: const [],
-        successMessage: publish
-            ? 'Event published successfully.'
-            : 'Draft saved successfully.',
+        successMessage: imageWarning ??
+            (publish
+                ? 'Event published successfully.'
+                : 'Draft saved successfully.'),
+        errorMessage: imageWarning == null ? null : imageWarning,
       );
     } catch (e) {
       state = state.copyWith(
@@ -437,36 +408,42 @@ void hydrateForEdit(MyEventResponseDto event) {
   Future<String?> _attachSelectedImagesToEvent({
     required int eventId,
   }) async {
-    try {
-      final uploadedPaths = <String>{};
+    final uploadedPaths = <String>{};
+    final failures = <String>[];
 
-      final featured = state.featuredImage;
-      if (featured != null) {
+    final featured = state.featuredImage;
+    if (featured != null) {
+      try {
         await _uploadAndAttachImage(
           eventId: eventId,
           image: featured,
           isCover: true,
         );
         uploadedPaths.add(featured.localPath);
+      } catch (e) {
+        failures.add('featured image: ${_messageFromError(e)}');
+      }
+    }
+
+    for (final image in state.galleryImages) {
+      if (uploadedPaths.contains(image.localPath)) {
+        continue;
       }
 
-      for (final image in state.galleryImages) {
-        if (uploadedPaths.contains(image.localPath)) {
-          continue;
-        }
-
+      try {
         await _uploadAndAttachImage(
           eventId: eventId,
           image: image,
           isCover: false,
         );
         uploadedPaths.add(image.localPath);
+      } catch (e) {
+        failures.add('${image.fileName}: ${_messageFromError(e)}');
       }
-
-      return null;
-    } catch (e) {
-      return _messageFromError(e);
     }
+
+    if (failures.isEmpty) return null;
+    return failures.join(' | ');
   }
 
   Future<void> _uploadAndAttachImage({

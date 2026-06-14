@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/widgets/app_spinner.dart';
+import '../../../../core/widgets/app_surface_card.dart';
 import '../../../../shared/events/models/create_event_state.dart';
 import 'create_event_form.dart';
 
@@ -19,7 +21,8 @@ class CreateEventTaxonomySection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SectionCard(
+    return AppSurfaceCard(
+      padding: const EdgeInsets.all(18),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -63,11 +66,7 @@ class CreateEventTaxonomySection extends StatelessWidget {
               suffixIcon: state.genresLoading
                   ? const Padding(
                       padding: EdgeInsets.all(12),
-                      child: SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
+                      child: AppSpinner(size: 16, strokeWidth: 2),
                     )
                   : null,
             ),
@@ -93,11 +92,7 @@ class CreateEventTaxonomySection extends StatelessWidget {
               suffixIcon: state.subGenresLoading
                   ? const Padding(
                       padding: EdgeInsets.all(12),
-                      child: SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
+                      child: AppSpinner(size: 16, strokeWidth: 2),
                     )
                   : null,
             ),

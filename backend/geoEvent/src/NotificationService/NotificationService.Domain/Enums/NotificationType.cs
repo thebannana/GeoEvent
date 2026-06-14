@@ -17,5 +17,14 @@ public enum NotificationType
     PaymentSucceeded,
     PaymentFailed,
     NewMessage,
-    General
+    MessageLiked,
+    GroupAdded,
+    General,
+    EventCommentLiked,
+    EventCommentAdded,
+    EventCommentReply,
+    EventLiked,
+    EventBookmarked,
+    EventReservationCreated,
+    EventReservationPaid,
 }

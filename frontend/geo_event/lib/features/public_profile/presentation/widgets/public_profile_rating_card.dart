@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/widgets/app_spinner.dart';
+import '../../../../core/widgets/app_surface_card.dart';
+
 class PublicProfileRatingCard extends StatelessWidget {
   final double averageRating;
   final int ratingsCount;
@@ -22,22 +25,12 @@ class PublicProfileRatingCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final muted = Theme.of(context).textTheme.bodySmall?.color;
     final hasReview = myReviewComment?.trim().isNotEmpty == true;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 18),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF17191D) : Colors.white,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(
-            color: isDark ? const Color(0xFF2A303A) : const Color(0xFFE5EAF2),
-          ),
-        ),
+      child: AppSurfaceCard(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -69,7 +62,8 @@ class PublicProfileRatingCard extends StatelessWidget {
               ),
             ],
             const SizedBox(height: 14),
-            Row(
+            Wrap(
+              spacing: 2,
               children: List.generate(5, (index) {
                 final starValue = index + 1;
                 final active = myRating != null && starValue <= myRating!;
@@ -77,6 +71,7 @@ class PublicProfileRatingCard extends StatelessWidget {
                 return IconButton(
                   onPressed: isSubmitting ? null : () => onRatingSelected(starValue),
                   visualDensity: VisualDensity.compact,
+                  tooltip: 'Rate $starValue out of 5',
                   icon: Icon(
                     active ? Icons.star_rounded : Icons.star_border_rounded,
                     color: active ? const Color(0xFFFFC857) : Colors.grey,
@@ -108,10 +103,9 @@ class PublicProfileRatingCard extends StatelessWidget {
                   ),
                 ),
                 if (isSubmitting)
-                  const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+                  const AppSpinner(
+                    size: 16,
+                    strokeWidth: 2,
                   ),
               ],
             ),

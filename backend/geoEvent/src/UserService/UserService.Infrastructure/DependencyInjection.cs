@@ -5,6 +5,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using UserService.Application.Interfaces.Repositories;
 using UserService.Application.Interfaces.Services;
+using UserService.Infrastructure.Consumers;
 using UserService.Infrastructure.Persistence;
 using UserService.Infrastructure.Repositories;
 using UserService.Infrastructure.Services;
@@ -39,10 +40,14 @@ public static class DependencyInjection
         services.AddHttpClient<IExternalValidationService, ExternalValidationService>(client =>
         {
             client.BaseAddress = new Uri(eventServiceBaseUrl);
+            client.DefaultRequestHeaders.Accept.Add(
+                new MediaTypeWithQualityHeaderValue("application/json"));
         });
 
         services.AddMassTransit(x =>
         {
+            x.AddConsumer<UserEventPreferenceInteractionConsumer>();
+
             x.UsingRabbitMq((ctx, cfg) =>
             {
                 cfg.Host(

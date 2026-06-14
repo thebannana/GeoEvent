@@ -1,10 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/widgets/app_surface_card.dart';
+import '../../../../shared/events/models/create_event_models.dart';
+import '../../../../shared/events/providers/event_providers.dart';
 import '../../../../shared/reservations/models/reservation.dart';
 import 'reservation_status_badge.dart';
 import 'ticket_bottom_sheet.dart';
 
-class ReservationCard extends StatelessWidget {
+final reservationEventProvider =
+    FutureProvider.family<EventItem, int>((ref, eventId) async {
+  return ref.read(eventsRepositoryProvider).getEventById(eventId);
+});
+
+class ReservationCard extends ConsumerWidget {
   final Reservation reservation;
   final VoidCallback onCancel;
 
@@ -15,48 +24,35 @@ class ReservationCard extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final status = reservation.status;
+    final colorScheme = theme.colorScheme;
+    final status = reservation.displayStatus;
     final normalized = status.toLowerCase();
-    final canCancel = normalized == 'pending' || normalized == 'confirmed';
+    final canCancel = reservation.canBeCancelled;
 
-    return Container(
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1B2028) : Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: isDark ? const Color(0xFF2A303A) : const Color(0xFFE3EAF3),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.10 : 0.04),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
+    final eventAsync = ref.watch(reservationEventProvider(reservation.eventId));
+
+    return AppSurfaceCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 14, 14, 0),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Container(
                   width: 42,
                   height: 42,
                   decoration: BoxDecoration(
-                    color: isDark
-                        ? const Color(0xFF222833)
-                        : const Color(0xFFF3F6FA),
+                    color: colorScheme.surfaceContainerHighest,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Icon(
                     Icons.confirmation_num_rounded,
                     size: 20,
-                    color: theme.colorScheme.primary,
+                    color: colorScheme.primary,
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -66,21 +62,38 @@ class ReservationCard extends StatelessWidget {
                     children: [
                       Text(
                         'Reservation #${reservation.reservationId}',
-                        style: const TextStyle(
+                        style: theme.textTheme.bodyMedium?.copyWith(
                           fontWeight: FontWeight.w700,
-                          fontSize: 14,
                         ),
                       ),
-                      Text(
-                        'Event #${reservation.eventId}',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: theme.colorScheme.onSurfaceVariant,
+                      const SizedBox(height: 4),
+                      eventAsync.when(
+                        data: (event) => Text(
+                          event.title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                            color: colorScheme.onSurface,
+                          ),
+                        ),
+                        loading: () => Text(
+                          'Loading event...',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                        error: (_, __) => Text(
+                          'Event #${reservation.eventId}',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                          ),
                         ),
                       ),
                     ],
                   ),
                 ),
+                const SizedBox(width: 8),
                 ReservationStatusBadge(status: status),
               ],
             ),
@@ -88,10 +101,7 @@ class ReservationCard extends StatelessWidget {
           const SizedBox(height: 12),
           Divider(
             height: 1,
-            indent: 14,
-            endIndent: 14,
-            color:
-                isDark ? const Color(0xFF2A303A) : const Color(0xFFE3EAF3),
+            color: colorScheme.outline.withValues(alpha: 0.60),
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
@@ -124,14 +134,15 @@ class ReservationCard extends StatelessWidget {
                   Icon(
                     Icons.timer_outlined,
                     size: 14,
-                    color: theme.colorScheme.error,
+                    color: colorScheme.error,
                   ),
                   const SizedBox(width: 4),
-                  Text(
-                    'Expires ${_formatShortDate(reservation.expiresAt)}',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: theme.colorScheme.error,
+                  Expanded(
+                    child: Text(
+                      'Expires ${_formatShortDate(reservation.expiresAt)}',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colorScheme.error,
+                      ),
                     ),
                   ),
                 ],
@@ -141,32 +152,31 @@ class ReservationCard extends StatelessWidget {
           if (reservation.tickets.isNotEmpty || canCancel)
             Padding(
               padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
-              child: Row(
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
                 children: [
                   if (reservation.tickets.isNotEmpty)
-                    Expanded(
-                      child: TextButton.icon(
-                        icon: const Icon(Icons.qr_code_rounded, size: 18),
-                        label: Text(
-                          '${reservation.tickets.length} ticket${reservation.tickets.length > 1 ? 's' : ''}',
-                        ),
-                        onPressed: () => _showTickets(context),
+                    TextButton.icon(
+                      icon: const Icon(Icons.qr_code_rounded, size: 18),
+                      label: Text(
+                        '${reservation.tickets.length} ticket${reservation.tickets.length > 1 ? 's' : ''}',
                       ),
+                      onPressed: () =>
+                          _showTickets(context, eventAsync.valueOrNull?.title),
                     ),
                   if (canCancel)
-                    Expanded(
-                      child: TextButton.icon(
-                        icon: Icon(
-                          Icons.cancel_outlined,
-                          size: 18,
-                          color: theme.colorScheme.error,
-                        ),
-                        label: Text(
-                          'Cancel',
-                          style: TextStyle(color: theme.colorScheme.error),
-                        ),
-                        onPressed: onCancel,
+                    TextButton.icon(
+                      icon: Icon(
+                        Icons.cancel_outlined,
+                        size: 18,
+                        color: colorScheme.error,
                       ),
+                      label: Text(
+                        'Cancel',
+                        style: TextStyle(color: colorScheme.error),
+                      ),
+                      onPressed: onCancel,
                     ),
                 ],
               ),
@@ -176,16 +186,15 @@ class ReservationCard extends StatelessWidget {
     );
   }
 
-  void _showTickets(BuildContext context) {
+  void _showTickets(BuildContext context, String? eventTitle) {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
+      backgroundColor: Colors.transparent,
       builder: (_) => TicketBottomSheet(
         reservationId: reservation.reservationId,
+        eventTitle: eventTitle,
         tickets: reservation.tickets,
       ),
     );
@@ -210,12 +219,12 @@ class _DetailChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colorScheme = Theme.of(context).colorScheme;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF222833) : const Color(0xFFF3F6FA),
+        color: colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
@@ -224,14 +233,15 @@ class _DetailChip extends StatelessWidget {
           Icon(
             icon,
             size: 13,
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
+            color: colorScheme.onSurfaceVariant,
           ),
           const SizedBox(width: 4),
           Text(
             label,
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(
               fontSize: 12,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              color: colorScheme.onSurfaceVariant,
             ),
           ),
         ],

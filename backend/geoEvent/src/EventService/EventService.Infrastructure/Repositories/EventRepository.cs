@@ -17,6 +17,66 @@ public class EventRepository : IEventRepository
         _context = context;
     }
 
+    public async Task<List<Event>> GetPublicCandidatesAsync(EventFilterDto filter, int take = 200)
+    {
+        filter ??= new EventFilterDto();
+
+        var query = _context.Events
+            .AsNoTracking()
+            .Include(e => e.Images)
+            .Include(e => e.Venue)
+            .Include(e => e.Segment)
+            .Include(e => e.Genre)
+            .Include(e => e.SubGenre)
+            .Where(e => e.Status == EventStatus.Active)
+            .AsQueryable();
+
+        if (filter.CityId.HasValue)
+            query = query.Where(e => e.CityId == filter.CityId.Value);
+
+        if (filter.SegmentId.HasValue)
+            query = query.Where(e => e.SegmentId == filter.SegmentId.Value);
+
+        if (filter.GenreId.HasValue)
+            query = query.Where(e => e.GenreId == filter.GenreId.Value);
+
+        if (filter.SubGenreId.HasValue)
+            query = query.Where(e => e.SubGenreId == filter.SubGenreId.Value);
+
+        if (filter.MinPrice.HasValue)
+            query = query.Where(e => e.Price >= filter.MinPrice.Value);
+
+        if (filter.MaxPrice.HasValue)
+            query = query.Where(e => e.Price <= filter.MaxPrice.Value);
+
+        if (filter.FromDate.HasValue)
+            query = query.Where(e => e.StartDateTime >= filter.FromDate.Value);
+
+        if (filter.ToDate.HasValue)
+            query = query.Where(e => e.StartDateTime <= filter.ToDate.Value);
+
+        if (filter.IsOnline.HasValue)
+            query = query.Where(e => e.IsOnline == filter.IsOnline.Value);
+
+        if (filter.IsFeatured.HasValue)
+            query = query.Where(e => e.IsFeatured == filter.IsFeatured.Value);
+
+        if (!string.IsNullOrWhiteSpace(filter.SearchTerm))
+        {
+            var term = filter.SearchTerm.Trim();
+            query = query.Where(e =>
+                e.Title.Contains(term) ||
+                e.Description.Contains(term) ||
+                (e.Tags != null && e.Tags.Contains(term)));
+        }
+
+        return await query
+            .OrderBy(e => e.StartDateTime)
+            .ThenBy(e => e.EventId)
+            .Take(Math.Min(Math.Max(take, 20), 500))
+            .ToListAsync();
+    }
+
     public async Task<Comment?> GetCommentByIdAsync(int commentId)
     {
         return await _context.Comments
@@ -533,12 +593,12 @@ public class EventRepository : IEventRepository
             .ToListAsync();
 
     public async Task<List<EventLike>> GetLikedEventsByUserAsync(int userId) =>
-    await _context.EventLikes
-        .Include(x => x.Event)
-            .ThenInclude(e => e.Images)
-        .Where(x => x.UserId == userId)
-        .OrderByDescending(x => x.LikedAt)
-        .ToListAsync();
+        await _context.EventLikes
+            .Include(x => x.Event)
+                .ThenInclude(e => e!.Images)
+            .Where(x => x.UserId == userId)
+            .OrderByDescending(x => x.LikedAt)
+            .ToListAsync();
     public async Task<Bookmark> CreateBookmarkAsync(Bookmark bookmark)
     {
         _context.Bookmarks.Add(bookmark);

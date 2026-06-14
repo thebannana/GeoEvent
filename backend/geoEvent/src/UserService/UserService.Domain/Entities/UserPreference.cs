@@ -1,4 +1,4 @@
-﻿namespace UserService.Domain.Entities;
+﻿using UserService.Domain.Entities;
 
 public class UserPreference
 {
@@ -7,12 +7,11 @@ public class UserPreference
     public int? UserId { get; set; }
     public int? SegmentId { get; set; }
     public int? GenreId { get; set; }
+    public int? SubGenreId { get; set; }
     public double Score { get; set; } = 0.0;
 
-    // Navigation
     public User? User { get; set; }
 
-    // Domain logic
     public void UpdateScore(double score)
     {
         Score = score;

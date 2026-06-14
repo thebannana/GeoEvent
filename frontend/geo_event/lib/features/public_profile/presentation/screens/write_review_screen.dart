@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/widgets/app_spinner.dart';
+import '../../../../core/widgets/app_surface_card.dart';
+import '../../../../core/widgets/glass_scaffold.dart';
+
 class WriteReviewScreen extends StatefulWidget {
   final int? initialRating;
   final String? initialComment;
@@ -43,7 +47,9 @@ class _WriteReviewScreenState extends State<WriteReviewScreen> {
 
     setState(() => isBusy = true);
     try {
-      await widget.onSave(rating!, commentController.text);
+      await widget.onSave(rating!, commentController.text.trim().isEmpty
+          ? null
+          : commentController.text.trim());
       if (!mounted) return;
       Navigator.pop(context, true);
     } finally {
@@ -66,66 +72,87 @@ class _WriteReviewScreenState extends State<WriteReviewScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Write review')),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Leave a review',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: List.generate(5, (index) {
-                final star = index + 1;
-                final active = (rating ?? 0) >= star;
-                return IconButton(
-                  onPressed: isBusy ? null : () => setState(() => rating = star),
-                  icon: Icon(
-                    active ? Icons.star_rounded : Icons.star_border_rounded,
-                    color: active ? const Color(0xFFFFC857) : Colors.grey,
+    final theme = Theme.of(context);
+    final canSave = rating != null && !isBusy;
+
+    return GlassScaffold(
+      appBar: AppBar(
+        title: const Text('Write review'),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+      ),
+      child: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: AppSurfaceCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Leave a review',
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w700,
                   ),
-                );
-              }),
-            ),
-            TextField(
-              controller: commentController,
-              minLines: 4,
-              maxLines: 6,
-              maxLength: 1000,
-              decoration: const InputDecoration(
-                hintText: 'Write your review (optional)',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                onPressed: isBusy ? null : save,
-                child: isBusy
-                    ? const SizedBox(
-                        height: 18,
-                        width: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text('Save review'),
-              ),
-            ),
-            if (widget.canDelete) ...[
-              const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton(
-                  onPressed: isBusy ? null : deleteReview,
-                  child: const Text('Delete review'),
                 ),
-              ),
-            ],
-          ],
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 4,
+                  children: List.generate(5, (index) {
+                    final star = index + 1;
+                    final active = (rating ?? 0) >= star;
+
+                    return IconButton(
+                      tooltip: 'Rate $star out of 5',
+                      onPressed: isBusy ? null : () => setState(() => rating = star),
+                      icon: Icon(
+                        active
+                            ? Icons.star_rounded
+                            : Icons.star_border_rounded,
+                        color: active ? const Color(0xFFFFC857) : Colors.grey,
+                        size: 30,
+                      ),
+                    );
+                  }),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: commentController,
+                  minLines: 4,
+                  maxLines: 6,
+                  maxLength: 1000,
+                  enabled: !isBusy,
+                  decoration: const InputDecoration(
+                    hintText: 'Write your review (optional)',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: canSave ? save : null,
+                    child: isBusy
+                        ? const AppSpinner(
+                            size: 18,
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          )
+                        : const Text('Save review'),
+                  ),
+                ),
+                if (widget.canDelete) ...[
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton(
+                      onPressed: isBusy ? null : deleteReview,
+                      child: const Text('Delete review'),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
         ),
       ),
     );

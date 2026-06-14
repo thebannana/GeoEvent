@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 
 class AppBottomSheetContainer extends StatelessWidget {
@@ -25,7 +23,7 @@ class AppBottomSheetContainer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
+    final scheme = theme.colorScheme;
 
     Widget content = Padding(
       padding: padding,
@@ -44,41 +42,38 @@ class AppBottomSheetContainer extends StatelessWidget {
       child: SafeArea(
         top: false,
         minimum: margin.resolve(Directionality.of(context)),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(28),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
-            child: Container(
-              constraints: BoxConstraints(
-                maxHeight: MediaQuery.of(context).size.height * maxHeightFactor,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * maxHeightFactor,
+          ),
+          child: Material(
+            color: scheme.surface,
+            surfaceTintColor: Colors.transparent,
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(28),
+              side: BorderSide(
+                color: scheme.outlineVariant.withValues(alpha: 0.7),
               ),
-              decoration: BoxDecoration(
-                color: isDark
-                    ? Colors.black.withValues(alpha: 0.28)
-                    : Colors.white.withValues(alpha: 0.72),
-                borderRadius: BorderRadius.circular(28),
-                border: Border.all(
-                  color: Colors.white.withValues(alpha: isDark ? 0.10 : 0.52),
-                ),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (showHandle) ...[
-                    const SizedBox(height: 10),
-                    Container(
-                      width: 42,
-                      height: 5,
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.onSurface.withValues(alpha: 0.22),
-                        borderRadius: BorderRadius.circular(999),
-                      ),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (showHandle) ...[
+                  const SizedBox(height: 10),
+                  Container(
+                    width: 42,
+                    height: 5,
+                    decoration: BoxDecoration(
+                      color: scheme.onSurfaceVariant.withValues(alpha: 0.35),
+                      borderRadius: BorderRadius.circular(999),
                     ),
-                  ],
-                  if (header != null) header!,
-                  Flexible(child: content),
+                  ),
                 ],
-              ),
+                if (header != null) header!,
+                Flexible(child: content),
+              ],
             ),
           ),
         ),

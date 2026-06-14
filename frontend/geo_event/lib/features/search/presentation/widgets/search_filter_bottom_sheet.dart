@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/widgets/app_loading_indicator.dart';
 import '../../../../shared/events/models/event_taxonomy_models.dart';
 import '../../../../shared/events/providers/event_providers.dart';
 import '../../domain/filter_selection.dart';
@@ -44,16 +45,10 @@ class _SearchFilterBottomSheetState
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (_segmentId != null) {
-        await _loadGenres(
-          _segmentId!,
-          preserveSelection: true,
-        );
+        await _loadGenres(_segmentId!, preserveSelection: true);
       }
       if (_genreId != null) {
-        await _loadSubGenres(
-          _genreId!,
-          preserveSelection: true,
-        );
+        await _loadSubGenres(_genreId!, preserveSelection: true);
       }
     });
   }
@@ -139,9 +134,8 @@ class _SearchFilterBottomSheetState
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bg = isDark ? const Color(0xFF161A21) : Colors.white;
-    final border = isDark ? const Color(0xFF2A303A) : const Color(0xFFE3EAF3);
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
 
     Widget buildChoiceChip({
       required String label,
@@ -163,9 +157,11 @@ class _SearchFilterBottomSheetState
         height: MediaQuery.of(context).size.height * 0.82,
         margin: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: bg,
+          color: colorScheme.surface,
           borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: border),
+          border: Border.all(
+            color: colorScheme.outline.withValues(alpha: 0.75),
+          ),
         ),
         child: Column(
           children: [
@@ -174,9 +170,7 @@ class _SearchFilterBottomSheetState
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                color: isDark
-                    ? Colors.white24
-                    : Colors.black.withValues(alpha: 0.15),
+                color: colorScheme.onSurface.withValues(alpha: 0.16),
                 borderRadius: BorderRadius.circular(99),
               ),
             ),
@@ -247,7 +241,7 @@ class _SearchFilterBottomSheetState
                     const Padding(
                       padding: EdgeInsets.symmetric(vertical: 8),
                       child: Center(
-                        child: CircularProgressIndicator(),
+                        child: AppLoadingIndicator(),
                       ),
                     )
                   else
@@ -291,7 +285,7 @@ class _SearchFilterBottomSheetState
                     const Padding(
                       padding: EdgeInsets.symmetric(vertical: 8),
                       child: Center(
-                        child: CircularProgressIndicator(),
+                        child: AppLoadingIndicator(),
                       ),
                     )
                   else

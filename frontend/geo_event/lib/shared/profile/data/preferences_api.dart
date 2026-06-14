@@ -26,8 +26,8 @@ class PreferencesApi {
     final response = await _dio.put(
       '/api/preferences',
       data: {
-        'segmentId': ?segmentId,
-        'genreId': ?genreId,
+        if (segmentId != null) 'segmentId': segmentId,
+        if (genreId != null) 'genreId': genreId,
         'score': score,
       },
     );

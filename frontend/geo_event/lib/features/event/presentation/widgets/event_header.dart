@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+
+import '../../../../core/widgets/app_icon_circle_button.dart';
+import '../../../../core/widgets/app_surface_card.dart';
 import 'event_price_badge.dart';
 
 class EventHeader extends StatelessWidget {
@@ -47,6 +50,10 @@ class EventHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final text = theme.textTheme;
+
     final categoryText = [category, subCategory]
         .where((e) => e != null && e.trim().isNotEmpty)
         .join(' • ');
@@ -69,31 +76,50 @@ class EventHeader extends StatelessWidget {
 
     final hasOwner =
         (ownerPrimaryText != null && ownerPrimaryText.isNotEmpty) ||
-        (avatarUrl != null && avatarUrl.isNotEmpty);
+            (avatarUrl != null && avatarUrl.isNotEmpty);
+
+    final accent = categoryColor ?? scheme.primary;
+    final muted = text.bodyMedium?.color ?? scheme.onSurface.withValues(alpha: 0.72);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
-            _CircleAction(icon: Icons.arrow_back_ios_new, onTap: onBack),
+            AppIconCircleButton(
+              onPressed: onBack,
+              tooltip: 'Back',
+              icon: Icons.arrow_back_ios_new,
+            ),
             const Spacer(),
-            _CircleAction(
+            AppIconCircleButton(
+              onPressed: onLikeTap,
+              tooltip: isLiked ? 'Unlike event' : 'Like event',
               icon: isLiked ? Icons.favorite : Icons.favorite_border,
-              onTap: onLikeTap,
+              foregroundColor: isLiked ? scheme.error : null,
             ),
             const SizedBox(width: 8),
-            _CircleAction(
+            AppIconCircleButton(
+              onPressed: onBookmarkTap,
+              tooltip: isBookmarked ? 'Remove bookmark' : 'Bookmark event',
               icon: isBookmarked ? Icons.bookmark : Icons.bookmark_border,
-              onTap: onBookmarkTap,
+              foregroundColor: isBookmarked ? scheme.primary : null,
             ),
             const SizedBox(width: 8),
-            _CircleAction(
-              icon: Icons.outlined_flag_rounded,
-              onTap: onReportTap,
+            if (onReportTap != null) ...[
+              AppIconCircleButton(
+                onPressed: onReportTap,
+                tooltip: 'Report event',
+                icon: Icons.outlined_flag_rounded,
+              ),
+              const SizedBox(width: 8),
+            ],
+            AppIconCircleButton(
+              onPressed: onShareTap,
+              tooltip: 'Share event',
+              icon: Icons.ios_share,
             ),
             const SizedBox(width: 8),
-            _CircleAction(icon: Icons.ios_share, onTap: onShareTap),
           ],
         ),
         const SizedBox(height: 18),
@@ -101,18 +127,15 @@ class EventHeader extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: (categoryColor ?? Colors.white).withValues(alpha: 0.16),
+              color: accent.withValues(alpha: 0.10),
               borderRadius: BorderRadius.circular(999),
-              border: Border.all(
-                color: (categoryColor ?? Colors.white).withValues(alpha: 0.45),
-              ),
+              border: Border.all(color: accent.withValues(alpha: 0.32)),
             ),
             child: Text(
               categoryText,
-              style: TextStyle(
-                color: categoryColor ?? Colors.white,
+              style: text.labelLarge?.copyWith(
+                color: accent,
                 fontWeight: FontWeight.w800,
-                fontSize: 14,
               ),
             ),
           ),
@@ -123,105 +146,88 @@ class EventHeader extends StatelessWidget {
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             EventPriceBadge(price: price),
-            Text(
-              '$likes likes',
-              style: const TextStyle(color: Colors.white70),
-            ),
-            Text(
-              '$views views',
-              style: const TextStyle(color: Colors.white70),
-            ),
+            Text('$likes likes', style: text.bodyMedium?.copyWith(color: muted)),
+            Text('$views views', style: text.bodyMedium?.copyWith(color: muted)),
           ],
         ),
         const SizedBox(height: 16),
         Text(
           title,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 26,
+          style: text.headlineSmall?.copyWith(
+            color: scheme.onSurface,
             fontWeight: FontWeight.w800,
             height: 1.1,
           ),
         ),
         if (hasOwner) ...[
           const SizedBox(height: 14),
-          Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: onOwnerTap,
-              borderRadius: BorderRadius.circular(18),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 6),
-                child: Row(
-                  children: [
-                    _OwnerAvatar(
-                      avatarUrl: avatarUrl,
-                      fallbackText:
-                          ownerSecondaryText ?? ownerPrimaryText ?? 'U',
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+          AppSurfaceCard(
+            onTap: onOwnerTap,
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                _OwnerAvatar(
+                  avatarUrl: avatarUrl,
+                  fallbackText: ownerSecondaryText ?? ownerPrimaryText ?? 'U',
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
                         children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  ownerPrimaryText ?? 'Organizer',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 15,
-                                  ),
-                                ),
-                              ),
-                              if (ownerRating != null) ...[
-                                const SizedBox(width: 8),
-                                const Icon(
-                                  Icons.star_rounded,
-                                  color: Colors.amber,
-                                  size: 16,
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  '${ownerRating!.toStringAsFixed(1)}/5',
-                                  style: const TextStyle(
-                                    color: Colors.white70,
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 13,
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                          if (ownerSecondaryText != null &&
-                              ownerSecondaryText.isNotEmpty) ...[
-                            const SizedBox(height: 2),
-                            Text(
-                              ownerSecondaryText,
+                          Expanded(
+                            child: Text(
+                              ownerPrimaryText ?? 'Organizer',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: Colors.white60,
-                                fontWeight: FontWeight.w500,
-                                fontSize: 13,
+                              style: text.titleMedium?.copyWith(
+                                color: scheme.onSurface,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                          if (ownerRating != null) ...[
+                            const SizedBox(width: 8),
+                            const Icon(
+                              Icons.star_rounded,
+                              color: Colors.amber,
+                              size: 16,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${ownerRating!.toStringAsFixed(1)}/5',
+                              style: text.bodySmall?.copyWith(
+                                color: muted,
+                                fontWeight: FontWeight.w700,
                               ),
                             ),
                           ],
                         ],
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    const Icon(
-                      Icons.chevron_right,
-                      color: Colors.white54,
-                    ),
-                  ],
+                      if (ownerSecondaryText != null &&
+                          ownerSecondaryText.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          ownerSecondaryText,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: text.bodySmall?.copyWith(
+                            color: muted,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
-              ),
+                const SizedBox(width: 8),
+                Icon(
+                  Icons.chevron_right,
+                  color: scheme.onSurface.withValues(alpha: 0.54),
+                ),
+              ],
             ),
           ),
         ],
@@ -241,12 +247,14 @@ class _OwnerAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final trimmed = avatarUrl?.trim() ?? '';
 
     if (trimmed.isNotEmpty) {
       return CircleAvatar(
         radius: 22,
-        backgroundColor: Colors.white12,
+        backgroundColor: scheme.surfaceContainerHighest,
         backgroundImage: NetworkImage(trimmed),
         onBackgroundImageError: (_, __) {},
       );
@@ -254,11 +262,11 @@ class _OwnerAvatar extends StatelessWidget {
 
     return CircleAvatar(
       radius: 22,
-      backgroundColor: Colors.white12,
+      backgroundColor: scheme.surfaceContainerHighest,
       child: Text(
         _initials(fallbackText),
-        style: const TextStyle(
-          color: Colors.white,
+        style: theme.textTheme.labelLarge?.copyWith(
+          color: scheme.onSurface,
           fontWeight: FontWeight.w700,
         ),
       ),
@@ -273,39 +281,8 @@ class _OwnerAvatar extends StatelessWidget {
         .toList();
 
     if (parts.isEmpty) return 'U';
-    if (parts.length == 1) return parts.first.characters.first.toUpperCase();
-    return (parts.first.characters.first + parts.last.characters.first)
+    if (parts.length == 1) return parts.first.substring(0, 1).toUpperCase();
+    return '${parts.first.substring(0, 1)}${parts.last.substring(0, 1)}'
         .toUpperCase();
-  }
-}
-
-class _CircleAction extends StatelessWidget {
-  final IconData icon;
-  final VoidCallback? onTap;
-
-  const _CircleAction({
-    required this.icon,
-    this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final enabled = onTap != null;
-
-    return Material(
-      color: Colors.white.withValues(alpha: 0.12),
-      shape: const CircleBorder(),
-      child: InkWell(
-        customBorder: const CircleBorder(),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(10),
-          child: Icon(
-            icon,
-            color: enabled ? Colors.white : Colors.white30,
-          ),
-        ),
-      ),
-    );
   }
 }

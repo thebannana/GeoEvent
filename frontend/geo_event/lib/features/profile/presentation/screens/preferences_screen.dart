@@ -1,8 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../application/preferences_controller.dart';
+import '../../../../core/widgets/app_empty_state.dart';
+import '../../../../core/widgets/app_error_view.dart';
+import '../../../../core/widgets/app_spinner.dart';
+import '../../../../core/widgets/app_surface_card.dart';
+import '../../../../core/widgets/glass_scaffold.dart';
+import '../../../../shared/profile/models/event_taxonomy_models.dart';
 import '../../../../shared/profile/models/user_preference.dart';
+import '../../../../shared/profile/providers/event_taxonomy_providers.dart';
+import '../../application/preferences_controller.dart';
+
+final eventTaxonomyProvider = FutureProvider<List<SegmentLookup>>((ref) async {
+  return ref.read(eventTaxonomyRepositoryProvider).getSegments();
+});
 
 class PreferencesScreen extends ConsumerWidget {
   const PreferencesScreen({super.key});
@@ -10,64 +21,23 @@ class PreferencesScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final prefsAsync = ref.watch(preferencesControllerProvider);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final taxonomyAsync = ref.watch(eventTaxonomyProvider);
 
-    return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+    return GlassScaffold(
       appBar: AppBar(
         title: const Text('Affinity Preferences'),
+        backgroundColor: Colors.transparent,
       ),
-      body: RefreshIndicator(
-        onRefresh: () =>
+      child: RefreshIndicator(
+        onRefresh: () async {
+          await Future.wait([
             ref.read(preferencesControllerProvider.notifier).refresh(),
+            ref.refresh(eventTaxonomyProvider.future),
+          ]);
+        },
         child: prefsAsync.when(
-          data: (prefs) {
-            final segmentPrefs = prefs
-                .where((p) => p.segmentId != null)
-                .toList()
-              ..sort((a, b) {
-                final byScore = b.score.compareTo(a.score);
-                if (byScore != 0) return byScore;
-                return (a.segmentId ?? 0).compareTo(b.segmentId ?? 0);
-              });
-
-            final genrePrefs = prefs
-                .where((p) => p.genreId != null)
-                .toList()
-              ..sort((a, b) {
-                final byScore = b.score.compareTo(a.score);
-                if (byScore != 0) return byScore;
-                return (a.genreId ?? 0).compareTo(b.genreId ?? 0);
-              });
-
-            return ListView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-              children: [
-                const _AffinityExplainerCard(),
-                const SizedBox(height: 16),
-                _PreferenceSection(
-                  title: 'Segments',
-                  icon: Icons.category_rounded,
-                  preferences: segmentPrefs,
-                  emptyMessage: 'No segment affinities have been recorded yet.',
-                  isDark: isDark,
-                  onTap: (pref) => _showEditDialog(context, ref, pref),
-                ),
-                const SizedBox(height: 16),
-                _PreferenceSection(
-                  title: 'Genres',
-                  icon: Icons.local_offer_rounded,
-                  preferences: genrePrefs,
-                  emptyMessage: 'No genre affinities have been recorded yet.',
-                  isDark: isDark,
-                  onTap: (pref) => _showEditDialog(context, ref, pref),
-                ),
-              ],
-            );
-          },
           loading: () => const Center(
-            child: CircularProgressIndicator(),
+            child: AppSpinner(size: 28, strokeWidth: 2.6),
           ),
           error: (_, __) => ListView(
             physics: const AlwaysScrollableScrollPhysics(),
@@ -75,136 +45,142 @@ class PreferencesScreen extends ConsumerWidget {
             children: [
               const _AffinityExplainerCard(),
               const SizedBox(height: 16),
-              _PreferencesStateCard(
-                icon: Icons.cloud_off_rounded,
+              AppErrorState(
                 title: 'Failed to load affinity data',
-                subtitle: 'Pull to refresh or try again.',
-                actionLabel: 'Retry',
-                onAction: () {
+                message: 'Pull to refresh or try again.',
+                onRetry: () {
                   ref.read(preferencesControllerProvider.notifier).refresh();
+                  ref.invalidate(eventTaxonomyProvider);
                 },
               ),
             ],
           ),
+          data: (prefs) {
+            return taxonomyAsync.when(
+              loading: () => const Center(
+                child: AppSpinner(size: 28, strokeWidth: 2.6),
+              ),
+              error: (_, __) => ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                children: [
+                  const _AffinityExplainerCard(),
+                  const SizedBox(height: 16),
+                  AppErrorState(
+                    title: 'Failed to load category names',
+                    message: 'Pull to refresh or try again.',
+                    onRetry: () {
+                      ref.invalidate(eventTaxonomyProvider);
+                    },
+                  ),
+                ],
+              ),
+              data: (segments) {
+                final segmentNames = <int, String>{};
+                final genreNames = <int, String>{};
+                final subGenreNames = <int, String>{};
+
+                for (final segment in segments) {
+                  segmentNames[segment.segmentId] = segment.name;
+
+                  for (final genre in segment.genres) {
+                    genreNames[genre.genreId] = genre.name;
+
+                    for (final subGenre in genre.subGenres) {
+                      subGenreNames[subGenre.subGenreId] = subGenre.name;
+                    }
+                  }
+                }
+
+                final segmentPrefs = prefs
+                    .where(
+                      (p) =>
+                          p.segmentId != null &&
+                          p.genreId == null &&
+                          p.subGenreId == null,
+                    )
+                    .toList()
+                  ..sort(_sortByScoreThenIds);
+
+                final genrePrefs = prefs
+                    .where(
+                      (p) =>
+                          p.segmentId != null &&
+                          p.genreId != null &&
+                          p.subGenreId == null,
+                    )
+                    .toList()
+                  ..sort(_sortByScoreThenIds);
+
+                final subGenrePrefs = prefs
+                    .where(
+                      (p) =>
+                          p.segmentId != null &&
+                          p.genreId != null &&
+                          p.subGenreId != null,
+                    )
+                    .toList()
+                  ..sort(_sortByScoreThenIds);
+
+                return ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                  children: [
+                    const _AffinityExplainerCard(),
+                    const SizedBox(height: 16),
+                    _PreferenceSection(
+                      title: 'Segments',
+                      icon: Icons.category_rounded,
+                      preferences: segmentPrefs,
+                      emptyMessage:
+                          'No segment affinities have been recorded yet.',
+                      segmentNames: segmentNames,
+                      genreNames: genreNames,
+                      subGenreNames: subGenreNames,
+                    ),
+                    const SizedBox(height: 16),
+                    _PreferenceSection(
+                      title: 'Genres',
+                      icon: Icons.local_offer_rounded,
+                      preferences: genrePrefs,
+                      emptyMessage:
+                          'No genre affinities have been recorded yet.',
+                      segmentNames: segmentNames,
+                      genreNames: genreNames,
+                      subGenreNames: subGenreNames,
+                    ),
+                    const SizedBox(height: 16),
+                    _PreferenceSection(
+                      title: 'Subgenres',
+                      icon: Icons.interests_rounded,
+                      preferences: subGenrePrefs,
+                      emptyMessage:
+                          'No subgenre affinities have been recorded yet.',
+                      segmentNames: segmentNames,
+                      genreNames: genreNames,
+                      subGenreNames: subGenreNames,
+                    ),
+                  ],
+                );
+              },
+            );
+          },
         ),
       ),
     );
   }
 
-  Future<void> _showEditDialog(
-    BuildContext context,
-    WidgetRef ref,
-    UserPreference pref,
-  ) async {
-    final formKey = GlobalKey<FormState>();
-    final scoreController = TextEditingController(
-      text: pref.score.toStringAsFixed(1),
-    );
+  static int _sortByScoreThenIds(UserPreference a, UserPreference b) {
+    final byScore = b.score.compareTo(a.score);
+    if (byScore != 0) return byScore;
 
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) {
-        bool saving = false;
+    final bySegment = (a.segmentId ?? 0).compareTo(b.segmentId ?? 0);
+    if (bySegment != 0) return bySegment;
 
-        return StatefulBuilder(
-          builder: (context, setLocalState) {
-            return AlertDialog(
-              title: Text(_prefTitle(pref)),
-              content: Form(
-                key: formKey,
-                child: TextFormField(
-                  controller: scoreController,
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(
-                    labelText: 'Score (0–100)',
-                    border: OutlineInputBorder(),
-                  ),
-                  validator: (value) {
-                    final score = double.tryParse((value ?? '').trim());
-                    if (score == null) return 'Enter a valid number';
-                    if (score < 0 || score > 100) {
-                      return 'Score must be between 0 and 100';
-                    }
-                    return null;
-                  },
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: saving ? null : () => Navigator.of(ctx).pop(),
-                  child: const Text('Cancel'),
-                ),
-                FilledButton(
-                  onPressed: saving
-                      ? null
-                      : () async {
-                          if (!formKey.currentState!.validate()) return;
+    final byGenre = (a.genreId ?? 0).compareTo(b.genreId ?? 0);
+    if (byGenre != 0) return byGenre;
 
-                          setLocalState(() => saving = true);
-
-                          try {
-                            final score =
-                                double.parse(scoreController.text.trim());
-
-                            await ref
-                                .read(preferencesControllerProvider.notifier)
-                                .upsert(
-                                  segmentId: pref.segmentId,
-                                  genreId: pref.genreId,
-                                  score: score,
-                                );
-
-                            if (ctx.mounted) {
-                              Navigator.of(ctx).pop();
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Affinity score updated.'),
-                                ),
-                              );
-                            }
-                          } catch (_) {
-                            if (ctx.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text(
-                                    'Could not update affinity score.',
-                                  ),
-                                ),
-                              );
-                            }
-                          } finally {
-                            if (ctx.mounted) {
-                              setLocalState(() => saving = false);
-                            }
-                          }
-                        },
-                  child: saving
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Text('Save'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-
-    scoreController.dispose();
-  }
-
-  String _prefTitle(UserPreference pref) {
-    if (pref.segmentId != null) {
-      return 'Segment #${pref.segmentId}';
-    }
-    if (pref.genreId != null) {
-      return 'Genre #${pref.genreId}';
-    }
-    return 'Preference #${pref.prefId}';
+    return (a.subGenreId ?? 0).compareTo(b.subGenreId ?? 0);
   }
 }
 
@@ -213,20 +189,8 @@ class _AffinityExplainerCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return Container(
-      width: double.infinity,
+    return AppSurfaceCard(
       padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF17191D) : Colors.white,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(
-          color: isDark
-              ? const Color(0xFF2A303A)
-              : const Color(0xFFE5EAF2),
-        ),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -238,15 +202,12 @@ class _AffinityExplainerCard extends StatelessWidget {
           const SizedBox(height: 12),
           const Text(
             'What affinity means',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-            ),
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 8),
           Text(
-            'Affinity scores show how strongly a user is associated with event segments and genres. '
-            'The app is intended to update these values automatically from user behavior such as browsing, liking, bookmarking, and similar activity.',
+            'Affinity scores show how strongly your activity aligns with different event categories. '
+            'They are updated automatically from interactions such as liking, bookmarking, commenting, reserving, and similar event activity.',
             style: TextStyle(
               fontSize: 13,
               height: 1.45,
@@ -255,8 +216,7 @@ class _AffinityExplainerCard extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           Text(
-            'For demonstration purposes, the professor can also edit these scores manually. '
-            'Higher scores indicate stronger affinity, and values are ordered from highest to lowest.',
+            'Higher scores indicate stronger interest and help personalize recommendations, search results, and map visibility.',
             style: TextStyle(
               fontSize: 13,
               height: 1.45,
@@ -274,16 +234,18 @@ class _PreferenceSection extends StatelessWidget {
   final IconData icon;
   final List<UserPreference> preferences;
   final String emptyMessage;
-  final bool isDark;
-  final ValueChanged<UserPreference> onTap;
+  final Map<int, String> segmentNames;
+  final Map<int, String> genreNames;
+  final Map<int, String> subGenreNames;
 
   const _PreferenceSection({
     required this.title,
     required this.icon,
     required this.preferences,
     required this.emptyMessage,
-    required this.isDark,
-    required this.onTap,
+    required this.segmentNames,
+    required this.genreNames,
+    required this.subGenreNames,
   });
 
   @override
@@ -297,19 +259,16 @@ class _PreferenceSection extends StatelessWidget {
             const SizedBox(width: 8),
             Text(
               title,
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-              ),
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
             ),
           ],
         ),
         const SizedBox(height: 10),
         if (preferences.isEmpty)
-          _PreferencesStateCard(
+          AppEmptyState(
             icon: icon,
             title: 'Nothing here yet',
-            subtitle: emptyMessage,
+            message: emptyMessage,
           )
         else
           ...preferences.map(
@@ -317,8 +276,9 @@ class _PreferenceSection extends StatelessWidget {
               padding: const EdgeInsets.only(bottom: 10),
               child: _PreferenceTile(
                 preference: pref,
-                isDark: isDark,
-                onTap: () => onTap(pref),
+                segmentNames: segmentNames,
+                genreNames: genreNames,
+                subGenreNames: subGenreNames,
               ),
             ),
           ),
@@ -329,65 +289,63 @@ class _PreferenceSection extends StatelessWidget {
 
 class _PreferenceTile extends StatelessWidget {
   final UserPreference preference;
-  final bool isDark;
-  final VoidCallback onTap;
+  final Map<int, String> segmentNames;
+  final Map<int, String> genreNames;
+  final Map<int, String> subGenreNames;
 
   const _PreferenceTile({
     required this.preference,
-    required this.isDark,
-    required this.onTap,
+    required this.segmentNames,
+    required this.genreNames,
+    required this.subGenreNames,
   });
 
   @override
   Widget build(BuildContext context) {
-    final isSegment = preference.segmentId != null;
-    final title = isSegment
-        ? 'Segment #${preference.segmentId}'
-        : 'Genre #${preference.genreId}';
+    final title = _titleFor(preference, segmentNames, genreNames, subGenreNames);
+    final subtitle = _subtitleFor(
+      preference,
+      segmentNames,
+      genreNames,
+      subGenreNames,
+    );
 
-    return Container(
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF17191D) : Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: isDark
-              ? const Color(0xFF2A303A)
-              : const Color(0xFFE5EAF2),
-        ),
-      ),
+    return AppSurfaceCard(
+      padding: EdgeInsets.zero,
       child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 14,
-          vertical: 4,
-        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
         leading: Container(
           width: 40,
           height: 40,
           decoration: BoxDecoration(
-            color: Theme.of(context)
-                .colorScheme
-                .primary
-                .withValues(alpha: 0.10),
+            color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.10),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Icon(
-            isSegment ? Icons.category_rounded : Icons.local_offer_rounded,
+            _iconFor(preference),
             color: Theme.of(context).colorScheme.primary,
             size: 20,
           ),
         ),
         title: Text(
           title,
-          style: const TextStyle(
-            fontWeight: FontWeight.w600,
-            fontSize: 14,
-          ),
+          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
         ),
         subtitle: Padding(
           padding: const EdgeInsets.only(top: 6),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              if (subtitle != null) ...[
+                Text(
+                  subtitle,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 4),
+              ],
               Text(
                 'Score: ${preference.score.toStringAsFixed(1)}',
                 style: TextStyle(
@@ -401,81 +359,76 @@ class _PreferenceTile extends StatelessWidget {
                 minHeight: 6,
                 borderRadius: BorderRadius.circular(999),
               ),
+              const SizedBox(height: 8),
+              Text(
+                'Updated: ${_formatDate(preference.lastUpdated)}',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
             ],
           ),
         ),
-        trailing: const Icon(Icons.chevron_right_rounded),
-        onTap: onTap,
       ),
     );
   }
-}
 
-class _PreferencesStateCard extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final String? actionLabel;
-  final VoidCallback? onAction;
+  static String _titleFor(
+    UserPreference pref,
+    Map<int, String> segmentNames,
+    Map<int, String> genreNames,
+    Map<int, String> subGenreNames,
+  ) {
+    if (pref.subGenreId != null) {
+      return subGenreNames[pref.subGenreId!] ?? 'Subgenre #${pref.subGenreId}';
+    }
+    if (pref.genreId != null) {
+      return genreNames[pref.genreId!] ?? 'Genre #${pref.genreId}';
+    }
+    if (pref.segmentId != null) {
+      return segmentNames[pref.segmentId!] ?? 'Segment #${pref.segmentId}';
+    }
+    return 'Preference #${pref.prefId}';
+  }
 
-  const _PreferencesStateCard({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    this.actionLabel,
-    this.onAction,
-  });
+  static String? _subtitleFor(
+    UserPreference pref,
+    Map<int, String> segmentNames,
+    Map<int, String> genreNames,
+    Map<int, String> subGenreNames,
+  ) {
+    if (pref.subGenreId != null) {
+      final segment = pref.segmentId != null
+          ? (segmentNames[pref.segmentId!] ?? 'Segment #${pref.segmentId}')
+          : null;
+      final genre = pref.genreId != null
+          ? (genreNames[pref.genreId!] ?? 'Genre #${pref.genreId}')
+          : null;
+      return [segment, genre].whereType<String>().join(' • ');
+    }
 
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    if (pref.genreId != null) {
+      return pref.segmentId != null
+          ? (segmentNames[pref.segmentId!] ?? 'Segment #${pref.segmentId}')
+          : null;
+    }
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF17191D) : Colors.white,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(
-          color: isDark
-              ? const Color(0xFF2A303A)
-              : const Color(0xFFE5EAF2),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(
-            icon,
-            size: 30,
-            color: Theme.of(context).colorScheme.primary,
-          ),
-          const SizedBox(height: 12),
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            subtitle,
-            style: TextStyle(
-              fontSize: 13,
-              color: Theme.of(context).textTheme.bodySmall?.color,
-            ),
-          ),
-          if (actionLabel != null && onAction != null) ...[
-            const SizedBox(height: 14),
-            TextButton.icon(
-              onPressed: onAction,
-              icon: const Icon(Icons.refresh_rounded),
-              label: Text(actionLabel!),
-            ),
-          ],
-        ],
-      ),
-    );
+    return null;
+  }
+
+  static IconData _iconFor(UserPreference pref) {
+    if (pref.subGenreId != null) return Icons.interests_rounded;
+    if (pref.genreId != null) return Icons.local_offer_rounded;
+    return Icons.category_rounded;
+  }
+
+  static String _formatDate(DateTime value) {
+    final day = value.day.toString().padLeft(2, '0');
+    final month = value.month.toString().padLeft(2, '0');
+    final year = value.year.toString();
+    final hour = value.hour.toString().padLeft(2, '0');
+    final minute = value.minute.toString().padLeft(2, '0');
+    return '$day.$month.$year • $hour:$minute';
   }
 }

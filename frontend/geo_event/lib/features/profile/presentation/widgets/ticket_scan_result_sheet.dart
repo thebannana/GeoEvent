@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/widgets/app_bottom_sheet_container.dart';
 import '../../../../shared/profile/models/ticket_scan_result.dart';
 
 class TicketScanResultSheet extends StatelessWidget {
@@ -32,53 +33,62 @@ class TicketScanResultSheet extends StatelessWidget {
         icon = Icons.cancel_rounded;
     }
 
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: accent, size: 42),
-            const SizedBox(height: 12),
-            Text(
-              result.message,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-              textAlign: TextAlign.center,
+    return AppBottomSheetContainer(
+      scrollable: false,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: accent, size: 42),
+          const SizedBox(height: 12),
+          Text(
+            result.message,
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 16),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: CircleAvatar(
+              backgroundImage:
+                  (result.participantAvatarUrl ?? '').trim().isNotEmpty
+                      ? NetworkImage(result.participantAvatarUrl!)
+                      : null,
+              child: (result.participantAvatarUrl ?? '').trim().isEmpty
+                  ? const Icon(Icons.person_rounded)
+                  : null,
             ),
-            const SizedBox(height: 16),
+            title: Text(result.participantUsername ?? 'Unknown attendee'),
+            subtitle: Text(result.ticketType ?? 'Ticket'),
+          ),
+          if (result.usedAt != null)
             ListTile(
               contentPadding: EdgeInsets.zero,
-              leading: CircleAvatar(
-                backgroundImage: (result.participantAvatarUrl ?? '').trim().isNotEmpty
-                    ? NetworkImage(result.participantAvatarUrl!)
-                    : null,
-                child: (result.participantAvatarUrl ?? '').trim().isEmpty
-                    ? const Icon(Icons.person_rounded)
-                    : null,
-              ),
-              title: Text(result.participantUsername ?? 'Unknown attendee'),
-              subtitle: Text(result.ticketType ?? 'Ticket'),
+              leading: const Icon(Icons.access_time_rounded),
+              title: const Text('Previously used'),
+              subtitle: Text(_formatDateTime(result.usedAt!)),
             ),
-            if (result.usedAt != null)
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.access_time_rounded),
-                title: const Text('Previously used'),
-                subtitle: Text(result.usedAt!.toLocal().toString()),
-              ),
-            const SizedBox(height: 8),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: Text(success ? 'Continue scanning' : 'Close'),
-              ),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(success ? 'Continue scanning' : 'Close'),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
+  }
+
+  String _formatDateTime(DateTime value) {
+    final local = value.toLocal();
+    final dd = local.day.toString().padLeft(2, '0');
+    final mm = local.month.toString().padLeft(2, '0');
+    final yyyy = local.year.toString();
+    final hh = local.hour.toString().padLeft(2, '0');
+    final min = local.minute.toString().padLeft(2, '0');
+    return '$dd.$mm.$yyyy • $hh:$min';
   }
 }

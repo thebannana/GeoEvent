@@ -145,6 +145,7 @@ public class NotificationServiceImpl : INotificationService
             Type = dto.Type,
             Title = dto.Title,
             Description = dto.Description,
+            ImageUrl = dto.ImageUrl,
             IsRead = false,
             CreatedAt = DateTime.UtcNow
         };
@@ -214,6 +215,7 @@ public class NotificationServiceImpl : INotificationService
         Type = n.Type.ToString(),
         Title = n.Title,
         Description = n.Description,
+        ImageUrl = n.ImageUrl,
         IsRead = n.IsRead,
         UserId = n.UserId,
         CreatedAt = n.CreatedAt,

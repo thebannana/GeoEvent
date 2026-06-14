@@ -17,15 +17,19 @@ class AuthResponse {
       accessToken.isNotEmpty && refreshToken.isNotEmpty && user != null;
 
   factory AuthResponse.fromJson(Map<String, dynamic> json) {
-    final rawUser = json['user'];
-    final rawExpiresAt = json['expiresAt'];
+    final rawUser = json['user'] ?? json['User'];
+    final rawExpiresAt = json['expiresAt'] ?? json['ExpiresAt'];
 
     return AuthResponse(
-      accessToken: json['accessToken'] as String? ?? '',
-      refreshToken: json['refreshToken'] as String? ?? '',
+      accessToken:
+          (json['accessToken'] ?? json['AccessToken'] ?? '').toString(),
+      refreshToken:
+          (json['refreshToken'] ?? json['RefreshToken'] ?? '').toString(),
       expiresAt: rawExpiresAt is String && rawExpiresAt.isNotEmpty
           ? DateTime.tryParse(rawExpiresAt)
-          : null,
+          : rawExpiresAt is DateTime
+              ? rawExpiresAt
+              : null,
       user: rawUser is Map<String, dynamic>
           ? AuthUser.fromJson(rawUser)
           : rawUser is Map

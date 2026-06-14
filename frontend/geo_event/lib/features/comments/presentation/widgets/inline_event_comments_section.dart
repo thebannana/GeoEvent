@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/utils/date_time_extensions.dart';
+import '../../../../core/widgets/app_empty_state.dart';
+import '../../../../core/widgets/app_spinner.dart';
+import '../../../../core/widgets/app_surface_card.dart';
 import '../../../../shared/comments/models/comment_item.dart';
 import '../../../../shared/reports/models/report_target_type.dart';
 import '../../../auth/application/auth_controller.dart';
@@ -49,6 +52,9 @@ class _InlineEventCommentsSectionState
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
     final state = ref.watch(eventCommentsControllerProvider(widget.eventId));
     final controller =
         ref.read(eventCommentsControllerProvider(widget.eventId).notifier);
@@ -75,40 +81,21 @@ class _InlineEventCommentsSectionState
     final isEditing = state.editingCommentId != null;
     final isReplying = state.replyingToCommentId != null;
 
-    return Container(
-      width: double.infinity,
+    return AppSurfaceCard(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
-      decoration: BoxDecoration(
-        color: const Color(0xFF121216),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Comments',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 19,
+            style: theme.textTheme.titleLarge?.copyWith(
               fontWeight: FontWeight.w700,
               letterSpacing: -0.2,
             ),
           ),
           const SizedBox(height: 14),
           if (errorText != null && errorText.trim().isNotEmpty) ...[
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.red.withValues(alpha: 0.14),
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Text(
-                errorText,
-                style: const TextStyle(color: Colors.white),
-              ),
-            ),
+            _InlineErrorBanner(message: errorText),
             const SizedBox(height: 12),
           ],
           if (isReplying || isEditing)
@@ -146,27 +133,18 @@ class _InlineEventCommentsSectionState
           ),
           const SizedBox(height: 18),
           if (state.isLoading)
-            const Center(
-              child: Padding(
-                padding: EdgeInsets.symmetric(vertical: 20),
-                child: CircularProgressIndicator(),
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 20),
+              child: Center(
+                child: AppSpinner(size: 24, strokeWidth: 2.5),
               ),
             )
           else if (state.comments.isEmpty)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.04),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: const Text(
-                'No comments yet. Start the conversation.',
-                style: TextStyle(
-                  color: Colors.white70,
-                  fontSize: 14,
-                ),
-              ),
+            const AppEmptyState(
+              title: 'No comments yet',
+              message: 'Start the conversation.',
+              icon: Icons.chat_bubble_outline_rounded,
+              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 20),
             )
           else
             Column(
@@ -231,10 +209,10 @@ class _InlineEventCommentsSectionState
             alignment: Alignment.centerLeft,
             child: TextButton.icon(
               onPressed: state.isLoading ? null : controller.refresh,
-              icon: const Icon(Icons.refresh, size: 18),
+              icon: const Icon(Icons.refresh_rounded, size: 18),
               label: const Text('Refresh comments'),
               style: TextButton.styleFrom(
-                foregroundColor: Colors.white60,
+                foregroundColor: colorScheme.onSurfaceVariant,
                 padding: const EdgeInsets.symmetric(horizontal: 4),
               ),
             ),
@@ -253,6 +231,35 @@ class _InlineEventCommentsSectionState
   }
 }
 
+class _InlineErrorBanner extends StatelessWidget {
+  final String message;
+
+  const _InlineErrorBanner({
+    required this.message,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: colorScheme.errorContainer.withValues(alpha: 0.72),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Text(
+        message,
+        style: TextStyle(
+          color: colorScheme.onErrorContainer,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+    );
+  }
+}
+
 class _ComposerStateBanner extends StatelessWidget {
   final bool isEditing;
   final VoidCallback onCancel;
@@ -264,26 +271,28 @@ class _ComposerStateBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.05),
+        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.7),
         borderRadius: BorderRadius.circular(14),
       ),
       child: Row(
         children: [
           Icon(
             isEditing ? Icons.edit_outlined : Icons.reply_rounded,
-            color: Colors.white70,
+            color: colorScheme.onSurfaceVariant,
             size: 18,
           ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               isEditing ? 'Editing comment' : 'Replying to comment',
-              style: const TextStyle(
-                color: Colors.white70,
+              style: TextStyle(
+                color: colorScheme.onSurfaceVariant,
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
               ),
@@ -292,7 +301,7 @@ class _ComposerStateBanner extends StatelessWidget {
           TextButton(
             onPressed: onCancel,
             style: TextButton.styleFrom(
-              foregroundColor: Colors.white,
+              foregroundColor: colorScheme.primary,
               padding: const EdgeInsets.symmetric(horizontal: 8),
               minimumSize: const Size(0, 32),
             ),
@@ -325,6 +334,8 @@ class _CommentComposer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
@@ -337,25 +348,28 @@ class _CommentComposer extends StatelessWidget {
         Expanded(
           child: Container(
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.025),
+              color: colorScheme.surfaceContainerHigh.withValues(alpha: 0.5),
               borderRadius: BorderRadius.circular(22),
               border: Border.all(
-                color: Colors.white.withValues(alpha: 0.10),
+                color: colorScheme.outline.withValues(alpha: 0.22),
               ),
             ),
             child: TextField(
               controller: controller,
               minLines: 1,
               maxLines: 5,
-              style: const TextStyle(color: Colors.white, height: 1.3),
+              style: TextStyle(
+                color: colorScheme.onSurface,
+                height: 1.3,
+              ),
               decoration: InputDecoration(
                 hintText: isEditing
                     ? 'Edit your comment...'
                     : isReplying
                         ? 'Write a reply...'
                         : 'Add a comment...',
-                hintStyle: const TextStyle(
-                  color: Colors.white38,
+                hintStyle: TextStyle(
+                  color: colorScheme.onSurfaceVariant,
                   fontSize: 14,
                   fontWeight: FontWeight.w500,
                 ),
@@ -375,35 +389,19 @@ class _CommentComposer extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 10),
-        GestureDetector(
-          onTap: isSubmitting ? null : onSubmit,
-          child: Container(
-            height: 42,
+        FilledButton(
+          onPressed: isSubmitting ? null : onSubmit,
+          style: FilledButton.styleFrom(
+            minimumSize: const Size(0, 42),
             padding: const EdgeInsets.symmetric(horizontal: 14),
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: const Color(0xFF3797EF).withValues(
-                alpha: isSubmitting ? 0.5 : 1,
-              ),
-              borderRadius: BorderRadius.circular(999),
-            ),
-            child: isSubmitting
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
-                  )
-                : Text(
-                    isEditing ? 'Save' : 'Post',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
           ),
+          child: isSubmitting
+              ? const AppSpinner(
+                  size: 16,
+                  strokeWidth: 2,
+                  color: Colors.white,
+                )
+              : Text(isEditing ? 'Save' : 'Post'),
         ),
       ],
     );
@@ -447,6 +445,9 @@ class _ThreadCommentTile extends StatelessWidget {
         comment.userId != null &&
         currentUserId == comment.userId;
 
+    final colorScheme = Theme.of(context).colorScheme;
+    final likedColor = colorScheme.error;
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -473,9 +474,8 @@ class _ThreadCommentTile extends StatelessWidget {
                   _MetaText(comment.createdAt.timeAgo(short: true)),
                   _ActionTextButton(
                     label: comment.isLiked ? 'Unlike' : 'Like',
-                    color: comment.isLiked
-                        ? const Color(0xFFFF6B81)
-                        : Colors.white60,
+                    color:
+                        comment.isLiked ? likedColor : colorScheme.onSurfaceVariant,
                     onTap: comment.isDeleted ? null : onLikeTap,
                   ),
                   _ActionTextButton(
@@ -486,9 +486,8 @@ class _ThreadCommentTile extends StatelessWidget {
                     _ActionTextButton(
                       label: 'Report',
                       color: Colors.orangeAccent,
-                      onTap: comment.isDeleted
-                          ? null
-                          : () => onReportTap!(comment),
+                      onTap:
+                          comment.isDeleted ? null : () => onReportTap!(comment),
                     ),
                   if (canManage)
                     _ActionTextButton(
@@ -498,7 +497,7 @@ class _ThreadCommentTile extends StatelessWidget {
                   if (canManage)
                     _ActionTextButton(
                       label: 'Delete',
-                      color: Colors.redAccent,
+                      color: colorScheme.error,
                       onTap: onDeleteTap,
                     ),
                   if (comment.likesCount > 0)
@@ -509,18 +508,12 @@ class _ThreadCommentTile extends StatelessWidget {
               ),
               if (comment.replyCount > 0 && !comment.areRepliesLoaded) ...[
                 const SizedBox(height: 8),
-                GestureDetector(
+                _ActionTextButton(
+                  label: comment.isReplyLoading
+                      ? 'Loading replies...'
+                      : 'View ${comment.replyCount} repl${comment.replyCount == 1 ? 'y' : 'ies'}',
+                  color: colorScheme.onSurfaceVariant,
                   onTap: onLoadRepliesTap,
-                  child: Text(
-                    comment.isReplyLoading
-                        ? 'Loading replies...'
-                        : 'View ${comment.replyCount} repl${comment.replyCount == 1 ? 'y' : 'ies'}',
-                    style: const TextStyle(
-                      color: Colors.white54,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
                 ),
               ],
               if (comment.replies.isNotEmpty) ...[
@@ -531,7 +524,7 @@ class _ThreadCommentTile extends StatelessWidget {
                   decoration: BoxDecoration(
                     border: Border(
                       left: BorderSide(
-                        color: Colors.white.withValues(alpha: 0.08),
+                        color: colorScheme.outline.withValues(alpha: 0.22),
                         width: 1.2,
                       ),
                     ),
@@ -550,10 +543,11 @@ class _ThreadCommentTile extends StatelessWidget {
                               onReplyTap: reply.isDeleted
                                   ? null
                                   : () => onReplyReplyTap(reply),
-                              onEditTap: _canManage(currentUserId, reply.userId) &&
-                                      !reply.isDeleted
-                                  ? () => onReplyEditTap(reply)
-                                  : null,
+                              onEditTap:
+                                  _canManage(currentUserId, reply.userId) &&
+                                          !reply.isDeleted
+                                      ? () => onReplyEditTap(reply)
+                                      : null,
                               onDeleteTap:
                                   _canManage(currentUserId, reply.userId) &&
                                           !reply.isDeleted
@@ -571,17 +565,16 @@ class _ThreadCommentTile extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 8),
-        GestureDetector(
-          onTap: comment.isDeleted ? null : onLikeTap,
-          child: Padding(
-            padding: const EdgeInsets.only(top: 2),
-            child: Icon(
-              comment.isLiked ? Icons.favorite : Icons.favorite_border,
-              size: 18,
-              color: comment.isLiked
-                  ? const Color(0xFFFF6B81)
-                  : Colors.white54,
-            ),
+        IconButton(
+          tooltip: comment.isLiked ? 'Unlike comment' : 'Like comment',
+          onPressed: comment.isDeleted ? null : onLikeTap,
+          visualDensity: VisualDensity.compact,
+          padding: const EdgeInsets.only(top: 2),
+          constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+          icon: Icon(
+            comment.isLiked ? Icons.favorite : Icons.favorite_border,
+            size: 18,
+            color: comment.isLiked ? likedColor : colorScheme.onSurfaceVariant,
           ),
         ),
       ],
@@ -615,8 +608,12 @@ class _ReplyCommentTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final canManage =
-        currentUserId != null && reply.userId != null && currentUserId == reply.userId;
+    final canManage = currentUserId != null &&
+        reply.userId != null &&
+        currentUserId == reply.userId;
+
+    final colorScheme = Theme.of(context).colorScheme;
+    final likedColor = colorScheme.error;
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -644,9 +641,8 @@ class _ReplyCommentTile extends StatelessWidget {
                   _MetaText(reply.createdAt.timeAgo(short: true)),
                   _ActionTextButton(
                     label: reply.isLiked ? 'Unlike' : 'Like',
-                    color: reply.isLiked
-                        ? const Color(0xFFFF6B81)
-                        : Colors.white60,
+                    color:
+                        reply.isLiked ? likedColor : colorScheme.onSurfaceVariant,
                     onTap: reply.isDeleted ? null : onLikeTap,
                   ),
                   _ActionTextButton(
@@ -667,7 +663,7 @@ class _ReplyCommentTile extends StatelessWidget {
                   if (canManage)
                     _ActionTextButton(
                       label: 'Delete',
-                      color: Colors.redAccent,
+                      color: colorScheme.error,
                       onTap: onDeleteTap,
                     ),
                   if (reply.likesCount > 0)
@@ -680,17 +676,16 @@ class _ReplyCommentTile extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 6),
-        GestureDetector(
-          onTap: reply.isDeleted ? null : onLikeTap,
-          child: Padding(
-            padding: const EdgeInsets.only(top: 2),
-            child: Icon(
-              reply.isLiked ? Icons.favorite : Icons.favorite_border,
-              size: 16,
-              color: reply.isLiked
-                  ? const Color(0xFFFF6B81)
-                  : Colors.white54,
-            ),
+        IconButton(
+          tooltip: reply.isLiked ? 'Unlike reply' : 'Like reply',
+          onPressed: reply.isDeleted ? null : onLikeTap,
+          visualDensity: VisualDensity.compact,
+          padding: const EdgeInsets.only(top: 2),
+          constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
+          icon: Icon(
+            reply.isLiked ? Icons.favorite : Icons.favorite_border,
+            size: 16,
+            color: reply.isLiked ? likedColor : colorScheme.onSurfaceVariant,
           ),
         ),
       ],
@@ -709,6 +704,7 @@ class _CommentBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     final authorName = commentAuthorName(comment);
     final username = commentUsername(comment);
 
@@ -719,7 +715,9 @@ class _CommentBubble extends StatelessWidget {
         vertical: isReply ? 9 : 10,
       ),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: isReply ? 0.045 : 0.06),
+        color: isReply
+            ? colorScheme.surfaceContainerHigh.withValues(alpha: 0.55)
+            : colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
         borderRadius: BorderRadius.circular(isReply ? 16 : 18),
       ),
       child: Column(
@@ -733,8 +731,8 @@ class _CommentBubble extends StatelessWidget {
               children: [
                 Text(
                   authorName,
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: colorScheme.onSurface,
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
                     height: 1.35,
@@ -743,8 +741,8 @@ class _CommentBubble extends StatelessWidget {
                 if (username.isNotEmpty)
                   Text(
                     '@$username',
-                    style: const TextStyle(
-                      color: Colors.white54,
+                    style: TextStyle(
+                      color: colorScheme.onSurfaceVariant,
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
                       height: 1.35,
@@ -753,10 +751,10 @@ class _CommentBubble extends StatelessWidget {
               ],
             )
           else
-            const Text(
+            Text(
               'Deleted user',
               style: TextStyle(
-                color: Colors.white54,
+                color: colorScheme.onSurfaceVariant,
                 fontSize: 14,
                 fontWeight: FontWeight.w700,
                 height: 1.35,
@@ -766,7 +764,9 @@ class _CommentBubble extends StatelessWidget {
           Text(
             comment.content,
             style: TextStyle(
-              color: comment.isDeleted ? Colors.white38 : Colors.white70,
+              color: comment.isDeleted
+                  ? colorScheme.onSurfaceVariant.withValues(alpha: 0.7)
+                  : colorScheme.onSurface.withValues(alpha: 0.82),
               fontSize: 14,
               height: 1.4,
               fontWeight: FontWeight.w400,
@@ -794,11 +794,12 @@ class _AvatarBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final initials = _buildInitials(fallbackText);
+    final colorScheme = Theme.of(context).colorScheme;
 
     if (avatarUrl != null && avatarUrl!.trim().isNotEmpty) {
       return CircleAvatar(
         radius: size / 2,
-        backgroundColor: const Color(0xFF2B2B31),
+        backgroundColor: colorScheme.surfaceContainerHighest,
         backgroundImage: NetworkImage(avatarUrl!),
         onBackgroundImageError: (_, __) {},
       );
@@ -808,12 +809,12 @@ class _AvatarBubble extends StatelessWidget {
       width: size,
       height: size,
       alignment: Alignment.center,
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         shape: BoxShape.circle,
         gradient: LinearGradient(
           colors: [
-            Color(0xFF8E8E93),
-            Color(0xFF5A5A60),
+            colorScheme.primary.withValues(alpha: 0.85),
+            colorScheme.secondary.withValues(alpha: 0.75),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -822,7 +823,7 @@ class _AvatarBubble extends StatelessWidget {
       child: Text(
         initials,
         style: TextStyle(
-          color: Colors.white,
+          color: colorScheme.onPrimary,
           fontSize: fontSize,
           fontWeight: FontWeight.w700,
         ),
@@ -834,7 +835,8 @@ class _AvatarBubble extends StatelessWidget {
     final cleaned = text.trim();
     if (cleaned.isEmpty) return '?';
 
-    final parts = cleaned.split(RegExp(r'\s+')).where((e) => e.isNotEmpty).toList();
+    final parts =
+        cleaned.split(RegExp(r'\s+')).where((e) => e.isNotEmpty).toList();
     if (parts.isEmpty) return '?';
     if (parts.length == 1) return parts.first.characters.first.toUpperCase();
 
@@ -846,27 +848,33 @@ class _AvatarBubble extends StatelessWidget {
 class _ActionTextButton extends StatelessWidget {
   final String label;
   final VoidCallback? onTap;
-  final Color color;
+  final Color? color;
 
   const _ActionTextButton({
     required this.label,
     required this.onTap,
-    this.color = Colors.white60,
+    this.color,
   });
 
   @override
   Widget build(BuildContext context) {
-    final effectiveColor = onTap == null ? Colors.white24 : color;
+    final colorScheme = Theme.of(context).colorScheme;
+    final baseColor = color ?? colorScheme.onSurfaceVariant;
+    final effectiveColor =
+        onTap == null ? colorScheme.onSurface.withValues(alpha: 0.28) : baseColor;
 
-    return GestureDetector(
+    return InkWell(
       onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: Text(
-        label,
-        style: TextStyle(
-          color: effectiveColor,
-          fontSize: 13,
-          fontWeight: FontWeight.w600,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 2),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: effectiveColor,
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+          ),
         ),
       ),
     );
@@ -882,8 +890,8 @@ class _MetaText extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       text,
-      style: const TextStyle(
-        color: Colors.white38,
+      style: TextStyle(
+        color: Theme.of(context).colorScheme.onSurfaceVariant,
         fontSize: 12,
         fontWeight: FontWeight.w500,
       ),

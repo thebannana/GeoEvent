@@ -1,53 +1,58 @@
 class SortOption {
   final String sortBy;
   final bool sortDescending;
+  final String label;
 
   const SortOption({
     required this.sortBy,
     required this.sortDescending,
+    required this.label,
   });
+
+  static const recommended = SortOption(
+    sortBy: 'Recommended',
+    sortDescending: true,
+    label: 'Recommended',
+  );
 
   static const soonest = SortOption(
     sortBy: 'StartDateTime',
     sortDescending: false,
+    label: 'Soonest',
   );
 
   static const latest = SortOption(
     sortBy: 'StartDateTime',
     sortDescending: true,
+    label: 'Latest',
   );
 
   static const mostLiked = SortOption(
     sortBy: 'LikesCount',
     sortDescending: true,
+    label: 'Most liked',
   );
 
   static const mostViewed = SortOption(
     sortBy: 'ViewCount',
     sortDescending: true,
+    label: 'Most viewed',
   );
 
   static const lowestPrice = SortOption(
     sortBy: 'Price',
     sortDescending: false,
+    label: 'Lowest price',
   );
 
   static const highestPrice = SortOption(
     sortBy: 'Price',
     sortDescending: true,
+    label: 'Highest price',
   );
 
-  String get label {
-    if (sortBy == 'LikesCount' && sortDescending) return 'Most liked';
-    if (sortBy == 'ViewCount' && sortDescending) return 'Most viewed';
-    if (sortBy == 'Price' && !sortDescending) return 'Lowest price';
-    if (sortBy == 'Price' && sortDescending) return 'Highest price';
-    if (sortBy == 'StartDateTime' && !sortDescending) return 'Soonest';
-    if (sortBy == 'StartDateTime' && sortDescending) return 'Latest';
-    return 'Sort';
-  }
-
-  static const all = <SortOption>[
+  static const all = [
+    recommended,
     soonest,
     latest,
     mostLiked,

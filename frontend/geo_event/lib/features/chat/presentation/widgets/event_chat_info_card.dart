@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../../../../shared/chat/models/chat_event_info.dart';
 
 class EventChatInfoCard extends StatelessWidget {
@@ -16,6 +17,8 @@ class EventChatInfoCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
     final subtitleParts = <String>[
       if (info.startsAt != null) _formatDate(info.startsAt!),
       if (info.venueName?.trim().isNotEmpty ?? false) info.venueName!.trim(),
@@ -26,10 +29,10 @@ class EventChatInfoCard extends StatelessWidget {
       margin: const EdgeInsets.fromLTRB(16, 12, 16, 8),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: theme.colorScheme.primary.withValues(alpha: 0.08),
+        color: colorScheme.primary.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(18),
         border: Border.all(
-          color: theme.colorScheme.primary.withValues(alpha: 0.18),
+          color: colorScheme.primary.withValues(alpha: 0.18),
         ),
       ),
       child: Row(
@@ -97,19 +100,23 @@ class _ImageThumb extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hasImage = imageUrl != null && imageUrl!.trim().isNotEmpty;
+    final colorScheme = Theme.of(context).colorScheme;
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(14),
       child: Container(
         width: 64,
         height: 64,
-        color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.10),
+        color: colorScheme.primary.withValues(alpha: 0.10),
         child: hasImage
             ? Image.network(
                 imageUrl!.trim(),
                 fit: BoxFit.cover,
               )
-            : const Icon(Icons.event_rounded),
+            : Icon(
+                Icons.event_rounded,
+                color: colorScheme.primary,
+              ),
       ),
     );
   }

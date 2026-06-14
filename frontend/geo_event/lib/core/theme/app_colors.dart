@@ -1,41 +1,32 @@
 import 'package:flutter/material.dart';
 
 class AppColors {
-  // Light
-  static const lightBackground = Color(0xFFF3F5F8);
-  static const lightSurface = Color(0xFFF9FBFD);
+  static const primary = Color(0xFF5B7CFA);
+  static const error = Color(0xFFD84C4C);
+
+  static const lightBackground = Color(0xFFF5F6F8);
+  static const lightSurface = Color(0xFFFFFFFF);
+  static const lightSurfaceSoft = Color(0xFFF0F2F5);
   static const lightCard = Color(0xFFFFFFFF);
-  static const lightSurfaceSoft = Color(0xFFEFF3F8);
-  static const lightGlassFill = Color(0xCCFFFFFF);
+  static const lightInputFill = Color(0xFFF2F4F7);
+  static const lightSelectedFill = Color(0xFFE8EEFF);
 
-  // Dark
-  static const darkBackground = Color(0xFF0A0C10);
-  static const darkSurface = Color(0xFF11141A);
-  static const darkCard = Color(0xFF171B22);
-  static const darkSurfaceSoft = Color(0xFF20252E);
-  static const darkGlassFill = Color(0x332B3440);
+  static const darkBackground = Color(0xFF111315);
+  static const darkSurface = Color(0xFF181B1F);
+  static const darkSurfaceSoft = Color(0xFF20242A);
+  static const darkCard = Color(0xFF1A1D21);
+  static const darkInputFill = Color(0xFF20242A);
+  static const darkSelectedFill = Color(0xFF273248);
 
-  // Brand
-  static const primary = Color(0xFF77A8FF);
-  static const secondary = Color(0xFF8C7CFF);
-  static const accent = Color(0xFF62E6D2);
+  static const textPrimaryLight = Color(0xFF171A1F);
+  static const textSecondaryLight = Color(0xFF6B7280);
 
-  // Text
-  static const textPrimaryLight = Color(0xFF111318);
-  static const textSecondaryLight = Color(0xFF667180);
+  static const textPrimaryDark = Color(0xFFF3F4F6);
+  static const textSecondaryDark = Color(0xFFA1A8B3);
 
-  static const textPrimaryDark = Color(0xFFF5F7FB);
-  static const textSecondaryDark = Color(0xFF9CA7B5);
+  static const borderLight = Color(0xFFD9DEE7);
+  static const borderLightSoft = Color(0xFFE8ECF2);
 
-  // Borders
-  static const borderLight = Color(0xFFDCE4EF);
-  static const borderLightSoft = Color(0xFFE8EEF5);
-
-  static const borderDark = Color(0xFF2A303A);
-  static const borderDarkSoft = Color(0xFF232933);
-
-  // Status
-  static const success = Color(0xFF38D39F);
-  static const warning = Color(0xFFFFBE5C);
-  static const error = Color(0xFFFF7285);
+  static const borderDark = Color(0xFF30353D);
+  static const borderDarkSoft = Color(0xFF252A31);
 }

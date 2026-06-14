@@ -11,6 +11,10 @@ final authStateProvider =
   return AuthController(ref);
 });
 
+  final sessionUserIdProvider = Provider<int?>((ref) {
+  return ref.watch(authStateProvider).user?.userId;
+});
+
 class AuthController extends StateNotifier<AuthState> {
   final Ref ref;
 
@@ -26,11 +30,6 @@ class AuthController extends StateNotifier<AuthState> {
         state = const AuthState.initial().copyWith(isInitialized: true);
         return;
       }
-
-      state = storedState.copyWith(
-        isLoading: false,
-        isInitialized: false,
-      );
 
       final refreshed =
           await tryRefreshToken(storedState.refreshToken, setLoading: false);
@@ -74,48 +73,55 @@ class AuthController extends StateNotifier<AuthState> {
     }
   }
 
-Future<bool> register({
-  required String username,
-  required String email,
-  required DateTime birthDate,
-  required String phoneNumber,
-  required String password,
-  required String firstName,
-  required String lastName,
-  required bool consentGiven,
-}) async {
-  state = state.copyWith(isLoading: true);
+  Future<bool> register({
+    required String username,
+    required String email,
+    required DateTime birthDate,
+    required String phoneNumber,
+    required String password,
+    required String firstName,
+    required String lastName,
+    required bool consentGiven,
+  }) async {
+    state = state.copyWith(isLoading: true);
 
-  try {
-    final response = await ref.read(authRepositoryProvider).register(
-          RegisterRequest(
-            username: username.trim().toLowerCase(),
-            email: email.trim().toLowerCase(),
-            birthDate: birthDate,
-            phoneNumber: phoneNumber.trim(),
-            consentGiven: consentGiven,
-            consentVersion: '1.0',
-            password: password,
-            firstName: firstName.trim(),
-            lastName: lastName.trim(),
-          ),
+    try {
+      final response = await ref.read(authRepositoryProvider).register(
+            RegisterRequest(
+              username: username.trim().toLowerCase(),
+              email: email.trim().toLowerCase(),
+              birthDate: birthDate,
+              phoneNumber: phoneNumber.trim(),
+              consentGiven: consentGiven,
+              consentVersion: '1.0',
+              password: password,
+              firstName: firstName.trim(),
+              lastName: lastName.trim(),
+            ),
+          );
+
+      if (response != null && response.hasTokens) {
+        state = AuthState(
+          accessToken: response.accessToken,
+          refreshToken: response.refreshToken,
+          expiresAt: response.expiresAt,
+          user: response.user,
+          isLoading: false,
+          isInitialized: true,
         );
+      } else {
+        state = state.copyWith(
+          isLoading: false,
+          isInitialized: true,
+        );
+      }
 
-    state = AuthState(
-      accessToken: response.accessToken,
-      refreshToken: response.refreshToken,
-      expiresAt: response.expiresAt,
-      user: response.user,
-      isLoading: false,
-      isInitialized: true,
-    );
-
-    return true;
-  } catch (e) {
-    state = state.copyWith(isLoading: false, isInitialized: true);
-    rethrow;
+      return true;
+    } catch (e) {
+      state = state.copyWith(isLoading: false, isInitialized: true);
+      rethrow;
+    }
   }
-}
 
   Future<void> forgotPassword(String email) async {
     state = state.copyWith(isLoading: true);

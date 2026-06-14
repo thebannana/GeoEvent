@@ -39,7 +39,7 @@ class SearchResultCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
+    final colorScheme = theme.colorScheme;
 
     final subtitleParts = [
       if ((item.segmentName ?? '').isNotEmpty) item.segmentName!,
@@ -48,8 +48,8 @@ class SearchResultCard extends StatelessWidget {
     ];
     final subtitle = subtitleParts.join(' · ');
     final accent = _segmentColor(item);
-    final imageUrl =
-        item.coverImageUrl ?? (item.imageUrls.isNotEmpty ? item.imageUrls.first : null);
+    final imageUrl = item.coverImageUrl ??
+        (item.imageUrls.isNotEmpty ? item.imageUrls.first : null);
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
@@ -70,16 +70,14 @@ class SearchResultCard extends StatelessWidget {
           },
           child: Container(
             decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF1B2028) : Colors.white,
+              color: colorScheme.surface,
               borderRadius: BorderRadius.circular(18),
               border: Border.all(
-                color: isDark
-                    ? const Color(0xFF2A303A)
-                    : const Color(0xFFE3EAF3),
+                color: colorScheme.outline.withValues(alpha: 0.75),
               ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: isDark ? 0.12 : 0.04),
+                  color: theme.shadowColor.withValues(alpha: 0.08),
                   blurRadius: 12,
                   offset: const Offset(0, 4),
                 ),
@@ -128,7 +126,7 @@ class SearchResultCard extends StatelessWidget {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: theme.textTheme.bodySmall?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
+                              color: colorScheme.onSurfaceVariant,
                             ),
                           ),
                         ],
@@ -138,26 +136,26 @@ class SearchResultCard extends StatelessWidget {
                             Icon(
                               Icons.favorite_border_rounded,
                               size: 12,
-                              color: theme.colorScheme.onSurfaceVariant,
+                              color: colorScheme.onSurfaceVariant,
                             ),
                             const SizedBox(width: 3),
                             Text(
                               item.likesCount.toString(),
                               style: theme.textTheme.bodySmall?.copyWith(
-                                color: theme.colorScheme.onSurfaceVariant,
+                                color: colorScheme.onSurfaceVariant,
                               ),
                             ),
                             const SizedBox(width: 10),
                             Icon(
                               Icons.remove_red_eye_outlined,
                               size: 12,
-                              color: theme.colorScheme.onSurfaceVariant,
+                              color: colorScheme.onSurfaceVariant,
                             ),
                             const SizedBox(width: 3),
                             Text(
                               item.viewCount.toString(),
                               style: theme.textTheme.bodySmall?.copyWith(
-                                color: theme.colorScheme.onSurfaceVariant,
+                                color: colorScheme.onSurfaceVariant,
                               ),
                             ),
                           ],
@@ -174,9 +172,8 @@ class SearchResultCard extends StatelessWidget {
                                     vertical: 5,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: isDark
-                                        ? Colors.white.withValues(alpha: 0.06)
-                                        : const Color(0xFFF3F6FA),
+                                    color:
+                                        colorScheme.surfaceContainerHighest,
                                     borderRadius: BorderRadius.circular(9),
                                   ),
                                   child: Text(
@@ -189,20 +186,20 @@ class SearchResultCard extends StatelessWidget {
                               ),
                             ),
                             const SizedBox(width: 8),
-                              IconButton(
-                                tooltip: 'Open directions',
-                                onPressed: onOpenDirections != null
-                                    ? () => onOpenDirections!(item)
-                                    : null,
-                                icon: const Icon(Icons.directions_rounded),
-                                style: IconButton.styleFrom(
-                                  backgroundColor: isDark
-                                      ? Colors.white.withValues(alpha: 0.06)
-                                      : const Color(0xFFF3F6FA),
-                                  foregroundColor: accent,
-                                  disabledForegroundColor: theme.colorScheme.onSurfaceVariant,
-                                ),
+                            IconButton(
+                              tooltip: 'Open directions',
+                              onPressed: onOpenDirections != null
+                                  ? () => onOpenDirections!(item)
+                                  : null,
+                              icon: const Icon(Icons.directions_rounded),
+                              style: IconButton.styleFrom(
+                                backgroundColor:
+                                    colorScheme.surfaceContainerHighest,
+                                foregroundColor: accent,
+                                disabledForegroundColor:
+                                    colorScheme.onSurfaceVariant,
                               ),
+                            ),
                           ],
                         ),
                       ],

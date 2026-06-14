@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/widgets/app_surface_card.dart';
 import '../../../../shared/reports/models/report_target_type.dart';
 
 class ReportTargetPreview extends StatelessWidget {
@@ -18,7 +19,7 @@ class ReportTargetPreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colorScheme = Theme.of(context).colorScheme;
 
     IconData icon;
     switch (targetType) {
@@ -36,16 +37,9 @@ class ReportTargetPreview extends StatelessWidget {
         break;
     }
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1C1F24) : Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: isDark ? const Color(0xFF2D323A) : const Color(0xFFE6EBF2),
-        ),
-      ),
+    return AppSurfaceCard(
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           if (imageUrl != null && imageUrl!.trim().isNotEmpty)
             ClipRRect(
@@ -90,7 +84,7 @@ class ReportTargetPreview extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       fontSize: 12,
-                      color: Theme.of(context).textTheme.bodySmall?.color,
+                      color: colorScheme.onSurfaceVariant,
                     ),
                   ),
                 ],
@@ -110,16 +104,18 @@ class _FallbackIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Container(
       width: 52,
       height: 52,
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
+        color: colorScheme.primary.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(14),
       ),
       child: Icon(
         icon,
-        color: Theme.of(context).colorScheme.primary,
+        color: colorScheme.primary,
       ),
     );
   }

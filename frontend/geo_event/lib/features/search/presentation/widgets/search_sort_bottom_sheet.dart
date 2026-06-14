@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/widgets/app_bottom_sheet_container.dart';
 import '../../domain/sort_option.dart';
 
 class SearchSortBottomSheet extends StatelessWidget {
@@ -12,16 +13,13 @@ class SearchSortBottomSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bg = isDark ? const Color(0xFF161A21) : Colors.white;
-    final border = isDark ? const Color(0xFF2A303A) : const Color(0xFFE3EAF3);
-
     Widget tile(SortOption value) {
       final active = selected.sortBy == value.sortBy &&
           selected.sortDescending == value.sortDescending;
 
       return ListTile(
         onTap: () => Navigator.pop(context, value),
+        contentPadding: EdgeInsets.zero,
         title: Text(
           value.label,
           style: TextStyle(
@@ -29,52 +27,47 @@ class SearchSortBottomSheet extends StatelessWidget {
           ),
         ),
         trailing: active
-            ? const Icon(Icons.check_rounded, color: Color(0xFF6B8FBF))
+            ? Icon(
+                Icons.check_rounded,
+                color: Theme.of(context).colorScheme.primary,
+              )
             : null,
       );
     }
 
-    return SafeArea(
-      child: Container(
-        margin: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: border),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 10),
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: isDark
-                    ? Colors.white24
-                    : Colors.black.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(99),
+    return AppBottomSheetContainer(
+  scrollable: false,
+  child: ConstrainedBox(
+    constraints: BoxConstraints(
+      maxHeight: MediaQuery.of(context).size.height * 0.7,
+    ),
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Padding(
+          padding: EdgeInsets.fromLTRB(4, 4, 4, 8),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'Sort events',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
               ),
             ),
-            const SizedBox(height: 8),
-            const Padding(
-              padding: EdgeInsets.fromLTRB(16, 8, 16, 4),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Sort events',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ),
-            ...SortOption.all.map(tile),
-            const SizedBox(height: 10),
-          ],
+          ),
         ),
-      ),
-    );
+        Flexible(
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: SortOption.all.map(tile).toList(),
+            ),
+          ),
+        ),
+      ],
+    ),
+  ),
+);
   }
 }

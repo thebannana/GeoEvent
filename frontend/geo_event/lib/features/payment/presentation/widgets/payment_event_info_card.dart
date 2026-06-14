@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/widgets/app_surface_card.dart';
+
 class PaymentEventInfoCard extends StatelessWidget {
   final String? ownerName;
   final String? categoryName;
@@ -14,7 +16,7 @@ class PaymentEventInfoCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colorScheme = Theme.of(context).colorScheme;
 
     Widget row(String label, String? value) {
       if (value == null || value.trim().isEmpty) {
@@ -33,7 +35,7 @@ class PaymentEventInfoCard extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
-                  color: isDark ? Colors.white70 : Colors.black54,
+                  color: colorScheme.onSurfaceVariant,
                 ),
               ),
             ),
@@ -51,15 +53,7 @@ class PaymentEventInfoCard extends StatelessWidget {
       );
     }
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF17191D) : Colors.white,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(
-          color: isDark ? const Color(0xFF2A303A) : const Color(0xFFE5EAF2),
-        ),
-      ),
+    return AppSurfaceCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_client.dart';
+import '../../auth/application/auth_controller.dart';
 import '../../profile/application/profile_controller.dart';
 import '../../../shared/events/data/my_events_api.dart';
 import '../../../shared/events/data/my_events_repository.dart';
@@ -22,34 +23,34 @@ final myEventsProvider =
 class MyEventsController extends AsyncNotifier<List<MyEventResponseDto>> {
   @override
   Future<List<MyEventResponseDto>> build() async {
-    return _fetchMyEvents();
-  }
+    ref.watch(sessionUserIdProvider);
 
-  Future<void> refresh() async {
-    state = const AsyncLoading();
-    state = await AsyncValue.guard(_fetchMyEvents);
-  }
-
-  Future<List<MyEventResponseDto>> _fetchMyEvents() async {
-    final profile = await ref.read(profileControllerProvider.future);
+    final profile = await ref.watch(profileControllerProvider.future);
     final repo = ref.read(myEventsRepositoryProvider);
     return repo.getMyEvents(profile.userId);
   }
 
-Future<bool> deleteEvent(int eventId) async {
-  final current = state.valueOrNull ?? const <MyEventResponseDto>[];
-
-  try {
-    await ref.read(myEventsRepositoryProvider).deleteEvent(eventId);
-
-    state = AsyncData(
-      current.where((e) => e.eventId != eventId).toList(),
-    );
-    return true;
-  } catch (_) {
-    return false;
+  Future<void> refresh() async {
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(() async {
+      final profile = await ref.read(profileControllerProvider.future);
+      final repo = ref.read(myEventsRepositoryProvider);
+      return repo.getMyEvents(profile.userId);
+    });
   }
-}
 
+  Future<bool> deleteEvent(int eventId) async {
+    final current = state.valueOrNull ?? const <MyEventResponseDto>[];
 
+    try {
+      await ref.read(myEventsRepositoryProvider).deleteEvent(eventId);
+
+      state = AsyncData(
+        current.where((e) => e.eventId != eventId).toList(),
+      );
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
 }

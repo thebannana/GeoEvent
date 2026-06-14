@@ -32,8 +32,8 @@ class AppEmptyState extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                width: 76,
-                height: 76,
+                width: 72,
+                height: 72,
                 decoration: BoxDecoration(
                   color: colorScheme.primary.withValues(alpha: 0.10),
                   shape: BoxShape.circle,
@@ -57,12 +57,14 @@ class AppEmptyState extends StatelessWidget {
                 Text(
                   message!,
                   textAlign: TextAlign.center,
-                  style: theme.textTheme.bodyMedium,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
                 ),
               ],
               if (onAction != null && actionLabel != null) ...[
                 const SizedBox(height: 18),
-                ElevatedButton(
+                FilledButton(
                   onPressed: onAction,
                   child: Text(actionLabel!),
                 ),

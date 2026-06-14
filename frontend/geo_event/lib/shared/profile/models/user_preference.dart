@@ -2,6 +2,7 @@ class UserPreference {
   final int prefId;
   final int? segmentId;
   final int? genreId;
+  final int? subGenreId;
   final double score;
   final DateTime lastUpdated;
 
@@ -9,6 +10,7 @@ class UserPreference {
     required this.prefId,
     this.segmentId,
     this.genreId,
+    this.subGenreId,
     required this.score,
     required this.lastUpdated,
   });
@@ -18,6 +20,7 @@ class UserPreference {
       prefId: (json['prefId'] as num).toInt(),
       segmentId: (json['segmentId'] as num?)?.toInt(),
       genreId: (json['genreId'] as num?)?.toInt(),
+      subGenreId: (json['subGenreId'] as num?)?.toInt(),
       score: (json['score'] as num?)?.toDouble() ?? 0,
       lastUpdated: DateTime.parse((json['lastUpdated'] ?? '').toString()),
     );

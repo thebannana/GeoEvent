@@ -7,6 +7,11 @@ namespace UserService.Application.Interfaces.Repositories;
 
 public interface IUserRepository
 {
+    Task<UserPreference?> GetPreferenceAsync(int userId, int? segmentId, int? genreId, int? subGenreId);
+    Task<UserPreference> CreatePreferenceAsync(UserPreference preference);
+    Task UpdatePreferenceAsync(UserPreference preference);
+    Task<List<UserPreference>> GetUserPreferencesAsync(int userId);
+    Task DeletePreferenceAsync(UserPreference preference);
     Task<User?> GetByIdAsync(int userId);
     Task<User?> GetPublicByIdAsync(int userId);
     Task<List<User>> GetPublicByIdsAsync(IEnumerable<int> userIds);
@@ -39,13 +44,6 @@ public interface IUserRepository
 
     Task<List<ActivityLog>> GetUserActivityLogsAsync(int userId, int page, int pageSize);
     Task<ActivityLog> CreateActivityLogAsync(ActivityLog log);
-
-    Task<List<UserPreference>> GetUserPreferencesAsync(int userId);
-    Task<UserPreference?> GetPreferenceAsync(int userId, int? segmentId, int? genreId);
-    Task<UserPreference> CreatePreferenceAsync(UserPreference preference);
-    Task UpdatePreferenceAsync(UserPreference preference);
-    Task DeletePreferenceAsync(UserPreference preference);
-
     Task<UserRating?> GetUserRatingAsync(int raterId, int ratedUserId);
     Task<UserRating> CreateUserRatingAsync(UserRating rating);
     Task UpdateUserRatingAsync(UserRating rating);

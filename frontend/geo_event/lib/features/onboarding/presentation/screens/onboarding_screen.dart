@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/widgets/glass_scaffold.dart';
 import '../widgets/onboarding_page_content.dart';
 
 class OnboardingScreen extends StatefulWidget {
@@ -46,6 +47,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   Future<void> _skipToLast() async {
+    if (_currentPage == _pageCount - 1) {
+      _goToLogin();
+      return;
+    }
+
     await _pageController.animateToPage(
       _pageCount - 1,
       duration: const Duration(milliseconds: 260),
@@ -58,13 +64,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     final theme = Theme.of(context);
     final isLastPage = _currentPage == _pageCount - 1;
 
-    return Scaffold(
-      body: SafeArea(
+    return GlassScaffold(
+      child: SafeArea(
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 460),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
               child: Column(
                 children: [
                   Row(
@@ -77,8 +83,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       ),
                       const Spacer(),
                       TextButton(
-                        onPressed: isLastPage ? _goToLogin : _skipToLast,
-                        child: Text(isLastPage ? 'Skip' : 'Skip'),
+                        onPressed: _skipToLast,
+                        child: Text(isLastPage ? 'Continue' : 'Skip'),
                       ),
                     ],
                   ),
@@ -87,6 +93,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     child: PageView(
                       controller: _pageController,
                       onPageChanged: (index) {
+                        if (!mounted) return;
                         setState(() {
                           _currentPage = index;
                         });
@@ -128,7 +135,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       ],
                     ),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 18),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: List.generate(_pageCount, (index) {
@@ -147,7 +154,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       );
                     }),
                   ),
-                  const SizedBox(height: 28),
+                  const SizedBox(height: 22),
                   SizedBox(
                     width: double.infinity,
                     child: FilledButton(
@@ -169,7 +176,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       child: const Text('Skip for now'),
                     ),
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 8),
                   TextButton(
                     onPressed: () => context.push('/privacy'),
                     child: const Text('Privacy Policy'),

@@ -37,9 +37,39 @@ class Reservation {
     required this.tickets,
   });
 
+  String get displayStatus {
+    final normalized = status.trim().toLowerCase();
+    final now = DateTime.now();
+
+    if (normalized == 'cancelled') return 'Cancelled';
+    if (normalized == 'refunded') return 'Refunded';
+    if (normalized == 'expired') return 'Expired';
+
+    if (expiresAt.isBefore(now) || expiresAt.isAtSameMomentAs(now)) {
+      return 'Expired';
+    }
+
+    if (normalized == 'confirmed') return 'Confirmed';
+    if (normalized == 'pending') return 'Pending';
+
+    return _capitalize(status);
+  }
+
+  bool get isExpiredByTime {
+    final now = DateTime.now();
+    return expiresAt.isBefore(now) || expiresAt.isAtSameMomentAs(now);
+  }
+
+  bool get canBeCancelled {
+    final normalized = displayStatus.toLowerCase();
+    return normalized == 'pending' || normalized == 'confirmed';
+  }
+
   bool get isActive {
-    final normalized = status.toLowerCase();
-    return normalized != 'cancelled' && normalized != 'expired';
+    final normalized = displayStatus.toLowerCase();
+    return normalized != 'cancelled' &&
+        normalized != 'expired' &&
+        normalized != 'refunded';
   }
 
   factory Reservation.fromJson(Map<String, dynamic> json) => Reservation(
@@ -51,17 +81,17 @@ class Reservation {
         totalAmount: (json['totalAmount'] as num).toDouble(),
         currency: (json['currency'] ?? '').toString(),
         status: (json['status'] ?? '').toString(),
-        createdAt: DateTime.parse((json['createdAt'] ?? '').toString()),
+        createdAt: DateTime.parse((json['createdAt'] ?? '').toString()).toLocal(),
         confirmedAt: json['confirmedAt'] != null
-            ? DateTime.parse(json['confirmedAt'].toString())
+            ? DateTime.parse(json['confirmedAt'].toString()).toLocal()
             : null,
         cancelledAt: json['cancelledAt'] != null
-            ? DateTime.parse(json['cancelledAt'].toString())
+            ? DateTime.parse(json['cancelledAt'].toString()).toLocal()
             : null,
         expiredAt: json['expiredAt'] != null
-            ? DateTime.parse(json['expiredAt'].toString())
+            ? DateTime.parse(json['expiredAt'].toString()).toLocal()
             : null,
-        expiresAt: DateTime.parse((json['expiresAt'] ?? '').toString()),
+        expiresAt: DateTime.parse((json['expiresAt'] ?? '').toString()).toLocal(),
         paymentReference: json['paymentReference']?.toString(),
         notes: json['notes']?.toString(),
         tickets: (json['tickets'] as List<dynamic>? ?? const [])
@@ -115,6 +145,12 @@ class Reservation {
       notes: identical(notes, _sentinel) ? this.notes : notes as String?,
       tickets: tickets ?? this.tickets,
     );
+  }
+
+  static String _capitalize(String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return trimmed;
+    return '${trimmed[0].toUpperCase()}${trimmed.substring(1).toLowerCase()}';
   }
 }
 

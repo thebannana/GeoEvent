@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../features/auth/application/auth_controller.dart';
 import '../data/bookmark_repository.dart';
 import '../models/bookmark.dart';
 import '../providers/bookmark_providers.dart';
@@ -9,6 +10,7 @@ class BookmarksController extends AsyncNotifier<List<Bookmark>> {
 
   @override
   Future<List<Bookmark>> build() async {
+    ref.watch(sessionUserIdProvider);
     return _repository.getBookmarks();
   }
 

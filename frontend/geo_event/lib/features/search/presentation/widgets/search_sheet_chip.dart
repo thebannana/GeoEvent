@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 class SearchSheetChip extends StatelessWidget {
   final String label;
-  final bool isDark;
   final VoidCallback? onTap;
   final bool isSelected;
   final bool showArrow;
@@ -10,7 +9,6 @@ class SearchSheetChip extends StatelessWidget {
   const SearchSheetChip({
     super.key,
     required this.label,
-    required this.isDark,
     this.onTap,
     this.isSelected = false,
     this.showArrow = false,
@@ -18,21 +16,24 @@ class SearchSheetChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
     final bgColor = isSelected
-        ? (isDark ? const Color(0xFF253041) : const Color(0xFFEAF2FF))
-        : (isDark ? const Color(0xFF1B2028) : Colors.white);
+        ? colorScheme.primary.withValues(alpha: 0.10)
+        : colorScheme.surface;
 
     final borderColor = isSelected
-        ? const Color(0xFF6B8FBF)
-        : (isDark ? const Color(0xFF2A303A) : const Color(0xFFE3EAF3));
+        ? colorScheme.primary.withValues(alpha: 0.65)
+        : colorScheme.outline.withValues(alpha: 0.75);
 
     final textColor = isSelected
-        ? (isDark ? Colors.white : const Color(0xFF365D92))
-        : (isDark ? Colors.white70 : Colors.black54);
+        ? colorScheme.primary
+        : colorScheme.onSurface.withValues(alpha: 0.72);
 
     final iconColor = isSelected
-        ? (isDark ? Colors.white70 : const Color(0xFF365D92))
-        : (isDark ? Colors.white38 : Colors.black38);
+        ? colorScheme.primary
+        : colorScheme.onSurface.withValues(alpha: 0.48);
 
     return Material(
       color: Colors.transparent,

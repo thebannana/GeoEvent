@@ -1,7 +1,5 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using UserService.API.Extensions;
-using UserService.Application.DTOs;
 using UserService.Application.Interfaces.Services;
 
 namespace UserService.API.Controllers;
@@ -19,32 +17,24 @@ public class PreferencesController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetMyPreferences()
+    public async Task<IActionResult> GetMine()
     {
-        var userId = User.GetUserId();
+        var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (!int.TryParse(userIdClaim, out var userId))
+            return Unauthorized(new { error = "Invalid user token." });
+
         var result = await _userService.GetUserPreferencesAsync(userId);
         return result.Success
             ? Ok(result.Data)
             : StatusCode(result.StatusCode, new { error = result.Error });
     }
 
-    [HttpPut]
-    public async Task<IActionResult> Upsert([FromBody] UpdatePreferenceDto dto)
+    [HttpGet("users/{userId:int}")]
+    public async Task<IActionResult> GetByUserId(int userId)
     {
-        var userId = User.GetUserId();
-        var result = await _userService.UpsertPreferenceAsync(userId, dto);
+        var result = await _userService.GetUserPreferencesAsync(userId);
         return result.Success
             ? Ok(result.Data)
-            : StatusCode(result.StatusCode, new { error = result.Error });
-    }
-
-    [HttpDelete("{prefId:int}")]
-    public async Task<IActionResult> Delete(int prefId)
-    {
-        var userId = User.GetUserId();
-        var result = await _userService.DeletePreferenceAsync(userId, prefId);
-        return result.Success
-            ? Ok(new { message = "Preference removed." })
             : StatusCode(result.StatusCode, new { error = result.Error });
     }
 }

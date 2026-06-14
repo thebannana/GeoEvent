@@ -20,29 +20,26 @@ class AuthApi {
     );
   }
 
-  Future<AuthResponse> register(RegisterRequest request) async {
-  final response = await dio.post(
-    '/api/auth/register',
-    data: request.toJson(),
-  );
+  Future<AuthResponse?> register(RegisterRequest request) async {
+    final response = await dio.post(
+      '/api/auth/register',
+      data: request.toJson(),
+    );
 
-  final raw = response.data;
-  if (raw is! Map) {
-    throw Exception('Invalid register response.');
+    final raw = response.data;
+    if (raw is! Map) {
+      return null;
+    }
+
+    final map = Map<String, dynamic>.from(raw);
+    final parsed = AuthResponse.fromJson(map);
+
+    if (!parsed.hasTokens) {
+      return null;
+    }
+
+    return parsed;
   }
-
-  final map = Map<String, dynamic>.from(raw);
-
-  final hasAuthShape = map.containsKey('accessToken') &&
-      map.containsKey('refreshToken') &&
-      map.containsKey('user');
-
-  if (!hasAuthShape) {
-    throw Exception('Register response did not include auth tokens.');
-  }
-
-  return AuthResponse.fromJson(map);
-}
 
   Future<void> forgotPassword(String email) async {
     await dio.post(

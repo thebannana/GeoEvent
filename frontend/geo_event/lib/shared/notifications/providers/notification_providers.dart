@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_client.dart';
+import '../../../features/auth/application/auth_controller.dart';
 import '../data/notification_api.dart';
 import '../data/notification_repository.dart';
 import '../models/notification_item.dart';
@@ -27,6 +28,7 @@ class UnreadNotificationCountController extends AsyncNotifier<int> {
 
   @override
   Future<int> build() async {
+    ref.watch(sessionUserIdProvider);
     _repository = ref.read(notificationRepositoryProvider);
     return _repository.getUnreadCount();
   }
@@ -67,6 +69,7 @@ class NotificationsController extends AsyncNotifier<List<NotificationItem>> {
 
   @override
   Future<List<NotificationItem>> build() async {
+    ref.watch(sessionUserIdProvider);
     _repository = ref.read(notificationRepositoryProvider);
     return _loadFirstPage();
   }

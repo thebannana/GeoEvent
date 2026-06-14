@@ -20,6 +20,7 @@ class AuthHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final textTheme = theme.textTheme;
 
     return Padding(
       padding: padding,
@@ -32,15 +33,15 @@ class AuthHeader extends StatelessWidget {
               height: 72,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: colorScheme.primary.withValues(alpha: 0.12),
+                color: colorScheme.primaryContainer,
                 border: Border.all(
-                  color: colorScheme.primary.withValues(alpha: 0.20),
+                  color: colorScheme.outlineVariant.withValues(alpha: 0.5),
                 ),
               ),
               child: Icon(
                 icon,
                 size: 32,
-                color: colorScheme.primary,
+                color: colorScheme.onPrimaryContainer,
               ),
             ),
             const SizedBox(height: 18),
@@ -48,7 +49,8 @@ class AuthHeader extends StatelessWidget {
           Text(
             title,
             textAlign: textAlign,
-            style: theme.textTheme.headlineSmall?.copyWith(
+            style: textTheme.headlineSmall?.copyWith(
+              color: colorScheme.onSurface,
               fontWeight: FontWeight.w800,
             ),
           ),
@@ -56,8 +58,8 @@ class AuthHeader extends StatelessWidget {
           Text(
             subtitle,
             textAlign: textAlign,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: colorScheme.onSurface.withValues(alpha: 0.72),
+            style: textTheme.bodyMedium?.copyWith(
+              color: colorScheme.onSurfaceVariant,
               height: 1.45,
             ),
           ),

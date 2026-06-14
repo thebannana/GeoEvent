@@ -1,11 +1,15 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../features/auth/application/auth_controller.dart';
 import '../data/liked_events_api.dart';
 import '../models/liked_event.dart';
 
 final likedEventsProvider =
     StateNotifierProvider<LikedEventsNotifier, AsyncValue<List<LikedEventDto>>>(
-  (ref) => LikedEventsNotifier(ref),
+  (ref) {
+    ref.watch(sessionUserIdProvider);
+    return LikedEventsNotifier(ref);
+  },
 );
 
 class LikedEventsNotifier extends StateNotifier<AsyncValue<List<LikedEventDto>>> {

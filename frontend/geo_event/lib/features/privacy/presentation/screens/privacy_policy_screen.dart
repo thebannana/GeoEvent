@@ -1,18 +1,23 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/widgets/app_surface_card.dart';
+import '../../../../core/widgets/glass_scaffold.dart';
+
 class PrivacyPolicyScreen extends StatelessWidget {
   const PrivacyPolicyScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
 
-    return Scaffold(
+    return GlassScaffold(
       appBar: AppBar(
         title: const Text('Privacy Policy'),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
       ),
-      body: ListView(
+      child: ListView(
+        physics: const ClampingScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
         children: [
           Text(
@@ -29,8 +34,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 20),
-          _InfoCard(
-            isDark: isDark,
+          AppSurfaceCard(
             child: Text(
               'This screen is a product-ready placeholder for GeoEvent. Replace it with your final legal text before release, but keep the same structure so users can clearly understand what data the app uses and why.',
               style: theme.textTheme.bodyMedium?.copyWith(height: 1.5),
@@ -39,8 +43,8 @@ class PrivacyPolicyScreen extends StatelessWidget {
           const SizedBox(height: 20),
           _SectionBlock(
             title: 'What GeoEvent may collect',
-            child: _BulletList(
-              items: const [
+            child: const _BulletList(
+              items: [
                 'Account details such as your name, email address, and login information.',
                 'Event activity such as reservations, tickets, favorites, and notifications.',
                 'Approximate or precise location data if location-based discovery is enabled.',
@@ -50,8 +54,8 @@ class PrivacyPolicyScreen extends StatelessWidget {
           ),
           _SectionBlock(
             title: 'How data may be used',
-            child: _BulletList(
-              items: const [
+            child: const _BulletList(
+              items: [
                 'To help you discover nearby events and relevant recommendations.',
                 'To manage reservations, tickets, reminders, and event updates.',
                 'To improve app stability, security, and performance.',
@@ -61,8 +65,8 @@ class PrivacyPolicyScreen extends StatelessWidget {
           ),
           _SectionBlock(
             title: 'Permissions',
-            child: _BulletList(
-              items: const [
+            child: const _BulletList(
+              items: [
                 'Location: used to show relevant events near you and improve map-based discovery.',
                 'Notifications: used to send reservation updates, reminders, and important event activity.',
                 'Camera or media access: only needed if profile photos, event media, or uploads are supported.',
@@ -71,8 +75,8 @@ class PrivacyPolicyScreen extends StatelessWidget {
           ),
           _SectionBlock(
             title: 'Your choices',
-            child: _BulletList(
-              items: const [
+            child: const _BulletList(
+              items: [
                 'You can choose whether to grant certain device permissions.',
                 'You can stop using location-based features by disabling location access in system settings.',
                 'You can disable push notifications in your device settings.',
@@ -174,32 +178,6 @@ class _BulletList extends StatelessWidget {
             ),
           )
           .toList(),
-    );
-  }
-}
-
-class _InfoCard extends StatelessWidget {
-  final Widget child;
-  final bool isDark;
-
-  const _InfoCard({
-    required this.child,
-    required this.isDark,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF17191D) : const Color(0xFFF8FAFC),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: isDark ? const Color(0xFF2A303A) : const Color(0xFFE5EAF2),
-        ),
-      ),
-      child: child,
     );
   }
 }

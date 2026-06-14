@@ -8,12 +8,12 @@ public class Notification
     public NotificationType Type { get; set; }
     public string Title { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
+    public string? ImageUrl { get; set; }
     public bool IsRead { get; set; } = false;
     public int? UserId { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? ReadAt { get; set; }
 
-    // Domain logic
     public void MarkAsRead()
     {
         IsRead = true;

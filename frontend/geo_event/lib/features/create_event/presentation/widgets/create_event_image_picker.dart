@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../../../../core/widgets/app_surface_card.dart';
 import '../../../../shared/events/models/create_event_models.dart';
 import '../../../../shared/events/models/create_event_state.dart';
 import 'create_event_form.dart';
@@ -25,7 +26,8 @@ class CreateEventImagePicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SectionCard(
+    return AppSurfaceCard(
+      padding: const EdgeInsets.all(18),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -106,17 +108,10 @@ class ImagePreviewTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final theme = Theme.of(context);
 
-    return Container(
+    return AppSurfaceCard(
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: isDark ? const Color(0xFF2A303A) : const Color(0xFFE3EAF3),
-        ),
-        color: isDark ? const Color(0xFF1B2028) : Colors.white,
-      ),
       child: Row(
         children: [
           ClipRRect(
@@ -142,7 +137,7 @@ class ImagePreviewTile extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text(
                   subtitle,
-                  style: Theme.of(context).textTheme.bodySmall,
+                  style: theme.textTheme.bodySmall,
                 ),
               ],
             ),
@@ -251,12 +246,12 @@ class ImageFallback extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final theme = Theme.of(context);
 
     return Container(
       width: width,
       height: height,
-      color: isDark ? const Color(0xFF2A303A) : const Color(0xFFE9EEF5),
+      color: theme.colorScheme.surfaceContainerHighest,
       alignment: Alignment.center,
       child: const Icon(Icons.image_not_supported_outlined),
     );

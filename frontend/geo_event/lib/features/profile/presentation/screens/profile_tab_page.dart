@@ -1,7 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/widgets/app_async_view.dart';
+import '../../../../core/widgets/app_error_view.dart';
+import '../../../../core/widgets/app_loading_indicator.dart';
+import '../../../../shared/bookmarks/providers/bookmark_providers.dart';
+import '../../../../shared/likes/providers/liked_events_providers.dart';
+import '../../../../shared/notifications/providers/notification_providers.dart';
+import '../../../../shared/profile/providers/profile_providers.dart';
 import '../../../auth/application/auth_controller.dart';
+import '../../../inbox/application/inbox_controller.dart';
+import '../../../reservations/application/reservations_controller.dart';
 import '../../application/profile_controller.dart';
 import 'activity_logs_screen.dart';
 import 'bookmarks_screen.dart';
@@ -18,9 +27,34 @@ class ProfileTabPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final profileAsync = ref.watch(profileControllerProvider);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return profileAsync.when(
+    return AppAsyncView(
+      value: profileAsync,
+      loading: const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: AppLoadingIndicator(
+            title: 'Loading profile',
+            message: 'Please wait while we prepare your account details.',
+            centered: false,
+            padding: EdgeInsets.zero,
+          ),
+        ),
+      ),
+      errorBuilder: (error, stackTrace) {
+        return Center(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: AppErrorState(
+              title: 'Failed to load profile',
+              message: error.toString(),
+              onRetry: () {
+                ref.invalidate(profileControllerProvider);
+              },
+            ),
+          ),
+        );
+      },
       data: (profile) {
         return ProfileScreen(
           profile: profile,
@@ -106,6 +140,18 @@ class ProfileTabPage extends ConsumerWidget {
             try {
               await ref.read(authStateProvider.notifier).logout();
 
+              ref.invalidate(profileControllerProvider);
+              ref.invalidate(myProfileProvider);
+              ref.invalidate(myPreferencesProvider);
+              ref.invalidate(bookmarksProvider);
+              ref.invalidate(likedEventsProvider);
+              ref.invalidate(unreadNotificationCountProvider);
+              ref.invalidate(notificationsControllerProvider);
+              ref.invalidate(reservationsControllerProvider);
+
+              // If your inbox screen uses the separate InboxController from the other file:
+              ref.invalidate(inboxControllerProvider);
+
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Logged out successfully.')),
@@ -121,65 +167,6 @@ class ProfileTabPage extends ConsumerWidget {
           },
         );
       },
-      loading: () => const Center(
-        child: Padding(
-          padding: EdgeInsets.all(24),
-          child: CircularProgressIndicator(),
-        ),
-      ),
-      error: (error, _) => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF17191D) : Colors.white,
-              borderRadius: BorderRadius.circular(22),
-              border: Border.all(
-                color: isDark
-                    ? const Color(0xFF2A303A)
-                    : const Color(0xFFE5EAF2),
-              ),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(
-                  Icons.error_outline_rounded,
-                  size: 30,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
-                const SizedBox(height: 12),
-                const Text(
-                  'Failed to load profile',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 16,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  '$error',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: Theme.of(context).textTheme.bodySmall?.color,
-                  ),
-                ),
-                const SizedBox(height: 14),
-                TextButton.icon(
-                  onPressed: () {
-                    ref.invalidate(profileControllerProvider);
-                  },
-                  icon: const Icon(Icons.refresh_rounded),
-                  label: const Text('Retry'),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
     );
   }
 }

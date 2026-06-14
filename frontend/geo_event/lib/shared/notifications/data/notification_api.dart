@@ -15,7 +15,7 @@ class NotificationApi {
       queryParameters: {
         'page': page,
         'pageSize': pageSize,
-        'isRead': ?isRead,
+        'isRead': isRead,
       },
     );
     final items = (response.data['items'] as List)

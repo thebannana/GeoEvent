@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/widgets/app_chip.dart';
+import '../../../../core/widgets/app_empty_state.dart';
+import '../../../../core/widgets/app_error_view.dart';
+import '../../../../core/widgets/app_loading_indicator.dart';
+import '../../../../core/widgets/glass_scaffold.dart';
 import '../../application/inbox_controller.dart';
 import '../widgets/inbox_notification_tile.dart';
 
@@ -28,9 +33,8 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
     final hasUnread =
         (state.notifications.valueOrNull ?? []).any((n) => !n.isRead);
 
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: RefreshIndicator(
+    return GlassScaffold(
+      child: RefreshIndicator(
         onRefresh: ctrl.load,
         child: CustomScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
@@ -66,13 +70,13 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
                 padding: const EdgeInsets.fromLTRB(18, 12, 18, 6),
                 child: Row(
                   children: [
-                    _FilterChip(
+                    AppChip(
                       label: 'All',
                       selected: state.filter == NotificationFilter.all,
                       onTap: () => ctrl.setFilter(NotificationFilter.all),
                     ),
                     const SizedBox(width: 8),
-                    _FilterChip(
+                    AppChip(
                       label: 'Oldest',
                       selected: state.sort == NotificationSort.oldest,
                       onTap: () {
@@ -84,7 +88,7 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
                       },
                     ),
                     const SizedBox(width: 8),
-                    _FilterChip(
+                    AppChip(
                       label: 'Newest',
                       selected: state.sort == NotificationSort.newest,
                       onTap: () => ctrl.setSort(NotificationSort.newest),
@@ -99,8 +103,7 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
                             vertical: 6,
                           ),
                           minimumSize: Size.zero,
-                          tapTargetSize:
-                              MaterialTapTargetSize.shrinkWrap,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         ),
                         child: const Text(
                           'Mark all read',
@@ -115,11 +118,10 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
               const SliverPadding(
                 padding: EdgeInsets.fromLTRB(18, 16, 18, 24),
                 sliver: SliverToBoxAdapter(
-                  child: Center(
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(vertical: 28),
-                      child: CircularProgressIndicator(),
-                    ),
+                  child: AppLoadingIndicator(
+                    title: 'Loading inbox',
+                    message: 'Fetching your latest notifications...',
+                    centered: false,
                   ),
                 ),
               )
@@ -127,14 +129,22 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
               SliverPadding(
                 padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
                 sliver: SliverToBoxAdapter(
-                  child: _ErrorState(onRetry: ctrl.load),
+                  child: AppErrorState(
+                    title: 'Failed to load notifications',
+                    message: 'Pull to refresh or try again.',
+                    onRetry: ctrl.load,
+                  ),
                 ),
               )
             else if (items.isEmpty)
               const SliverPadding(
                 padding: EdgeInsets.fromLTRB(18, 8, 18, 24),
                 sliver: SliverToBoxAdapter(
-                  child: _EmptyState(),
+                  child: AppEmptyState(
+                    icon: Icons.notifications_none_rounded,
+                    title: 'All caught up',
+                    message: 'No notifications to show.',
+                  ),
                 ),
               )
             else
@@ -165,163 +175,6 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _FilterChip extends StatelessWidget {
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _FilterChip({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final primary = Theme.of(context).colorScheme.primary;
-
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(
-          color: selected
-              ? primary.withValues(alpha: isDark ? 0.22 : 0.12)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(
-            color: selected
-                ? primary.withValues(alpha: 0.6)
-                : isDark
-                    ? const Color(0xFF2A303A)
-                    : const Color(0xFFE3EAF3),
-          ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: selected
-                ? primary
-                : isDark
-                    ? Colors.white70
-                    : Colors.black54,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _EmptyState extends StatelessWidget {
-  const _EmptyState();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Theme.of(context).brightness == Brightness.dark
-            ? const Color(0xFF17191D)
-            : Colors.white,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(
-          color: Theme.of(context).brightness == Brightness.dark
-              ? const Color(0xFF2A303A)
-              : const Color(0xFFE5EAF2),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(
-            Icons.notifications_none_rounded,
-            size: 30,
-            color: Theme.of(context).colorScheme.primary,
-          ),
-          const SizedBox(height: 12),
-          const Text(
-            'All caught up',
-            style: TextStyle(
-              fontWeight: FontWeight.w700,
-              fontSize: 16,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'No notifications to show.',
-            style: TextStyle(
-              fontSize: 13,
-              color: Theme.of(context).textTheme.bodySmall?.color,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ErrorState extends StatelessWidget {
-  final VoidCallback onRetry;
-
-  const _ErrorState({required this.onRetry});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Theme.of(context).brightness == Brightness.dark
-            ? const Color(0xFF17191D)
-            : Colors.white,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(
-          color: Theme.of(context).brightness == Brightness.dark
-              ? const Color(0xFF2A303A)
-              : const Color(0xFFE5EAF2),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(
-            Icons.cloud_off_rounded,
-            size: 30,
-            color: Theme.of(context).colorScheme.primary,
-          ),
-          const SizedBox(height: 12),
-          const Text(
-            'Failed to load notifications',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Pull to refresh or try again.',
-            style: TextStyle(
-              fontSize: 13,
-              color: Theme.of(context).textTheme.bodySmall?.color,
-            ),
-          ),
-          const SizedBox(height: 14),
-          TextButton.icon(
-            onPressed: onRetry,
-            icon: const Icon(Icons.refresh_rounded),
-            label: const Text('Retry'),
-          ),
-        ],
       ),
     );
   }

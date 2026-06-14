@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -14,11 +12,11 @@ class AppTheme {
     final base = GoogleFonts.afacadTextTheme();
     final textTheme = _buildTextTheme(base, Brightness.light);
 
-    final colorScheme = ColorScheme(
+    const colorScheme = ColorScheme(
       brightness: Brightness.light,
       primary: AppColors.primary,
       onPrimary: Colors.white,
-      secondary: AppColors.secondary,
+      secondary: AppColors.primary,
       onSecondary: Colors.white,
       error: AppColors.error,
       onError: Colors.white,
@@ -27,12 +25,12 @@ class AppTheme {
       surfaceContainerHighest: AppColors.lightSurfaceSoft,
       outline: AppColors.borderLight,
       outlineVariant: AppColors.borderLightSoft,
-      shadow: Colors.black.withValues(alpha: 0.10),
-      scrim: Colors.black.withValues(alpha: 0.35),
+      shadow: Color(0x1A000000),
+      scrim: Color(0x59000000),
       inverseSurface: AppColors.darkSurface,
       onInverseSurface: AppColors.textPrimaryDark,
-      tertiary: AppColors.accent,
-      onTertiary: AppColors.textPrimaryLight,
+      tertiary: AppColors.primary,
+      onTertiary: Colors.white,
     );
 
     return ThemeData(
@@ -44,7 +42,7 @@ class AppTheme {
       canvasColor: AppColors.lightBackground,
       splashFactory: InkSparkle.splashFactory,
       appBarTheme: AppBarTheme(
-        backgroundColor: Colors.transparent,
+        backgroundColor: AppColors.lightBackground,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         scrolledUnderElevation: 0,
@@ -56,19 +54,19 @@ class AppTheme {
         ),
       ),
       cardTheme: CardThemeData(
-        color: AppColors.lightCard.withValues(alpha: 0.72),
-        shadowColor: Colors.black.withValues(alpha: 0.05),
+        color: AppColors.lightCard,
+        shadowColor: const Color(0x14000000),
         elevation: 0,
         margin: EdgeInsets.zero,
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(_radiusXl),
-          side: BorderSide(
-            color: AppColors.borderLight.withValues(alpha: 0.75),
+          side: const BorderSide(
+            color: AppColors.borderLight,
           ),
         ),
       ),
-      dividerTheme: DividerThemeData(
+      dividerTheme: const DividerThemeData(
         color: AppColors.borderLightSoft,
         thickness: 1,
         space: 1,
@@ -82,9 +80,9 @@ class AppTheme {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: AppColors.lightGlassFill,
+        fillColor: AppColors.lightInputFill,
         hintStyle: textTheme.bodyMedium?.copyWith(
-          color: AppColors.textSecondaryLight.withValues(alpha: 0.90),
+          color: AppColors.textSecondaryLight,
         ),
         labelStyle: textTheme.bodyMedium?.copyWith(
           color: AppColors.textSecondaryLight,
@@ -96,20 +94,20 @@ class AppTheme {
         ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(_radiusLg),
-          borderSide: BorderSide(
-            color: AppColors.borderLight.withValues(alpha: 0.65),
+          borderSide: const BorderSide(
+            color: AppColors.borderLight,
           ),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(_radiusLg),
-          borderSide: BorderSide(
-            color: AppColors.borderLight.withValues(alpha: 0.70),
+          borderSide: const BorderSide(
+            color: AppColors.borderLight,
           ),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(_radiusLg),
-          borderSide: BorderSide(
-            color: AppColors.primary.withValues(alpha: 0.95),
+          borderSide: const BorderSide(
+            color: AppColors.primary,
             width: 1.4,
           ),
         ),
@@ -150,8 +148,8 @@ class AppTheme {
           foregroundColor: AppColors.textPrimaryLight,
           minimumSize: const Size.fromHeight(54),
           padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
-          side: BorderSide(
-            color: AppColors.borderLight.withValues(alpha: 0.90),
+          side: const BorderSide(
+            color: AppColors.borderLight,
           ),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(_radiusMd),
@@ -173,11 +171,11 @@ class AppTheme {
         ),
       ),
       chipTheme: ChipThemeData(
-        backgroundColor: AppColors.lightGlassFill,
-        selectedColor: AppColors.primary.withValues(alpha: 0.14),
+        backgroundColor: AppColors.lightSurfaceSoft,
+        selectedColor: AppColors.lightSelectedFill,
         disabledColor: AppColors.lightSurfaceSoft,
-        side: BorderSide(
-          color: AppColors.borderLight.withValues(alpha: 0.80),
+        side: const BorderSide(
+          color: AppColors.borderLight,
         ),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(999),
@@ -192,22 +190,16 @@ class AppTheme {
         ),
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       ),
-      bottomSheetTheme: BottomSheetThemeData(
-        backgroundColor: AppColors.lightCard.withValues(alpha: 0.88),
+      bottomSheetTheme: const BottomSheetThemeData(
+        backgroundColor: AppColors.lightCard,
         surfaceTintColor: Colors.transparent,
-        shape: const RoundedRectangleBorder(
+        shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
         ),
       ),
-      dialogTheme: DialogThemeData(
-        backgroundColor: AppColors.lightCard.withValues(alpha: 0.88),
+      dialogTheme: const DialogThemeData(
+        backgroundColor: AppColors.lightCard,
         surfaceTintColor: Colors.transparent,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(28),
-          side: BorderSide(
-            color: AppColors.borderLight.withValues(alpha: 0.75),
-          ),
-        ),
       ),
     );
   }
@@ -216,11 +208,11 @@ class AppTheme {
     final base = GoogleFonts.afacadTextTheme();
     final textTheme = _buildTextTheme(base, Brightness.dark);
 
-    final colorScheme = ColorScheme(
+    const colorScheme = ColorScheme(
       brightness: Brightness.dark,
       primary: AppColors.primary,
       onPrimary: Colors.white,
-      secondary: AppColors.secondary,
+      secondary: AppColors.primary,
       onSecondary: Colors.white,
       error: AppColors.error,
       onError: Colors.white,
@@ -229,12 +221,12 @@ class AppTheme {
       surfaceContainerHighest: AppColors.darkSurfaceSoft,
       outline: AppColors.borderDark,
       outlineVariant: AppColors.borderDarkSoft,
-      shadow: Colors.black.withValues(alpha: 0.38),
-      scrim: Colors.black.withValues(alpha: 0.55),
+      shadow: Color(0x61000000),
+      scrim: Color(0x8C000000),
       inverseSurface: AppColors.lightSurface,
       onInverseSurface: AppColors.textPrimaryLight,
-      tertiary: AppColors.accent,
-      onTertiary: AppColors.textPrimaryLight,
+      tertiary: AppColors.primary,
+      onTertiary: Colors.white,
     );
 
     return ThemeData(
@@ -246,7 +238,7 @@ class AppTheme {
       canvasColor: AppColors.darkBackground,
       splashFactory: InkSparkle.splashFactory,
       appBarTheme: AppBarTheme(
-        backgroundColor: Colors.transparent,
+        backgroundColor: AppColors.darkBackground,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         scrolledUnderElevation: 0,
@@ -258,19 +250,19 @@ class AppTheme {
         ),
       ),
       cardTheme: CardThemeData(
-        color: AppColors.darkCard.withValues(alpha: 0.78),
-        shadowColor: Colors.black.withValues(alpha: 0.24),
+        color: AppColors.darkCard,
+        shadowColor: const Color(0x33000000),
         elevation: 0,
         margin: EdgeInsets.zero,
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(_radiusXl),
-          side: BorderSide(
-            color: AppColors.borderDark.withValues(alpha: 0.95),
+          side: const BorderSide(
+            color: AppColors.borderDark,
           ),
         ),
       ),
-      dividerTheme: DividerThemeData(
+      dividerTheme: const DividerThemeData(
         color: AppColors.borderDarkSoft,
         thickness: 1,
         space: 1,
@@ -284,9 +276,9 @@ class AppTheme {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: AppColors.darkGlassFill,
+        fillColor: AppColors.darkInputFill,
         hintStyle: textTheme.bodyMedium?.copyWith(
-          color: AppColors.textSecondaryDark.withValues(alpha: 0.72),
+          color: AppColors.textSecondaryDark,
         ),
         labelStyle: textTheme.bodyMedium?.copyWith(
           color: AppColors.textSecondaryDark,
@@ -298,20 +290,20 @@ class AppTheme {
         ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(_radiusLg),
-          borderSide: BorderSide(
-            color: AppColors.borderDark.withValues(alpha: 0.85),
+          borderSide: const BorderSide(
+            color: AppColors.borderDark,
           ),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(_radiusLg),
-          borderSide: BorderSide(
-            color: AppColors.borderDark.withValues(alpha: 0.95),
+          borderSide: const BorderSide(
+            color: AppColors.borderDark,
           ),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(_radiusLg),
-          borderSide: BorderSide(
-            color: AppColors.primary.withValues(alpha: 0.95),
+          borderSide: const BorderSide(
+            color: AppColors.primary,
             width: 1.4,
           ),
         ),
@@ -352,8 +344,8 @@ class AppTheme {
           foregroundColor: AppColors.textPrimaryDark,
           minimumSize: const Size.fromHeight(54),
           padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
-          side: BorderSide(
-            color: AppColors.borderDark.withValues(alpha: 0.95),
+          side: const BorderSide(
+            color: AppColors.borderDark,
           ),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(_radiusMd),
@@ -375,11 +367,11 @@ class AppTheme {
         ),
       ),
       chipTheme: ChipThemeData(
-        backgroundColor: AppColors.darkGlassFill,
-        selectedColor: AppColors.primary.withValues(alpha: 0.18),
+        backgroundColor: AppColors.darkSurfaceSoft,
+        selectedColor: AppColors.darkSelectedFill,
         disabledColor: AppColors.darkSurfaceSoft,
-        side: BorderSide(
-          color: AppColors.borderDark.withValues(alpha: 0.95),
+        side: const BorderSide(
+          color: AppColors.borderDark,
         ),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(999),
@@ -394,22 +386,16 @@ class AppTheme {
         ),
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       ),
-      bottomSheetTheme: BottomSheetThemeData(
-        backgroundColor: AppColors.darkCard.withValues(alpha: 0.88),
+      bottomSheetTheme: const BottomSheetThemeData(
+        backgroundColor: AppColors.darkCard,
         surfaceTintColor: Colors.transparent,
-        shape: const RoundedRectangleBorder(
+        shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
         ),
       ),
-      dialogTheme: DialogThemeData(
-        backgroundColor: AppColors.darkCard.withValues(alpha: 0.90),
+      dialogTheme: const DialogThemeData(
+        backgroundColor: AppColors.darkCard,
         surfaceTintColor: Colors.transparent,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(28),
-          side: BorderSide(
-            color: AppColors.borderDark.withValues(alpha: 0.95),
-          ),
-        ),
       ),
     );
   }
@@ -483,17 +469,11 @@ class AppTheme {
   }
 }
 
-/// Optional helper for truly glassy surfaces in widgets.
-/// Example:
-/// GlassContainer(
-///   child: ...
-/// )
 class GlassContainer extends StatelessWidget {
   final Widget child;
   final EdgeInsetsGeometry? padding;
   final BorderRadius? borderRadius;
   final Color? color;
-  final double blur;
 
   const GlassContainer({
     super.key,
@@ -501,41 +481,29 @@ class GlassContainer extends StatelessWidget {
     this.padding,
     this.borderRadius,
     this.color,
-    this.blur = 14,
   });
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return ClipRRect(
-      borderRadius: borderRadius ?? BorderRadius.circular(26),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
-        child: Container(
-          padding: padding ?? const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: color ??
-                (isDark
-                    ? AppColors.darkCard.withValues(alpha: 0.72)
-                    : AppColors.lightCard.withValues(alpha: 0.72)),
-            borderRadius: borderRadius ?? BorderRadius.circular(26),
-            border: Border.all(
-              color: isDark
-                  ? AppColors.borderDark.withValues(alpha: 0.95)
-                  : AppColors.borderLight.withValues(alpha: 0.75),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: isDark ? 0.22 : 0.06),
-                blurRadius: 30,
-                offset: const Offset(0, 16),
-              ),
-            ],
-          ),
-          child: child,
+    return Container(
+      padding: padding ?? const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: color ?? (isDark ? AppColors.darkCard : AppColors.lightCard),
+        borderRadius: borderRadius ?? BorderRadius.circular(26),
+        border: Border.all(
+          color: isDark ? AppColors.borderDark : AppColors.borderLight,
         ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.16 : 0.04),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
+          ),
+        ],
       ),
+      child: child,
     );
   }
 }

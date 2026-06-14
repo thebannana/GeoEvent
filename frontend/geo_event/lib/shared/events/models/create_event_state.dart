@@ -18,7 +18,6 @@ class CreateEventState {
   final bool clearGenreId;
   final bool clearSubGenreId;
 
-  final bool isOnline;
   final bool isFree;
 
   final MapboxPlace? selectedLocation;
@@ -46,7 +45,6 @@ class CreateEventState {
     this.subGenreId,
     this.clearGenreId = false,
     this.clearSubGenreId = false,
-    this.isOnline = false,
     this.isFree = false,
     this.selectedLocation,
     this.clearSelectedLocation = false,
@@ -72,7 +70,6 @@ class CreateEventState {
     bool clearSegmentId = false,
     bool clearGenreId = false,
     bool clearSubGenreId = false,
-    bool? isOnline,
     bool? isFree,
     MapboxPlace? selectedLocation,
     bool clearSelectedLocation = false,
@@ -99,7 +96,6 @@ class CreateEventState {
       subGenreId: clearSubGenreId ? null : (subGenreId ?? this.subGenreId),
       clearGenreId: clearGenreId,
       clearSubGenreId: clearSubGenreId,
-      isOnline: isOnline ?? this.isOnline,
       isFree: isFree ?? this.isFree,
       selectedLocation: clearSelectedLocation
           ? null

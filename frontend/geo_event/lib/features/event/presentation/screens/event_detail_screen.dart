@@ -4,7 +4,12 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 
-import '../../../../core/widgets/app_loading_sheet.dart';
+import '../../../../core/widgets/app_bottom_sheet_container.dart';
+import '../../../../core/widgets/app_empty_state.dart';
+import '../../../../core/widgets/app_icon_circle_button.dart';
+import '../../../../core/widgets/app_loading_indicator.dart';
+import '../../../../core/widgets/app_spinner.dart';
+import '../../../../core/widgets/app_surface_card.dart';
 import '../../../../shared/bookmarks/providers/bookmark_providers.dart';
 import '../../../../shared/chat/models/chat_thread_args.dart';
 import '../../../../shared/chat/models/chat_thread_type.dart';
@@ -231,7 +236,8 @@ class _EventDetailsScreenState extends ConsumerState<EventDetailsScreen> {
 
   List<String> buildGallery(EventItem item) {
     final urls = <String>[
-      if (item.coverImageUrl?.trim().isNotEmpty == true) item.coverImageUrl!.trim(),
+      if (item.coverImageUrl?.trim().isNotEmpty == true)
+        item.coverImageUrl!.trim(),
       ...item.imageUrls.map((e) => e.trim()),
     ];
 
@@ -286,25 +292,25 @@ class _EventDetailsScreenState extends ConsumerState<EventDetailsScreen> {
 
   String two(int value) => value.toString().padLeft(2, '0');
 
-void openDirections(EventItem item, WidgetRef ref) {
-  final activeNavigation = ref.read(activeNavigationProvider);
+  void openDirections(EventItem item, WidgetRef ref) {
+    final activeNavigation = ref.read(activeNavigationProvider);
 
-  if (activeNavigation?.eventId == item.eventId) {
+    if (activeNavigation?.eventId == item.eventId) {
+      widget.onCloseParentSearchSheet?.call();
+      Navigator.of(context).maybePop();
+      return;
+    }
+
+    ref.read(pendingDirectionsProvider.notifier).state = EventDirectionsRequest(
+      eventId: item.eventId,
+      latitude: item.latitude,
+      longitude: item.longitude,
+      title: item.title,
+    );
+
     widget.onCloseParentSearchSheet?.call();
     Navigator.of(context).maybePop();
-    return;
   }
-
-  ref.read(pendingDirectionsProvider.notifier).state = EventDirectionsRequest(
-    eventId: item.eventId,
-    latitude: item.latitude,
-    longitude: item.longitude,
-    title: item.title,
-  );
-
-  widget.onCloseParentSearchSheet?.call();
-  Navigator.of(context).maybePop();
-}
 
   Future<void> openDirectChat({
     required BuildContext context,
@@ -409,158 +415,126 @@ void openDirections(EventItem item, WidgetRef ref) {
   }
 
   Future<void> _openAttendeesSheet() async {
-  await showModalBottomSheet<void>(
-    context: context,
-    backgroundColor: Colors.transparent,
-    isScrollControlled: true,
-    builder: (_) {
-      return DraggableScrollableSheet(
-        initialChildSize: 0.52,
-        minChildSize: 0.32,
-        maxChildSize: 0.94,
-        expand: false,
-        snap: true,
-        snapSizes: const [0.32, 0.52, 0.94],
-        builder: (context, scrollController) {
-          final attendees = _attendees;
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) {
+        final attendees = _attendees;
 
-          return Container(
-            decoration: const BoxDecoration(
-              color: Color(0xFF17191D),
-              borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        return AppBottomSheetContainer(
+          maxHeightFactor: 0.94,
+          header: Padding(
+            padding: const EdgeInsets.fromLTRB(18, 16, 12, 8),
+            child: Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Attendees',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                Text(
+                  '${attendees.length}',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.close_rounded),
+                ),
+              ],
             ),
-            child: SafeArea(
-              top: false,
-              child: CustomScrollView(
-                controller: scrollController,
-                physics: const ClampingScrollPhysics(),
-                slivers: [
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-                      child: Column(
-                        children: [
-                          Container(
-                            width: 42,
-                            height: 4,
-                            decoration: BoxDecoration(
-                              color: Colors.white24,
-                              borderRadius: BorderRadius.circular(999),
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          Row(
+          ),
+          child: _reservationDataLoading
+              ? const AppLoadingIndicator(
+                  title: 'Loading attendees',
+                  message: 'Please wait while we fetch the attendee list.',
+                  centered: false,
+                  padding: EdgeInsets.symmetric(vertical: 24, horizontal: 8),
+                )
+              : attendees.isEmpty
+                  ? const AppEmptyState(
+                      title: 'No attendees yet',
+                      message: 'Attendees will appear here after reservations.',
+                      icon: Icons.people_outline_rounded,
+                      padding: EdgeInsets.all(24),
+                    )
+                  : ListView.separated(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: attendees.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 8),
+                      itemBuilder: (context, index) {
+                        final attendee = attendees[index];
+                        final username = attendee.username.trim().isNotEmpty
+                            ? attendee.username.trim()
+                            : 'User ${attendee.userId}';
+                        final avatarUrl = attendee.avatarUrl?.trim();
+
+                        return AppSurfaceCard(
+                          onTap: () {
+                            Navigator.of(context).pop();
+                            _openUserProfile(attendee.userId);
+                          },
+                          padding: const EdgeInsets.all(12),
+                          child: Row(
                             children: [
-                              const Expanded(
-                                child: Text(
-                                  'Attendees',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.w800,
-                                  ),
+                              CircleAvatar(
+                                radius: 22,
+                                backgroundImage:
+                                    avatarUrl != null && avatarUrl.isNotEmpty
+                                        ? NetworkImage(avatarUrl)
+                                        : null,
+                                child: avatarUrl == null || avatarUrl.isEmpty
+                                    ? Text(
+                                        username.substring(0, 1).toUpperCase(),
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      )
+                                    : null,
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      username,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      attendee.quantity > 1
+                                          ? '${attendee.quantity} tickets'
+                                          : '1 ticket',
+                                      style:
+                                          Theme.of(context).textTheme.bodySmall,
+                                    ),
+                                  ],
                                 ),
                               ),
-                              Text(
-                                '${attendees.length}',
-                                style: const TextStyle(
-                                  color: Colors.white60,
-                                  fontWeight: FontWeight.w700,
-                                ),
+                              Icon(
+                                Icons.chevron_right_rounded,
+                                color:
+                                    Theme.of(context).colorScheme.onSurfaceVariant,
                               ),
                             ],
                           ),
-                          const SizedBox(height: 12),
-                        ],
-                      ),
+                        );
+                      },
                     ),
-                  ),
-                  if (_reservationDataLoading)
-                    const SliverFillRemaining(
-                      hasScrollBody: false,
-                      child: AppLoadingIndicator(
-                        message: 'Loading attendees...',
-                      ),
-                    )
-                  else if (attendees.isEmpty)
-                    const SliverFillRemaining(
-                      hasScrollBody: false,
-                      child: Center(
-                        child: Text(
-                          'No attendees yet.',
-                          style: TextStyle(color: Colors.white70),
-                        ),
-                      ),
-                    )
-                  else
-                    SliverPadding(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-                      sliver: SliverList.separated(
-                        itemCount: attendees.length,
-                        separatorBuilder: (_, __) => Divider(
-                          color: Colors.white.withValues(alpha: 0.08),
-                          height: 1,
-                        ),
-                        itemBuilder: (context, index) {
-                          final attendee = attendees[index];
-                          final username = attendee.username.trim().isNotEmpty
-                              ? attendee.username.trim()
-                              : 'User ${attendee.userId}';
-                          final avatarUrl = attendee.avatarUrl?.trim();
-
-                          return ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            onTap: () {
-                              Navigator.of(context).pop();
-                              _openUserProfile(attendee.userId);
-                            },
-                            leading: CircleAvatar(
-                              radius: 22,
-                              backgroundColor: Colors.white12,
-                              backgroundImage:
-                                  avatarUrl != null && avatarUrl.isNotEmpty
-                                      ? NetworkImage(avatarUrl)
-                                      : null,
-                              child: avatarUrl == null || avatarUrl.isEmpty
-                                  ? Text(
-                                      username.substring(0, 1).toUpperCase(),
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    )
-                                  : null,
-                            ),
-                            title: Text(
-                              username,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            subtitle: Text(
-                              attendee.quantity > 1
-                                  ? '${attendee.quantity} tickets'
-                                  : '1 ticket',
-                              style: const TextStyle(color: Colors.white60),
-                            ),
-                            trailing: const Icon(
-                              Icons.chevron_right,
-                              color: Colors.white54,
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          );
-        },
-      );
-    },
-  );
-}
+        );
+      },
+    );
+  }
 
   Future<void> openReportEventScreen(EventItem item) async {
     final result = await Navigator.of(context).push<bool>(
@@ -586,6 +560,20 @@ void openDirections(EventItem item, WidgetRef ref) {
 
   Future<void> reserve(EventItem item) async {
     if (_reserveLoading) return;
+
+    final currentUserId = ref.read(authStateProvider).user?.userId;
+    final isOwnEvent =
+        currentUserId != null &&
+        item.organizerId != null &&
+        currentUserId == item.organizerId;
+
+    if (isOwnEvent) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('You cannot reserve your own event.')),
+      );
+      return;
+    }
 
     final reserveState = _buildReserveState(_tickets);
     if (!reserveState.canReserve || reserveState.ticket == null) {
@@ -713,14 +701,15 @@ void openDirections(EventItem item, WidgetRef ref) {
           if (!mounted) return;
           Navigator.of(context).pop();
         },
-      onSendInChat: () {
-        Navigator.of(context).pop();
-        openDirectChat(
-          context: context,
-          ref: ref,
-          otherUserId: item.organizerId!,
-        );
-      },
+        onSendInChat: () {
+          Navigator.of(context).pop();
+          if (item.organizerId == null) return;
+          openDirectChat(
+            context: context,
+            ref: ref,
+            otherUserId: item.organizerId!,
+          );
+        },
       ),
     );
   }
@@ -748,305 +737,273 @@ void openDirections(EventItem item, WidgetRef ref) {
   }
 
   @override
-  Widget build(BuildContext context) {
-    final state = ref.watch(eventDetailsControllerProvider(widget.eventId));
-    final controller =
-        ref.read(eventDetailsControllerProvider(widget.eventId).notifier);
-    final bookmarksState = ref.watch(bookmarksProvider);
-    final bookmarksController = ref.read(bookmarksProvider.notifier);
-    final authState = ref.watch(authStateProvider);
-    final currentUserId = authState.user?.userId;
+Widget build(BuildContext context) {
+  final theme = Theme.of(context);
+  final scheme = theme.colorScheme;
 
-    if (state.isLoading) {
-      return const Scaffold(
-        backgroundColor: Color(0xFF0F1014),
-        body: Center(child: CircularProgressIndicator()),
-      );
-    }
+  final state = ref.watch(eventDetailsControllerProvider(widget.eventId));
+  final controller =
+      ref.read(eventDetailsControllerProvider(widget.eventId).notifier);
+  final bookmarksState = ref.watch(bookmarksProvider);
+  final bookmarksController = ref.read(bookmarksProvider.notifier);
+  final authState = ref.watch(authStateProvider);
+  final currentUserId = authState.user?.userId;
 
-    if (state.hasError || state.event == null) {
-      return Scaffold(
-        backgroundColor: const Color(0xFF0F1014),
-        appBar: AppBar(backgroundColor: Colors.transparent),
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Text(
-              state.error ?? 'Failed to load event.',
-              style: const TextStyle(color: Colors.white),
-              textAlign: TextAlign.center,
-            ),
-          ),
-        ),
-      );
-    }
-
-    final item = state.event!;
-    final isLiked = item.isLiked;
-    final isBookmarked =
-        bookmarksState.valueOrNull?.any((b) => b.eventId == item.eventId) ?? false;
-    final gallery = buildGallery(item);
-
-    final ownerProfileState = item.organizerId != null
-        ? ref.watch(publicProfileControllerProvider(item.organizerId!))
-        : null;
-
-    final ownerDisplayName = ownerProfileState?.maybeWhen(
-              data: (bundle) => bundle.user.fullName.trim().isNotEmpty
-                  ? bundle.user.fullName.trim()
-                  : null,
-              orElse: () => null,
-            ) ??
-        item.promoterName?.trim();
-
-    final ownerUsername = ownerProfileState?.maybeWhen(
-      data: (bundle) =>
-          bundle.user.username.trim().isNotEmpty ? bundle.user.username.trim() : null,
-      orElse: () => null,
-    );
-
-    final ownerAvatarUrl = ownerProfileState?.maybeWhen(
-      data: (bundle) => bundle.user.imageUrl?.trim().isNotEmpty == true
-          ? bundle.user.imageUrl!.trim()
-          : null,
-      orElse: () => null,
-    );
-
-    final capacity = _publicCapacity > 0 ? _publicCapacity : item.capacity;
-    final reservedCount = _publicReservedCount;
-    final attendeeCount = _attendees.length;
-
-    final previewUsers = _attendees
-        .take(5)
-        .map(
-          (e) => AttendeePreviewUser(
-            userId: e.userId,
-            label: e.username.trim().isNotEmpty ? e.username.trim() : 'User ${e.userId}',
-            avatarUrl: e.avatarUrl,
-          ),
-        )
-        .toList();
-
-    final reserveState = _buildReserveState(_tickets);
-
+  if (state.isLoading) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0F1014),
-      body: Stack(
-        children: [
-          if (gallery.isNotEmpty)
-            Positioned.fill(
-              child: Image.network(
-                gallery.first,
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-              ),
-            ),
-          Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.black.withValues(alpha: 0.45),
-                    const Color(0xFF0F1014).withValues(alpha: 0.82),
-                    const Color(0xFF0F1014),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          SafeArea(
-            child: Column(
-              children: [
-                Expanded(
-                  child: RefreshIndicator(
-                    onRefresh: () async {
-                      await controller.refresh();
-                      await _loadReservationData();
-                      await _loadTickets();
-                    },
-                    child: ListView(
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
-                      children: [
-                        EventHeader(
-                          title: item.title,
-                          category: item.segmentName ?? item.genreName,
-                          subCategory: item.subGenreName,
-                          ownerDisplayName: ownerDisplayName,
-                          ownerUsername: ownerUsername,
-                          ownerAvatarUrl: ownerAvatarUrl,
-                          likes: item.likesCount,
-                          views: item.viewCount,
-                          price: item.price,
-                          isLiked: isLiked,
-                          isBookmarked: isBookmarked,
-                          onBack: () => Navigator.of(context).maybePop(),
-                          onLikeTap: () async {
-                            try {
-                              if (isLiked) {
-                                await controller.unlikeEvent();
-                              } else {
-                                await controller.likeEvent();
-                              }
-                            } catch (_) {}
-                          },
-                          onBookmarkTap: () async {
-                            await bookmarksController.toggleBookmark(
-                              eventId: item.eventId,
-                            );
-                          },
-                          onReportTap: () => openReportEventScreen(item),
-                          onShareTap: () => openShareSheet(item),
-                          onOwnerTap: item.organizerId == null
-                              ? null
-                              : () => openOwnerProfile(item),
-                        ),
-                        const SizedBox(height: 18),
-                        EventGallery(imageUrls: gallery),
-                        const SizedBox(height: 18),
-                        if (_reservationDataLoading)
-                          Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.08),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(
-                                color: Colors.white.withValues(alpha: 0.08),
-                              ),
-                            ),
-                            child: const AppLoadingIndicator(
-                              size: 26,
-                              strokeWidth: 2.6,
-                              message: 'Loading attendees and capacity...',
-                              padding: EdgeInsets.symmetric(
-                                vertical: 24,
-                                horizontal: 12,
-                              ),
-                            ),
-                          )
-                        else
-                          EventCapacityCard(
-                            capacity: capacity,
-                            reservedCount: reservedCount,
-                            attendeeCount: attendeeCount,
-                            previewUsers: previewUsers,
-                            onViewAttendeesTap: _openAttendeesSheet,
-                          ),
-                        const SizedBox(height: 18),
-                        EventInfoSection(
-                          location: item.isOnline ? 'Online event' : item.venueName,
-                          dateText: formatDateRange(item),
-                          timeText: formatTimeRange(item),
-                          countdownText: countdownText(item),
-                          description: item.description,
-                          capacity: capacity,
-                          participantCount: attendeeCount,
-                          isOnline: item.isOnline,
-                          tags: item.tags,
-                          accessibilityInfo: item.accessibilityInfo,
-                          onDirectionsTap:
-                              item.isOnline ? null : () => openDirections(item, ref),
-                        ),
-                        const SizedBox(height: 12),
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(14),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.06),
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          child: _availabilityLoading
-                              ? const AppLoadingIndicator(
-                                  size: 22,
-                                  strokeWidth: 2.4,
-                                  message: 'Checking ticket availability...',
-                                  centered: false,
-                                  padding: EdgeInsets.zero,
-                                )
-                              : Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Icon(
-                                      reserveState.canReserve
-                                          ? Icons.confirmation_number_outlined
-                                          : Icons.info_outline,
-                                      color: reserveState.canReserve
-                                          ? const Color(0xFF63B3ED)
-                                          : Colors.white70,
-                                    ),
-                                    const SizedBox(width: 10),
-                                    Expanded(
-                                      child: Text(
-                                        reserveState.message,
-                                        style: TextStyle(
-                                          color: reserveState.canReserve
-                                              ? Colors.white
-                                              : Colors.white70,
-                                          fontWeight: reserveState.canReserve
-                                              ? FontWeight.w600
-                                              : FontWeight.w500,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                        ),
-                        if (item.externalUrl != null &&
-                            item.externalUrl!.trim().isNotEmpty) ...[
-                          const SizedBox(height: 18),
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.all(14),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.06),
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            child: Row(
-                              children: [
-                                const Icon(Icons.link, color: Colors.white70),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Text(
-                                    item.externalUrl!,
-                                    style: const TextStyle(color: Colors.white70),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                        const SizedBox(height: 24),
-                        InlineEventCommentsSection(
-                          eventId: item.eventId,
-                          currentUserId: currentUserId,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                BottomBar(
-                  isReserveLoading: _reserveLoading,
-                  reserveEnabled: reserveState.canReserve,
-                  reserveLabel: reserveState.buttonLabel,
-                  onChatTap: () => openDirectChat(          
-                    context: context,
-                    ref: ref,
-                    otherUserId: item.organizerId!,),
-                  onReserveTap: () => reserve(item),
-                  onDirectionsTap: item.isOnline ? null : () => openDirections(item, ref),
-                ),
-              ],
-            ),
-          ),
-        ],
+      backgroundColor: theme.scaffoldBackgroundColor,
+      body: const AppLoadingIndicator(
+        title: 'Loading event',
+        message: 'Please wait while we prepare the event details.',
       ),
     );
   }
+
+  if (state.hasError || state.event == null) {
+    return Scaffold(
+      backgroundColor: theme.scaffoldBackgroundColor,
+      appBar: AppBar(),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text(
+            state.error ?? 'Failed to load event.',
+            style: theme.textTheme.bodyLarge?.copyWith(
+              color: scheme.onSurface,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ),
+      ),
+    );
+  }
+
+  final item = state.event!;
+  final isOwnEvent =
+    currentUserId != null &&
+    item.organizerId != null &&
+    currentUserId == item.organizerId;
+  final isLiked = item.isLiked;
+  final isBookmarked =
+      bookmarksState.valueOrNull?.any((b) => b.eventId == item.eventId) ?? false;
+  final gallery = buildGallery(item);
+
+  final ownerProfileState = item.organizerId != null
+      ? ref.watch(publicProfileControllerProvider(item.organizerId!))
+      : null;
+
+  final ownerDisplayName = ownerProfileState?.maybeWhen(
+            data: (bundle) => bundle.user.fullName.trim().isNotEmpty
+                ? bundle.user.fullName.trim()
+                : null,
+            orElse: () => null,
+          ) ??
+      item.promoterName?.trim();
+
+  final ownerUsername = ownerProfileState?.maybeWhen(
+    data: (bundle) =>
+        bundle.user.username.trim().isNotEmpty ? bundle.user.username.trim() : null,
+    orElse: () => null,
+  );
+
+  final ownerAvatarUrl = ownerProfileState?.maybeWhen(
+    data: (bundle) => bundle.user.imageUrl?.trim().isNotEmpty == true
+        ? bundle.user.imageUrl!.trim()
+        : null,
+    orElse: () => null,
+  );
+
+  final capacity = _publicCapacity > 0 ? _publicCapacity : item.capacity;
+  final reservedCount = _publicReservedCount;
+  final attendeeCount = _attendees.length;
+
+  final previewUsers = _attendees
+      .take(5)
+      .map(
+        (e) => AttendeePreviewUser(
+          userId: e.userId,
+          label: e.username.trim().isNotEmpty ? e.username.trim() : 'User ${e.userId}',
+          avatarUrl: e.avatarUrl,
+        ),
+      )
+      .toList();
+
+final reserveState = _buildReserveState(_tickets);
+final effectiveReserveEnabled = !isOwnEvent && reserveState.canReserve;
+final effectiveReserveLabel =
+    isOwnEvent ? 'Your event' : reserveState.buttonLabel;
+  final muted = theme.textTheme.bodyMedium?.color ??
+      scheme.onSurface.withValues(alpha: 0.72);
+
+  return Scaffold(
+    backgroundColor: theme.scaffoldBackgroundColor,
+    body: SafeArea(
+      child: Column(
+        children: [
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: () async {
+                await controller.refresh();
+                await _loadReservationData();
+                await _loadTickets();
+              },
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
+                children: [
+                  EventHeader(
+                    title: item.title,
+                    category: item.segmentName ?? item.genreName,
+                    subCategory: item.subGenreName,
+                    ownerDisplayName: ownerDisplayName,
+                    ownerUsername: ownerUsername,
+                    ownerAvatarUrl: ownerAvatarUrl,
+                    likes: item.likesCount,
+                    views: item.viewCount,
+                    price: item.price,
+                    isLiked: isLiked,
+                    isBookmarked: isBookmarked,
+                    onBack: () => Navigator.of(context).maybePop(),
+                    onLikeTap: () async {
+                      try {
+                        if (isLiked) {
+                          await controller.unlikeEvent();
+                        } else {
+                          await controller.likeEvent();
+                        }
+                      } catch (_) {}
+                    },
+                    onBookmarkTap: () async {
+                      await bookmarksController.toggleBookmark(eventId: item.eventId);
+                    },
+                    onReportTap: isOwnEvent ? null : () => openReportEventScreen(item),
+                    onShareTap: () => openShareSheet(item),
+                    onOwnerTap: item.organizerId == null
+                        ? null
+                        : () => openOwnerProfile(item),
+                  ),
+                  const SizedBox(height: 18),
+                  EventGallery(imageUrls: gallery),
+                  const SizedBox(height: 18),
+                  if (_reservationDataLoading)
+                    AppSurfaceCard(
+                      padding: const EdgeInsets.all(16),
+                      child: const AppLoadingIndicator(
+                        title: 'Loading attendance',
+                        message: 'Loading attendees and capacity...',
+                        padding: EdgeInsets.symmetric(
+                          vertical: 24,
+                          horizontal: 12,
+                        ),
+                      ),
+                    )
+                  else
+                    EventCapacityCard(
+                      capacity: capacity,
+                      reservedCount: reservedCount,
+                      attendeeCount: attendeeCount,
+                      previewUsers: previewUsers,
+                      onViewAttendeesTap: _openAttendeesSheet,
+                    ),
+                  const SizedBox(height: 18),
+                  EventInfoSection(
+                    location: item.isOnline ? 'Online event' : item.venueName,
+                    dateText: formatDateRange(item),
+                    timeText: formatTimeRange(item),
+                    countdownText: countdownText(item),
+                    description: item.description,
+                    capacity: capacity,
+                    participantCount: attendeeCount,
+                    isOnline: item.isOnline,
+                    tags: item.tags,
+                    accessibilityInfo: item.accessibilityInfo,
+                    onDirectionsTap:
+                        item.isOnline ? null : () => openDirections(item, ref),
+                  ),
+                  const SizedBox(height: 12),
+                  AppSurfaceCard(
+                    padding: const EdgeInsets.all(14),
+                    child: _availabilityLoading
+                        ? const AppLoadingIndicator(
+                            title: 'Checking availability',
+                            message: 'Checking ticket availability...',
+                            centered: false,
+                            padding: EdgeInsets.zero,
+                          )
+                        : Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Icon(
+                                effectiveReserveEnabled
+                                    ? Icons.confirmation_number_outlined
+                                    : Icons.info_outline,
+                                color: effectiveReserveEnabled ? scheme.primary : muted,
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  isOwnEvent ? 'You cannot reserve a spot for your own event.' : reserveState.message,
+                                  style: theme.textTheme.bodyMedium?.copyWith(
+                                    color: effectiveReserveEnabled ? scheme.onSurface : muted,
+                                    fontWeight: effectiveReserveEnabled ? FontWeight.w600 : FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                  ),
+                  if (item.externalUrl != null &&
+                      item.externalUrl!.trim().isNotEmpty) ...[
+                    const SizedBox(height: 18),
+                    AppSurfaceCard(
+                      padding: const EdgeInsets.all(14),
+                      child: Row(
+                        children: [
+                          Icon(Icons.link, color: muted),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              item.externalUrl!,
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: muted,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 24),
+                  InlineEventCommentsSection(
+                    eventId: item.eventId,
+                    currentUserId: currentUserId,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          BottomBar(
+            isReserveLoading: _reserveLoading,
+            reserveEnabled: effectiveReserveEnabled,
+            reserveLabel: effectiveReserveLabel,
+            onChatTap: isOwnEvent || item.organizerId == null
+                ? null
+                : () => openDirectChat(
+                      context: context,
+                      ref: ref,
+                      otherUserId: item.organizerId!,
+                    ),
+            onReserveTap: () => reserve(item),
+            onDirectionsTap: item.isOnline ? null : () => openDirections(item, ref),
+          ),
+        ],
+      ),
+    ),
+  );
+}
 }
 
 class BottomBar extends StatelessWidget {
-  final VoidCallback onChatTap;
+  final VoidCallback? onChatTap;
   final VoidCallback onReserveTap;
   final VoidCallback? onDirectionsTap;
   final bool isReserveLoading;
@@ -1065,58 +1022,46 @@ class BottomBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
     final effectiveOnPressed =
         (!reserveEnabled || isReserveLoading) ? null : onReserveTap;
 
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 18),
       decoration: BoxDecoration(
-        color: const Color(0xFF111317).withValues(alpha: 0.96),
+        color: scheme.surface,
         border: Border(
-          top: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+          top: BorderSide(color: scheme.outline.withValues(alpha: 0.24)),
         ),
       ),
       child: Row(
         children: [
-          ActionIcon(
-            icon: Icons.chat_bubble_outline,
-            onTap: onChatTap,
-          ),
-          const SizedBox(width: 12),
+          if (onChatTap != null) ...[
+            AppIconCircleButton(
+              onPressed: onChatTap,
+              tooltip: 'Open chat',
+              icon: Icons.chat_bubble_outline,
+            ),
+            const SizedBox(width: 12),
+          ],
           Expanded(
             child: SizedBox(
               height: 52,
               child: ElevatedButton(
                 onPressed: effectiveOnPressed,
-                style: ButtonStyle(
-                  elevation: WidgetStateProperty.all(0),
-                  shape: WidgetStateProperty.all(
-                    RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(999),
-                    ),
+                style: ElevatedButton.styleFrom(
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(999),
                   ),
-                  backgroundColor: WidgetStateProperty.resolveWith((states) {
-                    if (states.contains(WidgetState.disabled)) {
-                      return const Color(0xFF3A3F46);
-                    }
-                    return const Color(0xFF3B82C4);
-                  }),
-                  foregroundColor: WidgetStateProperty.resolveWith((states) {
-                    if (states.contains(WidgetState.disabled)) {
-                      return Colors.white70;
-                    }
-                    return Colors.white;
-                  }),
                 ),
                 child: isReserveLoading
-                    ? const SizedBox(
-                        width: 22,
-                        height: 22,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2.5,
-                          valueColor:
-                              AlwaysStoppedAnimation<Color>(Colors.white),
-                        ),
+                    ? AppSpinner(
+                        size: 22,
+                        strokeWidth: 2.5,
+                        color: theme.colorScheme.onPrimary,
                       )
                     : Text(
                         reserveLabel,
@@ -1126,42 +1071,12 @@ class BottomBar extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 12),
-          ActionIcon(
+          AppIconCircleButton(
+            onPressed: onDirectionsTap,
+            tooltip: 'Open directions',
             icon: Icons.navigation_outlined,
-            onTap: onDirectionsTap,
           ),
         ],
-      ),
-    );
-  }
-}
-
-class ActionIcon extends StatelessWidget {
-  final IconData icon;
-  final VoidCallback? onTap;
-
-  const ActionIcon({
-    super.key,
-    required this.icon,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.white.withValues(alpha: 0.10),
-      borderRadius: BorderRadius.circular(16),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: SizedBox(
-          width: 52,
-          height: 52,
-          child: Icon(
-            icon,
-            color: onTap == null ? Colors.white30 : Colors.white,
-          ),
-        ),
       ),
     );
   }

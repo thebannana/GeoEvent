@@ -2,15 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:signalr_netcore/signalr_client.dart';
 
-import '../../../core/config/app_config.dart';
-import '../../../shared/chat/models/chat_participant.dart';
-import '../../auth/application/auth_controller.dart';
+import '../../../../../core/config/app_config.dart';
 import '../../../shared/chat/data/chat_repository.dart';
+import '../../../shared/chat/models/chat_participant.dart';
 import '../../../shared/chat/models/chat_thread_args.dart';
 import '../../../shared/chat/models/chat_thread_details.dart';
 import '../../../shared/chat/models/message_item.dart';
 import '../../../shared/chat/providers/chat_providers.dart';
+import '../../auth/application/auth_controller.dart';
 import 'messages_controller.dart';
+
 
 class ChatThreadState {
   final AsyncValue<ChatThreadDetails> details;
@@ -48,8 +49,8 @@ class ChatThreadState {
       sending: sending ?? this.sending,
       connectingRealtime: connectingRealtime ?? this.connectingRealtime,
       realtimeConnected: realtimeConnected ?? this.realtimeConnected,
-      hubConnection: clearHubConnection ? null : (hubConnection ?? this.hubConnection),
-      replyingTo: clearReplyingTo ? null : (replyingTo ?? this.replyingTo),
+      hubConnection: clearHubConnection ? null : hubConnection ?? this.hubConnection,
+      replyingTo: clearReplyingTo ? null : replyingTo ?? this.replyingTo,
     );
   }
 }
@@ -68,7 +69,7 @@ class ChatThreadController extends StateNotifier<ChatThreadState> {
 
   ChatThreadController(this.ref, this.args) : super(const ChatThreadState());
 
-  ChatRepository get _repo => ref.read(messagesRepositoryProvider);
+  ChatRepository get repo => ref.read(messagesRepositoryProvider);
 
   Future<void> load() async {
     state = state.copyWith(
@@ -76,12 +77,9 @@ class ChatThreadController extends StateNotifier<ChatThreadState> {
       messages: const AsyncLoading(),
     );
 
-    final detailsResult = await AsyncValue.guard(
-      () => _repo.getThreadDetails(args.threadId),
-    );
-
+    final detailsResult = await AsyncValue.guard(() => repo.getThreadDetails(args.threadId));
     final messagesResult = await AsyncValue.guard(() async {
-      final items = await _repo.getThreadMessages(args.threadId);
+      final items = await repo.getThreadMessages(args.threadId);
       items.sort((a, b) => a.sentAt.compareTo(b.sentAt));
       return items;
     });
@@ -94,8 +92,7 @@ class ChatThreadController extends StateNotifier<ChatThreadState> {
     );
 
     await markThreadRead();
-ref.read(messagesInboxControllerProvider.notifier)
-    .markThreadLocallyRead(args.threadId);
+    ref.read(messagesInboxControllerProvider.notifier).markThreadLocallyRead(args.threadId);
   }
 
   void setReplyingTo(MessageItem item) {
@@ -115,14 +112,15 @@ ref.read(messagesInboxControllerProvider.notifier)
     state = state.copyWith(sending: true);
 
     try {
-      final item = await _repo.sendThreadMessage(
+      final item = await repo.sendThreadMessage(
         threadId: args.threadId,
         content: trimmed,
         replyToMessageId: state.replyingTo?.id,
       );
 
       if (!mounted) return false;
-      _upsert(item);
+
+      upsertMessage(item);
       state = state.copyWith(clearReplyingTo: true);
       return true;
     } finally {
@@ -136,13 +134,18 @@ ref.read(messagesInboxControllerProvider.notifier)
     required int messageId,
     required String content,
   }) async {
-    final item = await _repo.editMessage(messageId: messageId, content: content);
+    final item = await repo.editMessage(
+      messageId: messageId,
+      content: content,
+    );
+
     if (!mounted) return;
-    _upsert(item);
+    upsertMessage(item);
   }
 
   Future<void> deleteMessage(int messageId) async {
     final current = state.messages.valueOrNull ?? const <MessageItem>[];
+
     state = state.copyWith(
       messages: AsyncData(
         current.where((m) => m.id != messageId).toList(growable: false),
@@ -150,7 +153,7 @@ ref.read(messagesInboxControllerProvider.notifier)
     );
 
     try {
-      await _repo.deleteMessage(messageId);
+      await repo.deleteMessage(messageId);
     } catch (_) {
       if (mounted) {
         state = state.copyWith(messages: AsyncData(current));
@@ -161,29 +164,27 @@ ref.read(messagesInboxControllerProvider.notifier)
 
   Future<void> toggleLike(MessageItem item) async {
     final updated = item.isLikedByMe
-        ? await _repo.unlikeMessage(item.id)
-        : await _repo.likeMessage(item.id);
+        ? await repo.unlikeMessage(item.id)
+        : await repo.likeMessage(item.id);
 
     if (!mounted) return;
-    _upsert(updated);
+    upsertMessage(updated);
   }
 
-Future<void> markThreadRead() async {
-  await _repo.markThreadRead(args.threadId);
+  Future<void> markThreadRead() async {
+    await repo.markThreadRead(args.threadId);
 
-  final current = state.messages.valueOrNull ?? const <MessageItem>[];
-  final updated = current
-      .map((m) => m.isRead ? m : m.copyWith(isRead: true))
-      .toList(growable: false);
+    final current = state.messages.valueOrNull ?? const <MessageItem>[];
+    final updated = current
+        .map((m) => m.isRead ? m : m.copyWith(isRead: true))
+        .toList(growable: false);
 
-  if (!mounted) return;
-  state = state.copyWith(messages: AsyncData(updated));
-}
+    if (!mounted) return;
+    state = state.copyWith(messages: AsyncData(updated));
+  }
 
   Future<void> connectRealtime() async {
-    if (state.hubConnection != null ||
-        state.connectingRealtime ||
-        state.realtimeConnected) {
+    if (state.hubConnection != null || state.connectingRealtime || state.realtimeConnected) {
       return;
     }
 
@@ -202,13 +203,13 @@ Future<void> markThreadRead() async {
         .withAutomaticReconnect()
         .build();
 
-    hub.on('MessageCreated', _handleMessagePayload);
-    hub.on('MessageUpdated', _handleMessagePayload);
-    hub.on('MessageLiked', _handleMessagePayload);
-    hub.on('MessageUnliked', _handleMessagePayload);
-    hub.on('MessageRead', _handleMessagePayload);
-    hub.on('MessageDeleted', _handleDeletePayload);
-    hub.on('PresenceChanged', _handlePresencePayload);
+    hub.on('MessageCreated', handleMessagePayload);
+    hub.on('MessageUpdated', handleMessagePayload);
+    hub.on('MessageLiked', handleMessagePayload);
+    hub.on('MessageUnliked', handleMessagePayload);
+    hub.on('MessageRead', handleMessagePayload);
+    hub.on('MessageDeleted', handleDeletePayload);
+    hub.on('PresenceChanged', handlePresencePayload);
 
     try {
       await hub.start();
@@ -244,15 +245,16 @@ Future<void> markThreadRead() async {
     }
   }
 
-  void _handleMessagePayload(List<Object?>? argsList) {
+  void handleMessagePayload(List<Object?>? argsList) {
     if (!mounted || argsList == null || argsList.isEmpty) return;
+
     final raw = argsList.first;
     if (raw is! Map) return;
 
     try {
       final item = MessageItem.fromJson(Map<String, dynamic>.from(raw));
       if (item.threadId != args.threadId) return;
-      _upsert(item);
+      upsertMessage(item);
     } catch (e, st) {
       debugPrint('SignalR payload parse error: $e');
       debugPrintStack(stackTrace: st);
@@ -260,8 +262,9 @@ Future<void> markThreadRead() async {
     }
   }
 
-  void _handleDeletePayload(List<Object?>? argsList) {
+  void handleDeletePayload(List<Object?>? argsList) {
     if (!mounted || argsList == null || argsList.isEmpty) return;
+
     final raw = argsList.first;
     if (raw is! Map) return;
 
@@ -279,60 +282,61 @@ Future<void> markThreadRead() async {
     );
   }
 
-Future<void> leaveGroup() async {
-  await _repo.leaveThread(args.threadId);
-  ref.read(messagesInboxControllerProvider.notifier).removeThreadLocally(args.threadId);
-}
+  Future<void> leaveThread() async {
+    await repo.leaveThread(args.threadId);
+    ref.read(messagesInboxControllerProvider.notifier).removeThreadLocally(args.threadId);
+  }
 
-void _handlePresencePayload(List<Object?>? argsList) {
-  if (!mounted || argsList == null || argsList.isEmpty) return;
-  final raw = argsList.first;
-  if (raw is! Map) return;
+  void handlePresencePayload(List<Object?>? argsList) {
+    if (!mounted || argsList == null || argsList.isEmpty) return;
 
-  final userId = (raw['userId'] as num?)?.toInt();
-  final isOnline = raw['isOnline'] as bool? ?? false;
-  final lastActiveAt = raw['lastActiveAt'] != null
-      ? DateTime.tryParse(raw['lastActiveAt'].toString())
-      : null;
+    final raw = argsList.first;
+    if (raw is! Map) return;
 
-  final current = state.details.valueOrNull;
-  if (current == null || userId == null) return;
+    final userId = (raw['userId'] as num?)?.toInt();
+    final isOnline = raw['isOnline'] as bool? ?? false;
+final lastActiveAt = raw['lastActiveAt'] != null
+    ? DateTime.tryParse(raw['lastActiveAt'].toString())?.toLocal()
+    : null;
 
-  final updatedParticipants = current.participants.map((p) {
-    if (p.userId != userId) return p;
-    return ChatParticipant(
-      userId: p.userId,
-      displayName: p.displayName,
-      username: p.username,
-      avatarUrl: p.avatarUrl,
-      isOnline: isOnline,
-      lastActiveAt: lastActiveAt,
-      joinedAt: p.joinedAt,
-    );
-  }).toList(growable: false);
+    final current = state.details.valueOrNull;
+    if (current == null || userId == null) return;
 
-  state = state.copyWith(
-    details: AsyncData(
-      current.copyWith(
-        participants: updatedParticipants,
-        otherUserIsOnline:
-            current.otherUserId == userId ? isOnline : current.otherUserIsOnline,
-        otherUserLastActiveAt: current.otherUserId == userId
-            ? lastActiveAt
-            : current.otherUserLastActiveAt,
+    final updatedParticipants = current.participants
+        .map((p) {
+          if (p.userId != userId) return p;
+          return ChatParticipant(
+            userId: p.userId,
+            displayName: p.displayName,
+            username: p.username,
+            avatarUrl: p.avatarUrl,
+            isOnline: isOnline,
+            lastActiveAt: lastActiveAt,
+            joinedAt: p.joinedAt,
+          );
+        })
+        .toList(growable: false);
+
+    state = state.copyWith(
+      details: AsyncData(
+        current.copyWith(
+          participants: updatedParticipants,
+          otherUserIsOnline:
+              current.otherUserId == userId ? isOnline : current.otherUserIsOnline,
+          otherUserLastActiveAt: current.otherUserId == userId
+              ? lastActiveAt
+              : current.otherUserLastActiveAt,
+        ),
       ),
-    ),
-  );
-}
+    );
+  }
 
-  void _upsert(MessageItem item) {
+  void upsertMessage(MessageItem item) {
     if (!mounted) return;
 
-    final current = List<MessageItem>.from(
-      state.messages.valueOrNull ?? const <MessageItem>[],
-    );
-
+    final current = List<MessageItem>.from(state.messages.valueOrNull ?? const <MessageItem>[]);
     final index = current.indexWhere((m) => m.id == item.id);
+
     if (index >= 0) {
       current[index] = item;
     } else {
@@ -340,20 +344,20 @@ void _handlePresencePayload(List<Object?>? argsList) {
     }
 
     current.sort((a, b) => a.sentAt.compareTo(b.sentAt));
+
     state = state.copyWith(messages: AsyncData(current));
 
     ref.read(messagesInboxControllerProvider.notifier).updateConversationFromMessage(
-  threadId: item.threadId,
-  preview: item.content,
-  sentAt: item.sentAt,
-  isMine: args.otherUserId == null ? false : item.senderId != args.otherUserId,
-);
+          threadId: item.threadId,
+          preview: item.content,
+          sentAt: item.sentAt,
+          isMine: args.otherUserId == null ? false : item.senderId != args.otherUserId,
+        );
   }
 
   @override
   void dispose() {
     final hub = state.hubConnection;
-
     if (hub != null) {
       Future.microtask(() async {
         try {
@@ -364,7 +368,6 @@ void _handlePresencePayload(List<Object?>? argsList) {
         } catch (_) {}
       });
     }
-
     super.dispose();
   }
 }

@@ -38,21 +38,28 @@ class ReservationsState {
     );
   }
 
-  List<Reservation> get filteredItems {
-    final all = paged.valueOrNull?.items ?? const <Reservation>[];
-    final q = searchQuery.trim().toLowerCase();
+List<Reservation> get filteredItems {
+  final all = paged.valueOrNull?.items ?? const <Reservation>[];
+  final q = searchQuery.trim().toLowerCase();
 
-    if (q.isEmpty) return all;
+  final byStatus = activeStatus == null
+      ? all
+      : all.where((reservation) {
+          return reservation.displayStatus.toLowerCase() ==
+              activeStatus!.toLowerCase();
+        }).toList();
 
-    return all.where((reservation) {
-      return reservation.reservationId.toString().contains(q) ||
-          reservation.eventId.toString().contains(q) ||
-          reservation.status.toLowerCase().contains(q) ||
-          reservation.currency.toLowerCase().contains(q) ||
-          (reservation.paymentReference?.toLowerCase().contains(q) ?? false) ||
-          (reservation.notes?.toLowerCase().contains(q) ?? false);
-    }).toList();
-  }
+  if (q.isEmpty) return byStatus;
+
+  return byStatus.where((reservation) {
+    return reservation.reservationId.toString().contains(q) ||
+        reservation.eventId.toString().contains(q) ||
+        reservation.displayStatus.toLowerCase().contains(q) ||
+        reservation.currency.toLowerCase().contains(q) ||
+        (reservation.paymentReference?.toLowerCase().contains(q) ?? false) ||
+        (reservation.notes?.toLowerCase().contains(q) ?? false);
+  }).toList();
+}
 }
 
 class ReservationsController extends Notifier<ReservationsState> {
@@ -64,15 +71,15 @@ class ReservationsController extends Notifier<ReservationsState> {
     return const ReservationsState();
   }
 
-  Future<void> load() async {
-    state = state.copyWith(paged: const AsyncValue.loading());
+Future<void> load() async {
+  state = state.copyWith(paged: const AsyncValue.loading());
 
-    final result = await AsyncValue.guard<PagedResult<Reservation>>(
-      () => _repo.getMyReservations(status: state.activeStatus),
-    );
+  final result = await AsyncValue.guard<PagedResult<Reservation>>(
+    () => _repo.getMyReservations(),
+  );
 
-    state = state.copyWith(paged: result);
-  }
+  state = state.copyWith(paged: result);
+}
 
   Future<void> setFilter(String? status) async {
     state = state.copyWith(activeStatus: () => status);

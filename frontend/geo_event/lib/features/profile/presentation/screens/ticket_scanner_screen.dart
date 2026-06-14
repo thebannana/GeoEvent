@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
+import '../../../../core/widgets/app_bottom_sheet_container.dart';
+import '../../../../core/widgets/app_spinner.dart';
 import '../../../../shared/profile/providers/profile_providers.dart';
 import '../widgets/ticket_scan_result_sheet.dart';
 
@@ -16,7 +18,8 @@ class TicketScannerScreen extends ConsumerStatefulWidget {
   });
 
   @override
-  ConsumerState<TicketScannerScreen> createState() => _TicketScannerScreenState();
+  ConsumerState<TicketScannerScreen> createState() =>
+      _TicketScannerScreenState();
 }
 
 class _TicketScannerScreenState extends ConsumerState<TicketScannerScreen> {
@@ -54,6 +57,7 @@ class _TicketScannerScreenState extends ConsumerState<TicketScannerScreen> {
       await showModalBottomSheet<void>(
         context: context,
         isScrollControlled: true,
+        backgroundColor: Colors.transparent,
         builder: (_) => TicketScanResultSheet(result: result),
       );
     } catch (e) {
@@ -65,65 +69,23 @@ class _TicketScannerScreenState extends ConsumerState<TicketScannerScreen> {
       if (mounted) {
         setState(() {
           _isHandlingScan = false;
+          _lastScannedValue = null;
         });
       }
     }
   }
 
   Future<void> _openManualCodeInput() async {
-    final controller = TextEditingController();
+  final code = await showModalBottomSheet<String>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (context) => const _ManualTicketCodeSheet(),
+  );
 
-    final code = await showModalBottomSheet<String>(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) {
-        return Padding(
-          padding: EdgeInsets.only(
-            left: 16,
-            right: 16,
-            top: 16,
-            bottom: MediaQuery.of(context).viewInsets.bottom + 16,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'Enter ticket code',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: controller,
-                autofocus: true,
-                textInputAction: TextInputAction.done,
-                decoration: const InputDecoration(
-                  labelText: 'QR code / token',
-                  hintText: 'Paste or type the ticket code',
-                  border: OutlineInputBorder(),
-                ),
-                onSubmitted: (value) {
-                  Navigator.of(context).pop(value);
-                },
-              ),
-              const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  onPressed: () {
-                    Navigator.of(context).pop(controller.text);
-                  },
-                  child: const Text('Validate code'),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-
-    if (code == null || code.trim().isEmpty) return;
-    await _submitCode(code);
-  }
+  if (!mounted || code == null || code.trim().isEmpty) return;
+  await _submitCode(code);
+}
 
   @override
   Widget build(BuildContext context) {
@@ -153,10 +115,20 @@ class _TicketScannerScreenState extends ConsumerState<TicketScannerScreen> {
             child: Card(
               child: Padding(
                 padding: const EdgeInsets.all(16),
-                child: Text(
-                  _isHandlingScan
-                      ? 'Validating ticket...'
-                      : 'Align the QR code inside the frame or use manual input.',
+                child: Row(
+                  children: [
+                    if (_isHandlingScan) ...[
+                      const AppSpinner(size: 18, strokeWidth: 2),
+                      const SizedBox(width: 12),
+                    ],
+                    Expanded(
+                      child: Text(
+                        _isHandlingScan
+                            ? 'Validating ticket...'
+                            : 'Align the QR code inside the frame or use manual input.',
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -170,5 +142,76 @@ class _TicketScannerScreenState extends ConsumerState<TicketScannerScreen> {
   void dispose() {
     _controller.dispose();
     super.dispose();
+  }
+}
+
+class _ManualTicketCodeSheet extends StatefulWidget {
+  const _ManualTicketCodeSheet();
+
+  @override
+  State<_ManualTicketCodeSheet> createState() => _ManualTicketCodeSheetState();
+}
+
+class _ManualTicketCodeSheetState extends State<_ManualTicketCodeSheet> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    Navigator.of(context).pop(_controller.text);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: AppBottomSheetContainer(
+        scrollable: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Enter ticket code',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _controller,
+              autofocus: true,
+              textInputAction: TextInputAction.done,
+              decoration: const InputDecoration(
+                labelText: 'QR code / token',
+                hintText: 'Paste or type the ticket code',
+                border: OutlineInputBorder(),
+              ),
+              onSubmitted: (_) => _submit(),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: _submit,
+                child: const Text('Validate code'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

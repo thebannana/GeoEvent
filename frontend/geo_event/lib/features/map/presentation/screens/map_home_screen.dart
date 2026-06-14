@@ -1,25 +1,29 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' hide Layer;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart' as geo;
+import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 
 import '../../../../core/config/app_env.dart';
+import '../../../../core/widgets/app_loading_indicator.dart';
+import '../../../../shared/events/models/create_event_models.dart';
 import '../../../../shared/events/models/event_map_pin_data.dart';
 import '../../../../shared/events/providers/event_providers.dart';
+import '../../../../shared/location/data/map_location_service.dart';
+import '../../../../shared/location/data/map_pin_annotations_service.dart';
+import '../../../../shared/location/data/map_route_service.dart';
 import '../../../../shared/location/models/event_directions_request.dart';
+import '../../../../shared/location/models/map_filter_selection.dart';
 import '../../../../shared/location/providers/directions_providers.dart';
+import '../../../../shared/profile/providers/profile_providers.dart';
 import '../../../event/presentation/screens/event_detail_screen.dart';
 import '../../application/map_settings_controller.dart';
 import '../widgets/event_pin_marker.dart';
-import '../widgets/map_filter_panel.dart';
+import '../widgets/map_navigation_cards.dart';
 
 extension PuckPositionX on StyleManager {
   Future<Position?> getPuckPositionSafe() async {
@@ -67,13 +71,7 @@ class MapHomeScreen extends ConsumerStatefulWidget {
 
 class MapHomeScreenState extends ConsumerState<MapHomeScreen>
     with WidgetsBindingObserver {
-  static const ui.Size pinLogicalSize = ui.Size(190, 132);
   static const String terrainSourceId = 'geoevent-terrain-source';
-  static const String routeSourceId = 'geoevent-route-source';
-  static const String routeLayerId = 'geoevent-route-layer';
-  static const Color routeLineColor = Color(0xFF199DFF);
-  static const double routeLineWidth = 8.5;
-
   static const double baseZoom = 13.0;
   static const double cityZoom = 15.5;
   static const double cityPitch = 60.0;
@@ -81,17 +79,18 @@ class MapHomeScreenState extends ConsumerState<MapHomeScreen>
   static const double defaultLng = 18.4131;
   static const double defaultLat = 43.8563;
 
-  StreamSubscription<geo.Position>? _navigationPositionSub;
-  StreamSubscription<geo.Position>? _headingPositionSub;
-  geo.Position? _lastReroutePosition;
-  bool _isRerouting = false;
-
-  MapboxMap? mapboxMap;
-  PointAnnotationManager? pointAnnotationManager;
+  final locationService = MapLocationService();
+  final routeService = MapRouteService();
+  final pinService = MapPinAnnotationService();
 
   ProviderSubscription<MapSettingsState>? settingsSubscription;
   ProviderSubscription<EventDirectionsRequest?>? pendingDirectionsSubscription;
+
   Timer? pinsRefreshTimer;
+  MapboxMap? mapboxMap;
+
+  late List<EventMapPinData> events;
+  final Map<String, GlobalKey> pinKeys = {};
 
   bool styleLoaded = false;
   bool captureReady = false;
@@ -103,28 +102,28 @@ class MapHomeScreenState extends ConsumerState<MapHomeScreen>
   bool isFetchingRoute = false;
   bool isNavigationUiOpen = false;
 
-  final Map<String, GlobalKey> pinKeys = {};
-  final Map<String, int> annotationEventIds = {};
-  late List<EventMapPinData> events;
+  geo.Position? lastReroutePosition;
+  bool isRerouting = false;
 
   EventDirectionsRequest? activeDirectionsRequest;
   EventDirectionsRequest? activeNavigationRequest;
 
   double? currentLatitude;
   double? currentLongitude;
-
-  final Dio _dio = Dio();
+  double _currentZoom = baseZoom;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+
     AppEnv.validate();
     MapboxOptions.setAccessToken(AppEnv.mapboxToken);
-    startHeadingTracking();
 
     events = [];
     rebuildPinKeys();
+
+    startHeadingTracking();
     listenToMapSettings();
     listenToPendingDirections();
     scheduleInitialLoad();
@@ -154,23 +153,11 @@ class MapHomeScreenState extends ConsumerState<MapHomeScreen>
     );
   }
 
-void startHeadingTracking() {
-  _headingPositionSub?.cancel();
-
-  const settings = geo.LocationSettings(
-    accuracy: geo.LocationAccuracy.bestForNavigation,
-    distanceFilter: 0,
-  );
-
-  _headingPositionSub =
-      geo.Geolocator.getPositionStream(locationSettings: settings).listen(
-    (position) {
-      final heading = position.heading;
-      if (heading.isNaN) return;
-      widget.onBearingChanged?.call(heading);
-    },
-  );
-}
+  void startHeadingTracking() {
+    locationService.startHeadingTracking(
+      onHeading: (heading) => widget.onBearingChanged?.call(heading),
+    );
+  }
 
   void listenToMapSettings() {
     settingsSubscription?.close();
@@ -183,19 +170,13 @@ void startHeadingTracking() {
           await applyStandardMapConfiguration(next);
           await animateCameraFor3D(next.map3D);
         }
-
         if (previous.terrain != next.terrain) {
           await applyTerrain(next.terrain);
         }
-
-        if (previous.dayNightCycle != next.dayNightCycle) {
+        if (previous.dayNightCycle != next.dayNightCycle ||
+            previous.mapPins != next.mapPins) {
           await applyStandardMapConfiguration(next);
         }
-
-        if (previous.mapPins != next.mapPins) {
-          await applyStandardMapConfiguration(next);
-        }
-
         if (previous.eventPins != next.eventPins) {
           await applyEventPinsVisibility(next.eventPins);
         }
@@ -207,7 +188,7 @@ void startHeadingTracking() {
     pendingDirectionsSubscription?.close();
     pendingDirectionsSubscription = ref.listenManual<EventDirectionsRequest?>(
       pendingDirectionsProvider,
-      (previous, next) async {
+      (_, next) async {
         if (next == null || handlingPendingDirections) return;
         await tryHandlePendingDirections(next);
       },
@@ -217,43 +198,12 @@ void startHeadingTracking() {
   bool get isReadyForPendingDirections =>
       mounted && mapboxMap != null && styleLoaded && captureReady;
 
-  Future<void> tryHandlePendingDirections(EventDirectionsRequest request) async {
-  if (activeNavigationRequest?.eventId == request.eventId) {
-    ref.read(pendingDirectionsProvider.notifier).state = null;
-    if (mounted) {
-      setState(() {
-        isNavigationUiOpen = true;
-        activeDirectionsRequest = null;
-      });
-    }
-    return;
-  }
-
-  if (!isReadyForPendingDirections) {
-    await Future<void>.delayed(const Duration(milliseconds: 250));
-  }
-
-  if (!isReadyForPendingDirections || !mounted) return;
-
-  handlingPendingDirections = true;
-  try {
-    await focusOnEventLocation(
-      latitude: request.latitude,
-      longitude: request.longitude,
-    );
-
+  void showMessage(String message) {
     if (!mounted) return;
-    setState(() {
-      activeDirectionsRequest = request;
-      isNavigationUiOpen = false;
-    });
-
-    ref.read(pendingDirectionsProvider.notifier).state = null;
-    hasHandledInitialPendingDirections = true;
-  } finally {
-    handlingPendingDirections = false;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
   }
-}
 
   void rebuildPinKeys() {
     pinKeys
@@ -261,18 +211,32 @@ void startHeadingTracking() {
       ..addEntries(events.map((event) => MapEntry(event.id, GlobalKey())));
   }
 
-  void onMapCreated(MapboxMap createdMap) async {
+  void scheduleInitialLoad() {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      setState(() => captureReady = true);
+      await reloadMapPins();
+      await consumeInitialPendingDirectionsIfNeeded();
+    });
+  }
+
+  Future<void> onMapCreated(MapboxMap createdMap) async {
     mapboxMap = createdMap;
     widget.onMapReady?.call(createdMap);
 
     await hideBuiltInCompass();
     await enableUserLocation();
-    await prepareAnnotations();
+    await pinService.prepare(
+      mapboxMap: createdMap,
+      onEventTap: handleEventTap,
+    );
+
     await consumeInitialPendingDirectionsIfNeeded();
   }
 
   Future<void> hideBuiltInCompass() async {
     if (mapboxMap == null) return;
+
     await mapboxMap!.compass.updateSettings(
       CompassSettings(
         enabled: false,
@@ -300,133 +264,21 @@ void startHeadingTracking() {
     );
   }
 
- Future<void> openActiveNavigationUi() async {
-  final request = activeNavigationRequest;
-  if (request == null || mapboxMap == null) return;
-
-  if (isNavigationUiOpen) {
-    if (!mounted) return;
-    setState(() {
-      isNavigationUiOpen = false;
-    });
-    return;
-  }
-
-  await mapboxMap!.easeTo(
-    CameraOptions(
-      center: Point(
-        coordinates: Position(request.longitude, request.latitude),
-      ),
-      zoom: 14.5,
-      pitch: 45.0,
-      bearing: 0.0,
-      padding: MbxEdgeInsets(
-        top: 140,
-        left: 60,
-        right: 60,
-        bottom: 260,
-      ),
-    ),
-    MapAnimationOptions(duration: 700, startDelay: 0),
-  );
-
-  if (!mounted) return;
-  setState(() {
-    isNavigationUiOpen = true;
-  });
-}
-
   Future<geo.Position?> getCurrentDeviceLocation() async {
-  try {
-    final serviceEnabled = await geo.Geolocator.isLocationServiceEnabled();
-    debugPrint('Location service enabled: $serviceEnabled');
+    final result = await locationService.getCurrentLocation();
 
-    if (!serviceEnabled) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Location services are disabled. Please enable GPS.'),
-          ),
-        );
-      }
-      return null;
+    if (result.position != null) {
+      currentLatitude = result.position!.latitude;
+      currentLongitude = result.position!.longitude;
+      return result.position!;
     }
 
-    var permission = await geo.Geolocator.checkPermission();
-    debugPrint('Location permission before request: $permission');
-
-    if (permission == geo.LocationPermission.denied) {
-      permission = await geo.Geolocator.requestPermission();
-      debugPrint('Location permission after request: $permission');
+    if (result.failure != null) {
+      showMessage(locationService.messageForFailure(result.failure!));
     }
 
-    if (permission == geo.LocationPermission.denied) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Location permission was denied.'),
-          ),
-        );
-      }
-      return null;
-    }
-
-    if (permission == geo.LocationPermission.deniedForever) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Location permission is permanently denied. Enable it in Settings.'),
-          ),
-        );
-      }
-      return null;
-    }
-
-    geo.Position? lastKnown = await geo.Geolocator.getLastKnownPosition();
-    debugPrint('Last known position: $lastKnown');
-
-    try {
-      final position = await geo.Geolocator.getCurrentPosition(
-        locationSettings: const geo.LocationSettings(
-          accuracy: geo.LocationAccuracy.high,
-          timeLimit: Duration(seconds: 12),
-        ),
-      );
-
-      debugPrint('Current position: ${position.latitude}, ${position.longitude}');
-      currentLatitude = position.latitude;
-      currentLongitude = position.longitude;
-      return position;
-    } catch (e) {
-      debugPrint('getCurrentPosition failed, fallback to lastKnown: $e');
-
-      if (lastKnown != null) {
-        currentLatitude = lastKnown.latitude;
-        currentLongitude = lastKnown.longitude;
-        return lastKnown;
-      }
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Unable to determine your position. Try moving outdoors or enabling device location.'),
-          ),
-        );
-      }
-      return null;
-    }
-  } catch (e) {
-    debugPrint('getCurrentDeviceLocation error: $e');
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Location error: $e'),
-        ),
-      );
-    }
     return null;
   }
-}
 
   Future<Position?> getUserPosition() async {
     if (mapboxMap == null) return null;
@@ -439,58 +291,25 @@ void startHeadingTracking() {
     return position;
   }
 
-  Future<void> prepareAnnotations() async {
-    if (mapboxMap == null || pointAnnotationManager != null) return;
-
-    pointAnnotationManager =
-        await mapboxMap!.annotations.createPointAnnotationManager();
-    await pointAnnotationManager!.setIconAllowOverlap(true);
-    await pointAnnotationManager!.setTextAllowOverlap(true);
-    await pointAnnotationManager!.setIconIgnorePlacement(true);
-    await pointAnnotationManager!.setTextIgnorePlacement(true);
-
-    pointAnnotationManager!.addOnPointAnnotationClickListener(
-      MapPinClickListener(
-        onTap: (annotation) {
-          final eventId = annotationEventIds[annotation.id];
-          if (eventId == null || !mounted) return;
-          handleEventTap(eventId);
-        },
-      ),
-    );
-  }
-
   Future<void> onStyleLoaded(StyleLoadedEventData data) async {
     await hideBuiltInCompass();
-    await prepareAnnotations();
+
+    await pinService.prepare(
+      mapboxMap: mapboxMap!,
+      onEventTap: handleEventTap,
+    );
 
     terrainSourceAdded = false;
 
     if (!mounted) return;
-    setState(() {
-      styleLoaded = true;
-    });
+    setState(() => styleLoaded = true);
 
     final settings = ref.read(mapSettingsControllerProvider);
     await applyStandardMapConfiguration(settings);
     await applyTerrain(settings.terrain);
     await applyEventPinsVisibility(settings.eventPins);
     await reloadMapPins(silent: true, forceResync: true);
-
     await consumeInitialPendingDirectionsIfNeeded();
-  }
-
-  void onCameraChange(CameraChangedEventData event) {}
-
-  void scheduleInitialLoad() {
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (!mounted) return;
-      setState(() {
-        captureReady = true;
-      });
-      await reloadMapPins();
-      await consumeInitialPendingDirectionsIfNeeded();
-    });
   }
 
   String get baseStyleUri => MapboxStyles.STANDARD;
@@ -506,8 +325,10 @@ void startHeadingTracking() {
   Future<void> applyStandardMapConfiguration(MapSettingsState settings) async {
     if (mapboxMap == null || !styleLoaded) return;
 
+    final style = mapboxMap!.style;
+
     try {
-      await mapboxMap!.style.setStyleImportConfigProperty(
+      await style.setStyleImportConfigProperty(
         'basemap',
         'lightPreset',
         settings.dayNightCycle ? resolveLightPreset() : 'day',
@@ -515,7 +336,7 @@ void startHeadingTracking() {
     } catch (_) {}
 
     try {
-      await mapboxMap!.style.setStyleImportConfigProperty(
+      await style.setStyleImportConfigProperty(
         'basemap',
         'showPointOfInterestLabels',
         settings.mapPins,
@@ -523,7 +344,7 @@ void startHeadingTracking() {
     } catch (_) {}
 
     try {
-      await mapboxMap!.style.setStyleImportConfigProperty(
+      await style.setStyleImportConfigProperty(
         'basemap',
         'showTransitLabels',
         settings.mapPins,
@@ -531,7 +352,7 @@ void startHeadingTracking() {
     } catch (_) {}
 
     try {
-      await mapboxMap!.style.setStyleImportConfigProperty(
+      await style.setStyleImportConfigProperty(
         'basemap',
         'showPlaceLabels',
         true,
@@ -539,7 +360,7 @@ void startHeadingTracking() {
     } catch (_) {}
 
     try {
-      await mapboxMap!.style.setStyleImportConfigProperty(
+      await style.setStyleImportConfigProperty(
         'basemap',
         'showRoadLabels',
         true,
@@ -547,24 +368,12 @@ void startHeadingTracking() {
     } catch (_) {}
 
     try {
-      await mapboxMap!.style.setStyleImportConfigProperty(
+      await style.setStyleImportConfigProperty(
         'basemap',
         'show3dObjects',
         settings.map3D,
       );
     } catch (_) {}
-
-    if (activeNavigationRequest != null) {
-  try {
-    await mapboxMap!.style.setStyleLayerProperty(
-      routeLayerId,
-      'line-color',
-      routeLineColor.value,
-    );
-    await mapboxMap!.style.setStyleLayerProperty(routeLayerId, 'line-opacity', 1.0);
-    await mapboxMap!.style.setStyleLayerProperty(routeLayerId, 'line-width', routeLineWidth);
-  } catch (_) {}
-}
   }
 
   Future<void> ensureTerrainSource() async {
@@ -589,16 +398,12 @@ void startHeadingTracking() {
 
     await ensureTerrainSource();
 
-    final exaggeration = enabled ? terrainExaggeration : 0.0;
-
     try {
       await mapboxMap!.style.setStyleTerrainProperty(
         'exaggeration',
-        exaggeration,
+        enabled ? terrainExaggeration : 0.0,
       );
-    } catch (e) {
-      debugPrint('applyTerrain failed: $e');
-    }
+    } catch (_) {}
   }
 
   Future<void> animateCameraFor3D(bool enabled) async {
@@ -609,112 +414,40 @@ void startHeadingTracking() {
         zoom: enabled ? cityZoom : baseZoom,
         pitch: enabled ? cityPitch : 0.0,
       ),
-      MapAnimationOptions(
-        duration: 550,
-        startDelay: 0,
-      ),
+      MapAnimationOptions(duration: 550, startDelay: 0),
     );
   }
 
-  Future<void> focusOnEventLocation({
-    required double latitude,
-    required double longitude,
-  }) async {
-    if (mapboxMap == null) return;
-
-    final settings = ref.read(mapSettingsControllerProvider);
-
-    await mapboxMap!.easeTo(
-      CameraOptions(
-        center: Point(coordinates: Position(longitude, latitude)),
-        zoom: settings.map3D ? cityZoom : 15.8,
-        pitch: settings.map3D ? cityPitch : 0.0,
-        bearing: 0.0,
-        padding: MbxEdgeInsets(
-          top: 120,
-          left: 40,
-          right: 40,
-          bottom: 260,
-        ),
-      ),
-      MapAnimationOptions(
-        duration: 900,
-        startDelay: 0,
-      ),
-    );
+ui.Size pinSizeForPriority(EventPinPriority priority) {
+  switch (priority) {
+    case EventPinPriority.high:
+      return const ui.Size(220, 150);
+    case EventPinPriority.medium:
+      return const ui.Size(190, 132);
+    case EventPinPriority.low:
+      return const ui.Size(160, 116);
   }
+}
 
-  Future<void> consumeInitialPendingDirectionsIfNeeded() async {
-    if (hasHandledInitialPendingDirections) return;
+  List<EventMapPinData> visiblePinsForZoom({
+    required List<EventMapPinData> pins,
+    required double zoom,
+  }) {
+    if (zoom >= 15) return pins;
 
-    final request = ref.read(pendingDirectionsProvider);
-    if (request == null) {
-      hasHandledInitialPendingDirections = true;
-      return;
-    }
+    final maxCount = zoom >= 13.5
+        ? 40
+        : zoom >= 12
+            ? 20
+            : 10;
 
-    await tryHandlePendingDirections(request);
-  }
+    final filtered = pins.where((pin) {
+      if (zoom < 12) return pin.priority == EventPinPriority.high;
+      if (zoom < 13.5) return pin.priority != EventPinPriority.low;
+      return true;
+    }).toList();
 
-  Future<void> applyEventPinsVisibility(bool visible) async {
-    if (pointAnnotationManager == null) return;
-
-    await pointAnnotationManager!.deleteAll();
-    annotationEventIds.clear();
-
-    if (visible) {
-      await tryAddEventPins();
-    }
-
-    if (!mounted) return;
-    setState(() {});
-  }
-
-  Future<void> reloadMapPins({
-    bool silent = false,
-    bool forceResync = false,
-  }) async {
-    if (!mounted || isSyncingPins) return;
-
-    if (!silent) {
-      setState(() {
-        isLoadingMapPins = true;
-      });
-    }
-
-    final pins = await fetchMapPins();
-
-    if (!mounted) return;
-
-    final oldSignature =
-        events.map((e) => '${e.id}:${e.lat}:${e.lng}:${e.imageUrl}').join('|');
-    final newSignature =
-        pins.map((e) => '${e.id}:${e.lat}:${e.lng}:${e.imageUrl}').join('|');
-    final hasChanged = oldSignature != newSignature;
-
-    if (!hasChanged && !forceResync) {
-      if (!silent && mounted) {
-        setState(() {
-          isLoadingMapPins = false;
-        });
-      }
-      return;
-    }
-
-    setState(() {
-      events = pins;
-      rebuildPinKeys();
-      if (!silent) {
-        isLoadingMapPins = false;
-      }
-    });
-
-    await precacheMarkerImages();
-    await WidgetsBinding.instance.endOfFrame;
-    await Future<void>.delayed(const Duration(milliseconds: 180));
-
-    if (!mounted) return;
-    await syncEventPins();
+    return filtered.take(maxCount).toList();
   }
 
   Future<List<EventMapPinData>> fetchMapPins() async {
@@ -751,164 +484,192 @@ void startHeadingTracking() {
               todayOnly: filters.todayOnly,
             );
 
-      return items.map(EventMapPinData.fromEventItem).toList();
-    } catch (e) {
-      debugPrint('fetchMapPins error: $e');
+      final preferredSegmentIds = ref.read(preferredSegmentIdsProvider);
+      final preferredGenreIds = ref.read(preferredGenreIdsProvider);
+      final preferredSubGenreIds = ref.read(preferredSubGenreIdsProvider);
+
+      final scoredItems = items.map((item) {
+        final score = filters.usePreferences
+            ? mapRecommendationScore(
+                item: item,
+                userLatitude: userLat,
+                userLongitude: userLng,
+                preferredSegmentIds: preferredSegmentIds,
+                preferredGenreIds: preferredGenreIds,
+                preferredSubGenreIds: preferredSubGenreIds,
+              )
+            : 0;
+
+        return (item: item, score: score);
+      }).toList();
+
+      scoredItems.sort((a, b) => b.score.compareTo(a.score));
+
+      return scoredItems
+          .map(
+            (e) => EventMapPinData.fromEventItem(
+              e.item,
+              recommendationScore: e.score,
+            ),
+          )
+          .toList();
+    } catch (_) {
       return [];
     }
   }
 
-void startNavigationTracking(EventDirectionsRequest request) {
-  _navigationPositionSub?.cancel();
-  _lastReroutePosition = null;
+  Future<void> reloadMapPins({
+    bool silent = false,
+    bool forceResync = false,
+  }) async {
+    if (!mounted || isSyncingPins) return;
 
-  const settings = geo.LocationSettings(
-    accuracy: geo.LocationAccuracy.bestForNavigation,
-    distanceFilter: 10,
-  );
+    if (!silent) {
+      setState(() => isLoadingMapPins = true);
+    }
 
-  _navigationPositionSub =
-      geo.Geolocator.getPositionStream(locationSettings: settings).listen(
-    (position) async {
-      currentLatitude = position.latitude;
-      currentLongitude = position.longitude;
+    final pins = await fetchMapPins();
+    if (!mounted) return;
 
-      if (_isRerouting) return;
+    final oldSignature = events
+        .map((e) => '${e.id}-${e.lat}-${e.lng}-${e.imageUrl}-${e.priority.name}')
+        .join('|');
+    final newSignature = pins
+        .map((e) => '${e.id}-${e.lat}-${e.lng}-${e.imageUrl}-${e.priority.name}')
+        .join('|');
 
-      final last = _lastReroutePosition;
-      final movedEnough = last == null ||
-          geo.Geolocator.distanceBetween(
-                last.latitude,
-                last.longitude,
-                position.latitude,
-                position.longitude,
-              ) >=
-              25;
-
-      if (!movedEnough) return;
-
-      _isRerouting = true;
-      _lastReroutePosition = position;
-
-      try {
-        final routeGeoJson = await fetchRouteGeoJson(
-          originLng: position.longitude,
-          originLat: position.latitude,
-          destinationLng: request.longitude,
-          destinationLat: request.latitude,
-        );
-
-        await drawRouteLine(routeGeoJson);
-      } catch (e) {
-        debugPrint('reroute error $e');
-      } finally {
-        _isRerouting = false;
+    if (oldSignature == newSignature && !forceResync) {
+      if (!silent) {
+        setState(() => isLoadingMapPins = false);
       }
-    },
-  );
-}
+      return;
+    }
 
-  Future<void> syncEventPins() async {
-    if (pointAnnotationManager == null) return;
+    setState(() {
+      events = pins;
+      rebuildPinKeys();
+      if (!silent) {
+        isLoadingMapPins = false;
+      }
+    });
 
-    await pointAnnotationManager!.deleteAll();
-    annotationEventIds.clear();
-    await tryAddEventPins();
+    await pinService.precacheMarkerImages(context, events);
+    await WidgetsBinding.instance.endOfFrame;
+    await Future<void>.delayed(const Duration(milliseconds: 180));
 
     if (!mounted) return;
-    setState(() {});
+    await syncEventPins();
   }
 
-  Future<void> tryAddEventPins() async {
+  Future<void> syncEventPins() async {
     final settings = ref.read(mapSettingsControllerProvider);
-
-    if (isSyncingPins) return;
-    if (!settings.eventPins) return;
-    if (!styleLoaded || !captureReady) return;
-    if (pointAnnotationManager == null) return;
-    if (events.isEmpty) return;
+    if (!settings.eventPins || !styleLoaded || !captureReady || events.isEmpty) {
+      return;
+    }
 
     isSyncingPins = true;
 
     try {
-      final eventIdsForOptions = <int>[];
-      final options = <PointAnnotationOptions>[];
+      final visiblePins = visiblePinsForZoom(
+        pins: events,
+        zoom: _currentZoom,
+      );
 
-      for (final event in events) {
-        final bytes = await capturePinBytes(event.id);
-        if (bytes == null) continue;
-
-        final parsedEventId = int.tryParse(event.id);
-        if (parsedEventId == null) continue;
-
-        options.add(
-          PointAnnotationOptions(
-            geometry: Point(coordinates: Position(event.lng, event.lat)),
-            image: bytes,
-            iconAnchor: IconAnchor.BOTTOM,
-            iconOffset: [0.0, -6.0],
-          ),
-        );
-
-        eventIdsForOptions.add(parsedEventId);
-      }
-
-      if (options.isEmpty) return;
-
-      final annotations = await pointAnnotationManager!.createMulti(options);
-
-      for (var i = 0; i < annotations.length; i++) {
-        final annotationId = annotations[i]?.id;
-        if (annotationId == null) continue;
-        annotationEventIds[annotationId] = eventIdsForOptions[i];
-      }
-    } catch (e) {
-      debugPrint('tryAddEventPins failed: $e');
+      await pinService.syncPins(
+        events: visiblePins,
+        capturePinBytes: (eventId) async {
+          final key = pinKeys[eventId];
+          if (key == null) return null;
+          return pinService.capturePinBytes(key: key);
+        },
+      );
     } finally {
       isSyncingPins = false;
+      if (!mounted) return;
+      setState(() {});
     }
   }
 
-  Future<void> precacheMarkerImages() async {
-    for (final event in events) {
-      final url = (event.imageUrl ?? '').trim();
-      if (url.isEmpty) continue;
-
-      try {
-        await precacheImage(
-          NetworkImage(url),
-          context,
-          onError: (_, __) {},
-        );
-      } catch (_) {}
-    }
+  Future<void> tryAddEventPins() async {
+    await syncEventPins();
   }
 
-  Future<Uint8List?> capturePinBytes(String eventId) async {
-    final key = pinKeys[eventId];
+  Future<void> focusOnEventLocation({
+    required double latitude,
+    required double longitude,
+  }) async {
+    if (mapboxMap == null) return;
 
-    for (var i = 0; i < 30; i++) {
-      await Future<void>.delayed(const Duration(milliseconds: 32));
+    final settings = ref.read(mapSettingsControllerProvider);
 
-      final markerContext = key?.currentContext;
-      if (markerContext == null) continue;
+    await mapboxMap!.easeTo(
+      CameraOptions(
+        center: Point(coordinates: Position(longitude, latitude)),
+        zoom: settings.map3D ? cityZoom : 15.8,
+        pitch: settings.map3D ? cityPitch : 0.0,
+        bearing: 0.0,
+        padding: MbxEdgeInsets(top: 120, left: 40, right: 40, bottom: 260),
+      ),
+      MapAnimationOptions(duration: 900, startDelay: 0),
+    );
+  }
 
-      final boundary = markerContext.findRenderObject() as RenderRepaintBoundary?;
-      if (boundary == null || boundary.debugNeedsPaint) continue;
-
-      try {
-        final image = await boundary.toImage(pixelRatio: 3.0);
-        final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-        image.dispose();
-
-        final bytes = byteData?.buffer.asUint8List();
-        if (bytes != null && bytes.isNotEmpty) return bytes;
-      } catch (_) {
-        debugPrint('Pin capture failed for eventId=$eventId');
+  Future<void> tryHandlePendingDirections(EventDirectionsRequest request) async {
+    if (activeNavigationRequest?.eventId == request.eventId) {
+      ref.read(pendingDirectionsProvider.notifier).state = null;
+      if (mounted) {
+        setState(() {
+          isNavigationUiOpen = true;
+          activeDirectionsRequest = null;
+        });
       }
+      return;
     }
 
-    return null;
+    if (!isReadyForPendingDirections) {
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+    }
+    if (!isReadyForPendingDirections || !mounted) return;
+
+    handlingPendingDirections = true;
+    try {
+      await focusOnEventLocation(
+        latitude: request.latitude,
+        longitude: request.longitude,
+      );
+
+      if (!mounted) return;
+      setState(() {
+        activeDirectionsRequest = request;
+        isNavigationUiOpen = false;
+      });
+
+      ref.read(pendingDirectionsProvider.notifier).state = null;
+      hasHandledInitialPendingDirections = true;
+    } finally {
+      handlingPendingDirections = false;
+    }
+  }
+
+  Future<void> consumeInitialPendingDirectionsIfNeeded() async {
+    if (hasHandledInitialPendingDirections) return;
+
+    final request = ref.read(pendingDirectionsProvider);
+    if (request == null) {
+      hasHandledInitialPendingDirections = true;
+      return;
+    }
+
+    await tryHandlePendingDirections(request);
+  }
+
+  Future<void> applyEventPinsVisibility(bool visible) async {
+    await pinService.clear();
+    if (visible) {
+      await tryAddEventPins();
+    }
+    if (!mounted) return;
+    setState(() {});
   }
 
   Widget buildHiddenMarkerLayer() {
@@ -921,6 +682,7 @@ void startNavigationTracking(EventDirectionsRequest request) {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: events.map((event) {
+              final size = pinSizeForPriority(event.priority);
               return Padding(
                 padding: const EdgeInsets.only(bottom: 12),
                 child: RepaintBoundary(
@@ -929,8 +691,8 @@ void startNavigationTracking(EventDirectionsRequest request) {
                     title: event.title,
                     imageUrl: event.imageUrl ?? '',
                     color: event.categoryColor,
-                    width: pinLogicalSize.width,
-                    height: pinLogicalSize.height,
+                    width: size.width,
+                    height: size.height,
                   ),
                 ),
               );
@@ -941,18 +703,32 @@ void startNavigationTracking(EventDirectionsRequest request) {
     );
   }
 
-Future<void> centerOnUserPuck() async {
-  if (mapboxMap == null) return;
+  Future<void> centerOnUserPuck() async {
+    if (mapboxMap == null) return;
 
-  final puck = await getUserPosition();
-  if (puck != null) {
+    final puck = await getUserPosition();
+    if (puck != null) {
+      await mapboxMap!.easeTo(
+        CameraOptions(
+          center: Point(
+            coordinates: Position(puck.lng.toDouble(), puck.lat.toDouble()),
+          ),
+          zoom: 16.0,
+          pitch: 0.0,
+          bearing: 0.0,
+        ),
+        MapAnimationOptions(duration: 700, startDelay: 0),
+      );
+      return;
+    }
+
+    final gps = await getCurrentDeviceLocation();
+    if (gps == null) return;
+
     await mapboxMap!.easeTo(
       CameraOptions(
         center: Point(
-          coordinates: Position(
-            puck.lng.toDouble(),
-            puck.lat.toDouble(),
-          ),
+          coordinates: Position(gps.longitude, gps.latitude),
         ),
         zoom: 16.0,
         pitch: 0.0,
@@ -960,164 +736,156 @@ Future<void> centerOnUserPuck() async {
       ),
       MapAnimationOptions(duration: 700, startDelay: 0),
     );
-    return;
   }
 
-  final gps = await getCurrentDeviceLocation();
-  if (gps == null) return;
+  void notifyNavigationIconVisibility() {
+    widget.onNavigationUiVisibilityChanged?.call(activeNavigationRequest != null);
+  }
 
-  await mapboxMap!.easeTo(
-    CameraOptions(
-      center: Point(
-        coordinates: Position(gps.longitude, gps.latitude),
-      ),
-      zoom: 16.0,
-      pitch: 0.0,
-      bearing: 0.0,
-    ),
-    MapAnimationOptions(duration: 700, startDelay: 0),
-  );
-}
+  void startNavigationTracking(EventDirectionsRequest request) {
+    lastReroutePosition = null;
+    isRerouting = false;
 
-  Future<Map<String, dynamic>> fetchRouteGeoJson({
-    required double originLng,
-    required double originLat,
-    required double destinationLng,
-    required double destinationLat,
-  }) async {
-    final response = await _dio.get<Map<String, dynamic>>(
-      'https://api.mapbox.com/directions/v5/mapbox/driving-traffic/'
-      '$originLng,$originLat;$destinationLng,$destinationLat',
-      queryParameters: {
-        'access_token': AppEnv.mapboxToken,
-        'geometries': 'geojson',
-        'overview': 'full',
-        'steps': 'true',
+    locationService.startNavigationTracking(
+      onPosition: (position) async {
+        currentLatitude = position.latitude;
+        currentLongitude = position.longitude;
+
+        if (isRerouting) return;
+
+        final last = lastReroutePosition;
+        final movedEnough = last == null ||
+            geo.Geolocator.distanceBetween(
+                  last.latitude,
+                  last.longitude,
+                  position.latitude,
+                  position.longitude,
+                ) >=
+                25;
+
+        if (!movedEnough || mapboxMap == null) return;
+
+        isRerouting = true;
+        lastReroutePosition = position;
+
+        try {
+          final routeGeoJson = await routeService.fetchRouteGeoJson(
+            originLng: position.longitude,
+            originLat: position.latitude,
+            destinationLng: request.longitude,
+            destinationLat: request.latitude,
+          );
+
+          await routeService.drawRouteLine(
+            mapboxMap: mapboxMap!,
+            styleLoaded: styleLoaded,
+            routeFeature: routeGeoJson,
+          );
+        } catch (_) {
+        } finally {
+          isRerouting = false;
+        }
       },
     );
-
-    final data = response.data ?? const <String, dynamic>{};
-    final routes = data['routes'];
-
-    if (routes is! List || routes.isEmpty) {
-      throw Exception('No route found.');
-    }
-
-    final first = Map<String, dynamic>.from(routes.first as Map);
-    final geometry = Map<String, dynamic>.from(first['geometry'] as Map);
-
-    return {
-      'type': 'Feature',
-      'properties': {
-        'duration': first['duration'],
-        'distance': first['distance'],
-      },
-      'geometry': geometry,
-    };
-  }
-
-Future<void> drawRouteLine(Map<String, dynamic> routeFeature) async {
-  if (mapboxMap == null || !styleLoaded) return;
-
-  final style = mapboxMap!.style;
-  final data = jsonEncode({
-    'type': 'FeatureCollection',
-    'features': [routeFeature],
-  });
-
-  try {
-    await style.getStyleSourceProperties(routeSourceId);
-    await style.setStyleSourceProperty(routeSourceId, 'data', data);
-  } catch (_) {
-    await style.addSource(
-      GeoJsonSource(
-        id: routeSourceId,
-        data: data,
-      ),
-    );
-  }
-
-  try {
-    await style.getStyleLayerProperties(routeLayerId);
-  } catch (_) {
-    await style.addLayer(
-      LineLayer(
-        id: routeLayerId,
-        sourceId: routeSourceId,
-        lineJoin: LineJoin.ROUND,
-        lineCap: LineCap.ROUND,
-        lineColor: routeLineColor.value,
-        lineWidth: routeLineWidth,
-      ),
-    );
-  }
-
-  try {
-    await style.setStyleLayerProperty(
-      routeLayerId,
-      'line-color',
-      routeLineColor.value,
-    );
-    await style.setStyleLayerProperty(
-      routeLayerId,
-      'line-width',
-      routeLineWidth,
-    );
-    await style.setStyleLayerProperty(routeLayerId, 'line-join', 'round');
-    await style.setStyleLayerProperty(routeLayerId, 'line-cap', 'round');
-    await style.setStyleLayerProperty(routeLayerId, 'line-opacity', 1.0);
-  } catch (_) {}
-
-  await enableUserLocation();
-}
-
-void _notifyNavigationIconVisibility() {
-  widget.onNavigationUiVisibilityChanged?.call(activeNavigationRequest != null);
-}
-
-  Future<void> clearRouteLine() async {
-    if (mapboxMap == null) return;
-
-    try {
-      await mapboxMap!.style.removeStyleLayer(routeLayerId);
-    } catch (_) {}
-
-    try {
-      await mapboxMap!.style.removeStyleSource(routeSourceId);
-    } catch (_) {}
   }
 
   Future<void> startDirections(EventDirectionsRequest request) async {
-  final origin = await getCurrentDeviceLocation();
+    final origin = await getCurrentDeviceLocation();
+    if (origin == null || mapboxMap == null) return;
 
-  if (origin == null || mapboxMap == null) {
-    return;
+    await locationService.stopNavigationTracking();
+
+    lastReroutePosition = origin;
+    isRerouting = false;
+
+    if (mounted) {
+      setState(() {
+        isFetchingRoute = true;
+        activeNavigationRequest = request;
+        activeDirectionsRequest = null;
+        isNavigationUiOpen = true;
+      });
+    }
+    notifyNavigationIconVisibility();
+
+    try {
+      final routeGeoJson = await routeService.fetchRouteGeoJson(
+        originLng: origin.longitude,
+        originLat: origin.latitude,
+        destinationLng: request.longitude,
+        destinationLat: request.latitude,
+      );
+
+      await routeService.drawRouteLine(
+        mapboxMap: mapboxMap!,
+        styleLoaded: styleLoaded,
+        routeFeature: routeGeoJson,
+      );
+
+      await mapboxMap!.easeTo(
+        CameraOptions(
+          center: Point(
+            coordinates: Position(request.longitude, request.latitude),
+          ),
+          zoom: 14.5,
+          pitch: 45.0,
+          bearing: 0.0,
+          padding: MbxEdgeInsets(top: 140, left: 60, right: 60, bottom: 260),
+        ),
+        MapAnimationOptions(duration: 900, startDelay: 0),
+      );
+
+      startNavigationTracking(request);
+      ref.read(activeNavigationProvider.notifier).state = request;
+      isNavigationUiOpen = false;
+      notifyNavigationIconVisibility();
+    } catch (_) {
+      await locationService.stopNavigationTracking();
+      ref.read(activeNavigationProvider.notifier).state = null;
+
+      if (!mounted) return;
+      setState(() => activeNavigationRequest = null);
+
+      isNavigationUiOpen = false;
+      notifyNavigationIconVisibility();
+      showMessage('Unable to load route right now.');
+    } finally {
+      if (mounted) {
+        setState(() => isFetchingRoute = false);
+      }
+    }
   }
 
-  await _navigationPositionSub?.cancel();
-  _navigationPositionSub = null;
-  _lastReroutePosition = origin;
-  _isRerouting = false;
+  Future<void> stopNavigation() async {
+    await locationService.stopNavigationTracking();
+    lastReroutePosition = null;
+    isRerouting = false;
 
-if (mounted) {
-  setState(() {
-    isFetchingRoute = true;
-    activeNavigationRequest = request;
-    activeDirectionsRequest = null;
-    isNavigationUiOpen = true;
-  });
-  _notifyNavigationIconVisibility();
-}
+    if (mapboxMap != null) {
+      await routeService.clearRouteLine(mapboxMap!);
+    }
 
-  try {
-    final routeGeoJson = await fetchRouteGeoJson(
-      originLng: origin.longitude,
-      originLat: origin.latitude,
-      destinationLng: request.longitude,
-      destinationLat: request.latitude,
-    );
+    if (!mounted) return;
+    setState(() {
+      activeNavigationRequest = null;
+      isNavigationUiOpen = false;
+      activeDirectionsRequest = null;
+    });
 
-    await drawRouteLine(routeGeoJson);
+    ref.read(activeNavigationProvider.notifier).state = null;
+    notifyNavigationIconVisibility();
+    await centerOnUserPuck();
+  }
+
+  Future<void> openActiveNavigationUi() async {
+    final request = activeNavigationRequest;
+    if (request == null || mapboxMap == null) return;
+
+    if (isNavigationUiOpen) {
+      if (!mounted) return;
+      setState(() => isNavigationUiOpen = false);
+      return;
+    }
 
     await mapboxMap!.easeTo(
       CameraOptions(
@@ -1127,89 +895,35 @@ if (mounted) {
         zoom: 14.5,
         pitch: 45.0,
         bearing: 0.0,
-        padding: MbxEdgeInsets(
-          top: 140,
-          left: 60,
-          right: 60,
-          bottom: 260,
-        ),
+        padding: MbxEdgeInsets(top: 140, left: 60, right: 60, bottom: 260),
       ),
-      MapAnimationOptions(duration: 900, startDelay: 0),
+      MapAnimationOptions(duration: 700, startDelay: 0),
     );
 
-    startNavigationTracking(request);
-  } catch (e) {
-    debugPrint('startDirections error: $e');
-
-    await _navigationPositionSub?.cancel();
-    ref.read(activeNavigationProvider.notifier).state = null;
-    _navigationPositionSub = null;
-
-if (!mounted) return;
-setState(() {
-  activeNavigationRequest = null;
-  ref.read(activeNavigationProvider.notifier).state = request;
-  isNavigationUiOpen = false;
-});
-_notifyNavigationIconVisibility();
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Unable to load route right now.'),
-      ),
-    );
-  } finally {
-    if (mounted) {
-      setState(() {
-        isFetchingRoute = false;
-      });
-    }
+    if (!mounted) return;
+    setState(() => isNavigationUiOpen = true);
   }
-}
 
   void returnToEventDetails(EventDirectionsRequest request) {
-  if (!mounted) return;
-  Navigator.of(context).push(
-    MaterialPageRoute(
-      builder: (_) => EventDetailsScreen(
-        eventId: request.eventId,
-        onCloseParentSearchSheet: widget.onCloseSearchOverlay,
+    if (!mounted) return;
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => EventDetailsScreen(
+          eventId: request.eventId,
+          onCloseParentSearchSheet: widget.onCloseSearchOverlay,
+        ),
       ),
-    ),
-  );
-}
+    );
+  }
 
   void clearDirectionsCard() {
     if (!mounted) return;
-    setState(() {
-      activeDirectionsRequest = null;
-    });
+    setState(() => activeDirectionsRequest = null);
   }
 
-  Future<void> stopNavigation() async {
-  await _navigationPositionSub?.cancel();
-  _navigationPositionSub = null;
-  _lastReroutePosition = null;
-  _isRerouting = false;
-
-  await clearRouteLine();
-
-  if (!mounted) return;
-  setState(() {
-    activeNavigationRequest = null;
-    isNavigationUiOpen = false;
-    activeDirectionsRequest = null;
-    ref.read(activeNavigationProvider.notifier).state = null;
-  });
-  _notifyNavigationIconVisibility();
-  centerOnUserPuck();
-}
-
   void handleEventTap(int eventId) {
-    final callback = widget.onEventSelected;
-    if (callback != null) {
-      callback(eventId);
-    }
+    widget.onEventSelected?.call(eventId);
   }
 
   @override
@@ -1218,9 +932,8 @@ _notifyNavigationIconVisibility();
     pinsRefreshTimer?.cancel();
     settingsSubscription?.close();
     pendingDirectionsSubscription?.close();
-    _navigationPositionSub?.cancel();
-    pointAnnotationManager?.deleteAll();
-    _headingPositionSub?.cancel();
+    pinService.dispose();
+    locationService.dispose();
     super.dispose();
   }
 
@@ -1243,7 +956,15 @@ _notifyNavigationIconVisibility();
             ),
             onMapCreated: onMapCreated,
             onStyleLoadedListener: onStyleLoaded,
-            onCameraChangeListener: onCameraChange,
+            onCameraChangeListener: (event) async {
+              final zoom = event.cameraState.zoom;
+              final shouldResync = (zoom - _currentZoom).abs() >= 0.6;
+              _currentZoom = zoom;
+
+              if (shouldResync && mounted && !isSyncingPins) {
+                await syncEventPins();
+              }
+            },
           ),
         ),
         buildHiddenMarkerLayer(),
@@ -1256,10 +977,10 @@ _notifyNavigationIconVisibility();
                     .surface
                     .withValues(alpha: 0.18),
                 child: const Center(
-                  child: SizedBox(
-                    width: 26,
-                    height: 26,
-                    child: CircularProgressIndicator(strokeWidth: 2.4),
+                  child: AppLoadingIndicator(
+                    title: 'Loading map',
+                    message: 'Preparing pins and location data...',
+                    padding: EdgeInsets.all(24),
                   ),
                 ),
               ),
@@ -1275,8 +996,7 @@ _notifyNavigationIconVisibility();
               child: DirectionsActionCard(
                 title: activeDirectionsRequest!.title,
                 isLoading: isFetchingRoute,
-                onStartDirections: () =>
-                    startDirections(activeDirectionsRequest!),
+                onStartDirections: () => startDirections(activeDirectionsRequest!),
                 onReturnToEventDetails: () =>
                     returnToEventDetails(activeDirectionsRequest!),
                 onClose: clearDirectionsCard,
@@ -1296,235 +1016,13 @@ _notifyNavigationIconVisibility();
                 onViewEventDetails: () =>
                     returnToEventDetails(activeNavigationRequest!),
                 onClose: () {
-                  setState(() {
-                    isNavigationUiOpen = false;
-                  });
+                  if (!mounted) return;
+                  setState(() => isNavigationUiOpen = false);
                 },
               ),
             ),
           ),
       ],
     );
-  }
-}
-
-class DirectionsActionCard extends StatelessWidget {
-  final String title;
-  final bool isLoading;
-  final VoidCallback onStartDirections;
-  final VoidCallback onReturnToEventDetails;
-  final VoidCallback onClose;
-
-  const DirectionsActionCard({
-    super.key,
-    required this.title,
-    required this.onStartDirections,
-    required this.onReturnToEventDetails,
-    required this.onClose,
-    this.isLoading = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    return Material(
-      color: colorScheme.surface.withValues(alpha: 0.96),
-      borderRadius: BorderRadius.circular(20),
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: colorScheme.outline),
-          boxShadow: [
-            BoxShadow(
-              color: colorScheme.shadow,
-              blurRadius: 24,
-              offset: const Offset(0, 10),
-            ),
-          ],
-        ),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(Icons.navigation_rounded, color: colorScheme.primary),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      title,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        color: colorScheme.onSurface,
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: onClose,
-                    icon: Icon(
-                      Icons.close,
-                      color: colorScheme.onSurface.withValues(alpha: 0.65),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 14),
-              SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: ElevatedButton(
-                  onPressed: isLoading ? null : onStartDirections,
-                  child: isLoading
-                      ? const SizedBox(
-                          width: 22,
-                          height: 22,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2.5,
-                            valueColor:
-                                AlwaysStoppedAnimation<Color>(Colors.white),
-                          ),
-                        )
-                      : const Text(
-                          'Start directions',
-                          style: TextStyle(fontWeight: FontWeight.w700),
-                        ),
-                ),
-              ),
-              const SizedBox(height: 10),
-              SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: OutlinedButton(
-                  onPressed: onReturnToEventDetails,
-                  child: const Text(
-                    'Return to event details',
-                    style: TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class ActiveNavigationCard extends StatelessWidget {
-  final String title;
-  final VoidCallback onStopNavigation;
-  final VoidCallback onViewEventDetails;
-  final VoidCallback onClose;
-
-  const ActiveNavigationCard({
-    super.key,
-    required this.title,
-    required this.onStopNavigation,
-    required this.onViewEventDetails,
-    required this.onClose,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    return Material(
-      color: colorScheme.surface.withValues(alpha: 0.96),
-      borderRadius: BorderRadius.circular(20),
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: colorScheme.outline),
-          boxShadow: [
-            BoxShadow(
-              color: colorScheme.shadow,
-              blurRadius: 24,
-              offset: const Offset(0, 10),
-            ),
-          ],
-        ),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(Icons.navigation_rounded, color: colorScheme.primary),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      title,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        color: colorScheme.onSurface,
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: onClose,
-                    icon: Icon(
-                      Icons.close,
-                      color: colorScheme.onSurface.withValues(alpha: 0.65),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 14),
-              SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: ElevatedButton(
-                  onPressed: onStopNavigation,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: colorScheme.error,
-                    foregroundColor: colorScheme.onError,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    elevation: 0,
-                  ),
-                  child: const Text(
-                    'Stop navigation',
-                    style: TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 10),
-              SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: OutlinedButton(
-                  onPressed: onViewEventDetails,
-                  child: const Text(
-                    'View event details',
-                    style: TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class MapPinClickListener extends OnPointAnnotationClickListener {
-  final void Function(PointAnnotation annotation) onTap;
-
-  MapPinClickListener({
-    required this.onTap,
-  });
-
-  @override
-  void onPointAnnotationClick(PointAnnotation annotation) {
-    onTap(annotation);
   }
 }

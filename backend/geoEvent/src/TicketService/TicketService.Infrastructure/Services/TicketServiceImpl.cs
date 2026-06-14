@@ -1,5 +1,6 @@
 ﻿using System.Security.Cryptography;
 using MassTransit;
+using MassTransit.Transports;
 using Microsoft.AspNetCore.Http;
 using Shared.Contracts.Events;
 using Shared.Contracts.Reservations;
@@ -19,17 +20,20 @@ public class TicketServiceImpl : ITicketService
     private readonly IPublishEndpoint _publishEndpoint;
     private readonly IUserDirectoryService _userDirectoryService;
     private readonly IEventAuthorizationService _eventAuthorizationService;
+    private readonly IEventDirectoryClient _eventDirectoryClient;
 
     public TicketServiceImpl(
         ITicketRepository repository,
         IPublishEndpoint publishEndpoint,
         IUserDirectoryService userDirectoryService,
-        IEventAuthorizationService eventAuthorization)
+        IEventAuthorizationService eventAuthorization,
+        IEventDirectoryClient eventDirectoryClient)
     {
         _repository = repository;
         _publishEndpoint = publishEndpoint;
         _userDirectoryService = userDirectoryService;
         _eventAuthorizationService = eventAuthorization;
+        _eventDirectoryClient = eventDirectoryClient;
     }
 
     public async Task CancelUserReservationsAsync(int userId)
@@ -203,13 +207,16 @@ public class TicketServiceImpl : ITicketService
             created.TotalAmount,
             created.Currency,
             created.ExpiresAt,
-            created.CreatedAt));
+            created.CreatedAt
+        ));
+
+        await PublishReservationCreatedNotificationAsync(created, created.CreatedAt);
 
         return ServiceResult<ReservationResponseDto>.Created(MapToReservationResponse(created));
     }
 
     public async Task<ServiceResult<ReservationResponseDto>> ConfirmReservationAsync(
-        int reservationId, ConfirmReservationDto dto, int userId)
+    int reservationId, ConfirmReservationDto dto, int userId)
     {
         var reservation = await _repository.GetReservationByIdAsync(reservationId);
         if (reservation is null)
@@ -255,6 +262,14 @@ public class TicketServiceImpl : ITicketService
         reservation.Confirm(dto.PaymentReference);
         await _repository.UpdateReservationAsync(reservation);
 
+        await _publishEndpoint.Publish(new ReservationConfirmedMessage(
+            reservation.ReservationId,
+            reservation.EventId,
+            reservation.UserId,
+            reservation.Quantity,
+            reservation.ConfirmedAt ?? payment.PaidAt
+        ));
+
         var amountPerTicket = reservation.TotalAmount / reservation.Quantity;
         var tickets = Enumerable.Range(0, reservation.Quantity)
             .Select(_ => new Ticket
@@ -280,7 +295,10 @@ public class TicketServiceImpl : ITicketService
             payment.Amount,
             payment.Currency,
             payment.TransactionId!,
-            payment.PaidAt));
+            payment.PaidAt
+        ));
+
+        await PublishReservationPaidNotificationAsync(reservation, payment.PaidAt);
 
         foreach (var ticket in tickets)
         {
@@ -293,6 +311,22 @@ public class TicketServiceImpl : ITicketService
                 ticket.Amount,
                 ticket.Currency,
                 ticket.IssuedAt));
+        }
+
+        var eventSummary = await _eventDirectoryClient.GetEventAsync(reservation.EventId);
+
+        if (eventSummary is not null)
+        {
+            await _publishEndpoint.Publish(new UserEventPreferenceInteractionMessage(
+                Guid.NewGuid(),
+                reservation.UserId,
+                reservation.EventId,
+                eventSummary.SegmentId,
+                eventSummary.GenreId,
+                eventSummary.SubGenreId,
+                "ReservationConfirmed",
+                reservation.ConfirmedAt ?? DateTime.UtcNow
+            ));
         }
 
         var updated = await _repository.GetReservationByIdAsync(reservationId);
@@ -650,10 +684,12 @@ public class TicketServiceImpl : ITicketService
         if (eventId <= 0)
             return ServiceResult<PagedResult<OrganizerReservationResponseDto>>.Fail("Invalid event id.");
 
-        var isAdmin = string.Equals(requesterRole, "Admin", StringComparison.OrdinalIgnoreCase);
-        var isOrganizer = string.Equals(requesterRole, "Organizer", StringComparison.OrdinalIgnoreCase);
+        var allowed = await _eventAuthorizationService.CanManageEventAsync(
+            eventId,
+            requesterId,
+            requesterRole);
 
-        if (!isAdmin && !isOrganizer)
+        if (!allowed)
         {
             return ServiceResult<PagedResult<OrganizerReservationResponseDto>>.Forbidden(
                 "You are not allowed to view event reservations.");
@@ -771,6 +807,8 @@ public class TicketServiceImpl : ITicketService
             payment.PaidAt
         ));
 
+        await PublishReservationPaidNotificationAsync(created, payment.PaidAt);
+
         foreach (var ticket in tickets)
         {
             await _publishEndpoint.Publish(new TicketPurchasedMessage(
@@ -785,9 +823,86 @@ public class TicketServiceImpl : ITicketService
             ));
         }
 
+        var eventSummary = await _eventDirectoryClient.GetEventAsync(created.EventId);
+
+        if (eventSummary is not null)
+        {
+            await _publishEndpoint.Publish(new UserEventPreferenceInteractionMessage(
+                Guid.NewGuid(),
+                created.UserId,
+                created.EventId,
+                eventSummary.SegmentId,
+                eventSummary.GenreId,
+                eventSummary.SubGenreId,
+                "ReservationConfirmed",
+                created.ConfirmedAt ?? DateTime.UtcNow
+            ));
+        }
+
         var updated = await _repository.GetReservationByIdAsync(created.ReservationId);
         return ServiceResult<ReservationResponseDto>.Ok(MapToReservationResponse(updated!));
     }
+
+    public async Task<ServiceResult<bool>> RemoveAttendeeReservationAsync(
+    int eventId,
+    int reservationId,
+    int requesterId,
+    string requesterRole)
+    {
+        var allowed = await _eventAuthorizationService.CanManageEventAsync(
+            eventId,
+            requesterId,
+            requesterRole);
+
+        if (!allowed)
+        {
+            return ServiceResult<bool>.Forbidden(
+                "You are not allowed to remove attendees from this event.");
+        }
+
+        var reservation = await _repository.GetReservationByIdAsync(reservationId);
+        if (reservation is null || reservation.EventId != eventId)
+            return ServiceResult<bool>.NotFound("Reservation not found.");
+
+        if (!reservation.CanBeCancelled())
+            return ServiceResult<bool>.Fail("Reservation cannot be cancelled in its current state.");
+
+        if (reservation.EventTicketId.HasValue)
+        {
+            var eventTicket = await _repository.GetEventTicketByIdAsync(reservation.EventTicketId.Value);
+            if (eventTicket is not null)
+            {
+                eventTicket.Release(reservation.Quantity);
+                await _repository.UpdateEventTicketAsync(eventTicket);
+            }
+        }
+
+        var tickets = await _repository.GetTicketsByReservationAsync(reservationId);
+        foreach (var ticket in tickets.Where(t => t.CanBeCancelled()))
+        {
+            ticket.Cancel();
+            await _repository.UpdateTicketAsync(ticket);
+
+            await _publishEndpoint.Publish(new TicketCancelledMessage(
+                ticket.TicketId,
+                reservation.EventId,
+                reservation.UserId,
+                "Removed by organizer",
+                DateTime.UtcNow));
+        }
+
+        reservation.Cancel();
+        await _repository.UpdateReservationAsync(reservation);
+
+        await _publishEndpoint.Publish(new ReservationCancelledIntegrationMessage(
+            reservation.ReservationId,
+            reservation.EventId,
+            reservation.UserId,
+            DateTime.UtcNow));
+
+        return ServiceResult<bool>.Ok(true);
+    }
+
     public async Task<ServiceResult<EventReservationSummaryResponseDto>> GetEventReservationSummaryAsync(
     int eventId,
     int requesterId,
@@ -796,10 +911,12 @@ public class TicketServiceImpl : ITicketService
         if (eventId <= 0)
             return ServiceResult<EventReservationSummaryResponseDto>.Fail("Invalid event id.", 400);
 
-        var isAdmin = string.Equals(requesterRole, "Admin", StringComparison.OrdinalIgnoreCase);
-        var isOrganizer = string.Equals(requesterRole, "Organizer", StringComparison.OrdinalIgnoreCase);
+        var allowed = await _eventAuthorizationService.CanManageEventAsync(
+            eventId,
+            requesterId,
+            requesterRole);
 
-        if (!isAdmin && !isOrganizer)
+        if (!allowed)
         {
             return ServiceResult<EventReservationSummaryResponseDto>.Forbidden(
                 "You are not allowed to view event reservation summary.");
@@ -878,6 +995,65 @@ public class TicketServiceImpl : ITicketService
         Tickets = r.Tickets?.Select(MapToTicketResponse).ToList() ?? []
     };
 
+    private static string ResolveDisplayName(PublicUserProfileDto? profile, int userId)
+    {
+        if (!string.IsNullOrWhiteSpace(profile?.Username))
+            return profile.Username;
+
+        return $"User {userId}";
+    }
+
+    private async Task PublishReservationCreatedNotificationAsync(Reservation reservation, DateTime reservedAt)
+    {
+        var ev = await _eventDirectoryClient.GetEventAsync(reservation.EventId);
+        if (ev?.OrganizerId is not int organizerUserId || organizerUserId == reservation.UserId)
+            return;
+
+        var profiles = await _userDirectoryService.GetPublicProfilesAsync(new[] { reservation.UserId });
+        var profile = profiles.FirstOrDefault(x => x.UserId == reservation.UserId);
+
+        await _publishEndpoint.Publish(new EventReservationCreatedMessage(
+            reservation.ReservationId,
+            reservation.EventId,
+            ev.Title,
+            ev.CoverImageUrl,
+            organizerUserId,
+            reservation.UserId,
+            ResolveDisplayName(profile, reservation.UserId),
+            profile?.ImageUrl,
+            reservation.Quantity,
+            reservation.TotalAmount,
+            reservation.Currency,
+            reservation.Status.ToString(),
+            reservedAt
+        ));
+    }
+
+    private async Task PublishReservationPaidNotificationAsync(Reservation reservation, DateTime paidAt)
+    {
+        var ev = await _eventDirectoryClient.GetEventAsync(reservation.EventId);
+        if (ev?.OrganizerId is not int organizerUserId || organizerUserId == reservation.UserId)
+            return;
+
+        var profiles = await _userDirectoryService.GetPublicProfilesAsync(new[] { reservation.UserId });
+        var profile = profiles.FirstOrDefault(x => x.UserId == reservation.UserId);
+
+        await _publishEndpoint.Publish(new EventReservationPaidMessage(
+            reservation.ReservationId,
+            reservation.EventId,
+            ev.Title,
+            ev.CoverImageUrl,
+            organizerUserId,
+            reservation.UserId,
+            ResolveDisplayName(profile, reservation.UserId),
+            profile?.ImageUrl,
+            reservation.Quantity,
+            reservation.TotalAmount,
+            reservation.Currency,
+            reservation.Status.ToString(),
+            paidAt
+        ));
+    }
     private static TicketResponseDto MapToTicketResponse(Ticket t) => new()
     {
         TicketId = t.TicketId,

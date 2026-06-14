@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-class AppErrorView extends StatelessWidget {
+class AppErrorState extends StatelessWidget {
   final String title;
   final String? message;
   final String retryLabel;
@@ -8,7 +8,7 @@ class AppErrorView extends StatelessWidget {
   final IconData icon;
   final EdgeInsetsGeometry padding;
 
-  const AppErrorView({
+  const AppErrorState({
     super.key,
     this.title = 'Something went wrong',
     this.message,
@@ -57,12 +57,14 @@ class AppErrorView extends StatelessWidget {
                 Text(
                   message!,
                   textAlign: TextAlign.center,
-                  style: theme.textTheme.bodyMedium,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
                 ),
               ],
               if (onRetry != null) ...[
                 const SizedBox(height: 18),
-                ElevatedButton(
+                FilledButton(
                   onPressed: onRetry,
                   child: Text(retryLabel),
                 ),

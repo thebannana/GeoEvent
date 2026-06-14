@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/widgets/app_surface_card.dart';
 import '../../../../shared/public_profile/models/user_review.dart';
 
 class PublicProfileReviewsSection extends StatelessWidget {
@@ -40,10 +41,9 @@ class PublicProfileReviewsSection extends StatelessWidget {
                 ? review.reviewerDisplayName.trim()
                 : '@${review.reviewerUsername}';
 
-            return Card(
-              margin: const EdgeInsets.only(bottom: 12),
-              child: Padding(
-                padding: const EdgeInsets.all(14),
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: AppSurfaceCard(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [

@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/widgets/app_empty_state.dart';
+import '../../../../core/widgets/app_error_view.dart';
+import '../../../../core/widgets/app_spinner.dart';
+import '../../../../core/widgets/app_surface_card.dart';
 import '../../../../shared/chat/models/chat_participant.dart';
 import '../../../../shared/chat/models/chat_thread_args.dart';
-import '../../../../shared/chat/models/chat_thread_details.dart';
-import '../../../../shared/chat/models/chat_thread_type.dart';
 import '../../../../shared/chat/models/message_item.dart';
 import '../../../auth/application/auth_controller.dart';
 import '../../../event/presentation/screens/event_detail_screen.dart';
@@ -30,10 +32,9 @@ class ChatThreadScreen extends ConsumerStatefulWidget {
 }
 
 class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
-  final _messageController = TextEditingController();
-  final _scrollController = ScrollController();
-
-  bool _eventCardDismissed = false;
+  final messageController = TextEditingController();
+  final scrollController = ScrollController();
+  bool eventCardDismissed = false;
 
   @override
   void initState() {
@@ -42,8 +43,7 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
     Future.microtask(() async {
       if (!mounted) return;
 
-      final controller =
-          ref.read(chatThreadControllerProvider(widget.args).notifier);
+      final controller = ref.read(chatThreadControllerProvider(widget.args).notifier);
 
       try {
         await controller.connectRealtime();
@@ -52,8 +52,7 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
         await controller.markThreadRead();
         if (!mounted) return;
 
-        ref
-            .read(messagesInboxControllerProvider.notifier)
+        ref.read(messagesInboxControllerProvider.notifier)
             .markThreadLocallyRead(widget.args.threadId);
       } catch (e, st) {
         debugPrint('ChatThreadScreen init error: $e');
@@ -64,18 +63,17 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
 
   @override
   void dispose() {
-    _messageController.dispose();
-    _scrollController.dispose();
+    messageController.dispose();
+    scrollController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final state = ref.watch(chatThreadControllerProvider(widget.args));
-    final controller =
-        ref.read(chatThreadControllerProvider(widget.args).notifier);
+    final controller = ref.read(chatThreadControllerProvider(widget.args).notifier);
     final myUserId = ref.watch(authStateProvider).user?.userId;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     ref.listen(chatThreadControllerProvider(widget.args), (previous, next) {
       final previousCount = previous?.messages.valueOrNull?.length ?? 0;
@@ -83,9 +81,9 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
 
       if (nextCount > previousCount) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!_scrollController.hasClients) return;
-          _scrollController.animateTo(
-            _scrollController.position.maxScrollExtent,
+          if (!scrollController.hasClients) return;
+          scrollController.animateTo(
+            scrollController.position.maxScrollExtent,
             duration: const Duration(milliseconds: 260),
             curve: Curves.easeOutCubic,
           );
@@ -104,8 +102,6 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
         actions: [
           state.details.maybeWhen(
             data: (details) {
-              final isEventGroup = _isEventGroup(details);
-
               return IconButton(
                 tooltip: 'Chat details',
                 onPressed: () {
@@ -114,9 +110,7 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
                       builder: (_) => ChatDetailsScreen(
                         details: details,
                         currentUserId: myUserId,
-                        onLeaveGroup: isEventGroup
-                            ? () => controller.leaveGroup()
-                            : null,
+                        onLeaveThread: controller.leaveThread,
                         onOpenEventDetails: details.eventInfo == null
                             ? null
                             : () {
@@ -125,17 +119,14 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
 
                                 Navigator.of(context).push(
                                   MaterialPageRoute(
-                                    builder: (_) =>
-                                        EventDetailsScreen(eventId: eventId),
+                                    builder: (_) => EventDetailsScreen(eventId: eventId),
                                   ),
                                 );
                               },
                         onOpenParticipant: (ChatParticipant participant) {
                           Navigator.of(context).push(
                             MaterialPageRoute(
-                              builder: (_) => PublicProfileScreen(
-                                userId: participant.userId,
-                              ),
+                              builder: (_) => PublicProfileScreen(userId: participant.userId),
                             ),
                           );
                         },
@@ -155,15 +146,13 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
           state.details.maybeWhen(
             data: (details) {
               final eventInfo = details.eventInfo;
-              if (eventInfo == null || _eventCardDismissed) {
+              if (eventInfo == null || eventCardDismissed) {
                 return const SizedBox.shrink();
               }
 
               return EventChatInfoCard(
                 info: eventInfo,
-                onClose: () {
-                  setState(() => _eventCardDismissed = true);
-                },
+                onClose: () => setState(() => eventCardDismissed = true),
                 onOpenEvent: () {
                   final eventId = eventInfo.eventId;
                   if (eventId <= 0) return;
@@ -183,28 +172,16 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
               data: (items) {
                 if (items.isEmpty) {
                   return ListView(
-                    controller: _scrollController,
+                    controller: scrollController,
                     physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
                     children: const [
-                      _ThreadTopStateCard(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Icon(Icons.chat_bubble_outline_rounded, size: 30),
-                            SizedBox(height: 12),
-                            Text(
-                              'No messages yet',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            SizedBox(height: 6),
-                            Text(
-                              'Start the conversation with your first message.',
-                            ),
-                          ],
+                      ThreadTopStateCard(
+                        child: AppEmptyState(
+                          title: 'No messages yet',
+                          message: 'Start the conversation with your first message.',
+                          icon: Icons.chat_bubble_outline_rounded,
+                          padding: EdgeInsets.zero,
                         ),
                       ),
                     ],
@@ -212,75 +189,44 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
                 }
 
                 return ListView.separated(
-                  controller: _scrollController,
+                  controller: scrollController,
                   reverse: false,
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
                   itemCount: items.length,
                   separatorBuilder: (_, __) => const SizedBox(height: 10),
                   itemBuilder: (context, index) {
                     final message = items[index];
-                    final isMine =
-                        myUserId != null && message.senderId == myUserId;
+                    final isMine = myUserId != null && message.senderId == myUserId;
 
                     return ChatMessageBubble(
                       message: message,
                       isMine: isMine,
-                      isDark: isDark,
                       onReply: () => controller.setReplyingTo(message),
-                      onDelete: isMine
-                          ? () => controller.deleteMessage(message.id)
-                          : null,
+                      onDelete: isMine ? () => controller.deleteMessage(message.id) : null,
                       onLike: () => controller.toggleLike(message),
                       onEdit: isMine
-                          ? () => _showEditDialog(context, controller, message)
+                          ? () => showEditDialog(context, controller, message)
                           : null,
                     );
                   },
                 );
               },
               error: (_, __) => ListView(
-                controller: _scrollController,
+                controller: scrollController,
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
                 children: [
-                  _ThreadTopStateCard(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Icon(
-                          Icons.cloud_off_rounded,
-                          size: 30,
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
-                        const SizedBox(height: 12),
-                        const Text(
-                          'Failed to load messages',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          'Try loading the conversation again.',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Theme.of(context).textTheme.bodySmall?.color,
-                          ),
-                        ),
-                        const SizedBox(height: 14),
-                        TextButton.icon(
-                          onPressed: controller.load,
-                          icon: const Icon(Icons.refresh_rounded),
-                          label: const Text('Retry'),
-                        ),
-                      ],
+                  ThreadTopStateCard(
+                    child: AppErrorState(
+                      title: 'Failed to load messages',
+                      message: 'Try loading the conversation again.',
+                      onRetry: controller.load,
                     ),
                   ),
                 ],
               ),
               loading: () => const Center(
-                child: CircularProgressIndicator(),
+                child: AppSpinner(size: 28, strokeWidth: 2.8),
               ),
             ),
           ),
@@ -289,10 +235,10 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
             child: Container(
               padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
               decoration: BoxDecoration(
-                color: Theme.of(context).scaffoldBackgroundColor,
+                color: theme.scaffoldBackgroundColor,
                 border: Border(
                   top: BorderSide(
-                    color: Theme.of(context).dividerColor.withOpacity(0.08),
+                    color: theme.dividerColor.withValues(alpha: 0.20),
                   ),
                 ),
               ),
@@ -313,30 +259,24 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
                       Expanded(
                         child: Container(
                           decoration: BoxDecoration(
-                            color: isDark
-                                ? const Color(0xFF17191D)
-                                : Theme.of(context).colorScheme.surface,
+                            color: theme.colorScheme.surface,
                             borderRadius: BorderRadius.circular(22),
                             border: Border.all(
-                              color: isDark
-                                  ? const Color(0xFF2A303A)
-                                  : const Color(0xFFE5EAF2),
+                              color: theme.colorScheme.outline.withValues(alpha: 0.28),
                             ),
                           ),
                           child: TextField(
-                            controller: _messageController,
+                            controller: messageController,
                             minLines: 1,
                             maxLines: 5,
                             textInputAction: TextInputAction.send,
                             onSubmitted: state.sending
                                 ? null
                                 : (_) async {
-                                    final ok = await controller.sendMessage(
-                                      _messageController.text,
-                                    );
+                                    final ok = await controller.sendMessage(messageController.text);
                                     if (ok) {
-                                      _messageController.clear();
-                                      _jumpToBottom();
+                                      messageController.clear();
+                                      jumpToBottom();
                                     }
                                   },
                             decoration: const InputDecoration(
@@ -351,38 +291,32 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
                         ),
                       ),
                       const SizedBox(width: 10),
-                      Container(
+                      SizedBox(
                         width: 48,
                         height: 48,
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.primary,
-                          shape: BoxShape.circle,
-                        ),
-                        child: IconButton(
+                        child: FilledButton(
                           onPressed: state.sending
                               ? null
                               : () async {
-                                  final ok = await controller.sendMessage(
-                                    _messageController.text,
-                                  );
+                                  final ok = await controller.sendMessage(messageController.text);
                                   if (ok) {
-                                    _messageController.clear();
-                                    _jumpToBottom();
+                                    messageController.clear();
+                                    jumpToBottom();
                                   }
                                 },
-                          icon: state.sending
-                              ? SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color:
-                                        Theme.of(context).colorScheme.onPrimary,
-                                  ),
+                          style: FilledButton.styleFrom(
+                            shape: const CircleBorder(),
+                            padding: EdgeInsets.zero,
+                          ),
+                          child: state.sending
+                              ? AppSpinner(
+                                  size: 18,
+                                  strokeWidth: 2,
+                                  color: theme.colorScheme.onPrimary,
                                 )
                               : Icon(
                                   Icons.send_rounded,
-                                  color: Theme.of(context).colorScheme.onPrimary,
+                                  color: theme.colorScheme.onPrimary,
                                 ),
                         ),
                       ),
@@ -397,25 +331,18 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
     );
   }
 
-  bool _isEventGroup(ChatThreadDetails details) {
-    if (details.eventInfo != null) return true;
-    if (details.type == ChatThreadType.eventGroup) return true;
-    if (details.participants.length > 2) return true;
-    return false;
-  }
-
-  void _jumpToBottom() {
+  void jumpToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_scrollController.hasClients) return;
-      _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent,
+      if (!scrollController.hasClients) return;
+      scrollController.animateTo(
+        scrollController.position.maxScrollExtent,
         duration: const Duration(milliseconds: 260),
         curve: Curves.easeOutCubic,
       );
     });
   }
 
-  Future<void> _showEditDialog(
+  Future<void> showEditDialog(
     BuildContext context,
     ChatThreadController controller,
     MessageItem message,
@@ -451,25 +378,15 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
   }
 }
 
-class _ThreadTopStateCard extends StatelessWidget {
+class ThreadTopStateCard extends StatelessWidget {
   final Widget child;
 
-  const _ThreadTopStateCard({required this.child});
+  const ThreadTopStateCard({super.key, required this.child});
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return Container(
-      width: double.infinity,
+    return AppSurfaceCard(
       padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF17191D) : Colors.white,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(
-          color: isDark ? const Color(0xFF2A303A) : const Color(0xFFE5EAF2),
-        ),
-      ),
       child: child,
     );
   }

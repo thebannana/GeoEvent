@@ -4,6 +4,7 @@ using EventService.Application.Interfaces.Repositories;
 using EventService.Application.Interfaces.Services;
 using EventService.Domain.Entities;
 using EventService.Domain.Enums;
+using EventService.Infrastructure.Repositories;
 using MassTransit;
 using MassTransit.Transports;
 using Microsoft.Extensions.Logging;
@@ -53,9 +54,11 @@ public class EventServiceImpl : IEventService
 
     public async Task<ServiceResult<CommentResponseDto>> CreateCommentAsync(CreateCommentDto dto, int userId)
     {
+        Comment? parent = null;
+
         if (dto.ParentCommentId.HasValue)
         {
-            var parent = await _eventRepository.GetCommentByIdAsync(dto.ParentCommentId.Value);
+            parent = await _eventRepository.GetCommentByIdAsync(dto.ParentCommentId.Value);
             if (parent is null)
                 return ServiceResult<CommentResponseDto>.NotFound($"Parent comment {dto.ParentCommentId.Value} not found.");
         }
@@ -73,8 +76,70 @@ public class EventServiceImpl : IEventService
 
         var created = await _eventRepository.CreateCommentAsync(comment);
         var dtoResult = MapComment(created);
-
         await EnrichCommentsAsync(new List<CommentResponseDto> { dtoResult }, userId);
+
+        var ev = await _eventRepository.GetByIdWithDetailsAsync(dto.EventId);
+        if (ev != null)
+        {
+            var profiles = await _userProfileService.GetProfilesByIdsAsync(new[] { userId });
+            profiles.TryGetValue(userId, out var actor);
+
+            var actorDisplayName = ResolveDisplayName(actor, userId);
+            var actorAvatarUrl = actor?.AvatarUrl;
+            var eventImageUrl = ResolveEventImageUrl(ev);
+            var preview = BuildPreview(created.Content);
+
+            if (dto.ParentCommentId.HasValue)
+            {
+                if (parent?.UserId.HasValue == true && parent.UserId.Value != userId)
+                {
+                    await _publishEndpoint.Publish(new EventCommentReplyCreatedMessage(
+                        ev.EventId,
+                        ev.Title,
+                        eventImageUrl,
+                        parent.CommentId,
+                        parent.UserId.Value,
+                        created.CommentId,
+                        userId,
+                        actorDisplayName,
+                        actorAvatarUrl,
+                        preview,
+                        DateTime.UtcNow
+                    ));
+                }
+            }
+            else
+            {
+                if (ev.OrganizerId.HasValue && ev.OrganizerId.Value != userId)
+                {
+                    await _publishEndpoint.Publish(new EventCommentCreatedMessage(
+                        ev.EventId,
+                        ev.Title,
+                        eventImageUrl,
+                        ev.OrganizerId.Value,
+                        created.CommentId,
+                        userId,
+                        actorDisplayName,
+                        actorAvatarUrl,
+                        preview,
+                        DateTime.UtcNow
+                    ));
+                }
+            }
+        }
+
+        if (ev is not null)
+        {
+            await _publishEndpoint.Publish(new UserEventPreferenceInteractionMessage(
+                Guid.NewGuid(),
+                userId,
+                ev.EventId,
+                ev.SegmentId,
+                ev.GenreId,
+                ev.SubGenreId,
+                "Comment",
+                DateTime.UtcNow));
+        }
 
         return ServiceResult<CommentResponseDto>.Ok(dtoResult);
     }
@@ -135,7 +200,6 @@ public class EventServiceImpl : IEventService
     public async Task<ServiceResult<bool>> LikeCommentAsync(int commentId, int userId)
     {
         var comment = await _eventRepository.GetCommentByIdAsync(commentId);
-
         if (comment is null)
             return ServiceResult<bool>.NotFound("Comment not found.");
 
@@ -146,6 +210,30 @@ public class EventServiceImpl : IEventService
             return ServiceResult<bool>.Conflict("Comment already liked.");
 
         await _eventRepository.LikeCommentAsync(commentId, userId);
+
+        if (comment.UserId.HasValue && comment.UserId.Value != userId)
+        {
+            var ev = await _eventRepository.GetByIdWithDetailsAsync(comment.EventId ?? 0);
+            if (ev != null)
+            {
+                var profiles = await _userProfileService.GetProfilesByIdsAsync(new[] { userId });
+                profiles.TryGetValue(userId, out var liker);
+
+                await _publishEndpoint.Publish(new EventCommentLikedMessage(
+                    ev.EventId,
+                    ev.Title,
+                    ResolveEventImageUrl(ev),
+                    comment.CommentId,
+                    comment.UserId.Value,
+                    userId,
+                    ResolveDisplayName(liker, userId),
+                    liker?.AvatarUrl,
+                    BuildPreview(comment.Content),
+                    DateTime.UtcNow
+                ));
+            }
+        }
+
         return ServiceResult<bool>.Ok(true);
     }
 
@@ -234,35 +322,128 @@ public class EventServiceImpl : IEventService
         };
     }
     public async Task<ServiceResult<PagedResult<EventResponseDto>>> GetPublicAsync(
-        EventFilterDto filter,
-        int? requesterId = null)
+    EventFilterDto filter,
+    int? requesterId = null)
     {
         filter ??= new EventFilterDto();
         filter.Status = EventStatus.Active;
         filter.OrganizerId = null;
 
-        var result = await _eventRepository.GetAllAsync(filter);
-
-        var items = new List<EventResponseDto>();
-
-        foreach (var ev in result.Items)
+        if (!requesterId.HasValue)
         {
-            var isLiked = false;
+            var defaultResult = await _eventRepository.GetAllAsync(filter);
 
-            if (requesterId.HasValue)
-                isLiked = await _eventRepository.IsLikedByUserAsync(ev.EventId, requesterId.Value);
-
-            items.Add(MapToDto(ev, isLiked));
+            return ServiceResult<PagedResult<EventResponseDto>>.Ok(new PagedResult<EventResponseDto>
+            {
+                Items = defaultResult.Items.Select(ev => MapToDto(ev, false)).ToList(),
+                TotalCount = defaultResult.TotalCount,
+                Page = defaultResult.Page,
+                PageSize = defaultResult.PageSize
+            });
         }
 
-        return ServiceResult<PagedResult<EventResponseDto>>.Ok(
-            new PagedResult<EventResponseDto>
+        var preferences = await _userProfileService.GetUserPreferencesAsync(requesterId.Value);
+
+        if (preferences.Count == 0)
+        {
+            var defaultResult = await _eventRepository.GetAllAsync(filter);
+
+            var itemsWithoutPrefs = new List<EventResponseDto>();
+            foreach (var ev in defaultResult.Items)
             {
-                Items = items,
-                TotalCount = result.TotalCount,
-                Page = result.Page,
-                PageSize = result.PageSize
+                var isLiked = await _eventRepository.IsLikedByUserAsync(ev.EventId, requesterId.Value);
+                itemsWithoutPrefs.Add(MapToDto(ev, isLiked));
+            }
+
+            return ServiceResult<PagedResult<EventResponseDto>>.Ok(new PagedResult<EventResponseDto>
+            {
+                Items = itemsWithoutPrefs,
+                TotalCount = defaultResult.TotalCount,
+                Page = defaultResult.Page,
+                PageSize = defaultResult.PageSize
             });
+        }
+
+        var candidates = await _eventRepository.GetPublicCandidatesAsync(filter, 200);
+
+        var scored = new List<(DomainEvent Event, double Score)>();
+
+        foreach (var ev in candidates)
+        {
+            var score = CalculatePreferenceScore(ev, preferences);
+            scored.Add((ev, score));
+        }
+
+        var ranked = scored
+            .OrderByDescending(x => x.Score)
+            .ThenBy(x => x.Event.StartDateTime)
+            .ThenByDescending(x => x.Event.LikesCount)
+            .ThenBy(x => x.Event.EventId)
+            .ToList();
+
+        var page = filter.Page <= 0 ? 1 : filter.Page;
+        var pageSize = filter.PageSize <= 0 ? 20 : Math.Min(filter.PageSize, 100);
+
+        var pagedItems = ranked
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToList();
+
+        var resultItems = new List<EventResponseDto>();
+
+        foreach (var item in pagedItems)
+        {
+            var isLiked = await _eventRepository.IsLikedByUserAsync(item.Event.EventId, requesterId.Value);
+            resultItems.Add(MapToDto(item.Event, isLiked));
+        }
+
+        return ServiceResult<PagedResult<EventResponseDto>>.Ok(new PagedResult<EventResponseDto>
+        {
+            Items = resultItems,
+            TotalCount = ranked.Count,
+            Page = page,
+            PageSize = pageSize
+        });
+    }
+
+    private static double CalculatePreferenceScore(
+    DomainEvent ev,
+    IReadOnlyList<UserPreferenceDto> preferences)
+    {
+        double score = 0;
+
+        var segmentScore = preferences
+            .Where(p =>
+                p.SegmentId == ev.SegmentId &&
+                p.GenreId == null &&
+                p.SubGenreId == null)
+            .Select(p => p.Score)
+            .FirstOrDefault();
+
+        var genreScore = preferences
+            .Where(p =>
+                p.SegmentId == ev.SegmentId &&
+                p.GenreId == ev.GenreId &&
+                p.SubGenreId == null)
+            .Select(p => p.Score)
+            .FirstOrDefault();
+
+        var subGenreScore = preferences
+            .Where(p =>
+                p.SegmentId == ev.SegmentId &&
+                p.GenreId == ev.GenreId &&
+                p.SubGenreId == ev.SubGenreId)
+            .Select(p => p.Score)
+            .FirstOrDefault();
+
+        score += segmentScore * 1.0;
+        score += genreScore * 2.0;
+        score += subGenreScore * 3.0;
+
+        if (ev.IsFeatured)
+            score += 0.5;
+
+        return score;
     }
 
     public async Task<ServiceResult<EventResponseDto>> GetPublicByIdAsync(int eventId, int? requesterId = null)
@@ -273,6 +454,12 @@ public class EventServiceImpl : IEventService
 
         if (ev.Status != EventStatus.Active && ev.OrganizerId != requesterId)
             return ServiceResult<EventResponseDto>.NotFound($"Event {eventId} not found.");
+
+        if (!requesterId.HasValue || ev.OrganizerId != requesterId.Value)
+        {
+            await _eventRepository.IncrementViewCountAsync(eventId);
+            ev.ViewCount++;
+        }
 
         var isLiked = false;
         if (requesterId.HasValue)
@@ -710,7 +897,7 @@ public class EventServiceImpl : IEventService
 
     public async Task<ServiceResult<bool>> LikeAsync(int eventId, int userId)
     {
-        var ev = await _eventRepository.GetByIdAsync(eventId);
+        var ev = await _eventRepository.GetByIdWithDetailsAsync(eventId);
         if (ev is null)
             return ServiceResult<bool>.NotFound($"Event {eventId} not found.");
 
@@ -721,6 +908,34 @@ public class EventServiceImpl : IEventService
             return ServiceResult<bool>.Conflict("Event already liked.");
 
         await _eventRepository.LikeAsync(eventId, userId);
+
+        if (ev.OrganizerId.HasValue && ev.OrganizerId.Value != userId)
+        {
+            var profiles = await _userProfileService.GetProfilesByIdsAsync(new[] { userId });
+            profiles.TryGetValue(userId, out var liker);
+
+            await _publishEndpoint.Publish(new EventLikedMessage(
+                ev.EventId,
+                ev.Title,
+                ResolveEventImageUrl(ev),
+                ev.OrganizerId.Value,
+                userId,
+                ResolveDisplayName(liker, userId),
+                liker?.AvatarUrl,
+                DateTime.UtcNow
+            ));
+        }
+
+        await _publishEndpoint.Publish(new UserEventPreferenceInteractionMessage(
+            Guid.NewGuid(),
+            userId,
+            ev.EventId,
+            ev.SegmentId,
+            ev.GenreId,
+            ev.SubGenreId,
+            "Like",
+            DateTime.UtcNow));
+
         return ServiceResult<bool>.Ok(true);
     }
 
@@ -929,6 +1144,34 @@ public class EventServiceImpl : IEventService
         };
 
         var created = await _eventRepository.CreateBookmarkAsync(bookmark);
+
+        if (ev.OrganizerId.HasValue && ev.OrganizerId.Value != userId)
+        {
+            var profiles = await _userProfileService.GetProfilesByIdsAsync(new[] { userId });
+            profiles.TryGetValue(userId, out var saver);
+
+            await _publishEndpoint.Publish(new EventBookmarkedMessage(
+                ev.EventId,
+                ev.Title,
+                ResolveEventImageUrl(ev),
+                ev.OrganizerId.Value,
+                userId,
+                ResolveDisplayName(saver, userId),
+                saver?.AvatarUrl,
+                DateTime.UtcNow
+            ));
+        }
+
+        await _publishEndpoint.Publish(new UserEventPreferenceInteractionMessage(
+            Guid.NewGuid(),
+            userId,
+            ev.EventId,
+            ev.SegmentId,
+            ev.GenreId,
+            ev.SubGenreId,
+            "Bookmark",
+            DateTime.UtcNow));
+
         return ServiceResult<BookmarkResponseDto>.Created(MapBookmark(created));
     }
 
@@ -966,6 +1209,7 @@ public class EventServiceImpl : IEventService
         OrganizerId = ev.OrganizerId,
         SegmentId = ev.SegmentId,
         SegmentName = ev.Segment?.Name,
+        SegmentColor = ev.Segment?.Color,
         GenreId = ev.GenreId,
         GenreName = ev.Genre?.Name,
         SubGenreId = ev.SubGenreId,
@@ -1129,6 +1373,34 @@ public class EventServiceImpl : IEventService
         Locale = v.Locale,
         PriceZones = v.PriceZones.Select(MapPriceZone).ToList()
     };
+
+    private static string ResolveDisplayName(CommentUserProfileDto? profile, int userId)
+    {
+        if (!string.IsNullOrWhiteSpace(profile?.Username))
+            return profile.Username;
+
+        if (!string.IsNullOrWhiteSpace(profile?.DisplayName))
+            return profile.DisplayName;
+
+        return $"User {userId}";
+    }
+
+    private static string? ResolveEventImageUrl(DomainEvent ev)
+    {
+        return ev.Images.FirstOrDefault(i => i.IsCover)?.ImageUrl
+            ?? ev.Images.FirstOrDefault()?.ImageUrl;
+    }
+
+    private static string BuildPreview(string? content, int maxLength = 120)
+    {
+        if (string.IsNullOrWhiteSpace(content))
+            return string.Empty;
+
+        var normalized = content.Trim();
+        return normalized.Length <= maxLength
+            ? normalized
+            : normalized[..maxLength];
+    }
 
     public async Task<ServiceResult<PagedResult<EventResponseDto>>> GetAllAsync(EventFilterDto filter)
     {

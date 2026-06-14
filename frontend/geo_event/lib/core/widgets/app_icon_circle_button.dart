@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 
 class AppIconCircleButton extends StatelessWidget {
   final VoidCallback? onPressed;
-  final IconData icon;
+  final IconData? icon;
+  final Widget? child;
   final String tooltip;
   final double size;
   final Color? backgroundColor;
@@ -12,13 +13,14 @@ class AppIconCircleButton extends StatelessWidget {
   const AppIconCircleButton({
     super.key,
     required this.onPressed,
-    required this.icon,
     required this.tooltip,
+    this.icon,
+    this.child,
     this.size = 46,
     this.backgroundColor,
     this.foregroundColor,
     this.borderColor,
-  });
+  }) : assert(icon != null || child != null);
 
   @override
   Widget build(BuildContext context) {
@@ -28,11 +30,10 @@ class AppIconCircleButton extends StatelessWidget {
     return Tooltip(
       message: tooltip,
       child: Material(
-        color: backgroundColor ?? theme.cardColor.withValues(alpha: 0.78),
+        color: backgroundColor ?? colorScheme.surface,
         shape: CircleBorder(
           side: BorderSide(
-            color: borderColor ??
-                colorScheme.outline.withValues(alpha: 0.50),
+            color: borderColor ?? colorScheme.outline,
           ),
         ),
         child: InkWell(
@@ -41,10 +42,13 @@ class AppIconCircleButton extends StatelessWidget {
           child: SizedBox(
             width: size,
             height: size,
-            child: Icon(
-              icon,
-              size: 22,
-              color: foregroundColor ?? colorScheme.onSurface,
+            child: Center(
+              child: child ??
+                  Icon(
+                    icon,
+                    size: 22,
+                    color: foregroundColor ?? colorScheme.onSurface,
+                  ),
             ),
           ),
         ),

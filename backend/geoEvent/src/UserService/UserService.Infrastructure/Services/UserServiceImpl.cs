@@ -31,6 +31,62 @@ public class UserServiceImpl : IUserService
         _externalValidationService = externalValidationService;
     }
 
+    public async Task ApplyInteractionPreferenceAsync(
+    int userId,
+    int eventId,
+    int? segmentId,
+    int? genreId,
+    int? subGenreId,
+    string interactionType,
+    DateTime occurredAt)
+    {
+        var (segmentWeight, genreWeight, subGenreWeight) = interactionType switch
+        {
+            "Like" => (1.0, 2.0, 3.0),
+            "Bookmark" => (2.0, 3.0, 4.0),
+            "Comment" => (2.0, 4.0, 5.0),
+            "ReservationConfirmed" => (3.0, 5.0, 7.0),
+            _ => (0.0, 0.0, 0.0)
+        };
+
+        if (segmentId.HasValue && segmentWeight > 0)
+            await UpsertIncrementPreferenceAsync(userId, segmentId, null, null, segmentWeight);
+
+        if (segmentId.HasValue && genreId.HasValue && genreWeight > 0)
+            await UpsertIncrementPreferenceAsync(userId, segmentId, genreId, null, genreWeight);
+
+        if (segmentId.HasValue && genreId.HasValue && subGenreId.HasValue && subGenreWeight > 0)
+            await UpsertIncrementPreferenceAsync(userId, segmentId, genreId, subGenreId, subGenreWeight);
+    }
+
+    private async Task UpsertIncrementPreferenceAsync(
+        int userId,
+        int? segmentId,
+        int? genreId,
+        int? subGenreId,
+        double amount)
+    {
+        var existing = await _userRepository.GetPreferenceAsync(userId, segmentId, genreId, subGenreId);
+
+        if (existing is not null)
+        {
+            existing.IncrementScore(amount);
+            await _userRepository.UpdatePreferenceAsync(existing);
+            return;
+        }
+
+        var preference = new UserPreference
+        {
+            UserId = userId,
+            SegmentId = segmentId,
+            GenreId = genreId,
+            SubGenreId = subGenreId,
+            Score = amount,
+            LastUpdated = DateTime.UtcNow
+        };
+
+        await _userRepository.CreatePreferenceAsync(preference);
+    }
     public async Task<ServiceResult<UserProfileDto>> GetProfileAsync(int userId)
     {
         var user = await _userRepository.GetByIdAsync(userId);
@@ -305,7 +361,11 @@ public class UserServiceImpl : IUserService
 
     public async Task<ServiceResult<UserPreferenceResponseDto>> UpsertPreferenceAsync(int userId, UpdatePreferenceDto dto)
     {
-        var existing = await _userRepository.GetPreferenceAsync(userId, dto.SegmentId, dto.GenreId);
+        var existing = await _userRepository.GetPreferenceAsync(
+            userId,
+            dto.SegmentId,
+            dto.GenreId,
+            dto.SubGenreId);
 
         if (existing is not null)
         {
@@ -319,6 +379,7 @@ public class UserServiceImpl : IUserService
             UserId = userId,
             SegmentId = dto.SegmentId,
             GenreId = dto.GenreId,
+            SubGenreId = dto.SubGenreId,
             Score = dto.Score,
             LastUpdated = DateTime.UtcNow
         };
@@ -678,13 +739,13 @@ public class UserServiceImpl : IUserService
         GenreId = a.GenreId,
         CreatedAt = a.CreatedAt
     };
-
     private static UserPreferenceResponseDto MapPreference(UserPreference p) => new()
     {
         PrefId = p.PrefId,
         UserId = p.UserId,
         SegmentId = p.SegmentId,
         GenreId = p.GenreId,
+        SubGenreId = p.SubGenreId,
         Score = p.Score,
         LastUpdated = p.LastUpdated
     };

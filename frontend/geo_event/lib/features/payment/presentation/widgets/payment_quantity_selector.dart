@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/widgets/app_surface_card.dart';
+
 class PaymentQuantitySelector extends StatelessWidget {
   final int quantity;
   final int maxQuantity;
@@ -14,52 +16,61 @@ class PaymentQuantitySelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colorScheme = Theme.of(context).colorScheme;
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF17191D) : Colors.white,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(
-          color: isDark ? const Color(0xFF2A303A) : const Color(0xFFE5EAF2),
-        ),
-      ),
-      child: Row(
+    return AppSurfaceCard(
+      child: Wrap(
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        runSpacing: 12,
+        spacing: 12,
         children: [
-          const Expanded(
+          SizedBox(
+            width: 220,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                const Text(
                   'Ticket quantity',
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
-                SizedBox(height: 4),
+                const SizedBox(height: 4),
                 Text(
                   'Choose how many tickets you want to reserve.',
-                  style: TextStyle(fontSize: 13),
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
                 ),
               ],
             ),
           ),
-          IconButton(
-            onPressed: quantity > 1 ? () => onChanged(quantity - 1) : null,
-            icon: const Icon(Icons.remove_circle_outline),
-          ),
-          Text(
-            '$quantity',
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          IconButton(
-            onPressed: quantity < maxQuantity ? () => onChanged(quantity + 1) : null,
-            icon: const Icon(Icons.add_circle_outline),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                onPressed: quantity > 1 ? () => onChanged(quantity - 1) : null,
+                icon: const Icon(Icons.remove_circle_outline),
+                tooltip: 'Decrease quantity',
+              ),
+              Text(
+                '$quantity',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              IconButton(
+                onPressed: quantity < maxQuantity
+                    ? () => onChanged(quantity + 1)
+                    : null,
+                icon: const Icon(Icons.add_circle_outline),
+                tooltip: 'Increase quantity',
+              ),
+            ],
           ),
         ],
       ),

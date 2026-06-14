@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/widgets/app_surface_card.dart';
 import '../../../../shared/events/models/create_event_state.dart';
 
 class CreateEventForm extends StatelessWidget {
@@ -9,7 +10,6 @@ class CreateEventForm extends StatelessWidget {
   final TextEditingController capacityCtrl;
   final TextEditingController priceCtrl;
   final TextEditingController tagsCtrl;
-  final TextEditingController externalUrlCtrl;
   final TextEditingController accessibilityCtrl;
   final TextEditingController promoterCtrl;
   final DateTime? startAt;
@@ -18,7 +18,6 @@ class CreateEventForm extends StatelessWidget {
   final Future<void> Function() onPickStartDate;
   final Future<void> Function() onPickEndDate;
   final ValueChanged<bool> onFreeChanged;
-  final ValueChanged<bool> onOnlineChanged;
 
   const CreateEventForm({
     super.key,
@@ -28,7 +27,6 @@ class CreateEventForm extends StatelessWidget {
     required this.capacityCtrl,
     required this.priceCtrl,
     required this.tagsCtrl,
-    required this.externalUrlCtrl,
     required this.accessibilityCtrl,
     required this.promoterCtrl,
     required this.startAt,
@@ -37,7 +35,6 @@ class CreateEventForm extends StatelessWidget {
     required this.onPickStartDate,
     required this.onPickEndDate,
     required this.onFreeChanged,
-    required this.onOnlineChanged,
   });
 
   @override
@@ -53,6 +50,7 @@ class CreateEventForm extends StatelessWidget {
               TextFormField(
                 controller: titleCtrl,
                 textInputAction: TextInputAction.next,
+                enabled: !state.submitting,
                 decoration: const InputDecoration(
                   labelText: 'Title',
                   hintText: 'Write a title for your event',
@@ -61,6 +59,7 @@ class CreateEventForm extends StatelessWidget {
               const SizedBox(height: 12),
               TextFormField(
                 controller: descriptionCtrl,
+                enabled: !state.submitting,
                 minLines: 5,
                 maxLines: 7,
                 decoration: const InputDecoration(
@@ -76,10 +75,11 @@ class CreateEventForm extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const SectionLabel('Attendance & schedule'),
+              const SectionLabel('Attendance schedule'),
               const SizedBox(height: 12),
               TextFormField(
                 controller: capacityCtrl,
+                enabled: !state.submitting,
                 keyboardType: TextInputType.number,
                 decoration: const InputDecoration(
                   labelText: 'Capacity',
@@ -92,7 +92,7 @@ class CreateEventForm extends StatelessWidget {
                 value: startAt == null
                     ? 'Pick a starting date'
                     : formatDateTime(startAt!),
-                onTap: onPickStartDate,
+                onTap: state.submitting ? null : onPickStartDate,
               ),
               const SizedBox(height: 12),
               PickerField(
@@ -100,7 +100,7 @@ class CreateEventForm extends StatelessWidget {
                 value: endAt == null
                     ? 'Pick an ending date'
                     : formatDateTime(endAt!),
-                onTap: onPickEndDate,
+                onTap: state.submitting ? null : onPickEndDate,
               ),
             ],
           ),
@@ -128,24 +128,6 @@ class CreateEventForm extends StatelessWidget {
                   labelText: 'Price',
                 ),
               ),
-              const SizedBox(height: 12),
-              SwitchListTile.adaptive(
-                value: state.isOnline,
-                onChanged: state.submitting ? null : onOnlineChanged,
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Online event'),
-              ),
-              if (state.isOnline) ...[
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: externalUrlCtrl,
-                  enabled: !state.submitting,
-                  keyboardType: TextInputType.url,
-                  decoration: const InputDecoration(
-                    labelText: 'External URL',
-                  ),
-                ),
-              ],
               const SizedBox(height: 12),
               TextFormField(
                 controller: tagsCtrl,
@@ -190,18 +172,8 @@ class SectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return Container(
-      width: double.infinity,
+    return AppSurfaceCard(
       padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF17191D) : Colors.white,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(
-          color: isDark ? const Color(0xFF2A303A) : const Color(0xFFE5EAF2),
-        ),
-      ),
       child: child,
     );
   }
@@ -210,10 +182,7 @@ class SectionCard extends StatelessWidget {
 class SectionLabel extends StatelessWidget {
   final String text;
 
-  const SectionLabel(
-    this.text, {
-    super.key,
-  });
+  const SectionLabel(this.text, {super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -230,7 +199,7 @@ class SectionLabel extends StatelessWidget {
 class PickerField extends StatelessWidget {
   final String label;
   final String value;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   const PickerField({
     super.key,
@@ -248,6 +217,7 @@ class PickerField extends StatelessWidget {
         decoration: InputDecoration(
           labelText: label,
           suffixIcon: const Icon(Icons.calendar_today_outlined, size: 18),
+          enabled: onTap != null,
         ),
         child: Text(
           value,

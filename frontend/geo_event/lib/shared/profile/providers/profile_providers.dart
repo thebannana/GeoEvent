@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_client.dart';
+import '../../../features/auth/application/auth_controller.dart';
 import '../../location/providers/location_providers.dart';
 import '../data/preferences_api.dart';
 import '../data/preferences_repository.dart';
@@ -30,13 +31,37 @@ final preferencesRepositoryProvider = Provider<PreferencesRepository>((ref) {
 });
 
 final myProfileProvider = FutureProvider<UserProfile>((ref) async {
+  ref.watch(sessionUserIdProvider);
   final repo = ref.watch(profileRepositoryProvider);
   return repo.getProfile();
 });
 
 final myPreferencesProvider = FutureProvider<List<UserPreference>>((ref) async {
+  ref.watch(sessionUserIdProvider);
   final repo = ref.watch(preferencesRepositoryProvider);
   return repo.getPreferences();
+});
+
+final preferredSegmentIdsProvider = Provider<Set<int>>((ref) {
+  final prefs = ref.watch(myPreferencesProvider).valueOrNull ?? const <UserPreference>[];
+
+  return prefs
+      .where((p) => p.segmentId != null && p.score > 0)
+      .map((p) => p.segmentId!)
+      .toSet();
+});
+
+final preferredGenreIdsProvider = Provider<Set<int>>((ref) {
+  final prefs = ref.watch(myPreferencesProvider).valueOrNull ?? const <UserPreference>[];
+
+  return prefs
+      .where((p) => p.genreId != null && p.score > 0)
+      .map((p) => p.genreId!)
+      .toSet();
+});
+
+final preferredSubGenreIdsProvider = Provider<Set<int>>((ref) {
+  return const <int>{};
 });
 
 final mapboxCitySearchProvider =
@@ -58,11 +83,14 @@ final ticketScannerRepositoryProvider = Provider<TicketScannerRepository>((ref) 
   return TicketScannerRepository(ref.watch(ticketScannerApiProvider));
 });
 
-final myActivityLogsProvider = FutureProvider.autoDispose
-    .family<List<ActivityLog>, ({int page, int pageSize})>((ref, params) async {
-  final repo = ref.watch(profileRepositoryProvider);
-  return repo.getActivityLogs(
-    page: params.page,
-    pageSize: params.pageSize,
-  );
-});
+final myActivityLogsProvider =
+    FutureProvider.autoDispose.family<List<ActivityLog>, ({int page, int pageSize})>(
+  (ref, params) async {
+    ref.watch(sessionUserIdProvider);
+    final repo = ref.watch(profileRepositoryProvider);
+    return repo.getActivityLogs(
+      page: params.page,
+      pageSize: params.pageSize,
+    );
+  },
+);

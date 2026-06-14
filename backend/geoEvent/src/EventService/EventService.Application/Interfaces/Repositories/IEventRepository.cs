@@ -6,6 +6,8 @@ namespace EventService.Application.Interfaces.Repositories;
 
 public interface IEventRepository
 {
+    Task IncrementViewCountAsync(int eventId);
+    Task<List<Event>> GetPublicCandidatesAsync(EventFilterDto filter, int take = 200);
     // ── Events ────────────────────────────────────────────────
     Task<Event?> GetByIdAsync(int eventId);
     Task<Event?> GetByIdWithDetailsAsync(int eventId);
@@ -15,7 +17,6 @@ public interface IEventRepository
     Task UpdateAsync(Event entity);
     Task DeleteAsync(int eventId);
     Task<bool> ExistsAsync(int eventId);
-    Task IncrementViewCountAsync(int eventId);
 
     // ── Likes ─────────────────────────────────────────────────
     Task<bool> IsLikedByUserAsync(int eventId, int userId);

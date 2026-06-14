@@ -32,6 +32,6 @@ public class UserRatingConfiguration : IEntityTypeConfiguration<UserRating>
             .HasForeignKey(x => x.RatedUserId)
             .OnDelete(DeleteBehavior.NoAction);
 
-        builder.HasCheckConstraint("CK_UserRatings_Value", "[Value] >= 1 AND [Value] <= 5");
+        builder.ToTable(t => t.HasCheckConstraint("CK_UserRating_Value", "[Value] >= 1 AND [Value] <= 5"));
     }
 }

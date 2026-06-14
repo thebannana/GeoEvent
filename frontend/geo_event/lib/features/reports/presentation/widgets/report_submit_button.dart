@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:geo_event/core/widgets/app_spinner.dart';
 
 class ReportSubmitButton extends StatelessWidget {
   final bool enabled;
@@ -28,7 +29,10 @@ class ReportSubmitButton extends StatelessWidget {
             ? const SizedBox(
                 height: 20,
                 width: 20,
-                child: CircularProgressIndicator(strokeWidth: 2.4),
+                child: AppSpinner(
+                  size: 20,
+                  strokeWidth: 2.4,
+                ),
               )
             : const Text('Submit report'),
       ),

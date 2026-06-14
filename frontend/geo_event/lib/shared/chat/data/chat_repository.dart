@@ -11,6 +11,9 @@ class ChatRepository {
 
   Future<List<ConversationSummary>> getThreads() => api.getThreads();
 
+  Future<void> leaveThread(int threadId) async =>
+    api.leaveThread(threadId);
+
   Future<int> getUnreadCount() => api.getUnreadCount();
 
   Future<Map<String, dynamic>> openDirectThread({
@@ -48,8 +51,6 @@ class ChatRepository {
   Future<MessageItem> unlikeMessage(int messageId) => api.unlikeMessage(messageId);
 
   Future<void> markThreadRead(int threadId) => api.markThreadRead(threadId);
-
-Future<void> leaveThread(int threadId) => api.leaveThread(threadId);
 
   Future<List<ChatParticipant>> getThreadParticipants(int threadId) =>
       api.getThreadParticipants(threadId);

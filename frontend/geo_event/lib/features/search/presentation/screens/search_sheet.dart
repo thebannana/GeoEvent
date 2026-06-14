@@ -3,14 +3,19 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/widgets/app_chip.dart';
+import '../../../../core/widgets/app_empty_state.dart';
+import '../../../../core/widgets/app_error_view.dart';
+import '../../../../core/widgets/app_loading_indicator.dart';
 import '../../../../shared/events/models/create_event_models.dart';
 import '../../../../shared/events/providers/event_providers.dart';
 import '../../../../shared/location/models/event_directions_request.dart';
 import '../../../../shared/location/providers/directions_providers.dart';
 import '../../domain/filter_selection.dart';
+import '../../domain/sort_option.dart';
 import '../widgets/search_filter_bottom_sheet.dart';
 import '../widgets/search_result_card.dart';
-import '../widgets/search_sheet_chip.dart';
+import '../widgets/search_sort_bottom_sheet.dart';
 
 class SearchSheet extends ConsumerStatefulWidget {
   final VoidCallback? onCloseSheet;
@@ -36,10 +41,11 @@ class _SearchSheetState extends ConsumerState<SearchSheet> {
   int? _selectedGenreId;
   int? _selectedSubGenreId;
 
-  String _sortBy = 'StartDateTime';
-  bool _sortDescending = false;
+  String _sortBy = 'Recommended';
+  bool _sortDescending = true;
 
   int _requestId = 0;
+  bool _isDialogOpen = false;
 
   bool get _hasActiveFilters =>
       _selectedSegmentId != null ||
@@ -49,6 +55,7 @@ class _SearchSheetState extends ConsumerState<SearchSheet> {
   String get _query => _textController.text.trim();
 
   String get _sortLabel {
+    if (_sortBy == 'Recommended') return 'Recommended';
     if (_sortBy == 'LikesCount' && _sortDescending) return 'Most liked';
     if (_sortBy == 'ViewCount' && _sortDescending) return 'Most viewed';
     if (_sortBy == 'Price' && !_sortDescending) return 'Lowest price';
@@ -56,6 +63,10 @@ class _SearchSheetState extends ConsumerState<SearchSheet> {
     if (_sortBy == 'StartDateTime' && !_sortDescending) return 'Soonest';
     if (_sortBy == 'StartDateTime' && _sortDescending) return 'Latest';
     return 'Sort';
+  }
+
+  List<EventItem> _removeUnavailableEvents(List<EventItem> items) {
+    return items.where((item) => item.isVisibleInSearch).toList();
   }
 
   @override
@@ -77,28 +88,65 @@ class _SearchSheetState extends ConsumerState<SearchSheet> {
     widget.onCloseSheet?.call();
   }
 
-  Future<void> _openDirections(EventItem item) async {
-  final activeNavigation = ref.read(activeNavigationProvider);
-
-  if (activeNavigation?.eventId == item.eventId) {
-    await Navigator.of(context).maybePop();
-    _closeParentSearchSheet();
-    return;
+  void _setLoading() {
+    if (!mounted) return;
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
   }
 
-  ref.read(pendingDirectionsProvider.notifier).state = EventDirectionsRequest(
-    eventId: item.eventId,
-    latitude: item.latitude,
-    longitude: item.longitude,
-    title: item.title,
-  );
+  void _setResults(List<EventItem> results) {
+    if (!mounted) return;
+    setState(() {
+      _results = results;
+      _loading = false;
+      _error = null;
+    });
+  }
 
-  await Navigator.of(context).maybePop();
-  _closeParentSearchSheet();
-}
+  void _setError(Object error) {
+    if (!mounted) return;
+    setState(() {
+      _results = [];
+      _loading = false;
+      _error = error.toString().replaceFirst('Exception: ', '');
+    });
+  }
+
+  Future<void> _reloadCurrentResults() async {
+    if (_query.isEmpty) {
+      await _loadInitialResults(force: true);
+    } else {
+      await _search(_query);
+    }
+  }
+
+  Future<void> _openDirections(EventItem item) async {
+    final activeNavigation = ref.read(activeNavigationProvider);
+
+    if (activeNavigation?.eventId == item.eventId) {
+      await Navigator.of(context).maybePop();
+      _closeParentSearchSheet();
+      return;
+    }
+
+    ref.read(pendingDirectionsProvider.notifier).state = EventDirectionsRequest(
+      eventId: item.eventId,
+      latitude: item.latitude,
+      longitude: item.longitude,
+      title: item.title,
+    );
+
+    await Navigator.of(context).maybePop();
+    _closeParentSearchSheet();
+  }
 
   void _onQueryChanged(String value) {
-    setState(() {});
+    if (mounted) {
+      setState(() {});
+    }
+
     _debounce?.cancel();
 
     _debounce = Timer(const Duration(milliseconds: 350), () async {
@@ -111,63 +159,11 @@ class _SearchSheetState extends ConsumerState<SearchSheet> {
     });
   }
 
-  Map<int, double> _segmentWeights(List<dynamic> preferences) {
-    final map = <int, double>{};
-
-    for (final pref in preferences) {
-      final segmentId = pref.segmentId as int?;
-      if (segmentId != null) {
-        map[segmentId] = (map[segmentId] ?? 0) + (pref.score as num).toDouble();
-      }
-    }
-
-    return map;
-  }
-
-  Map<int, double> _genreWeights(List<dynamic> preferences) {
-    final map = <int, double>{};
-
-    for (final pref in preferences) {
-      final genreId = pref.genreId as int?;
-      if (genreId != null) {
-        map[genreId] = (map[genreId] ?? 0) + (pref.score as num).toDouble();
-      }
-    }
-
-    return map;
-  }
-
-  double _preferenceScore(
-    EventItem item,
-    Map<int, double> segmentWeights,
-    Map<int, double> genreWeights,
-  ) {
-    var score = 0.0;
-
-    if (item.segmentId != null) {
-      score += (segmentWeights[item.segmentId!] ?? 0) * 30;
-    }
-
-    if (item.genreId != null) {
-      score += (genreWeights[item.genreId!] ?? 0) * 22;
-    }
-
-    if (item.isFeatured) {
-      score += 6;
-    }
-
-    return score;
-  }
-
   Future<void> _loadInitialResults({bool force = false}) async {
     if (!force && _results.isNotEmpty && _query.isEmpty) return;
 
     final requestId = ++_requestId;
-
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+    _setLoading();
 
     try {
       final items = await ref.read(eventsApiProvider).searchEvents(
@@ -180,38 +176,12 @@ class _SearchSheetState extends ConsumerState<SearchSheet> {
             subGenreId: _selectedSubGenreId,
           );
 
-      final preferences = <dynamic>[];
-      final segmentWeights = _segmentWeights(preferences);
-      final genreWeights = _genreWeights(preferences);
-
-      final ranked = [...items]..sort((a, b) {
-          final aScore =
-              _preferenceScore(a, segmentWeights, genreWeights) +
-                  (a.likesCount / 20) +
-                  (a.viewCount / 200);
-
-          final bScore =
-              _preferenceScore(b, segmentWeights, genreWeights) +
-                  (b.likesCount / 20) +
-                  (b.viewCount / 200);
-
-          return bScore.compareTo(aScore);
-        });
-
       if (!mounted || requestId != _requestId) return;
-
-      setState(() {
-        _results = ranked;
-        _loading = false;
-      });
+      final visibleItems = _removeUnavailableEvents(items);
+      _setResults(visibleItems);
     } catch (e) {
       if (!mounted || requestId != _requestId) return;
-
-      setState(() {
-        _results = [];
-        _loading = false;
-        _error = e.toString().replaceFirst('Exception: ', '');
-      });
+      _setError(e);
     }
   }
 
@@ -224,11 +194,7 @@ class _SearchSheetState extends ConsumerState<SearchSheet> {
     }
 
     final requestId = ++_requestId;
-
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+    _setLoading();
 
     try {
       final items = await ref.read(eventsApiProvider).searchEvents(
@@ -269,299 +235,310 @@ class _SearchSheetState extends ConsumerState<SearchSheet> {
         return total;
       }
 
-      final ranked = [...items]..sort((a, b) => score(b).compareTo(score(a)));
+      final visibleItems = _removeUnavailableEvents(items);
+      final ranked = [...visibleItems]
+        ..sort((a, b) => score(b).compareTo(score(a)));
 
       if (!mounted || requestId != _requestId) return;
-
-      setState(() {
-        _results = ranked;
-        _loading = false;
-      });
+      _setResults(ranked);
     } catch (e) {
       if (!mounted || requestId != _requestId) return;
+      _setError(e);
+    }
+  }
 
-      setState(() {
-        _results = [];
-        _loading = false;
-        _error = e.toString().replaceFirst('Exception: ', '');
-      });
+  Future<T?> _showSheetSafeDialog<T>({
+    required Widget child,
+  }) async {
+    if (_isDialogOpen || !mounted) return null;
+
+    _isDialogOpen = true;
+    FocusScope.of(context).unfocus();
+
+    try {
+      await Future<void>.delayed(Duration.zero);
+
+      if (!mounted) return null;
+
+      return await showDialog<T>(
+        context: context,
+        barrierDismissible: true,
+        builder: (dialogContext) {
+          return Dialog(
+            backgroundColor: Colors.transparent,
+            insetPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 24,
+            ),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(dialogContext).size.height * 0.78,
+                maxWidth: 560,
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(28),
+                child: Material(
+                  color: Theme.of(dialogContext).colorScheme.surface,
+                  child: child,
+                ),
+              ),
+            ),
+          );
+        },
+      );
+    } finally {
+      _isDialogOpen = false;
     }
   }
 
   Future<void> _openSortSheet() async {
-    final selected = await showModalBottomSheet<_SortOption>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) {
-        final isDark = Theme.of(context).brightness == Brightness.dark;
-        final bg = isDark ? const Color(0xFF161A21) : Colors.white;
-        final border = isDark ? const Color(0xFF2A303A) : const Color(0xFFE3EAF3);
-
-        Widget tile({
-          required String title,
-          required _SortOption value,
-        }) {
-          final active = _sortBy == value.sortBy &&
-              _sortDescending == value.sortDescending;
-
-          return ListTile(
-            onTap: () => Navigator.pop(context, value),
-            title: Text(
-              title,
-              style: TextStyle(
-                fontWeight: active ? FontWeight.w700 : FontWeight.w500,
-              ),
-            ),
-            trailing: active
-                ? const Icon(Icons.check_rounded, color: Color(0xFF6B8FBF))
-                : null,
-          );
-        }
-
-        return SafeArea(
-          child: Container(
-            margin: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: bg,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: border),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const SizedBox(height: 10),
-                Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: isDark
-                        ? Colors.white24
-                        : Colors.black.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(99),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                const Padding(
-                  padding: EdgeInsets.fromLTRB(16, 8, 16, 4),
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      'Sort events',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                ),
-                tile(
-                  title: 'Soonest',
-                  value: const _SortOption(
-                    sortBy: 'StartDateTime',
-                    sortDescending: false,
-                  ),
-                ),
-                tile(
-                  title: 'Latest',
-                  value: const _SortOption(
-                    sortBy: 'StartDateTime',
-                    sortDescending: true,
-                  ),
-                ),
-                tile(
-                  title: 'Most liked',
-                  value: const _SortOption(
-                    sortBy: 'LikesCount',
-                    sortDescending: true,
-                  ),
-                ),
-                tile(
-                  title: 'Most viewed',
-                  value: const _SortOption(
-                    sortBy: 'ViewCount',
-                    sortDescending: true,
-                  ),
-                ),
-                tile(
-                  title: 'Lowest price',
-                  value: const _SortOption(
-                    sortBy: 'Price',
-                    sortDescending: false,
-                  ),
-                ),
-                tile(
-                  title: 'Highest price',
-                  value: const _SortOption(
-                    sortBy: 'Price',
-                    sortDescending: true,
-                  ),
-                ),
-                const SizedBox(height: 10),
-              ],
-            ),
-          ),
-        );
-      },
+    final selected = await _showSheetSafeDialog<SortOption>(
+      child: SearchSortBottomSheet(
+        selected: SortOption(
+          sortBy: _sortBy,
+          sortDescending: _sortDescending,
+          label: _sortLabel,
+        ),
+      ),
     );
 
-    if (selected == null) return;
+    if (selected == null || !mounted) return;
 
     setState(() {
       _sortBy = selected.sortBy;
       _sortDescending = selected.sortDescending;
     });
 
-    if (_query.isEmpty) {
-      await _loadInitialResults(force: true);
-    } else {
-      await _search(_query);
-    }
+    await _reloadCurrentResults();
   }
 
   Future<void> _openFilterSheet() async {
-    final segments = await ref.read(eventsApiProvider).getSegments();
+    try {
+      final segments = await ref.read(eventsApiProvider).getSegments();
 
-    if (!mounted) return;
+      if (!mounted) return;
 
-    final result = await showModalBottomSheet<FilterSelection>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) {
-        return SearchFilterBottomSheet(
+      final result = await _showSheetSafeDialog<FilterSelection>(
+        child: SearchFilterBottomSheet(
           initialSegmentId: _selectedSegmentId,
           initialGenreId: _selectedGenreId,
           initialSubGenreId: _selectedSubGenreId,
           segments: segments,
+        ),
+      );
+
+      if (result == null || !mounted) return;
+
+      setState(() {
+        _selectedSegmentId = result.segmentId;
+        _selectedGenreId = result.genreId;
+        _selectedSubGenreId = result.subGenreId;
+      });
+
+      await _reloadCurrentResults();
+    } catch (e) {
+      _setError(e);
+    }
+  }
+
+  Widget _buildBody() {
+    final query = _query;
+
+    if (_loading && _results.isEmpty) {
+      return ListView(
+        physics: const AlwaysScrollableScrollPhysics(
+          parent: ClampingScrollPhysics(),
+        ),
+        children: [
+          const SizedBox(height: 28),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16),
+            child: AppLoadingIndicator(
+              title: 'Loading events',
+              message: 'Please wait while we prepare your results.',
+              centered: false,
+            ),
+          ),
+          const SizedBox(height: 24),
+        ],
+      );
+    }
+
+    if (_error != null && _results.isEmpty) {
+      return ListView(
+        physics: const AlwaysScrollableScrollPhysics(
+          parent: ClampingScrollPhysics(),
+        ),
+        padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
+        children: [
+          AppErrorState(
+            message: _error!,
+            onRetry: _reloadCurrentResults,
+          ),
+        ],
+      );
+    }
+
+    if (query.isEmpty && _results.isEmpty) {
+      return ListView(
+        physics: const AlwaysScrollableScrollPhysics(
+          parent: ClampingScrollPhysics(),
+        ),
+        padding: const EdgeInsets.fromLTRB(16, 24, 16, 24),
+        children: const [
+          AppEmptyState(
+            title: 'No events available',
+            message: 'There are no events available right now.',
+          ),
+        ],
+      );
+    }
+
+    if (query.isNotEmpty && _results.isEmpty) {
+      return ListView(
+        physics: const AlwaysScrollableScrollPhysics(
+          parent: ClampingScrollPhysics(),
+        ),
+        padding: const EdgeInsets.fromLTRB(16, 24, 16, 24),
+        children: const [
+          AppEmptyState(
+            title: 'No events found',
+            message: 'Try a different keyword or adjust your filters.',
+          ),
+        ],
+      );
+    }
+
+    return ListView.builder(
+      physics: const AlwaysScrollableScrollPhysics(
+        parent: ClampingScrollPhysics(),
+      ),
+      padding: const EdgeInsets.only(bottom: 24),
+      itemCount: _results.length + 1,
+      itemBuilder: (context, index) {
+        if (index == 0) {
+          return Column(
+            children: [
+              if (_error != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                  child: Material(
+                    color: Theme.of(context)
+                        .colorScheme
+                        .errorContainer
+                        .withValues(alpha: 0.65),
+                    borderRadius: BorderRadius.circular(16),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.error_outline_rounded,
+                            color: Theme.of(context).colorScheme.error,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              _error!,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onErrorContainer,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              if (_loading)
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
+                  child: LinearProgressIndicator(minHeight: 3),
+                ),
+            ],
+          );
+        }
+
+        final item = _results[index - 1];
+        return SearchResultCard(
+          item: item,
+          onOpenDirections: _openDirections,
+          onCloseParentSearchSheet: _closeParentSearchSheet,
         );
       },
     );
-
-    if (result == null) return;
-
-    setState(() {
-      _selectedSegmentId = result.segmentId;
-      _selectedGenreId = result.genreId;
-      _selectedSubGenreId = result.subGenreId;
-    });
-
-    if (_query.isEmpty) {
-      await _loadInitialResults(force: true);
-    } else {
-      await _search(_query);
-    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
     final query = _query;
 
-    return ListView(
-      physics: const ClampingScrollPhysics(),
-      padding: const EdgeInsets.only(bottom: 24),
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: TextField(
-            controller: _textController,
-            autofocus: true,
-            onChanged: _onQueryChanged,
-            decoration: InputDecoration(
-              hintText: 'Search events',
-              prefixIcon: const Icon(Icons.search_rounded),
-              contentPadding: const EdgeInsets.symmetric(vertical: 14),
-              suffixIcon: query.isNotEmpty
-                  ? IconButton(
-                      onPressed: () async {
-                        _debounce?.cancel();
-                        _textController.clear();
-                        setState(() {});
-                        await _loadInitialResults(force: true);
-                      },
-                      icon: const Icon(Icons.close_rounded),
-                    )
-                  : null,
-            ),
-          ),
-        ),
-        const SizedBox(height: 10),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Row(
-            children: [
-              SearchSheetChip(
-                label: _hasActiveFilters ? 'Filtered' : 'Filter...',
-                isDark: isDark,
-                onTap: _openFilterSheet,
-                isSelected: _hasActiveFilters,
-              ),
-              const SizedBox(width: 8),
-              SearchSheetChip(
-                label: _sortLabel,
-                isDark: isDark,
-                onTap: _openSortSheet,
-                isSelected: _sortLabel != 'Sort',
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
-        if (_loading)
-          const Padding(
-            padding: EdgeInsets.only(top: 32),
-            child: Center(child: CircularProgressIndicator()),
-          )
-        else if (_error != null)
+    return RefreshIndicator(
+      onRefresh: _reloadCurrentResults,
+      child: Column(
+        children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
-            child: Center(
-              child: Text(
-                _error!,
-                textAlign: TextAlign.center,
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            child: TextField(
+              controller: _textController,
+              autofocus: true,
+              onChanged: _onQueryChanged,
+              textInputAction: TextInputAction.search,
+              decoration: InputDecoration(
+                hintText: 'Search events',
+                prefixIcon: const Icon(Icons.search_rounded),
+                contentPadding: const EdgeInsets.symmetric(vertical: 14),
+                suffixIcon: query.isNotEmpty
+                    ? IconButton(
+                        onPressed: () async {
+                          _debounce?.cancel();
+                          _textController.clear();
+                          if (mounted) setState(() {});
+                          await _loadInitialResults(force: true);
+                        },
+                        icon: const Icon(Icons.close_rounded),
+                        tooltip: 'Clear search',
+                      )
+                    : null,
               ),
-            ),
-          )
-        else if (query.isEmpty && _results.isEmpty)
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 24, 16, 0),
-            child: Center(
-              child: Text(
-                'No events available right now.',
-                textAlign: TextAlign.center,
-              ),
-            ),
-          )
-        else if (query.isNotEmpty && _results.isEmpty)
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 24, 16, 0),
-            child: Center(
-              child: Text(
-                'No events found.',
-                textAlign: TextAlign.center,
-              ),
-            ),
-          )
-        else
-          ..._results.map(
-            (item) => SearchResultCard(
-              item: item,
-              onOpenDirections: _openDirections,
-              onCloseParentSearchSheet: _closeParentSearchSheet,
             ),
           ),
-      ],
+          const SizedBox(height: 10),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  AppChip(
+                    label: _hasActiveFilters ? 'Filtered' : 'Filter',
+                    onTap: _openFilterSheet,
+                    selected: _hasActiveFilters,
+                    icon: Icons.tune_rounded,
+                  ),
+                  const SizedBox(width: 8),
+                  AppChip(
+                    label: _sortLabel,
+                    onTap: _openSortSheet,
+                    selected: _sortLabel != 'Sort',
+                    icon: Icons.swap_vert_rounded,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Expanded(
+            child: _buildBody(),
+          ),
+        ],
+      ),
     );
   }
-}
-
-class _SortOption {
-  final String sortBy;
-  final bool sortDescending;
-
-  const _SortOption({
-    required this.sortBy,
-    required this.sortDescending,
-  });
 }

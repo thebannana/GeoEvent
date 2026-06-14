@@ -115,25 +115,70 @@ final authorizedDioProvider = Provider<Dio>((ref) {
   return dio;
 });
 
+String _ansi(String code, String text, {bool enabled = false}) {
+  if (!enabled) return text;
+  return '$code$text\x1B[0m';
+}
+
+String _statusBadge(int? status, {bool color = false}) {
+  if (status == null) {
+    return _ansi('\x1B[35m', '🛰 NO_STATUS', enabled: color);
+  }
+  if (status >= 500) {
+    return _ansi('\x1B[31m', '🔥 $status SERVER', enabled: color);
+  }
+  if (status >= 400) {
+    return _ansi('\x1B[33m', '⚠️ $status CLIENT', enabled: color);
+  }
+  if (status >= 300) {
+    return _ansi('\x1B[34m', '↪ $status REDIRECT', enabled: color);
+  }
+  return _ansi('\x1B[32m', '✅ $status OK', enabled: color);
+}
+
 void _logRequest(RequestOptions options) {
+  const useAnsi = false;
+
   AppLogger.debug(
-    '${options.method} ${options.baseUrl}${options.path} | query=${options.queryParameters} | body=${options.data}',
+    '${_ansi('\x1B[36m', '🚀 REQUEST', enabled: useAnsi)}\n'
+    '├─ Method : ${options.method}\n'
+    '├─ URL    : ${options.baseUrl}${options.path}\n'
+    '├─ Query  : ${options.queryParameters.isEmpty ? '{}' : options.queryParameters}\n'
+    '├─ Headers: ${options.headers}\n'
+    '└─ Body   : ${options.data}',
     tag: 'HTTP',
   );
 }
 
 void _logResponse(Response response) {
+  const useAnsi = false;
+  final req = response.requestOptions;
+
   AppLogger.info(
-    '${response.statusCode} ${response.requestOptions.method} ${response.requestOptions.baseUrl}${response.requestOptions.path}',
+    '${_statusBadge(response.statusCode, color: useAnsi)}\n'
+    '├─ Method : ${req.method}\n'
+    '├─ URL    : ${req.baseUrl}${req.path}\n'
+    '└─ Body   : ${response.data}',
     tag: 'HTTP',
   );
 }
 
 void _logError(DioException error) {
+  const useAnsi = false;
+  final req = error.requestOptions;
+  final status = error.response?.statusCode;
+
   AppLogger.error(
-    '${error.response?.statusCode} ${error.requestOptions.method} ${error.requestOptions.baseUrl}${error.requestOptions.path}',
+    '${_statusBadge(status, color: useAnsi)}\n'
+    '├─ Method   : ${req.method}\n'
+    '├─ URL      : ${req.baseUrl}${req.path}\n'
+    '├─ Type     : ${error.type}\n'
+    '├─ Message  : ${error.message}\n'
+    '├─ Query    : ${req.queryParameters.isEmpty ? '{}' : req.queryParameters}\n'
+    '├─ Request  : ${req.data}\n'
+    '└─ Response : ${error.response?.data}',
     tag: 'HTTP',
-    error: error.response?.data ?? error,
+    error: error.error,
     stackTrace: error.stackTrace,
   );
 }

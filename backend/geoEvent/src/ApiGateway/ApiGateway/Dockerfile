@@ -5,8 +5,9 @@ EXPOSE 8080
 FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
 WORKDIR /src
 COPY . .
+RUN dotnet restore src/ApiGateway/ApiGateway/ApiGateway.csproj --disable-parallel
 RUN dotnet publish src/ApiGateway/ApiGateway/ApiGateway.csproj \
-    -c Release -o /app/publish --no-self-contained
+    -c Release -o /app/publish --no-restore --no-self-contained
 
 FROM base AS final
 WORKDIR /app

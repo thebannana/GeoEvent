@@ -42,6 +42,7 @@ class PublicProfileEventList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
 
     return SliverList.separated(
@@ -58,7 +59,7 @@ class PublicProfileEventList extends StatelessWidget {
         final subtitle = subtitleParts.join(' · ');
 
         final accent = _segmentColor(item);
-        final imageUrl = item.primaryImage;
+        final imageUrl = (item.primaryImage ?? '').trim();
 
         final infoParts = [
           if ((item.locationLabel ?? '').trim().isNotEmpty)
@@ -67,32 +68,31 @@ class PublicProfileEventList extends StatelessWidget {
         ];
         final infoText = infoParts.join(' · ');
 
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 18),
-          child: Material(
-            color: Colors.transparent,
+        return Material(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(18),
+          child: InkWell(
             borderRadius: BorderRadius.circular(18),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(18),
-              onTap: () => onEventTap(item.eventId),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF1B2028) : Colors.white,
-                  borderRadius: BorderRadius.circular(18),
-                  border: Border.all(
-                    color: isDark
-                        ? const Color(0xFF2A303A)
-                        : const Color(0xFFE3EAF3),
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: isDark ? 0.12 : 0.04),
-                      blurRadius: 12,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
+            onTap: () => onEventTap(item.eventId),
+            child: Ink(
+              decoration: BoxDecoration(
+                color: colorScheme.surface,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(
+                  color: colorScheme.outlineVariant.withValues(alpha: 0.8),
                 ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: isDark ? 0.10 : 0.04),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(0, 0, 12, 0),
                 child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     ClipRRect(
                       borderRadius: const BorderRadius.only(
@@ -101,8 +101,8 @@ class PublicProfileEventList extends StatelessWidget {
                       ),
                       child: SizedBox(
                         width: 82,
-                        height: 96,
-                        child: imageUrl != null && imageUrl.trim().isNotEmpty
+                        height: 110,
+                        child: imageUrl.isNotEmpty
                             ? Image.network(
                                 imageUrl,
                                 fit: BoxFit.cover,
@@ -113,12 +113,12 @@ class PublicProfileEventList extends StatelessWidget {
                             : _FallbackImage(accent: accent),
                       ),
                     ),
-                    const SizedBox(width: 12),
                     Expanded(
                       child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 11),
+                        padding: const EdgeInsets.fromLTRB(12, 11, 12, 11),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
                               item.title,
@@ -135,7 +135,7 @@ class PublicProfileEventList extends StatelessWidget {
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: theme.textTheme.bodySmall?.copyWith(
-                                  color: theme.colorScheme.onSurfaceVariant,
+                                  color: colorScheme.onSurfaceVariant,
                                 ),
                               ),
                             ],
@@ -146,37 +146,23 @@ class PublicProfileEventList extends StatelessWidget {
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
                                 style: theme.textTheme.bodySmall?.copyWith(
-                                  color: theme.colorScheme.onSurfaceVariant,
+                                  color: colorScheme.onSurfaceVariant,
                                 ),
                               ),
                             ],
-                            const SizedBox(height: 7),
-                            Row(
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 10,
+                              runSpacing: 4,
+                              crossAxisAlignment: WrapCrossAlignment.center,
                               children: [
-                                Icon(
-                                  Icons.favorite_border_rounded,
-                                  size: 12,
-                                  color: theme.colorScheme.onSurfaceVariant,
+                                _InlineStat(
+                                  icon: Icons.favorite_border_rounded,
+                                  value: item.likesCount.toString(),
                                 ),
-                                const SizedBox(width: 3),
-                                Text(
-                                  item.likesCount.toString(),
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    color: theme.colorScheme.onSurfaceVariant,
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                Icon(
-                                  Icons.remove_red_eye_outlined,
-                                  size: 12,
-                                  color: theme.colorScheme.onSurfaceVariant,
-                                ),
-                                const SizedBox(width: 3),
-                                Text(
-                                  item.viewCount.toString(),
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    color: theme.colorScheme.onSurfaceVariant,
-                                  ),
+                                _InlineStat(
+                                  icon: Icons.remove_red_eye_outlined,
+                                  value: item.viewCount.toString(),
                                 ),
                               ],
                             ),
@@ -185,23 +171,21 @@ class PublicProfileEventList extends StatelessWidget {
                       ),
                     ),
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(0, 10, 12, 10),
-                      child: Align(
-                        alignment: Alignment.bottomRight,
-                        child: Container(
+                      padding: const EdgeInsets.only(top: 10),
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: colorScheme.surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(9),
+                        ),
+                        child: Padding(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 10,
                             vertical: 5,
                           ),
-                          decoration: BoxDecoration(
-                            color: isDark
-                                ? Colors.white.withValues(alpha: 0.06)
-                                : const Color(0xFFF3F6FA),
-                            borderRadius: BorderRadius.circular(9),
-                          ),
                           child: Text(
                             _formatPrice(item.price),
                             style: theme.textTheme.bodySmall?.copyWith(
+                              color: colorScheme.onSurface,
                               fontWeight: FontWeight.w700,
                             ),
                           ),
@@ -215,6 +199,35 @@ class PublicProfileEventList extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+class _InlineStat extends StatelessWidget {
+  final IconData icon;
+  final String value;
+
+  const _InlineStat({
+    required this.icon,
+    required this.value,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = Theme.of(context).colorScheme.onSurfaceVariant;
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 12, color: color),
+        const SizedBox(width: 3),
+        Text(
+          value,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: color,
+              ),
+        ),
+      ],
     );
   }
 }

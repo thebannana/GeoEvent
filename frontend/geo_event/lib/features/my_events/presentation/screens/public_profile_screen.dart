@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/widgets/app_async_view.dart';
+import '../../../../core/widgets/app_surface_card.dart';
 import '../../../../shared/profile/data/public_users_api.dart';
 import '../../../../shared/profile/models/public_user_profile.dart';
 
@@ -20,36 +22,30 @@ class PublicProfileScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final profileAsync = ref.watch(publicProfileProvider(userId));
-    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Profile')),
-      body: profileAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (_, __) => Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Text(
-              'Could not load profile.',
-              style: Theme.of(context).textTheme.bodyMedium,
+      body: AppAsyncView<PublicUserProfileDto>(
+        value: profileAsync,
+        loading: const Center(child: CircularProgressIndicator()),
+        errorBuilder: (error, stackTrace) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text(
+                'Could not load profile.',
+                style: Theme.of(context).textTheme.bodyMedium,
+                textAlign: TextAlign.center,
+              ),
             ),
-          ),
-        ),
+          );
+        },
         data: (profile) {
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              Container(
+              AppSurfaceCard(
                 padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF17191D) : Colors.white,
-                  borderRadius: BorderRadius.circular(22),
-                  border: Border.all(
-                    color: isDark
-                        ? const Color(0xFF2A303A)
-                        : const Color(0xFFE5EAF2),
-                  ),
-                ),
                 child: Column(
                   children: [
                     CircleAvatar(
@@ -74,7 +70,9 @@ class PublicProfileScreen extends ConsumerWidget {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      profile.fullName.isNotEmpty ? profile.fullName : 'Unknown user',
+                      profile.fullName.isNotEmpty
+                          ? profile.fullName
+                          : 'Unknown user',
                       textAlign: TextAlign.center,
                       style: const TextStyle(
                         fontSize: 20,
@@ -86,10 +84,7 @@ class PublicProfileScreen extends ConsumerWidget {
                       profile.username.trim().isNotEmpty
                           ? '@${profile.username}'
                           : 'No username',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Theme.of(context).textTheme.bodySmall?.color,
-                      ),
+                      style: Theme.of(context).textTheme.bodyMedium,
                     ),
                     if (profile.isVerified) ...[
                       const SizedBox(height: 10),

@@ -41,6 +41,7 @@ class ShellSheetContent extends StatelessWidget {
       ),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOutCubic,
         decoration: BoxDecoration(
           color: colorScheme.surface,
           borderRadius: borderRadius,
@@ -61,76 +62,74 @@ class ShellSheetContent extends StatelessWidget {
         ),
         child: ClipRRect(
           borderRadius: borderRadius,
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              return Column(
-                children: [
-                  GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onVerticalDragUpdate: onDragUpdate,
-                    onVerticalDragEnd: onDragEnd,
-                    child: SafeArea(
-                      bottom: false,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (!isFullScreen) ...[
-                            const SizedBox(height: 10),
-                            Center(
-                              child: Container(
-                                width: 38,
-                                height: 5,
-                                decoration: BoxDecoration(
-                                  color: colorScheme.onSurface
-                                      .withValues(alpha: 0.16),
-                                  borderRadius: BorderRadius.circular(999),
+          child: Column(
+            children: [
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onVerticalDragUpdate: onDragUpdate,
+                onVerticalDragEnd: onDragEnd,
+                child: SafeArea(
+                  bottom: false,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (!isFullScreen) ...[
+                        const SizedBox(height: 10),
+                        Center(
+                          child: Container(
+                            width: 38,
+                            height: 5,
+                            decoration: BoxDecoration(
+                              color: colorScheme.onSurface.withValues(
+                                alpha: 0.16,
+                              ),
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                          ),
+                        ),
+                      ],
+                      Padding(
+                        padding: EdgeInsets.fromLTRB(
+                          18,
+                          isFullScreen ? 10 : 16,
+                          10,
+                          10,
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.titleLarge?.copyWith(
+                                  fontWeight: FontWeight.w700,
                                 ),
                               ),
                             ),
+                            IconButton(
+                              onPressed: onClose,
+                              icon: const Icon(Icons.close_rounded),
+                              tooltip: 'Close',
+                            ),
                           ],
-                          Padding(
-                            padding: EdgeInsets.fromLTRB(
-                              18,
-                              isFullScreen ? 10 : 16,
-                              10,
-                              10,
-                            ),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    title,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: theme.textTheme.titleLarge?.copyWith(
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                ),
-                                IconButton(
-                                  onPressed: onClose,
-                                  icon: const Icon(Icons.close_rounded),
-                                ),
-                              ],
-                            ),
-                          ),
-                          Divider(
-                            height: 1,
-                            color: theme.dividerColor.withValues(alpha: 0.35),
-                          ),
-                        ],
+                        ),
                       ),
-                    ),
+                      Divider(
+                        height: 1,
+                        color: theme.dividerColor.withValues(alpha: 0.35),
+                      ),
+                    ],
                   ),
-                  Expanded(
-                    child: SizedBox(
-                      width: double.infinity,
-                      child: body,
-                    ),
-                  ),
-                ],
-              );
-            },
+                ),
+              ),
+              Expanded(
+                child: SizedBox(
+                  width: double.infinity,
+                  child: body,
+                ),
+              ),
+            ],
           ),
         ),
       ),

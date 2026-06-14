@@ -12,80 +12,94 @@ class PublicProfileHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(18, 24, 18, 18),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF101215) : const Color(0xFFF6F8FC),
-      ),
+    final fullName = user.fullName.trim();
+    final username = user.username.trim();
+    final cityName = (user.cityName ?? '').trim();
+    final bio = (user.bio ?? '').trim();
+    final imageUrl = (user.imageUrl ?? '').trim();
+
+    final displayName = fullName.isNotEmpty ? fullName : '@$username';
+    final initialsSource = fullName.isNotEmpty ? fullName : username;
+    final leadingCharacter =
+        initialsSource.isNotEmpty ? initialsSource.characters.first.toUpperCase() : '?';
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(18, 8, 18, 8),
       child: Column(
         children: [
           CircleAvatar(
             radius: 38,
-            backgroundColor:
-                Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
-            backgroundImage:
-                user.imageUrl != null && user.imageUrl!.trim().isNotEmpty
-                    ? NetworkImage(user.imageUrl!)
-                    : null,
-            child: user.imageUrl == null || user.imageUrl!.trim().isEmpty
+            backgroundColor: colorScheme.primaryContainer,
+            backgroundImage: imageUrl.isNotEmpty ? NetworkImage(imageUrl) : null,
+            child: imageUrl.isEmpty
                 ? Text(
-                    user.fullName.isNotEmpty
-                        ? user.fullName.characters.first.toUpperCase()
-                        : '?',
+                    leadingCharacter,
                     style: TextStyle(
                       fontSize: 24,
                       fontWeight: FontWeight.w800,
-                      color: Theme.of(context).colorScheme.primary,
+                      color: colorScheme.onPrimaryContainer,
                     ),
                   )
                 : null,
           ),
           const SizedBox(height: 14),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Flexible(
-                child: Text(
-                  user.fullName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
           Text(
-            '@${user.username}',
-            style: TextStyle(
-              fontSize: 14,
-              color: Theme.of(context).textTheme.bodySmall?.color,
+            displayName,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: theme.textTheme.headlineSmall?.copyWith(
+              color: colorScheme.onSurface,
+              fontWeight: FontWeight.w800,
             ),
           ),
-          if ((user.cityName ?? '').trim().isNotEmpty) ...[
-            const SizedBox(height: 8),
+          if (username.isNotEmpty) ...[
+            const SizedBox(height: 4),
             Text(
-              user.cityName!,
-              style: TextStyle(
-                fontSize: 13,
-                color: Theme.of(context).textTheme.bodySmall?.color,
+              '@$username',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: colorScheme.onSurfaceVariant,
               ),
             ),
           ],
-          if ((user.bio ?? '').trim().isNotEmpty) ...[
+          if (cityName.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.location_on_outlined,
+                  size: 16,
+                  color: colorScheme.onSurfaceVariant,
+                ),
+                const SizedBox(width: 4),
+                Flexible(
+                  child: Text(
+                    cityName,
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+          if (bio.isNotEmpty) ...[
             const SizedBox(height: 12),
-            Text(
-              user.bio!,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 14,
-                height: 1.45,
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 520),
+              child: Text(
+                bio,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.onSurface,
+                  height: 1.45,
+                ),
               ),
             ),
           ],

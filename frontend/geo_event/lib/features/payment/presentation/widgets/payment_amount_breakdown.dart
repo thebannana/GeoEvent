@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/widgets.dart';
 import 'package:geo_event/shared/payment/models/payment_summary.dart';
+
+import '../../../../core/widgets/app_surface_card.dart';
 
 class PaymentAmountBreakdown extends StatelessWidget {
   final PaymentSummary summary;
@@ -12,8 +13,6 @@ class PaymentAmountBreakdown extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
     Widget row(String label, String value, {bool strong = false}) {
       return Padding(
         padding: const EdgeInsets.only(bottom: 10),
@@ -40,15 +39,7 @@ class PaymentAmountBreakdown extends StatelessWidget {
       );
     }
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF17191D) : Colors.white,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(
-          color: isDark ? const Color(0xFF2A303A) : const Color(0xFFE5EAF2),
-        ),
-      ),
+    return AppSurfaceCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

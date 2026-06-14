@@ -47,55 +47,55 @@ class _PaymentMethodTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final primary = theme.colorScheme.primary;
+    final colorScheme = theme.colorScheme;
+    final primary = colorScheme.primary;
 
-    return InkWell(
-      borderRadius: BorderRadius.circular(18),
-      onTap: onTap,
-      child: Ink(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? primary.withValues(alpha: 0.16)
-              : isDark
-                  ? const Color(0xFF1C1F24)
-                  : Colors.white,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onTap: onTap,
+        child: Ink(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+          decoration: BoxDecoration(
             color: isSelected
-                ? primary.withValues(alpha: 0.55)
-                : isDark
-                    ? const Color(0xFF2D323A)
-                    : const Color(0xFFE6EBF2),
-          ),
-        ),
-        child: Row(
-          children: [
-            Icon(
-              _iconFor(method),
-              color: isSelected ? primary : theme.iconTheme.color,
+                ? primary.withValues(alpha: 0.16)
+                : colorScheme.surface,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: isSelected
+                  ? primary.withValues(alpha: 0.55)
+                  : colorScheme.outline.withValues(alpha: 0.75),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                method.label,
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+          ),
+          child: Row(
+            children: [
+              Icon(
+                _iconFor(method),
+                color: isSelected ? primary : theme.iconTheme.color,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  method.label,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                  ),
                 ),
               ),
-            ),
-            Icon(
-              isSelected
-                  ? Icons.check_circle_rounded
-                  : Icons.chevron_right_rounded,
-              size: 20,
-              color: isSelected
-                  ? primary
-                  : theme.iconTheme.color?.withValues(alpha: 0.75),
-            ),
-          ],
+              const SizedBox(width: 8),
+              Icon(
+                isSelected
+                    ? Icons.check_circle_rounded
+                    : Icons.chevron_right_rounded,
+                size: 20,
+                color: isSelected
+                    ? primary
+                    : theme.iconTheme.color?.withValues(alpha: 0.75),
+              ),
+            ],
+          ),
         ),
       ),
     );

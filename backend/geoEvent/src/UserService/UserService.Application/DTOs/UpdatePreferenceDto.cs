@@ -6,6 +6,7 @@ public class UpdatePreferenceDto
 {
     public int? SegmentId { get; set; }
     public int? GenreId { get; set; }
+    public int? SubGenreId { get; set; }
 
     [Range(0.0, 100.0)]
     public double Score { get; set; }

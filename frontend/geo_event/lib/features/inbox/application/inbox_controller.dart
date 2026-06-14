@@ -3,6 +3,7 @@ import '../../../core/network/api_client.dart';
 import '../../../shared/notifications/data/notification_api.dart';
 import '../../../shared/notifications/data/notification_repository.dart';
 import '../../../shared/notifications/models/notification_item.dart';
+import '../../auth/application/auth_controller.dart';
 
 final notificationApiProvider = Provider<NotificationApi>((ref) {
   return NotificationApi(ref.watch(authorizedDioProvider));
@@ -86,6 +87,7 @@ class InboxController extends Notifier<InboxState> {
 
   @override
   InboxState build() {
+    ref.watch(sessionUserIdProvider);
     Future.microtask(load);
     return const InboxState(notifications: AsyncValue.loading());
   }

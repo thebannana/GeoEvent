@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import '../../../../core/widgets/app_chip.dart';
 import '../screens/public_profile_screen.dart';
 
 class PublicProfileEventFilters extends StatelessWidget {
@@ -14,29 +16,28 @@ class PublicProfileEventFilters extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 38,
+      height: 42,
       child: ListView(
         padding: const EdgeInsets.symmetric(horizontal: 18),
         scrollDirection: Axis.horizontal,
         children: [
-          _chip(context, 'All', PublicProfileEventFilter.all),
-          _chip(context, 'Upcoming', PublicProfileEventFilter.upcoming),
-          _chip(context, 'Past', PublicProfileEventFilter.past),
-          _chip(context, 'Free', PublicProfileEventFilter.free),
-          _chip(context, 'Paid', PublicProfileEventFilter.paid),
+          _chip('All', PublicProfileEventFilter.all),
+          _chip('Upcoming', PublicProfileEventFilter.upcoming),
+          _chip('Past', PublicProfileEventFilter.past),
+          _chip('Free', PublicProfileEventFilter.free),
+          _chip('Paid', PublicProfileEventFilter.paid),
         ],
       ),
     );
   }
 
-  Widget _chip(BuildContext context, String label, PublicProfileEventFilter value) {
-    final active = selected == value;
+  Widget _chip(String label, PublicProfileEventFilter value) {
     return Padding(
       padding: const EdgeInsets.only(right: 8),
-      child: ChoiceChip(
-        label: Text(label),
-        selected: active,
-        onSelected: (_) => onChanged(value),
+      child: AppChip(
+        label: label,
+        selected: selected == value,
+        onTap: () => onChanged(value),
       ),
     );
   }

@@ -33,9 +33,18 @@ public static class DependencyInjection
         if (string.IsNullOrWhiteSpace(userServiceUrl))
             throw new InvalidOperationException("Services:UserService is not configured.");
 
+        var eventServiceUrl = configuration["Services:EventService"];
+        if (string.IsNullOrWhiteSpace(eventServiceUrl))
+            throw new InvalidOperationException("Services:EventService is not configured.");
+
         services.AddHttpClient<IUserDirectoryService, UserDirectoryService>(client =>
         {
-            client.BaseAddress = new Uri(configuration["Services:UserService"]!);
+            client.BaseAddress = new Uri(userServiceUrl);
+        });
+
+        services.AddHttpClient<IEventDirectoryClient, EventDirectoryClient>(client =>
+        {
+            client.BaseAddress = new Uri(eventServiceUrl);
         });
 
         services.AddMassTransit(x =>

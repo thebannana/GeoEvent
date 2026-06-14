@@ -6,9 +6,17 @@ namespace UserService.Application.Interfaces.Services;
 
 public interface IUserService
 {
+    Task ApplyInteractionPreferenceAsync(
+    int userId,
+    int eventId,
+    int? segmentId,
+    int? genreId,
+    int? subGenreId,
+    string interactionType,
+    DateTime occurredAt);
+
     Task<ServiceResult<UserProfileDto>> GetProfileAsync(int userId);
     Task<List<CommentUserProfileDto>> GetCommentUserProfilesAsync(IEnumerable<int> ids);
-
     Task<ServiceResult<UserProfileDto>> UpdateProfileAsync(int userId, UpdateProfileDto request);
     Task<ServiceResult<bool>> DeleteAccountAsync(int userId);
     Task<ServiceResult<bool>> BanUserAsync(int userId, string reason = "Policy violation");
@@ -17,19 +25,12 @@ public interface IUserService
     Task<ServiceResult<bool>> ChangePasswordAsync(int userId, ChangePasswordDto dto);
     Task<ServiceResult<PagedResult<UserProfileDto>>> GetAllUsersAsync(UserFilterDto filter);
     Task<ServiceResult<bool>> AdminVerifyUserAsync(int userId);
-
     Task<ServiceResult<List<ActivityLogResponseDto>>> GetUserActivityLogsAsync(int userId, int page, int pageSize);
-    Task<ServiceResult<ActivityLogResponseDto>> LogActivityAsync(
-        int userId,
-        ActivityActionType actionType,
-        ActivityTargetType targetType,
-        int targetId,
-        string metadata,
-        Guid sessionId);
-
+    Task<ServiceResult<ActivityLogResponseDto>> LogActivityAsync(int userId, ActivityActionType actionType, ActivityTargetType targetType, int targetId, string metadata, Guid sessionId);
     Task<ServiceResult<List<UserPreferenceResponseDto>>> GetUserPreferencesAsync(int userId);
     Task<ServiceResult<UserPreferenceResponseDto>> UpsertPreferenceAsync(int userId, UpdatePreferenceDto dto);
     Task<ServiceResult<bool>> DeletePreferenceAsync(int userId, int prefId);
+
 
     Task<ServiceResult<ReportResponseDto>> CreateReportAsync(CreateReportDto dto, int reporterId);
     Task<ServiceResult<List<ReportResponseDto>>> GetUserReportsAsync(int userId);

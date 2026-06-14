@@ -17,10 +17,10 @@ class ShellNavItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final selectedColor = theme.colorScheme.primary;
-    final unselectedColor =
-        isDark ? Colors.white.withValues(alpha: 0.68) : const Color(0xFF5D6674);
+    final colorScheme = theme.colorScheme;
+
+    final selectedColor = colorScheme.primary;
+    final unselectedColor = colorScheme.onSurface.withValues(alpha: 0.62);
 
     return Expanded(
       child: Material(
@@ -35,7 +35,7 @@ class ShellNavItem extends StatelessWidget {
             padding: const EdgeInsets.symmetric(vertical: 4),
             decoration: BoxDecoration(
               color: selected
-                  ? selectedColor.withValues(alpha: isDark ? 0.18 : 0.12)
+                  ? selectedColor.withValues(alpha: 0.12)
                   : Colors.transparent,
               borderRadius: BorderRadius.circular(18),
             ),

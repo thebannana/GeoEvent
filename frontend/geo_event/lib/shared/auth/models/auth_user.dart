@@ -26,17 +26,19 @@ class AuthUser {
   String get fullName => '$firstName $lastName'.trim();
 
   factory AuthUser.fromJson(Map<String, dynamic> json) {
+    final createdAtRaw = json['createdAt'] ?? json['CreatedAt'];
+
     return AuthUser(
-      userId: json['userId'] as int,
-      username: json['username'] as String? ?? '',
-      email: json['email'] as String? ?? '',
-      firstName: json['firstName'] as String? ?? '',
-      lastName: json['lastName'] as String? ?? '',
-      imageUrl: json['imageUrl'] as String?,
-      role: json['role'] as String? ?? 'User',
-      isVerified: json['isVerified'] as bool? ?? false,
-      createdAt: DateTime.parse(json['createdAt'] as String),
-      cityId: json['cityId'] as int?,
+      userId: (json['userId'] ?? json['UserId'] ?? 0) as int,
+      username: (json['username'] ?? json['Username'] ?? '').toString(),
+      email: (json['email'] ?? json['Email'] ?? '').toString(),
+      firstName: (json['firstName'] ?? json['FirstName'] ?? '').toString(),
+      lastName: (json['lastName'] ?? json['LastName'] ?? '').toString(),
+      imageUrl: (json['imageUrl'] ?? json['ImageUrl']) as String?,
+      role: (json['role'] ?? json['Role'] ?? 'User').toString(),
+      isVerified: (json['isVerified'] ?? json['IsVerified'] ?? false) as bool,
+      createdAt: DateTime.parse(createdAtRaw.toString()),
+      cityId: (json['cityId'] ?? json['CityId']) as int?,
     );
   }
 

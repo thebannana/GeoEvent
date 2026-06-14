@@ -17,16 +17,29 @@ class _EventGalleryState extends State<EventGallery> {
   int _index = 0;
 
   @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
     if (widget.imageUrls.isEmpty) {
       return Container(
         height: 220,
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.05),
+          color: scheme.surfaceContainerHighest,
           borderRadius: BorderRadius.circular(22),
         ),
-        child: const Center(
-          child: Icon(Icons.image_outlined, color: Colors.white54, size: 42),
+        child: Center(
+          child: Icon(
+            Icons.image_outlined,
+            color: scheme.onSurface.withValues(alpha: 0.54),
+            size: 42,
+          ),
         ),
       );
     }
@@ -46,9 +59,12 @@ class _EventGalleryState extends State<EventGallery> {
                   widget.imageUrls[index],
                   fit: BoxFit.cover,
                   errorBuilder: (_, __, ___) => Container(
-                    color: Colors.white.withOpacity(0.05),
-                    child: const Center(
-                      child: Icon(Icons.broken_image_outlined, color: Colors.white54),
+                    color: scheme.surfaceContainerHighest,
+                    child: Center(
+                      child: Icon(
+                        Icons.broken_image_outlined,
+                        color: scheme.onSurface.withValues(alpha: 0.54),
+                      ),
                     ),
                   ),
                 );
@@ -68,7 +84,9 @@ class _EventGalleryState extends State<EventGallery> {
                 width: active ? 20 : 7,
                 height: 7,
                 decoration: BoxDecoration(
-                  color: active ? const Color(0xFF7EC8FF) : Colors.white24,
+                  color: active
+                      ? scheme.primary
+                      : scheme.onSurface.withValues(alpha: 0.18),
                   borderRadius: BorderRadius.circular(999),
                 ),
               );

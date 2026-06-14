@@ -58,6 +58,16 @@ public static class DependencyInjection
             x.AddConsumer<PaymentSucceededConsumer>();
             x.AddConsumer<PaymentFailedConsumer>();
 
+            x.AddConsumer<ChatMessageSentConsumer>();
+            x.AddConsumer<ChatMessageLikedConsumer>();
+            x.AddConsumer<ChatUserAddedToGroupConsumer>();
+
+            x.AddConsumer<EventCommentLikedConsumer>();
+            x.AddConsumer<EventCommentCreatedConsumer>();
+            x.AddConsumer<EventCommentReplyCreatedConsumer>();
+            x.AddConsumer<EventLikedConsumer>();
+            x.AddConsumer<EventBookmarkedConsumer>();
+
             x.UsingRabbitMq((ctx, cfg) =>
             {
                 cfg.Host(configuration["RabbitMq:Host"], configuration["RabbitMq:VirtualHost"], h =>

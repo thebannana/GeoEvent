@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/widgets/app_surface_card.dart';
+
 class AttendeePreviewUser {
   final int userId;
   final String label;
@@ -30,39 +32,40 @@ class EventCapacityCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final text = theme.textTheme;
+
     final safeCapacity = capacity <= 0 ? 1 : capacity;
     final normalizedReserved = reservedCount.clamp(0, safeCapacity);
     final progress = (normalizedReserved / safeCapacity).clamp(0.0, 1.0);
     final left = (capacity - normalizedReserved).clamp(0, capacity);
 
-    return Container(
+    final muted = text.bodyMedium?.color ?? scheme.onSurface.withValues(alpha: 0.72);
+    final faint = scheme.onSurface.withValues(alpha: 0.60);
+
+    return AppSurfaceCard(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Icon(Icons.groups_2_outlined, color: Colors.white),
+              Icon(Icons.groups_2_outlined, color: scheme.primary),
               const SizedBox(width: 10),
-              const Expanded(
+              Expanded(
                 child: Text(
                   'Capacity',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 17,
+                  style: text.titleMedium?.copyWith(
                     fontWeight: FontWeight.w700,
+                    color: scheme.onSurface,
                   ),
                 ),
               ),
               Text(
                 '$reservedCount / $capacity',
-                style: const TextStyle(
-                  color: Colors.white70,
+                style: text.bodyMedium?.copyWith(
+                  color: muted,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -74,11 +77,9 @@ class EventCapacityCard extends StatelessWidget {
             child: LinearProgressIndicator(
               value: progress,
               minHeight: 10,
-              backgroundColor: Colors.white.withValues(alpha: 0.10),
+              backgroundColor: scheme.surfaceContainerHighest,
               valueColor: AlwaysStoppedAnimation<Color>(
-                progress >= 0.9
-                    ? const Color(0xFFFF7A59)
-                    : const Color(0xFF67B8FF),
+                progress >= 0.9 ? theme.colorScheme.error : scheme.primary,
               ),
             ),
           ),
@@ -87,16 +88,16 @@ class EventCapacityCard extends StatelessWidget {
             children: [
               Text(
                 left <= 0 ? 'Sold out' : '$left spots left',
-                style: TextStyle(
-                  color: left <= 0 ? const Color(0xFFFF8A80) : Colors.white70,
+                style: text.bodyMedium?.copyWith(
+                  color: left <= 0 ? scheme.error : muted,
                   fontWeight: FontWeight.w600,
                 ),
               ),
               const Spacer(),
               Text(
                 '$attendeeCount attendees',
-                style: const TextStyle(
-                  color: Colors.white54,
+                style: text.bodySmall?.copyWith(
+                  color: faint,
                   fontWeight: FontWeight.w500,
                 ),
               ),
@@ -118,12 +119,11 @@ class EventCapacityCard extends StatelessWidget {
                       left: 5 * 22,
                       child: CircleAvatar(
                         radius: 16,
-                        backgroundColor: const Color(0xFF273446),
+                        backgroundColor: scheme.surfaceContainerHighest,
                         child: Text(
                           '+${previewUsers.length - 5}',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 11,
+                          style: text.labelSmall?.copyWith(
+                            color: scheme.onSurface,
                             fontWeight: FontWeight.w700,
                           ),
                         ),
@@ -138,18 +138,7 @@ class EventCapacityCard extends StatelessWidget {
             width: double.infinity,
             child: OutlinedButton(
               onPressed: onViewAttendeesTap,
-              style: OutlinedButton.styleFrom(
-                side: BorderSide(color: Colors.white.withValues(alpha: 0.14)),
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-              ),
-              child: const Text(
-                'View attendees',
-                style: TextStyle(fontWeight: FontWeight.w700),
-              ),
+              child: const Text('View attendees'),
             ),
           ),
         ],
@@ -165,11 +154,13 @@ class _UserAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final avatarUrl = user.avatarUrl?.trim() ?? '';
 
     return CircleAvatar(
       radius: 16,
-      backgroundColor: const Color(0xFF1D222B),
+      backgroundColor: scheme.outline.withValues(alpha: 0.18),
       child: avatarUrl.isNotEmpty
           ? CircleAvatar(
               radius: 15,
@@ -177,12 +168,11 @@ class _UserAvatar extends StatelessWidget {
             )
           : CircleAvatar(
               radius: 15,
-              backgroundColor: const Color(0xFF273446),
+              backgroundColor: scheme.surfaceContainerHighest,
               child: Text(
                 _initials(user.label),
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 11,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: scheme.onSurface,
                   fontWeight: FontWeight.w700,
                 ),
               ),

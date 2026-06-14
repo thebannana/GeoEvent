@@ -3,7 +3,10 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_client.dart';
+import '../../../features/auth/application/auth_controller.dart';
+import '../../events/models/create_event_models.dart';
 import '../../events/models/paged_result.dart';
+import '../../events/providers/event_providers.dart';
 import '../data/reservations_api.dart';
 import '../data/reservations_repository.dart';
 import '../models/reservation.dart';
@@ -16,6 +19,11 @@ final reservationsApiProvider = Provider<ReservationsApi>((ref) {
 final reservationsRepositoryProvider = Provider<ReservationsRepository>((ref) {
   final api = ref.watch(reservationsApiProvider);
   return ReservationsRepository(api);
+});
+
+final reservationEventProvider =
+    FutureProvider.family<EventItem, int>((ref, eventId) async {
+  return ref.read(eventsRepositoryProvider).getEventById(eventId);
 });
 
 class ReservationsState {
@@ -76,6 +84,7 @@ class ReservationsController extends AsyncNotifier<ReservationsState> {
 
   @override
   Future<ReservationsState> build() async {
+    ref.watch(sessionUserIdProvider);
     _repository = ref.read(reservationsRepositoryProvider);
     return _loadFirstPage();
   }

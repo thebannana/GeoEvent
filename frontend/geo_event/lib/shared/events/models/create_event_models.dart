@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 class MapboxPlace {
@@ -21,6 +22,7 @@ class EventItem {
   final int? organizerId;
   final int? segmentId;
   final String? segmentName;
+  final String? segmentColor;
   final int? genreId;
   final String? genreName;
   final int? subGenreId;
@@ -58,6 +60,7 @@ class EventItem {
     required this.organizerId,
     required this.segmentId,
     required this.segmentName,
+    required this.segmentColor,
     required this.genreId,
     required this.genreName,
     required this.subGenreId,
@@ -91,81 +94,112 @@ class EventItem {
     required this.coverImageUrl,
   });
 
-factory EventItem.fromJson(Map<String, dynamic> json) {
-  DateTime parseDate(dynamic value, {DateTime? fallback}) {
-    if (value == null) {
-      return fallback ?? DateTime.fromMillisecondsSinceEpoch(0);
-    }
-    return DateTime.tryParse(value.toString()) ??
-        fallback ??
-        DateTime.fromMillisecondsSinceEpoch(0);
+  String get normalizedStatus => status.trim().toLowerCase();
+
+  bool get isCancelled => normalizedStatus == 'cancelled';
+
+  bool get isFinished {
+    final now = DateTime.now();
+    final localEnd = endDateTime.toLocal();
+    return localEnd.isBefore(now) || localEnd.isAtSameMomentAs(now);
   }
 
-  bool readBool(dynamic value, {bool fallback = false}) {
-    if (value is bool) return value;
-    if (value is num) return value != 0;
-    if (value is String) {
-      final v = value.trim().toLowerCase();
-      if (v == 'true' || v == '1') return true;
-      if (v == 'false' || v == '0') return false;
-    }
-    return fallback;
+  bool get isUpcoming {
+    return startDateTime.toLocal().isAfter(DateTime.now());
   }
 
-  return EventItem(
-    eventId: (json['eventId'] as num?)?.toInt() ?? 0,
-    organizerId: (json['organizerId'] as num?)?.toInt(),
-    segmentId: (json['segmentId'] as num?)?.toInt(),
-    segmentName: json['segmentName']?.toString(),
-    genreId: (json['genreId'] as num?)?.toInt(),
-    genreName: json['genreName']?.toString(),
-    subGenreId: (json['subGenreId'] as num?)?.toInt(),
-    subGenreName: json['subGenreName']?.toString(),
-    venueId: (json['venueId'] as num?)?.toInt(),
-    venueName: json['venueName']?.toString(),
-    cityId: (json['cityId'] as num?)?.toInt(),
-    title: json['title']?.toString() ?? '',
-    description: json['description']?.toString() ?? '',
-    latitude: (json['latitude'] as num?)?.toDouble() ?? 0,
-    longitude: (json['longitude'] as num?)?.toDouble() ?? 0,
-    startDateTime: parseDate(json['startDateTime']),
-    endDateTime: parseDate(
-      json['endDateTime'],
-      fallback: parseDate(json['startDateTime']),
-    ),
-    capacity: (json['capacity'] as num?)?.toInt() ?? 0,
-    price: (json['price'] as num?)?.toDouble() ?? 0,
-    status: json['status']?.toString() ?? 'Draft',
-    isOnline: readBool(json['isOnline']),
-    isFeatured: readBool(json['isFeatured']),
-    viewCount: (json['viewCount'] as num?)?.toInt() ?? 0,
-    likesCount: (json['likesCount'] as num?)?.toInt() ?? 0,
-    isLiked: readBool(json['isLiked']),
-    isBookmarked: readBool(json['isBookmarked']),
-    tags: json['tags']?.toString(),
-    externalUrl: json['externalUrl']?.toString(),
-    accessibilityInfo: json['accessibilityInfo']?.toString(),
-    promoterName: json['promoterName']?.toString(),
-    locale: json['locale']?.toString() ?? 'bs-BA',
-    createdAt: json['createdAt'] != null
-        ? DateTime.tryParse(json['createdAt'].toString())
-        : null,
-    updatedAt: json['updatedAt'] != null
-        ? DateTime.tryParse(json['updatedAt'].toString())
-        : null,
-    imageUrls: (json['imageUrls'] as List<dynamic>? ?? const [])
-        .map((e) => e.toString())
-        .where((e) => e.trim().isNotEmpty)
-        .toList(),
-    coverImageUrl: json['coverImageUrl']?.toString(),
-  );
-}
+  bool get isOngoing {
+    final now = DateTime.now();
+    final localStart = startDateTime.toLocal();
+    final localEnd = endDateTime.toLocal();
+    final started =
+        localStart.isBefore(now) || localStart.isAtSameMomentAs(now);
+    final notEnded = localEnd.isAfter(now);
+    return started && notEnded;
+  }
+
+  bool get isVisibleInSearch {
+    if (isCancelled) return false;
+    return !isFinished;
+  }
+
+  factory EventItem.fromJson(Map<String, dynamic> json) {
+    DateTime parseDate(dynamic value, {DateTime? fallback}) {
+      if (value == null) {
+        return (fallback ?? DateTime.fromMillisecondsSinceEpoch(0)).toLocal();
+      }
+      final parsed = DateTime.tryParse(value.toString());
+      return (parsed ?? fallback ?? DateTime.fromMillisecondsSinceEpoch(0))
+          .toLocal();
+    }
+
+    bool readBool(dynamic value, {bool fallback = false}) {
+      if (value is bool) return value;
+      if (value is num) return value != 0;
+      if (value is String) {
+        final v = value.trim().toLowerCase();
+        if (v == 'true' || v == '1') return true;
+        if (v == 'false' || v == '0') return false;
+      }
+      return fallback;
+    }
+
+    return EventItem(
+      eventId: (json['eventId'] as num?)?.toInt() ?? 0,
+      organizerId: (json['organizerId'] as num?)?.toInt(),
+      segmentId: (json['segmentId'] as num?)?.toInt(),
+      segmentName: json['segmentName']?.toString(),
+      segmentColor: json['segmentColor']?.toString(),
+      genreId: (json['genreId'] as num?)?.toInt(),
+      genreName: json['genreName']?.toString(),
+      subGenreId: (json['subGenreId'] as num?)?.toInt(),
+      subGenreName: json['subGenreName']?.toString(),
+      venueId: (json['venueId'] as num?)?.toInt(),
+      venueName: json['venueName']?.toString(),
+      cityId: (json['cityId'] as num?)?.toInt(),
+      title: json['title']?.toString() ?? '',
+      description: json['description']?.toString() ?? '',
+      latitude: (json['latitude'] as num?)?.toDouble() ?? 0,
+      longitude: (json['longitude'] as num?)?.toDouble() ?? 0,
+      startDateTime: parseDate(json['startDateTime']),
+      endDateTime: parseDate(
+        json['endDateTime'],
+        fallback: parseDate(json['startDateTime']),
+      ),
+      capacity: (json['capacity'] as num?)?.toInt() ?? 0,
+      price: (json['price'] as num?)?.toDouble() ?? 0,
+      status: json['status']?.toString() ?? 'Draft',
+      isOnline: readBool(json['isOnline']),
+      isFeatured: readBool(json['isFeatured']),
+      viewCount: (json['viewCount'] as num?)?.toInt() ?? 0,
+      likesCount: (json['likesCount'] as num?)?.toInt() ?? 0,
+      isLiked: readBool(json['isLiked']),
+      isBookmarked: readBool(json['isBookmarked']),
+      tags: json['tags']?.toString(),
+      externalUrl: json['externalUrl']?.toString(),
+      accessibilityInfo: json['accessibilityInfo']?.toString(),
+      promoterName: json['promoterName']?.toString(),
+      locale: json['locale']?.toString() ?? 'bs-BA',
+      createdAt: json['createdAt'] != null
+          ? DateTime.tryParse(json['createdAt'].toString())?.toLocal()
+          : null,
+      updatedAt: json['updatedAt'] != null
+          ? DateTime.tryParse(json['updatedAt'].toString())?.toLocal()
+          : null,
+      imageUrls: (json['imageUrls'] as List<dynamic>? ?? const [])
+          .map((e) => e.toString())
+          .where((e) => e.trim().isNotEmpty)
+          .toList(),
+      coverImageUrl: json['coverImageUrl']?.toString(),
+    );
+  }
 
   EventItem copyWith({
     int? eventId,
     int? organizerId,
     int? segmentId,
     String? segmentName,
+    String? segmentColor,
     int? genreId,
     String? genreName,
     int? subGenreId,
@@ -203,6 +237,7 @@ factory EventItem.fromJson(Map<String, dynamic> json) {
       organizerId: organizerId ?? this.organizerId,
       segmentId: segmentId ?? this.segmentId,
       segmentName: segmentName ?? this.segmentName,
+      segmentColor: segmentColor ?? this.segmentColor,
       genreId: genreId ?? this.genreId,
       genreName: genreName ?? this.genreName,
       subGenreId: subGenreId ?? this.subGenreId,
@@ -236,6 +271,194 @@ factory EventItem.fromJson(Map<String, dynamic> json) {
       coverImageUrl: coverImageUrl ?? this.coverImageUrl,
     );
   }
+}
+
+double distanceKm({
+  required double lat1,
+  required double lon1,
+  required double lat2,
+  required double lon2,
+}) {
+  const earthRadiusKm = 6371.0;
+  final dLat = degToRad(lat2 - lat1);
+  final dLon = degToRad(lon2 - lon1);
+
+  final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
+      math.cos(degToRad(lat1)) *
+          math.cos(degToRad(lat2)) *
+          math.sin(dLon / 2) *
+          math.sin(dLon / 2);
+
+  final c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
+  return earthRadiusKm * c;
+}
+
+double degToRad(double deg) => deg * math.pi / 180;
+
+bool isWithinRadius({
+  required EventItem item,
+  required double userLatitude,
+  required double userLongitude,
+  required double radiusKm,
+}) {
+  final distance = distanceKm(
+    lat1: userLatitude,
+    lon1: userLongitude,
+    lat2: item.latitude,
+    lon2: item.longitude,
+  );
+
+  return distance <= radiusKm;
+}
+
+int preferenceScore({
+  required EventItem item,
+  required Set<int> preferredSegmentIds,
+  required Set<int> preferredGenreIds,
+  required Set<int> preferredSubGenreIds,
+}) {
+  var score = 0;
+
+  if (item.segmentId != null && preferredSegmentIds.contains(item.segmentId)) {
+    score += 30;
+  }
+  if (item.genreId != null && preferredGenreIds.contains(item.genreId)) {
+    score += 22;
+  }
+  if (item.subGenreId != null &&
+      preferredSubGenreIds.contains(item.subGenreId)) {
+    score += 16;
+  }
+  if (item.isFeatured) {
+    score += 6;
+  }
+
+  return score;
+}
+
+int mapRecommendationScore({
+  required EventItem item,
+  required double userLatitude,
+  required double userLongitude,
+  required Set<int> preferredSegmentIds,
+  required Set<int> preferredGenreIds,
+  required Set<int> preferredSubGenreIds,
+}) {
+  var total = preferenceScore(
+    item: item,
+    preferredSegmentIds: preferredSegmentIds,
+    preferredGenreIds: preferredGenreIds,
+    preferredSubGenreIds: preferredSubGenreIds,
+  );
+
+  final distance = distanceKm(
+    lat1: userLatitude,
+    lon1: userLongitude,
+    lat2: item.latitude,
+    lon2: item.longitude,
+  );
+
+  if (distance <= 2) {
+    total += 24;
+  } else if (distance <= 5) {
+    total += 16;
+  } else if (distance <= 10) {
+    total += 10;
+  } else if (distance <= 25) {
+    total += 4;
+  }
+
+  total += (item.likesCount / 25).round();
+  total += (item.viewCount / 250).round();
+
+  if (item.isFeatured) {
+    total += 4;
+  }
+
+  return total;
+}
+
+List<EventItem> rankByPreferences({
+  required List<EventItem> items,
+  required Set<int> preferredSegmentIds,
+  required Set<int> preferredGenreIds,
+  required Set<int> preferredSubGenreIds,
+}) {
+  final ranked = [...items];
+
+  ranked.sort(
+    (a, b) => preferenceScore(
+      item: b,
+      preferredSegmentIds: preferredSegmentIds,
+      preferredGenreIds: preferredGenreIds,
+      preferredSubGenreIds: preferredSubGenreIds,
+    ).compareTo(
+      preferenceScore(
+        item: a,
+        preferredSegmentIds: preferredSegmentIds,
+        preferredGenreIds: preferredGenreIds,
+        preferredSubGenreIds: preferredSubGenreIds,
+      ),
+    ),
+  );
+
+  return ranked;
+}
+
+List<EventItem> rankSearchResults({
+  required List<EventItem> items,
+  required String query,
+  required bool showGlobalEvents,
+  required double selectedRadiusKm,
+  required double userLatitude,
+  required double userLongitude,
+  required Set<int> preferredSegmentIds,
+  required Set<int> preferredGenreIds,
+  required Set<int> preferredSubGenreIds,
+}) {
+  final q = query.toLowerCase();
+  final ranked = [...items];
+
+  int score(EventItem item) {
+    var total = 0;
+
+    final title = item.title.toLowerCase();
+    final segment = (item.segmentName ?? '').toLowerCase();
+    final genre = (item.genreName ?? '').toLowerCase();
+    final subGenre = (item.subGenreName ?? '').toLowerCase();
+    final tags = (item.tags ?? '').toLowerCase();
+
+    if (title.contains(q)) total += 80;
+    if (segment.contains(q)) total += 30;
+    if (genre.contains(q)) total += 25;
+    if (subGenre.contains(q)) total += 20;
+    if (tags.contains(q)) total += 15;
+
+    total += preferenceScore(
+      item: item,
+      preferredSegmentIds: preferredSegmentIds,
+      preferredGenreIds: preferredGenreIds,
+      preferredSubGenreIds: preferredSubGenreIds,
+    );
+
+    total += (item.likesCount / 20).round();
+    total += (item.viewCount / 200).round();
+
+    if (!showGlobalEvents) {
+      final distance = distanceKm(
+        lat1: userLatitude,
+        lon1: userLongitude,
+        lat2: item.latitude,
+        lon2: item.longitude,
+      );
+      total += distance <= selectedRadiusKm ? 20 : -20;
+    }
+
+    return total;
+  }
+
+  ranked.sort((a, b) => score(b).compareTo(score(a)));
+  return ranked;
 }
 
 class CreateEventResponse {
@@ -304,9 +527,7 @@ class EventImageUploadItem {
     return EventImageUploadItem(
       localPath: localPath ?? this.localPath,
       isCover: isCover ?? this.isCover,
-      previewBytes: clearPreviewBytes
-          ? null
-          : (previewBytes ?? this.previewBytes),
+      previewBytes: clearPreviewBytes ? null : (previewBytes ?? this.previewBytes),
     );
   }
 }

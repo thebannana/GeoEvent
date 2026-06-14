@@ -45,12 +45,12 @@ factory MessageItem.fromJson(Map<String, dynamic> json) {
     isRead: json['isRead'] as bool? ?? false,
     likesCount: (json['likesCount'] as num?)?.toInt() ?? 0,
     isLikedByMe: json['isLikedByMe'] as bool? ?? false,
-    sentAt: DateTime.parse(json['sentAt'] as String),
+    sentAt: DateTime.parse(json['sentAt'] as String).toLocal(),
     readAt: json['readAt'] != null
-        ? DateTime.tryParse(json['readAt'] as String)
+        ? DateTime.tryParse(json['readAt'] as String)?.toLocal()
         : null,
     editedAt: json['editedAt'] != null
-        ? DateTime.tryParse(json['editedAt'] as String)
+        ? DateTime.tryParse(json['editedAt'] as String)?.toLocal()
         : null,
     senderDisplayName: json['senderDisplayName'] as String?,
     senderAvatarUrl: json['senderAvatarUrl'] as String?,

@@ -21,9 +21,11 @@ class AuthRepository {
     return response;
   }
 
-  Future<AuthResponse> register(RegisterRequest request) async {
+  Future<AuthResponse?> register(RegisterRequest request) async {
     final response = await api.register(request);
-    await localStorage.saveSession(response);
+    if (response != null && response.hasTokens) {
+      await localStorage.saveSession(response);
+    }
     return response;
   }
 

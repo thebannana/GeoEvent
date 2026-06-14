@@ -7,18 +7,4 @@ class PreferencesRepository {
   PreferencesRepository(this._api);
 
   Future<List<UserPreference>> getPreferences() => _api.getPreferences();
-
-  Future<UserPreference> upsertPreference({
-    int? segmentId,
-    int? genreId,
-    required double score,
-  }) {
-    return _api.upsertPreference(
-      segmentId: segmentId,
-      genreId: genreId,
-      score: score,
-    );
-  }
-
-  Future<void> deletePreference(int prefId) => _api.deletePreference(prefId);
 }

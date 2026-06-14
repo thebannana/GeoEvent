@@ -7,8 +7,10 @@ public interface IChatRepository
 {
     Task<int> GetThreadUnreadCountAsync(long threadId, int userId);
     Task<int> GetUnreadCountAsync(int userId);
+
     Task<ChatThread?> GetThreadByIdAsync(long threadId);
     Task<ChatThread?> GetDirectThreadAsync(int userA, int userB);
+    Task<ChatThread?> GetDirectThreadIncludingInactiveAsync(int userA, int userB);
     Task<ChatThread?> GetEventGroupThreadAsync(int eventId);
     Task<ChatThread> AddThreadAsync(ChatThread thread);
     Task UpdateThreadAsync(ChatThread thread);
@@ -28,6 +30,7 @@ public interface IChatRepository
     Task<ChatMessageLike?> GetMessageLikeAsync(long messageId, int userId);
     Task AddMessageLikeAsync(ChatMessageLike like);
     Task RemoveMessageLikeAsync(ChatMessageLike like);
+
     Task<List<ChatThreadParticipant>> GetUserParticipationsAsync(int userId);
     Task<List<ChatMessage>> GetMessagesBySenderAsync(int userId);
     Task<List<ChatThread>> GetUserThreadsAsync(int userId);

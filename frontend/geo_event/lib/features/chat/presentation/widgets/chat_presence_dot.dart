@@ -10,14 +10,17 @@ class ChatPresenceDot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
     return Container(
       width: 12,
       height: 12,
       decoration: BoxDecoration(
-        color: isOnline ? Colors.green : Colors.grey,
+        color: isOnline ? colorScheme.primary : colorScheme.outline,
         shape: BoxShape.circle,
         border: Border.all(
-          color: Theme.of(context).scaffoldBackgroundColor,
+          color: theme.scaffoldBackgroundColor,
           width: 2,
         ),
       ),

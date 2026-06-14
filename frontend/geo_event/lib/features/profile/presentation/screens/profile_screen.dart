@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/theme/theme_mode_controller.dart';
+import '../../../../core/widgets/app_chip.dart';
+import '../../../../core/widgets/app_spinner.dart';
 import '../../../../shared/profile/models/user_profile.dart';
 import '../widgets/profile_section.dart';
 
@@ -17,19 +19,19 @@ class ProfileScreen extends ConsumerWidget {
   final VoidCallback onLogout;
   final VoidCallback onOpenTicketScanner;
 
-const ProfileScreen({
-  super.key,
-  required this.profile,
-  required this.onEditProfile,
-  required this.onChangePassword,
-  required this.onOpenBookmarks,
-  required this.onOpenMyEvents,
-  required this.onOpenTicketScanner,
-  required this.onOpenPreferences,
-  required this.onOpenActivityLogs,
-  required this.onRevokeAllSessions,
-  required this.onLogout,
-});
+  const ProfileScreen({
+    super.key,
+    required this.profile,
+    required this.onEditProfile,
+    required this.onChangePassword,
+    required this.onOpenBookmarks,
+    required this.onOpenMyEvents,
+    required this.onOpenTicketScanner,
+    required this.onOpenPreferences,
+    required this.onOpenActivityLogs,
+    required this.onRevokeAllSessions,
+    required this.onLogout,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -145,7 +147,8 @@ const ProfileScreen({
                     return SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
                       child: ConstrainedBox(
-                        constraints: BoxConstraints(minWidth: constraints.maxWidth),
+                        constraints:
+                            BoxConstraints(minWidth: constraints.maxWidth),
                         child: Center(
                           child: SegmentedButton<ThemeMode>(
                             segments: const [
@@ -245,6 +248,12 @@ class _ProfileHeader extends StatelessWidget {
                     ? Image.network(
                         imageUrl,
                         fit: BoxFit.cover,
+                        loadingBuilder: (context, child, progress) {
+                          if (progress == null) return child;
+                          return const Center(
+                            child: AppSpinner(size: 22, strokeWidth: 2),
+                          );
+                        },
                         errorBuilder: (_, __, ___) => _ProfileAvatarFallback(
                           color: colors.primary,
                         ),
@@ -277,9 +286,9 @@ class _ProfileHeader extends StatelessWidget {
               runSpacing: 8,
               alignment: WrapAlignment.center,
               children: [
-                _InfoChip(
+                AppChip(
                   icon: Icons.calendar_today_outlined,
-                  label: 'Joined ${profile.createdAt?.year}',
+                  label: 'Joined ${profile.createdAt?.year ?? '—'}',
                 ),
               ],
             ),
@@ -360,24 +369,6 @@ class _ProfileActionTile extends StatelessWidget {
       subtitle: Text(subtitle),
       trailing: const Icon(Icons.chevron_right_rounded),
       onTap: onTap,
-    );
-  }
-}
-
-class _InfoChip extends StatelessWidget {
-  final IconData icon;
-  final String label;
-
-  const _InfoChip({
-    required this.icon,
-    required this.label,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Chip(
-      avatar: Icon(icon, size: 18),
-      label: Text(label),
     );
   }
 }

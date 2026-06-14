@@ -23,6 +23,9 @@ class PublicProfileActionButtons extends StatelessWidget {
           Expanded(
             child: FilledButton.icon(
               onPressed: onMessageTap,
+              style: FilledButton.styleFrom(
+                minimumSize: const Size.fromHeight(48),
+              ),
               icon: const Icon(Icons.chat_bubble_outline_rounded),
               label: const Text('Message'),
             ),
@@ -31,6 +34,9 @@ class PublicProfileActionButtons extends StatelessWidget {
           Expanded(
             child: OutlinedButton.icon(
               onPressed: onReportTap,
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size.fromHeight(48),
+              ),
               icon: const Icon(Icons.flag_outlined),
               label: const Text('Report'),
             ),

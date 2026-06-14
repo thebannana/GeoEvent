@@ -12,7 +12,7 @@ class ReportTextField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colorScheme = Theme.of(context).colorScheme;
 
     return TextField(
       controller: controller,
@@ -20,26 +20,28 @@ class ReportTextField extends StatelessWidget {
       minLines: 4,
       maxLines: 6,
       maxLength: 2000,
+      textInputAction: TextInputAction.newline,
       decoration: InputDecoration(
         hintText: 'Add extra details (optional)',
         filled: true,
-        fillColor: isDark ? const Color(0xFF1C1F24) : Colors.white,
+        fillColor: colorScheme.surface,
+        alignLabelWithHint: true,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(18),
           borderSide: BorderSide(
-            color: isDark ? const Color(0xFF2D323A) : const Color(0xFFE6EBF2),
+            color: colorScheme.outline.withValues(alpha: 0.75),
           ),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(18),
           borderSide: BorderSide(
-            color: isDark ? const Color(0xFF2D323A) : const Color(0xFFE6EBF2),
+            color: colorScheme.outline.withValues(alpha: 0.75),
           ),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(18),
           borderSide: BorderSide(
-            color: Theme.of(context).colorScheme.primary,
+            color: colorScheme.primary,
           ),
         ),
         contentPadding: const EdgeInsets.all(16),

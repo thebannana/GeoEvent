@@ -10,39 +10,12 @@ class ReservationStatusBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final normalized = status.toLowerCase();
-
-    final (color, bg) = switch (normalized) {
-      'confirmed' => (
-          const Color(0xFF437A22),
-          const Color(0xFFD4DFCC),
-        ),
-      'pending' => (
-          const Color(0xFFD19900),
-          const Color(0xFFE9E0C6),
-        ),
-      'cancelled' => (
-          const Color(0xFFA12C7B),
-          const Color(0xFFE0CED7),
-        ),
-      'expired' => (
-          const Color(0xFF7A7974),
-          const Color(0xFFF0EFED),
-        ),
-      'refunded' => (
-          const Color(0xFF006494),
-          const Color(0xFFC6D8E4),
-        ),
-      _ => (
-          const Color(0xFF7A7974),
-          const Color(0xFFF0EFED),
-        ),
-    };
+    final scheme = _reservationStatusScheme(context, status);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: bg,
+        color: scheme.background,
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
@@ -50,9 +23,54 @@ class ReservationStatusBadge extends StatelessWidget {
         style: TextStyle(
           fontSize: 11,
           fontWeight: FontWeight.w600,
-          color: color,
+          color: scheme.foreground,
         ),
       ),
     );
   }
+}
+
+class _ReservationStatusScheme {
+  final Color foreground;
+  final Color background;
+
+  const _ReservationStatusScheme({
+    required this.foreground,
+    required this.background,
+  });
+}
+
+_ReservationStatusScheme _reservationStatusScheme(
+  BuildContext context,
+  String status,
+) {
+  final colorScheme = Theme.of(context).colorScheme;
+  final normalized = status.toLowerCase();
+
+  return switch (normalized) {
+    'confirmed' => _ReservationStatusScheme(
+        foreground: colorScheme.primary,
+        background: colorScheme.primary.withValues(alpha: 0.12),
+      ),
+    'pending' => _ReservationStatusScheme(
+        foreground: const Color(0xFFD19900),
+        background: const Color(0xFFE9E0C6),
+      ),
+    'cancelled' => _ReservationStatusScheme(
+        foreground: colorScheme.onErrorContainer,
+        background: colorScheme.errorContainer,
+      ),
+    'expired' => _ReservationStatusScheme(
+        foreground: colorScheme.onSurfaceVariant,
+        background: colorScheme.surfaceContainerHighest,
+      ),
+    'refunded' => _ReservationStatusScheme(
+        foreground: const Color(0xFF006494),
+        background: const Color(0xFFC6D8E4),
+      ),
+    _ => _ReservationStatusScheme(
+        foreground: colorScheme.onSurfaceVariant,
+        background: colorScheme.surfaceContainerHighest,
+      ),
+  };
 }

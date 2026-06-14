@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/widgets/app_chip.dart';
+import '../../../../core/widgets/app_empty_state.dart';
+import '../../../../core/widgets/app_error_view.dart';
+import '../../../../core/widgets/app_surface_card.dart';
 import '../../../../shared/chat/models/chat_thread_args.dart';
 import '../../../../shared/chat/models/chat_thread_type.dart';
 import '../../../../shared/chat/models/conversation_summary.dart';
@@ -28,128 +32,150 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(messagesInboxControllerProvider);
     final controller = ref.read(messagesInboxControllerProvider.notifier);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
     final filtered = state.filteredConversations;
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
-      body: RefreshIndicator(
-        onRefresh: controller.refresh,
-        child: CustomScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          slivers: [
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(18, 14, 18, 0),
-                child: TextField(
-                  controller: _searchController,
-                  onChanged: controller.setSearchQuery,
-                  style: const TextStyle(fontSize: 15),
-                  decoration: InputDecoration(
-                    hintText: 'Search chats',
-                    prefixIcon: const Icon(Icons.search_rounded, size: 20),
-                    suffixIcon: state.searchQuery.isNotEmpty
-                        ? IconButton(
-                            onPressed: () {
-                              _searchController.clear();
-                              controller.setSearchQuery('');
-                            },
-                            icon: const Icon(Icons.close_rounded, size: 18),
-                          )
-                        : null,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 12),
-                    isDense: true,
+      resizeToAvoidBottomInset: false,
+      body: SafeArea(
+        top: false,
+        bottom: false,
+        maintainBottomViewPadding: true,
+        child: AnimatedPadding(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOut,
+          padding: EdgeInsets.only(bottom: bottomInset),
+          child: RefreshIndicator(
+            onRefresh: controller.refresh,
+            child: CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              keyboardDismissBehavior:
+                  ScrollViewKeyboardDismissBehavior.onDrag,
+              slivers: [
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(18, 14, 18, 0),
+                    child: TextField(
+                      controller: _searchController,
+                      onChanged: controller.setSearchQuery,
+                      textInputAction: TextInputAction.search,
+                      style: const TextStyle(fontSize: 15),
+                      decoration: InputDecoration(
+                        hintText: 'Search chats',
+                        prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                        suffixIcon: state.searchQuery.isNotEmpty
+                            ? IconButton(
+                                onPressed: () {
+                                  _searchController.clear();
+                                  controller.setSearchQuery('');
+                                },
+                                icon: const Icon(Icons.close_rounded, size: 18),
+                              )
+                            : null,
+                        contentPadding:
+                            const EdgeInsets.symmetric(vertical: 12),
+                        isDense: true,
+                      ),
+                    ),
                   ),
                 ),
-              ),
-            ),
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(18, 12, 18, 6),
-                child: Row(
-                  children: [
-                    _TopFilterChip(
-                      label: 'All',
-                      selected: !state.unreadOnly,
-                      onTap: () => controller.setUnreadOnly(false),
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(18, 12, 18, 6),
+                    child: Row(
+                      children: [
+                        _TopFilterChip(
+                          label: 'All',
+                          selected: !state.unreadOnly,
+                          onTap: () => controller.setUnreadOnly(false),
+                        ),
+                        const SizedBox(width: 8),
+                        _TopFilterChip(
+                          label: 'Unread',
+                          selected: state.unreadOnly,
+                          onTap: () => controller.setUnreadOnly(true),
+                          trailingCount:
+                              state.unreadCount > 0 ? state.unreadCount : null,
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: 8),
-                    _TopFilterChip(
-                      label: 'Unread',
-                      selected: state.unreadOnly,
-                      onTap: () => controller.setUnreadOnly(true),
-                      trailingCount:
-                          state.unreadCount > 0 ? state.unreadCount : null,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            if (state.conversations.isLoading)
-              const SliverPadding(
-                padding: EdgeInsets.fromLTRB(18, 10, 18, 24),
-                sliver: SliverToBoxAdapter(
-                  child: _ChatLoadingState(),
-                ),
-              )
-            else if (state.conversations.hasError)
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
-                sliver: SliverToBoxAdapter(
-                  child: _ChatErrorState(onRetry: controller.refresh),
-                ),
-              )
-            else if (filtered.isEmpty)
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
-                sliver: SliverToBoxAdapter(
-                  child: _ChatEmptyState(
-                    hasSearch: state.searchQuery.trim().isNotEmpty,
-                    unreadOnly: state.unreadOnly,
                   ),
                 ),
-              )
-            else
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
-                sliver: SliverList.separated(
-                  itemCount: filtered.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 10),
-                  itemBuilder: (context, index) {
-                    final item = filtered[index];
-                    return _ConversationCard(
-                      item: item,
-                      isDark: isDark,
-                      onTap: () async {
-                        controller.markThreadLocallyRead(item.threadId);
+                if (state.conversations.isLoading)
+                  const SliverPadding(
+                    padding: EdgeInsets.fromLTRB(18, 10, 18, 24),
+                    sliver: SliverToBoxAdapter(
+                      child: _ChatLoadingState(),
+                    ),
+                  )
+                else if (state.conversations.hasError)
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
+                    sliver: SliverToBoxAdapter(
+                      child: _ChatErrorState(onRetry: controller.refresh),
+                    ),
+                  )
+                else if (filtered.isEmpty)
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
+                    sliver: SliverFillRemaining(
+                      hasScrollBody: false,
+                      child: Align(
+                        alignment: Alignment.topCenter,
+                        child: _ChatEmptyState(
+                          hasSearch: state.searchQuery.trim().isNotEmpty,
+                          unreadOnly: state.unreadOnly,
+                        ),
+                      ),
+                    ),
+                  )
+                else
+                  SliverPadding(
+                    padding: EdgeInsets.fromLTRB(
+                      18,
+                      8,
+                      18,
+                      24 + bottomInset,
+                    ),
+                    sliver: SliverList.separated(
+                      itemCount: filtered.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 10),
+                      itemBuilder: (context, index) {
+                        final item = filtered[index];
+                        return _ConversationCard(
+                          item: item,
+                          onTap: () async {
+                            controller.markThreadLocallyRead(item.threadId);
 
-                        await Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => ChatThreadScreen(
-                              args: ChatThreadArgs(
-                                threadId: item.threadId,
-                                type: item.type,
-                                title: item.title,
-                                otherUserId: item.otherUserId,
-                                eventId: item.eventId,
+                            await Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => ChatThreadScreen(
+                                  args: ChatThreadArgs(
+                                    threadId: item.threadId,
+                                    type: item.type,
+                                    title: item.title,
+                                    otherUserId: item.otherUserId,
+                                    eventId: item.eventId,
+                                  ),
+                                ),
                               ),
-                            ),
-                          ),
-                        );
+                            );
 
-                        if (mounted) {
-                          await controller.refresh();
-                        }
+                            if (mounted) {
+                              await controller.refresh();
+                            }
+                          },
+                        );
                       },
-                    );
-                  },
+                    ),
+                  ),
+                SliverToBoxAdapter(
+                  child: SizedBox(height: 20 + bottomInset),
                 ),
-              ),
-            const SliverToBoxAdapter(
-              child: SizedBox(height: 20),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -158,12 +184,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
 class _ConversationCard extends StatelessWidget {
   final ConversationSummary item;
-  final bool isDark;
   final VoidCallback onTap;
 
   const _ConversationCard({
     required this.item,
-    required this.isDark,
     required this.onTap,
   });
 
@@ -173,111 +197,94 @@ class _ConversationCard extends StatelessWidget {
     final subtitlePrefix = item.isLastMessageFromMe ? 'You: ' : '';
     final resolvedTitle = _displayTitle(item);
 
-    return Material(
-      color: isDark ? const Color(0xFF17191D) : Colors.white,
-      borderRadius: BorderRadius.circular(18),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(18),
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(
-              color: isDark
-                  ? const Color(0xFF2A303A)
-                  : const Color(0xFFE5EAF2),
-            ),
+    return AppSurfaceCard(
+      onTap: onTap,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ChatAvatar(
+            title: resolvedTitle,
+            imageUrl: item.imageUrl,
+            size: 46,
+            type: item.type,
+            showPresence: item.type == ChatThreadType.direct,
+            isOnline: item.type == ChatThreadType.direct && item.isOnline,
           ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              ChatAvatar(
-                title: resolvedTitle,
-                imageUrl: item.imageUrl,
-                size: 46,
-                type: item.type,
-                showPresence: item.type == ChatThreadType.direct,
-                isOnline: item.type == ChatThreadType.direct && item.isOnline,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 1),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        resolvedTitle,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontWeight: item.unreadCount > 0
-                              ? FontWeight.w700
-                              : FontWeight.w600,
-                          fontSize: 14,
-                          height: 1.25,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '$subtitlePrefix${item.lastMessageContent}',
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 13,
-                          height: 1.35,
-                          color: theme.textTheme.bodySmall?.color,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
+          const SizedBox(width: 12),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.only(top: 1),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    _formatTime(item.lastMessageSentAt),
+                    resolvedTitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontSize: 11,
-                      color: theme.textTheme.bodySmall?.color,
+                      fontWeight: item.unreadCount > 0
+                          ? FontWeight.w700
+                          : FontWeight.w600,
+                      fontSize: 14,
+                      height: 1.25,
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  if (item.unreadCount > 0)
-                    Container(
-                      constraints: const BoxConstraints(minWidth: 22),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.primary,
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Text(
-                        item.unreadCount.toString(),
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: theme.colorScheme.onPrimary,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    )
-                  else
-                    Icon(
-                      Icons.chevron_right_rounded,
-                      size: 18,
-                      color: theme.colorScheme.onSurfaceVariant,
+                  const SizedBox(height: 4),
+                  Text(
+                    '$subtitlePrefix${item.lastMessageContent}',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      fontSize: 13,
+                      height: 1.35,
                     ),
+                  ),
                 ],
               ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                _formatTime(item.lastMessageSentAt),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  fontSize: 11,
+                ),
+              ),
+              const SizedBox(height: 8),
+              if (item.unreadCount > 0)
+                Container(
+                  constraints: const BoxConstraints(minWidth: 22),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primary,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    item.unreadCount.toString(),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: theme.colorScheme.onPrimary,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                )
+              else
+                Icon(
+                  Icons.chevron_right_rounded,
+                  size: 18,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
             ],
           ),
-        ),
+        ],
       ),
     );
   }
@@ -295,14 +302,13 @@ class _ConversationCard extends StatelessWidget {
 
   static String _formatTime(DateTime value) {
     final now = DateTime.now();
-    final local = value.toLocal();
-    final diff = now.difference(local);
+    final diff = now.difference(value);
 
     if (diff.inDays >= 1) {
-      return '${local.day.toString().padLeft(2, '0')}.${local.month.toString().padLeft(2, '0')}';
+      return '${value.day.toString().padLeft(2, '0')}.${value.month.toString().padLeft(2, '0')}';
     }
 
-    return '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
+    return '${value.hour.toString().padLeft(2, '0')}:${value.minute.toString().padLeft(2, '0')}';
   }
 }
 
@@ -321,64 +327,12 @@ class _TopFilterChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
-    return GestureDetector(
+    return AppChip(
+      label: trailingCount != null ? '$label ($trailingCount)' : label,
+      selected: selected,
       onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(
-          color: selected
-              ? theme.colorScheme.primary.withValues(
-                  alpha: isDark ? 0.22 : 0.12,
-                )
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(
-            color: selected
-                ? theme.colorScheme.primary.withValues(alpha: 0.6)
-                : isDark
-                    ? const Color(0xFF2A303A)
-                    : const Color(0xFFE3EAF3),
-          ),
-        ),
-        child: Row(
-          children: [
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: selected
-                    ? theme.colorScheme.primary
-                    : isDark
-                        ? Colors.white70
-                        : Colors.black54,
-              ),
-            ),
-            if (trailingCount != null) ...[
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.primary,
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Text(
-                  trailingCount.toString(),
-                  style: TextStyle(
-                    color: theme.colorScheme.onPrimary,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      icon: null,
     );
   }
 }
@@ -405,18 +359,11 @@ class _ChatSkeletonCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final base = isDark ? const Color(0xFF17191D) : Colors.white;
-    final line = isDark ? const Color(0xFF2A303A) : const Color(0xFFE5EAF2);
+    final theme = Theme.of(context);
+    final line = theme.dividerColor;
 
-    return Container(
-      width: double.infinity,
+    return AppSurfaceCard(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: base,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: line),
-      ),
       child: Row(
         children: [
           Container(
@@ -499,46 +446,11 @@ class _ChatEmptyState extends StatelessWidget {
             ? 'Unread conversations will appear here.'
             : 'Your conversations will appear here.';
 
-    return Container(
-      width: double.infinity,
+    return AppEmptyState(
+      title: title,
+      message: subtitle,
+      icon: Icons.forum_outlined,
       padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Theme.of(context).brightness == Brightness.dark
-            ? const Color(0xFF17191D)
-            : Colors.white,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(
-          color: Theme.of(context).brightness == Brightness.dark
-              ? const Color(0xFF2A303A)
-              : const Color(0xFFE5EAF2),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(
-            Icons.forum_outlined,
-            size: 30,
-            color: Theme.of(context).colorScheme.primary,
-          ),
-          const SizedBox(height: 12),
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            subtitle,
-            style: TextStyle(
-              fontSize: 13,
-              color: Theme.of(context).textTheme.bodySmall?.color,
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
@@ -550,52 +462,10 @@ class _ChatErrorState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Theme.of(context).brightness == Brightness.dark
-            ? const Color(0xFF17191D)
-            : Colors.white,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(
-          color: Theme.of(context).brightness == Brightness.dark
-              ? const Color(0xFF2A303A)
-              : const Color(0xFFE5EAF2),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(
-            Icons.cloud_off_rounded,
-            size: 30,
-            color: Theme.of(context).colorScheme.primary,
-          ),
-          const SizedBox(height: 12),
-          const Text(
-            'Failed to load chats',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Pull to refresh or try again.',
-            style: TextStyle(
-              fontSize: 13,
-              color: Theme.of(context).textTheme.bodySmall?.color,
-            ),
-          ),
-          const SizedBox(height: 14),
-          TextButton.icon(
-            onPressed: onRetry,
-            icon: const Icon(Icons.refresh_rounded),
-            label: const Text('Retry'),
-          ),
-        ],
-      ),
+    return AppErrorState(
+      title: 'Failed to load chats',
+      message: 'Pull to refresh or try again.',
+      onRetry: onRetry,
     );
   }
 }

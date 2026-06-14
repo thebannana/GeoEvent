@@ -2,9 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../my_events/presentation/screens/event_reservations_screen.dart';
-import '../../application/my_events_controller.dart';
+import '../../../../core/widgets/app_chip.dart';
+import '../../../../core/widgets/app_empty_state.dart';
+import '../../../../core/widgets/app_error_view.dart';
+import '../../../../core/widgets/app_spinner.dart';
+import '../../../../core/widgets/app_surface_card.dart';
+import '../../../../core/widgets/glass_scaffold.dart';
 import '../../../../shared/events/models/my_event_response_dto.dart';
+import '../../application/my_events_controller.dart';
+import '../../../my_events/presentation/screens/event_reservations_screen.dart';
 import 'edit_event_screen.dart';
 
 class MyEventsScreen extends ConsumerStatefulWidget {
@@ -21,9 +27,7 @@ class _MyEventsScreenState extends ConsumerState<MyEventsScreen> {
     'All',
     'Published',
     'Draft',
-    'Cancelled',
     'Completed',
-    'Postponed',
   ];
 
   String _query = '';
@@ -51,8 +55,7 @@ class _MyEventsScreenState extends ConsumerState<MyEventsScreen> {
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: overlayStyle,
-      child: Scaffold(
-        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      child: GlassScaffold(
         appBar: AppBar(
           title: const Text('My events'),
           centerTitle: false,
@@ -65,7 +68,7 @@ class _MyEventsScreenState extends ConsumerState<MyEventsScreen> {
           forceMaterialTransparency: true,
           systemOverlayStyle: overlayStyle,
         ),
-        body: RefreshIndicator(
+        child: RefreshIndicator(
           onRefresh: () => ref.read(myEventsProvider.notifier).refresh(),
           child: eventsAsync.when(
             loading: () => CustomScrollView(
@@ -74,7 +77,9 @@ class _MyEventsScreenState extends ConsumerState<MyEventsScreen> {
                 SliverToBoxAdapter(child: SizedBox(height: 20)),
                 SliverFillRemaining(
                   hasScrollBody: false,
-                  child: Center(child: CircularProgressIndicator()),
+                  child: Center(
+                    child: AppSpinner(size: 28, strokeWidth: 2.6),
+                  ),
                 ),
               ],
             ),
@@ -85,12 +90,10 @@ class _MyEventsScreenState extends ConsumerState<MyEventsScreen> {
                 SliverPadding(
                   padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
                   sliver: SliverToBoxAdapter(
-                    child: _TopStateCard(
-                      icon: Icons.cloud_off_rounded,
+                    child: AppErrorState(
                       title: 'Failed to load your events',
-                      subtitle: 'Pull to refresh or try again.',
-                      actionLabel: 'Retry',
-                      onAction: () {
+                      message: 'Pull to refresh or try again.',
+                      onRetry: () {
                         ref.read(myEventsProvider.notifier).refresh();
                       },
                     ),
@@ -109,7 +112,7 @@ class _MyEventsScreenState extends ConsumerState<MyEventsScreen> {
                     (event.venueName?.toLowerCase().contains(query) ?? false) ||
                     (event.genreName?.toLowerCase().contains(query) ?? false);
 
-                final uiStatus = _normalizeStatus(event.status);
+                final uiStatus = event.displayStatus;
                 final matchesStatus =
                     _selectedStatus == 'All' || uiStatus == _selectedStatus;
 
@@ -156,13 +159,11 @@ class _MyEventsScreenState extends ConsumerState<MyEventsScreen> {
                         child: Row(
                           children: [
                             for (var i = 0; i < _statuses.length; i++) ...[
-                              _StatusChip(
+                              AppChip(
                                 label: _statuses[i],
                                 selected: _selectedStatus == _statuses[i],
                                 onTap: () {
-                                  setState(
-                                    () => _selectedStatus = _statuses[i],
-                                  );
+                                  setState(() => _selectedStatus = _statuses[i]);
                                 },
                               ),
                               if (i != _statuses.length - 1)
@@ -177,12 +178,12 @@ class _MyEventsScreenState extends ConsumerState<MyEventsScreen> {
                     SliverPadding(
                       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
                       sliver: SliverToBoxAdapter(
-                        child: _TopStateCard(
+                        child: AppEmptyState(
                           icon: Icons.event_busy_rounded,
                           title: events.isEmpty
                               ? 'No events yet'
                               : 'No matching events',
-                          subtitle: events.isEmpty
+                          message: events.isEmpty
                               ? 'Events you create will appear here.'
                               : 'Try another search or status filter.',
                         ),
@@ -199,7 +200,6 @@ class _MyEventsScreenState extends ConsumerState<MyEventsScreen> {
                           final event = filtered[index];
                           return _EventCard(
                             event: event,
-                            isDark: isDark,
                             onTap: () {
                               _editEvent(event);
                             },
@@ -238,72 +238,55 @@ class _MyEventsScreenState extends ConsumerState<MyEventsScreen> {
   }
 
   Future<void> _confirmDelete(MyEventResponseDto event) async {
-  final confirmed = await showDialog<bool>(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      title: const Text('Delete event?'),
-      content: Text(
-        '"${event.title}" will be permanently deleted.',
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(ctx, false),
-          child: const Text('Keep'),
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete event?'),
+        content: Text(
+          '"${event.title}" will be permanently deleted.',
         ),
-        FilledButton(
-          onPressed: () => Navigator.pop(ctx, true),
-          style: FilledButton.styleFrom(
-            backgroundColor: Theme.of(context).colorScheme.error,
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Keep'),
           ),
-          child: const Text('Delete'),
-        ),
-      ],
-    ),
-  );
-
-  if (confirmed != true || !mounted) return;
-
-  final success = await ref
-      .read(myEventsProvider.notifier)
-      .deleteEvent(event.eventId);
-
-  if (!mounted) return;
-
-  ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(
-      content: Text(
-        success ? 'Event deleted.' : 'Could not delete event.',
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
       ),
-    ),
-  );
-}
+    );
 
-void _openReservations(MyEventResponseDto event) {
-  Navigator.of(context).push(
-    MaterialPageRoute(
-      builder: (_) => EventReservationsScreen(event: event),
-    ),
-  );
-}
+    if (confirmed != true || !mounted) return;
 
-  static String _normalizeStatus(String status) {
-    final normalized = status.trim().toLowerCase();
+    final success = await ref.read(myEventsProvider.notifier).deleteEvent(
+          event.eventId,
+        );
 
-    switch (normalized) {
-      case 'active':
-      case 'published':
-        return 'Published';
-      case 'draft':
-        return 'Draft';
-      case 'cancelled':
-        return 'Cancelled';
-      case 'completed':
-        return 'Completed';
-      case 'postponed':
-        return 'Postponed';
-      default:
-        return status.trim().isEmpty ? 'Unknown' : status;
-    }
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          success ? 'Event deleted.' : 'Could not delete event.',
+        ),
+      ),
+    );
+  }
+
+  void _openReservations(MyEventResponseDto event) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => EventReservationsScreen(event: event),
+        ),
+      );
+    });
   }
 
   static String _formatEventDate(DateTime dt) {
@@ -318,7 +301,6 @@ void _openReservations(MyEventResponseDto event) {
 
 class _EventCard extends StatelessWidget {
   final MyEventResponseDto event;
-  final bool isDark;
   final VoidCallback onTap;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
@@ -326,7 +308,6 @@ class _EventCard extends StatelessWidget {
 
   const _EventCard({
     required this.event,
-    required this.isDark,
     required this.onTap,
     required this.onEdit,
     required this.onDelete,
@@ -336,112 +317,147 @@ class _EventCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final status = _MyEventsScreenState._normalizeStatus(event.status);
+    final status = event.displayStatus;
     final statusColor = _statusColor(status);
 
-    return Material(
-      color: isDark ? const Color(0xFF17191D) : Colors.white,
-      borderRadius: BorderRadius.circular(22),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(22),
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(22),
-            border: Border.all(
-              color: isDark
-                  ? const Color(0xFF2A303A)
-                  : const Color(0xFFE5EAF2),
-            ),
-          ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _EventImage(
-                imageUrl: event.displayImageUrl,
-                isDark: isDark,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
+    return AppSurfaceCard(
+      onTap: onTap,
+      padding: const EdgeInsets.all(12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _EventImage(imageUrl: event.displayImageUrl),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            event.title,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w700,
-                              height: 1.2,
+                    Expanded(
+                      child: Text(
+                        event.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          height: 1.2,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    PopupMenuButton<_EventMenuAction>(
+                      tooltip: 'Event actions',
+                      onSelected: (value) {
+                        switch (value) {
+                          case _EventMenuAction.edit:
+                            onEdit();
+                            break;
+                          case _EventMenuAction.reservations:
+                            onViewReservations();
+                            break;
+                          case _EventMenuAction.delete:
+                            onDelete();
+                            break;
+                        }
+                      },
+                                            itemBuilder: (context) => [
+                        const PopupMenuItem(
+                          value: _EventMenuAction.edit,
+                          child: ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: Icon(Icons.edit_rounded),
+                            title: Text('Edit'),
+                          ),
+                        ),
+                        PopupMenuItem(
+                          value: _EventMenuAction.reservations,
+                          enabled: event.canViewReservations,
+                          child: ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: Icon(
+                              Icons.groups_rounded,
+                              color: event.canViewReservations
+                                  ? null
+                                  : Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant
+                                      .withValues(alpha: 0.5),
+                            ),
+                            title: Text(
+                              'View reservations',
+                              style: event.canViewReservations
+                                  ? null
+                                  : TextStyle(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant
+                                          .withValues(alpha: 0.5),
+                                    ),
                             ),
                           ),
                         ),
-                        const SizedBox(width: 4),
-                        PopupMenuButton<_EventMenuAction>(
-                          tooltip: 'Event actions',
-                          onSelected: (value) {
-                            switch (value) {
-                              case _EventMenuAction.edit:
-                                onEdit();
-                                break;
-                              case _EventMenuAction.reservations:
-                                onViewReservations();
-                                break;
-                              case _EventMenuAction.delete:
-                                onDelete();
-                                break;
-                            }
-                          },
-                          itemBuilder: (context) => const [
-                            PopupMenuItem(
-                              value: _EventMenuAction.edit,
-                              child: ListTile(
-                                contentPadding: EdgeInsets.zero,
-                                leading: Icon(Icons.edit_rounded),
-                                title: Text('Edit'),
-                              ),
-                            ),
-                            PopupMenuItem(
-                              value: _EventMenuAction.reservations,
-                              child: ListTile(
-                                contentPadding: EdgeInsets.zero,
-                                leading: Icon(Icons.groups_rounded),
-                                title: Text('View reservations'),
-                              ),
-                            ),
-                            PopupMenuDivider(),
-                            PopupMenuItem(
-                              value: _EventMenuAction.delete,
-                              child: ListTile(
-                                contentPadding: EdgeInsets.zero,
-                                leading: Icon(Icons.delete_outline_rounded),
-                                title: Text('Delete'),
-                              ),
-                            ),
-                          ],
-                          icon: Icon(
-                            Icons.more_vert_rounded,
-                            color: theme.colorScheme.onSurfaceVariant,
+                        const PopupMenuDivider(),
+                        const PopupMenuItem(
+                          value: _EventMenuAction.delete,
+                          child: ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: Icon(Icons.delete_outline_rounded),
+                            title: Text('Delete'),
                           ),
                         ),
                       ],
+                      icon: Icon(
+                        Icons.more_vert_rounded,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
                     ),
-                    const SizedBox(height: 6),
-                    if ((event.venueName?.isNotEmpty ?? false) ||
-                        (event.genreName?.isNotEmpty ?? false))
-                      Text(
-                        [
-                          if (event.genreName?.isNotEmpty ?? false)
-                            event.genreName!,
-                          if (event.venueName?.isNotEmpty ?? false)
-                            event.venueName!,
-                        ].join(' • '),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                if ((event.venueName?.isNotEmpty ?? false) ||
+                    (event.genreName?.isNotEmpty ?? false))
+                  Text(
+                    [
+                      if (event.genreName?.isNotEmpty ?? false) event.genreName!,
+                      if (event.venueName?.isNotEmpty ?? false) event.venueName!,
+                    ].join(' • '),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: theme.textTheme.bodySmall?.color,
+                    ),
+                  ),
+                const SizedBox(height: 8),
+                AppChip(
+                  label: status,
+                  selected: true,
+                  onTap: null,
+                  backgroundColor: statusColor.withValues(alpha: 0.14),
+                  foregroundColor: statusColor,
+                  borderColor: statusColor.withValues(alpha: 0.22),
+                  selectedBackgroundColor: statusColor.withValues(alpha: 0.14),
+                  selectedForegroundColor: statusColor,
+                  selectedBorderColor: statusColor.withValues(alpha: 0.22),
+                  compact: true,
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.schedule_rounded,
+                      size: 16,
+                      color: theme.colorScheme.primary,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        _MyEventsScreenState._formatEventDate(
+                          event.startDateTime,
+                        ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
@@ -449,61 +465,13 @@ class _EventCard extends StatelessWidget {
                           color: theme.textTheme.bodySmall?.color,
                         ),
                       ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 5,
-                          ),
-                          decoration: BoxDecoration(
-                            color: statusColor.withValues(alpha: 0.14),
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                          child: Text(
-                            status,
-                            style: TextStyle(
-                              color: statusColor,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.schedule_rounded,
-                          size: 16,
-                          color: theme.colorScheme.primary,
-                        ),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            _MyEventsScreenState._formatEventDate(
-                              event.startDateTime,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: theme.textTheme.bodySmall?.color,
-                            ),
-                          ),
-                        ),
-                      ],
                     ),
                   ],
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -534,11 +502,9 @@ enum _EventMenuAction {
 
 class _EventImage extends StatelessWidget {
   final String? imageUrl;
-  final bool isDark;
 
   const _EventImage({
     required this.imageUrl,
-    required this.isDark,
   });
 
   @override
@@ -555,17 +521,20 @@ class _EventImage extends StatelessWidget {
           fit: BoxFit.cover,
           frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
             if (wasSynchronouslyLoaded || frame != null) return child;
-            return _fallback(loading: true);
+            return _fallback(context, loading: true);
           },
-          errorBuilder: (_, __, ___) => _fallback(),
+          errorBuilder: (_, __, ___) => _fallback(context),
         ),
       );
     }
 
-    return _fallback();
+    return _fallback(context);
   }
 
-  Widget _fallback({bool loading = false}) {
+  Widget _fallback(BuildContext context, {bool loading = false}) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     return Container(
       width: 98,
       height: 98,
@@ -581,131 +550,13 @@ class _EventImage extends StatelessWidget {
       ),
       child: loading
           ? const Center(
-              child: SizedBox(
-                width: 22,
-                height: 22,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
+              child: AppSpinner(size: 22, strokeWidth: 2),
             )
-          : const Icon(Icons.event_rounded, size: 34),
-    );
-  }
-}
-
-class _StatusChip extends StatelessWidget {
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _StatusChip({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final primary = Theme.of(context).colorScheme.primary;
-
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(999),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: selected
-              ? primary.withValues(alpha: isDark ? 0.22 : 0.12)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(
-            color: selected
-                ? primary.withValues(alpha: 0.6)
-                : isDark
-                    ? const Color(0xFF2A303A)
-                    : const Color(0xFFE3EAF3),
-          ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: selected
-                ? primary
-                : isDark
-                    ? Colors.white70
-                    : Colors.black54,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _TopStateCard extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final String? actionLabel;
-  final VoidCallback? onAction;
-
-  const _TopStateCard({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    this.actionLabel,
-    this.onAction,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF17191D) : Colors.white,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(
-          color: isDark ? const Color(0xFF2A303A) : const Color(0xFFE5EAF2),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(
-            icon,
-            size: 30,
-            color: Theme.of(context).colorScheme.primary,
-          ),
-          const SizedBox(height: 12),
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
+          : Icon(
+              Icons.event_rounded,
+              size: 34,
+              color: theme.colorScheme.onSurfaceVariant,
             ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            subtitle,
-            style: TextStyle(
-              fontSize: 13,
-              color: Theme.of(context).textTheme.bodySmall?.color,
-            ),
-          ),
-          if (actionLabel != null && onAction != null) ...[
-            const SizedBox(height: 14),
-            TextButton.icon(
-              onPressed: onAction,
-              icon: const Icon(Icons.refresh_rounded),
-              label: Text(actionLabel!),
-            ),
-          ],
-        ],
-      ),
     );
   }
 }

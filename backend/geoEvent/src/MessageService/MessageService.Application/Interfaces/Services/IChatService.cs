@@ -5,6 +5,7 @@ namespace MessageService.Application.Interfaces.Services;
 
 public interface IChatService
 {
+    Task AddUserToEventThreadAsync(int eventId, int userId, int? addedByUserId = null);
     Task<ServiceResult<UnreadCountDto>> GetUnreadCountAsync(int userId);
     Task HandleDeletedUserAsync(int userId);
     Task RemoveUserFromEventThreadAsync(int eventId, int userId);
@@ -19,8 +20,7 @@ public interface IChatService
     Task<ServiceResult<ChatMessageDto>> UnlikeMessageAsync(long messageId, int userId);
     Task<ServiceResult<bool>> MarkThreadReadAsync(long threadId, int userId);
     Task<ServiceResult<List<ChatParticipantDto>>> GetParticipantsAsync(long threadId, int userId);
-
+    Task<ServiceResult<bool>> LeaveThreadAsync(long threadId, int userId);
     Task<bool> IsParticipantAsync(long threadId, int userId);
     Task SetUserOnlineAsync(int userId, bool isOnline);
-    Task AddUserToEventThreadAsync(int eventId, int userId);
 }

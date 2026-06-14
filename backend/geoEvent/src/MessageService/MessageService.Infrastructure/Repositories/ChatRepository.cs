@@ -29,6 +29,14 @@ public class ChatRepository : IChatRepository
                 x.Participants.Any(p => p.UserId == userA && p.LeftAt == null) &&
                 x.Participants.Any(p => p.UserId == userB && p.LeftAt == null));
 
+    public Task<ChatThread?> GetDirectThreadIncludingInactiveAsync(int userA, int userB) =>
+        _context.ChatThreads
+            .Include(x => x.Participants)
+            .FirstOrDefaultAsync(x =>
+                x.Type == ChatThreadType.Direct &&
+                x.Participants.Any(p => p.UserId == userA) &&
+                x.Participants.Any(p => p.UserId == userB));
+
     public Task<ChatThread?> GetEventGroupThreadAsync(int eventId) =>
         _context.ChatThreads
             .Include(x => x.Participants)

@@ -6,6 +6,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../../core/config/app_env.dart';
+import '../../../../core/widgets/app_loading_indicator.dart';
+import '../../../../core/widgets/app_spinner.dart';
+import '../../../../core/widgets/app_surface_card.dart';
+import '../../../../core/widgets/glass_scaffold.dart';
 import '../../../../shared/events/models/create_event_models.dart';
 import '../../../../shared/events/models/create_event_state.dart';
 import '../../../../shared/events/models/my_event_response_dto.dart';
@@ -34,7 +38,6 @@ class _EditEventScreenState extends ConsumerState<EditEventScreen> {
   final capacityCtrl = TextEditingController();
   final priceCtrl = TextEditingController();
   final tagsCtrl = TextEditingController();
-  final externalUrlCtrl = TextEditingController();
   final accessibilityCtrl = TextEditingController();
   final promoterCtrl = TextEditingController();
   final imagePicker = ImagePicker();
@@ -55,49 +58,47 @@ class _EditEventScreenState extends ConsumerState<EditEventScreen> {
     capacityCtrl.text = e.capacity.toString();
     priceCtrl.text = _formatPrice(e.price);
     tagsCtrl.text = e.tags ?? '';
-    externalUrlCtrl.text = e.externalUrl ?? '';
     accessibilityCtrl.text = e.accessibilityInfo ?? '';
     promoterCtrl.text = e.promoterName ?? '';
     startAt = e.startDateTime;
     endAt = e.endDateTime;
 
     Future.microtask(() async {
-final controller = ref.read(createEventControllerProvider.notifier);
+      final controller = ref.read(createEventControllerProvider.notifier);
 
-  await controller.loadInitial();
-  controller.hydrateForEdit(widget.event);
+      await controller.loadInitial();
+      controller.hydrateForEdit(widget.event);
 
-  if (widget.event.segmentId != null) {
-    await controller.selectSegment(widget.event.segmentId);
-  }
-  if (widget.event.genreId != null) {
-    await controller.selectGenre(widget.event.genreId);
-  }
-  if (widget.event.subGenreId != null) {
-    controller.selectSubGenre(widget.event.subGenreId);
-  }
-
-  final needsResolvedLocation =
-      widget.event.venueName == null || widget.event.venueName!.trim().isEmpty;
-
-  if (needsResolvedLocation) {
-    try {
-      final place = await ref.read(mapboxReverseGeocodingApiProvider).reverseGeocode(
-        latitude: widget.event.latitude,
-        longitude: widget.event.longitude,
-      );
-
-      if (place != null && mounted) {
-        controller.setSelectedLocation(place);
+      if (widget.event.segmentId != null) {
+        await controller.selectSegment(widget.event.segmentId);
       }
-    } catch (_) {
-      // Keep fallback location from hydrateForEdit.
-    }
-  }
+      if (widget.event.genreId != null) {
+        await controller.selectGenre(widget.event.genreId);
+      }
+      if (widget.event.subGenreId != null) {
+        controller.selectSubGenre(widget.event.subGenreId);
+      }
+
+      final needsResolvedLocation = widget.event.venueName == null ||
+          widget.event.venueName!.trim().isEmpty;
+
+      if (needsResolvedLocation) {
+        try {
+          final place =
+              await ref.read(mapboxReverseGeocodingApiProvider).reverseGeocode(
+                    latitude: widget.event.latitude,
+                    longitude: widget.event.longitude,
+                  );
+
+          if (place != null && mounted) {
+            controller.setSelectedLocation(place);
+          }
+        } catch (_) {
+          // Keep fallback location from hydrateForEdit.
+        }
+      }
     });
   }
-
-  
 
   @override
   void dispose() {
@@ -106,7 +107,6 @@ final controller = ref.read(createEventControllerProvider.notifier);
     capacityCtrl.dispose();
     priceCtrl.dispose();
     tagsCtrl.dispose();
-    externalUrlCtrl.dispose();
     accessibilityCtrl.dispose();
     promoterCtrl.dispose();
     super.dispose();
@@ -120,8 +120,10 @@ final controller = ref.read(createEventControllerProvider.notifier);
     final isPublished = widget.event.status.trim().toLowerCase() == 'published';
 
     ref.listen<CreateEventState>(createEventControllerProvider, (prev, next) {
-      final hadNoSuccess = prev?.successMessage == null || prev!.successMessage!.trim().isEmpty;
-      final hasSuccess = next.successMessage != null && next.successMessage!.trim().isNotEmpty;
+      final hadNoSuccess =
+          prev?.successMessage == null || prev!.successMessage!.trim().isEmpty;
+      final hasSuccess =
+          next.successMessage != null && next.successMessage!.trim().isNotEmpty;
 
       if (hadNoSuccess && hasSuccess && mounted) {
         Navigator.of(context).pop(true);
@@ -132,12 +134,12 @@ final controller = ref.read(createEventControllerProvider.notifier);
       priceCtrl.text = '0';
     }
 
-    return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+    return GlassScaffold(
       appBar: AppBar(
         title: const Text('Edit event'),
+        backgroundColor: Colors.transparent,
       ),
-      body: ListView(
+      child: ListView(
         padding: const EdgeInsets.fromLTRB(18, 18, 18, 24),
         children: [
           const Text(
@@ -157,17 +159,24 @@ final controller = ref.read(createEventControllerProvider.notifier);
           ),
           const SizedBox(height: 16),
           if (state.loadingInitial) ...[
-            const LinearProgressIndicator(),
+            const AppLoadingIndicator(
+              title: 'Loading event details',
+              message: 'Please wait while we prepare the form.',
+              centered: false,
+              padding: EdgeInsets.zero,
+            ),
             const SizedBox(height: 12),
           ],
-          if (state.errorMessage != null && state.errorMessage!.trim().isNotEmpty) ...[
+          if (state.errorMessage != null &&
+              state.errorMessage!.trim().isNotEmpty) ...[
             InlineBanner(
               message: state.errorMessage!,
               isError: true,
             ),
             const SizedBox(height: 12),
           ],
-          if (state.successMessage != null && state.successMessage!.trim().isNotEmpty) ...[
+          if (state.successMessage != null &&
+              state.successMessage!.trim().isNotEmpty) ...[
             InlineBanner(
               message: state.successMessage!,
               isError: false,
@@ -181,7 +190,6 @@ final controller = ref.read(createEventControllerProvider.notifier);
             capacityCtrl: capacityCtrl,
             priceCtrl: priceCtrl,
             tagsCtrl: tagsCtrl,
-            externalUrlCtrl: externalUrlCtrl,
             accessibilityCtrl: accessibilityCtrl,
             promoterCtrl: promoterCtrl,
             startAt: startAt,
@@ -208,19 +216,13 @@ final controller = ref.read(createEventControllerProvider.notifier);
                 priceCtrl.text = '0';
               }
             },
-            onOnlineChanged: (value) {
-              controller.setOnline(value);
-              if (value) {
-                controller.clearSelectedLocation();
-              }
-            },
           ),
           const SizedBox(height: 12),
           if ((widget.event.coverImageUrl?.trim().isNotEmpty ?? false) ||
-          widget.event.imageUrls.any((e) => e.trim().isNotEmpty)) ...[
-          _ExistingImagesSection(event: widget.event),
-          const SizedBox(height: 12),
-        ],
+              widget.event.imageUrls.any((e) => e.trim().isNotEmpty)) ...[
+            _ExistingImagesSection(event: widget.event),
+            const SizedBox(height: 12),
+          ],
           CreateEventImagePicker(
             state: state,
             onPickFeaturedImage: () => pickFeaturedImage(controller),
@@ -277,11 +279,7 @@ final controller = ref.read(createEventControllerProvider.notifier);
                   child: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 13),
                     child: state.submitting
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
+                        ? const AppSpinner(size: 18, strokeWidth: 2)
                         : Text(isPublished ? 'Save changes' : 'Save draft'),
                   ),
                 ),
@@ -296,10 +294,10 @@ final controller = ref.read(createEventControllerProvider.notifier);
                     child: Padding(
                       padding: const EdgeInsets.symmetric(vertical: 13),
                       child: state.submitting
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
+                          ? const AppSpinner(
+                              size: 18,
+                              strokeWidth: 2,
+                              color: Colors.white,
                             )
                           : const Text('Publish changes'),
                     ),
@@ -374,89 +372,81 @@ final controller = ref.read(createEventControllerProvider.notifier);
   }
 
   Future<void> submit(
-  CreateEventState state,
-  CreateEventController controller, {
-  required bool publish,
-}) async {
-  final title = titleCtrl.text.trim();
-  final description = descriptionCtrl.text.trim();
-  final capacity = int.tryParse(capacityCtrl.text.trim());
-  final price = state.isFree ? 0.0 : double.tryParse(priceCtrl.text.trim());
-  final externalUrl = nullableString(externalUrlCtrl.text);
-  final selectedLocation = state.selectedLocation;
+    CreateEventState state,
+    CreateEventController controller, {
+    required bool publish,
+  }) async {
+    final title = titleCtrl.text.trim();
+    final description = descriptionCtrl.text.trim();
+    final capacity = int.tryParse(capacityCtrl.text.trim());
+    final price = state.isFree ? 0.0 : double.tryParse(priceCtrl.text.trim());
+    final selectedLocation = state.selectedLocation;
 
-  final normalizedStatus = widget.event.status.trim().toLowerCase();
-  final isPublished =
-      normalizedStatus == 'published' || normalizedStatus == 'active';
-  final shouldPublish = !isPublished && publish;
+    final normalizedStatus = widget.event.status.trim().toLowerCase();
+    final isPublished =
+        normalizedStatus == 'published' || normalizedStatus == 'active';
+    final shouldPublish = !isPublished && publish;
 
-  if (title.length < 3 || title.length > 200) {
-    controller.setFormError('Title must be between 3 and 200 characters.');
-    return;
-  }
+    if (title.length < 3 || title.length > 200) {
+      controller.setFormError('Title must be between 3 and 200 characters.');
+      return;
+    }
 
-  if (description.length < 10 || description.length > 5000) {
-    controller.setFormError(
-      'Description must be between 10 and 5000 characters.',
+    if (description.length < 10 || description.length > 5000) {
+      controller.setFormError(
+        'Description must be between 10 and 5000 characters.',
+      );
+      return;
+    }
+
+    if (capacity == null || capacity < 0 || capacity > 1000000) {
+      controller.setFormError('Capacity must be between 0 and 1,000,000.');
+      return;
+    }
+
+    if (price == null || price < 0 || price > 100000) {
+      controller.setFormError('Price must be between 0 and 100000.');
+      return;
+    }
+
+    if (startAt == null || endAt == null) {
+      controller.setFormError('Please select both start and end date.');
+      return;
+    }
+
+    if (!endAt!.isAfter(startAt!)) {
+      controller.setFormError('End date must be after start date.');
+      return;
+    }
+
+    if (selectedLocation == null) {
+      controller.setFormError('Please choose a location.');
+      return;
+    }
+
+    await controller.submit(
+      title: title,
+      description: description,
+      segmentId: state.segmentId,
+      genreId: state.genreId,
+      subGenreId: state.subGenreId,
+      venueId: widget.event.venueId,
+      cityId: widget.event.cityId,
+      latitude: selectedLocation.latitude,
+      longitude: selectedLocation.longitude,
+      startDateTime: startAt!,
+      endDateTime: endAt!,
+      capacity: capacity,
+      price: price,
+      isOnline: false,
+      tags: nullableString(tagsCtrl.text),
+      externalUrl: null,
+      accessibilityInfo: nullableString(accessibilityCtrl.text),
+      promoterName: nullableString(promoterCtrl.text),
+      locale: widget.event.locale,
+      publish: shouldPublish,
     );
-    return;
   }
-
-  if (capacity == null || capacity < 0 || capacity > 1000000) {
-    controller.setFormError('Capacity must be between 0 and 1,000,000.');
-    return;
-  }
-
-  if (price == null || price < 0 || price > 100000) {
-    controller.setFormError('Price must be between 0 and 100000.');
-    return;
-  }
-
-  if (startAt == null || endAt == null) {
-    controller.setFormError('Please select both start and end date.');
-    return;
-  }
-
-  if (!endAt!.isAfter(startAt!)) {
-    controller.setFormError('End date must be after start date.');
-    return;
-  }
-
-  if (state.isOnline && (externalUrl == null || externalUrl.isEmpty)) {
-    controller.setFormError(
-      'Please provide an external URL for an online event.',
-    );
-    return;
-  }
-
-  if (selectedLocation == null) {
-    controller.setFormError('Please choose a location.');
-    return;
-  }
-
-  await controller.submit(
-    title: title,
-    description: description,
-    segmentId: state.segmentId,
-    genreId: state.genreId,
-    subGenreId: state.subGenreId,
-    venueId: widget.event.venueId,
-    cityId: widget.event.cityId,
-    latitude: selectedLocation.latitude,
-    longitude: selectedLocation.longitude,
-    startDateTime: startAt!,
-    endDateTime: endAt!,
-    capacity: capacity,
-    price: price,
-    isOnline: state.isOnline,
-    tags: nullableString(tagsCtrl.text),
-    externalUrl: externalUrl,
-    accessibilityInfo: nullableString(accessibilityCtrl.text),
-    promoterName: nullableString(promoterCtrl.text),
-    locale: widget.event.locale,
-    publish: shouldPublish,
-  );
-}
 
   Future<DateTime?> pickDateTime(
     BuildContext context, {
@@ -554,20 +544,8 @@ class _ExistingImagesSection extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
-    return Container(
-      width: double.infinity,
+    return AppSurfaceCard(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Theme.of(context).brightness == Brightness.dark
-            ? const Color(0xFF17191D)
-            : Colors.white,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(
-          color: Theme.of(context).brightness == Brightness.dark
-              ? const Color(0xFF2A303A)
-              : const Color(0xFFE5EAF2),
-        ),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -643,6 +621,8 @@ class _RemoteEventImage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return ClipRRect(
       borderRadius: BorderRadius.circular(16),
       child: Image.network(
@@ -655,25 +635,20 @@ class _RemoteEventImage extends StatelessWidget {
           return Container(
             width: width,
             height: height,
-            color: Theme.of(context).brightness == Brightness.dark
-                ? const Color(0xFF22252B)
-                : const Color(0xFFF1F4F8),
+            color: theme.colorScheme.surfaceContainerHighest,
             alignment: Alignment.center,
-            child: const SizedBox(
-              width: 22,
-              height: 22,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
+            child: const AppSpinner(size: 22, strokeWidth: 2),
           );
         },
         errorBuilder: (_, __, ___) => Container(
           width: width,
           height: height,
-          color: Theme.of(context).brightness == Brightness.dark
-              ? const Color(0xFF22252B)
-              : const Color(0xFFF1F4F8),
+          color: theme.colorScheme.surfaceContainerHighest,
           alignment: Alignment.center,
-          child: const Icon(Icons.broken_image_outlined),
+          child: Icon(
+            Icons.broken_image_outlined,
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
         ),
       ),
     );

@@ -22,6 +22,53 @@ namespace UserService.Infrastructure.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
+            modelBuilder.Entity("UserPreference", b =>
+                {
+                    b.Property<int>("PrefId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("PrefId"));
+
+                    b.Property<int?>("GenreId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("LastUpdated")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime2")
+                        .HasDefaultValueSql("GETUTCDATE()");
+
+                    b.Property<double>("Score")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("float")
+                        .HasDefaultValue(0.0);
+
+                    b.Property<int?>("SegmentId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("SubGenreId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("UserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("PrefId");
+
+                    b.HasIndex("GenreId");
+
+                    b.HasIndex("SegmentId");
+
+                    b.HasIndex("SubGenreId");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("UserId", "SegmentId", "GenreId", "SubGenreId")
+                        .IsUnique()
+                        .HasFilter("[UserId] IS NOT NULL");
+
+                    b.ToTable("UserPreferences");
+                });
+
             modelBuilder.Entity("UserService.Domain.Entities.ActivityLog", b =>
                 {
                     b.Property<int>("LogId")
@@ -342,46 +389,6 @@ namespace UserService.Infrastructure.Migrations
                     b.ToTable("Users", (string)null);
                 });
 
-            modelBuilder.Entity("UserService.Domain.Entities.UserPreference", b =>
-                {
-                    b.Property<int>("PrefId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("PrefId"));
-
-                    b.Property<int?>("GenreId")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime>("LastUpdated")
-                        .HasColumnType("datetime2");
-
-                    b.Property<double>("Score")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("float")
-                        .HasDefaultValue(0.0);
-
-                    b.Property<int?>("SegmentId")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("UserId")
-                        .HasColumnType("int");
-
-                    b.HasKey("PrefId");
-
-                    b.HasIndex("GenreId");
-
-                    b.HasIndex("SegmentId");
-
-                    b.HasIndex("UserId");
-
-                    b.HasIndex("UserId", "SegmentId", "GenreId")
-                        .IsUnique()
-                        .HasFilter("[UserId] IS NOT NULL AND [SegmentId] IS NOT NULL");
-
-                    b.ToTable("UserPreferences");
-                });
-
             modelBuilder.Entity("UserService.Domain.Entities.UserRating", b =>
                 {
                     b.Property<int>("RatingId")
@@ -418,8 +425,18 @@ namespace UserService.Infrastructure.Migrations
 
                     b.ToTable("UserRatings", null, t =>
                         {
-                            t.HasCheckConstraint("CK_UserRatings_Value", "[Value] >= 1 AND [Value] <= 5");
+                            t.HasCheckConstraint("CK_UserRating_Value", "[Value] >= 1 AND [Value] <= 5");
                         });
+                });
+
+            modelBuilder.Entity("UserPreference", b =>
+                {
+                    b.HasOne("UserService.Domain.Entities.User", "User")
+                        .WithMany("Preferences")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("UserService.Domain.Entities.ActivityLog", b =>
@@ -468,16 +485,6 @@ namespace UserService.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Person");
-                });
-
-            modelBuilder.Entity("UserService.Domain.Entities.UserPreference", b =>
-                {
-                    b.HasOne("UserService.Domain.Entities.User", "User")
-                        .WithMany("Preferences")
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade);
-
-                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("UserService.Domain.Entities.UserRating", b =>

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/utils/date_time_extensions.dart';
 import '../../../../shared/notifications/models/notification_item.dart';
 
 class InboxNotificationTile extends StatelessWidget {
@@ -52,21 +53,39 @@ class InboxNotificationTile extends StatelessWidget {
     return Icons.notifications_rounded;
   }
 
-  String _timeAgo() {
-    final now = DateTime.now();
-    final diff = now.difference(item.createdAt);
+Widget _leadingVisual(BuildContext context, Color accent) {
+  final imageUrl = item.imageUrl?.trim();
 
-    if (diff.inMinutes < 1) return 'Just now';
-    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-    if (diff.inHours < 24) return '${diff.inHours}h ago';
-    if (diff.inDays < 7) return '${diff.inDays}d ago';
-    if (diff.inDays < 30) return '${(diff.inDays / 7).floor()}w ago';
-    return '${item.createdAt.day}/${item.createdAt.month}/${item.createdAt.year}';
-  }
+  return Container(
+    width: 42,
+    height: 42,
+    decoration: BoxDecoration(
+      color: accent.withValues(alpha: 0.12),
+      borderRadius: BorderRadius.circular(14),
+    ),
+    clipBehavior: Clip.antiAlias,
+    child: imageUrl != null && imageUrl.isNotEmpty
+        ? Image.network(
+            imageUrl,
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => Icon(
+              _leadingIcon(),
+              color: accent,
+              size: 20,
+            ),
+          )
+        : Icon(
+            _leadingIcon(),
+            color: accent,
+            size: 20,
+          ),
+  );
+}
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
     final accent = _accentColor(context);
 
@@ -78,62 +97,49 @@ class InboxNotificationTile extends StatelessWidget {
         return false;
       },
       background: Container(
-        margin: const EdgeInsets.only(bottom: 12),
         decoration: BoxDecoration(
-          color: theme.colorScheme.error.withValues(alpha: 0.12),
+          color: colorScheme.error.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: theme.colorScheme.error.withValues(alpha: 0.25),
+            color: colorScheme.error.withValues(alpha: 0.25),
           ),
         ),
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.symmetric(horizontal: 20),
         child: Icon(
           Icons.delete_outline_rounded,
-          color: theme.colorScheme.error,
+          color: colorScheme.error,
         ),
       ),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF1B2028) : Colors.white,
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(20),
+        child: InkWell(
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: item.isRead
-                ? (isDark ? const Color(0xFF2A303A) : const Color(0xFFE3EAF3))
-                : accent.withValues(alpha: 0.35),
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: isDark ? 0.14 : 0.05),
-              blurRadius: 14,
-              offset: const Offset(0, 4),
+          onTap: onTap,
+          child: Ink(
+            decoration: BoxDecoration(
+              color: colorScheme.surface,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: item.isRead
+                    ? colorScheme.outline.withValues(alpha: 0.45)
+                    : accent.withValues(alpha: 0.35),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isDark ? 0.12 : 0.05),
+                  blurRadius: 14,
+                  offset: const Offset(0, 4),
+                ),
+              ],
             ),
-          ],
-        ),
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            borderRadius: BorderRadius.circular(20),
-            onTap: onTap,
             child: Padding(
               padding: const EdgeInsets.fromLTRB(14, 14, 10, 14),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
-                    width: 42,
-                    height: 42,
-                    decoration: BoxDecoration(
-                      color: accent.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: Icon(
-                      _leadingIcon(),
-                      color: accent,
-                      size: 20,
-                    ),
-                  ),
+                  _leadingVisual(context, accent),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
@@ -155,9 +161,9 @@ class InboxNotificationTile extends StatelessWidget {
                             ),
                             const SizedBox(width: 8),
                             Text(
-                              _timeAgo(),
+                              item.createdAt.timeAgo(short: true), // e.g. "2h", "5m", "now"
                               style: theme.textTheme.labelSmall?.copyWith(
-                                color: theme.colorScheme.onSurfaceVariant,
+                                color: colorScheme.onSurfaceVariant,
                               ),
                             ),
                           ],
@@ -169,7 +175,7 @@ class InboxNotificationTile extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                           style: theme.textTheme.bodyMedium?.copyWith(
                             height: 1.35,
-                            color: theme.colorScheme.onSurfaceVariant,
+                            color: colorScheme.onSurfaceVariant,
                           ),
                         ),
                         const SizedBox(height: 10),
@@ -189,7 +195,7 @@ class InboxNotificationTile extends StatelessWidget {
                               item.isRead ? 'Read' : 'Unread',
                               style: theme.textTheme.labelMedium?.copyWith(
                                 color: item.isRead
-                                    ? theme.colorScheme.onSurfaceVariant
+                                    ? colorScheme.onSurfaceVariant
                                     : accent,
                                 fontWeight: FontWeight.w700,
                               ),
@@ -202,7 +208,7 @@ class InboxNotificationTile extends StatelessWidget {
                   PopupMenuButton<String>(
                     icon: Icon(
                       Icons.more_horiz_rounded,
-                      color: theme.colorScheme.onSurfaceVariant,
+                      color: colorScheme.onSurfaceVariant,
                     ),
                     onSelected: (value) {
                       switch (value) {

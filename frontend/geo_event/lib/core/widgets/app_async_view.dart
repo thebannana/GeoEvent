@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'app_empty_state.dart';
 import 'app_error_view.dart';
-import 'app_loading_sheet.dart';
+import 'app_loading_indicator.dart';
 
 class AppAsyncView<T> extends StatelessWidget {
   final AsyncValue<T> value;
@@ -13,6 +13,13 @@ class AppAsyncView<T> extends StatelessWidget {
   final Widget? empty;
   final bool Function(T value)? isEmpty;
 
+  final VoidCallback? onRetry;
+  final String errorTitle;
+  final String? emptyTitle;
+  final String? emptyMessage;
+  final String loadingTitle;
+  final String? loadingMessage;
+
   const AppAsyncView({
     super.key,
     required this.value,
@@ -21,6 +28,12 @@ class AppAsyncView<T> extends StatelessWidget {
     this.errorBuilder,
     this.empty,
     this.isEmpty,
+    this.onRetry,
+    this.errorTitle = 'Something went wrong',
+    this.emptyTitle,
+    this.emptyMessage,
+    this.loadingTitle = 'Loading',
+    this.loadingMessage = 'Please wait while we prepare your content.',
   });
 
   @override
@@ -30,9 +43,9 @@ class AppAsyncView<T> extends StatelessWidget {
         final shouldShowEmpty = isEmpty?.call(result) ?? false;
         if (shouldShowEmpty) {
           return empty ??
-              const AppEmptyState(
-                title: 'Nothing here yet',
-                message: 'There is no data to show right now.',
+              AppEmptyState(
+                title: emptyTitle ?? 'Nothing here yet',
+                message: emptyMessage ?? 'There is no data to show right now.',
               );
         }
 
@@ -40,9 +53,9 @@ class AppAsyncView<T> extends StatelessWidget {
       },
       loading: () {
         return loading ??
-            const AppLoadingSheet(
-              title: 'Loading',
-              message: 'Please wait while we prepare your content.',
+            AppLoadingIndicator(
+              title: loadingTitle,
+              message: loadingMessage,
             );
       },
       error: (error, stackTrace) {
@@ -50,8 +63,10 @@ class AppAsyncView<T> extends StatelessWidget {
           return errorBuilder!(error, stackTrace);
         }
 
-        return AppErrorView(
+        return AppErrorState(
+          title: errorTitle,
           message: error.toString(),
+          onRetry: onRetry,
         );
       },
     );

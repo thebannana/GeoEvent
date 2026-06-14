@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/widgets/app_surface_card.dart';
 import '../../../../shared/public_profile/models/public_profile_user.dart';
 
 class PublicProfileStatsRow extends StatelessWidget {
@@ -35,24 +36,16 @@ class StatItem extends StatelessWidget {
   final String value;
 
   const StatItem({
+    super.key,
     required this.label,
     required this.value,
   });
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return Container(
+    return AppSurfaceCard(
       margin: const EdgeInsets.symmetric(horizontal: 4),
       padding: const EdgeInsets.symmetric(vertical: 14),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF17191D) : Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: isDark ? const Color(0xFF2A303A) : const Color(0xFFE5EAF2),
-        ),
-      ),
       child: Column(
         children: [
           Text(

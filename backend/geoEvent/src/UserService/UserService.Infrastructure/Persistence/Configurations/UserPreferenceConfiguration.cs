@@ -13,6 +13,9 @@ public class UserPreferenceConfiguration : IEntityTypeConfiguration<UserPreferen
         builder.Property(p => p.Score)
             .HasDefaultValue(0.0);
 
+        builder.Property(p => p.LastUpdated)
+            .HasDefaultValueSql("GETUTCDATE()");
+
         builder.HasOne(p => p.User)
             .WithMany(u => u.Preferences)
             .HasForeignKey(p => p.UserId)
@@ -21,7 +24,10 @@ public class UserPreferenceConfiguration : IEntityTypeConfiguration<UserPreferen
         builder.HasIndex(p => p.UserId);
         builder.HasIndex(p => p.SegmentId);
         builder.HasIndex(p => p.GenreId);
-        builder.HasIndex(p => new { p.UserId, p.SegmentId, p.GenreId }).IsUnique()
-            .HasFilter("[UserId] IS NOT NULL AND [SegmentId] IS NOT NULL");
+        builder.HasIndex(p => p.SubGenreId);
+
+        builder.HasIndex(p => new { p.UserId, p.SegmentId, p.GenreId, p.SubGenreId })
+            .IsUnique()
+            .HasFilter("[UserId] IS NOT NULL");
     }
 }

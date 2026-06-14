@@ -37,7 +37,7 @@ class AppLogger {
     }
 
     if (stackTrace != null && kDebugMode) {
-      debugPrint(stackTrace.toString());
+      debugPrintStack(stackTrace: stackTrace);
     }
   }
 
@@ -46,14 +46,12 @@ class AppLogger {
     String message, {
     String? tag,
   }) {
-    if (!kDebugMode) {
-      return;
-    }
+    if (!kDebugMode) return;
 
     final prefix = tag == null || tag.isEmpty
         ? '[$level]'
         : '[$level][$tag]';
 
-    debugPrint('$prefix $message');
+    debugPrint('$prefix $message', wrapWidth: 1024);
   }
 }

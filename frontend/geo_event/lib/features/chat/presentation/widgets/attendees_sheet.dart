@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+
 import '../../../../shared/chat/models/chat_participant.dart';
+import '../../../../shared/chat/models/chat_thread_type.dart';
+import 'chat_avatar.dart';
 
 class AttendeesSheet extends StatelessWidget {
   final List<ChatParticipant> participants;
@@ -11,6 +14,9 @@ class AttendeesSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
     return SafeArea(
       child: ListView.separated(
         shrinkWrap: true,
@@ -21,38 +27,32 @@ class AttendeesSheet extends StatelessWidget {
           final item = participants[index];
           final username = item.username.trim();
 
+          final subtitleParts = <String>[
+            if (username.isNotEmpty) '@$username',
+            if (item.joinedAt != null) 'Joined ${_format(item.joinedAt!)}',
+          ];
+
+          final subtitle =
+              subtitleParts.isEmpty ? 'Attendee' : subtitleParts.join(' • ');
+
           return ListTile(
             contentPadding: EdgeInsets.zero,
-            leading: CircleAvatar(
-              backgroundImage: item.avatarUrl != null &&
-                      item.avatarUrl!.trim().isNotEmpty
-                  ? NetworkImage(item.avatarUrl!.trim())
-                  : null,
-              child: item.avatarUrl == null || item.avatarUrl!.trim().isEmpty
-                  ? Text(
-                      item.displayName.isNotEmpty
-                          ? item.displayName.characters.first.toUpperCase()
-                          : '?',
-                    )
-                  : null,
+            leading: ChatAvatar(
+              title: item.displayName,
+              imageUrl: item.avatarUrl,
+              size: 40,
+              type: ChatThreadType.direct,
+              showPresence: true,
+              isOnline: item.isOnline,
             ),
             title: Text(item.displayName),
-            subtitle: Text(
-              [
-                if (username.isNotEmpty) '@$username',
-                if (item.joinedAt != null) 'Joined ${_format(item.joinedAt!)}',
-              ].join(' • ').isEmpty
-                  ? 'Attendee'
-                  : [
-                      if (username.isNotEmpty) '@$username',
-                      if (item.joinedAt != null)
-                        'Joined ${_format(item.joinedAt!)}',
-                    ].join(' • '),
-            ),
+            subtitle: Text(subtitle),
             trailing: Icon(
               Icons.circle,
               size: 12,
-              color: item.isOnline ? Colors.green : Colors.grey,
+              color: item.isOnline
+                  ? colorScheme.primary
+                  : colorScheme.outline,
             ),
           );
         },

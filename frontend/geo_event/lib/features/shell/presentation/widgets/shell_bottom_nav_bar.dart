@@ -17,7 +17,7 @@ class ShellBottomNavBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
+    final colorScheme = theme.colorScheme;
 
     return SafeArea(
       top: false,
@@ -26,16 +26,14 @@ class ShellBottomNavBar extends StatelessWidget {
         child: Container(
           height: 82,
           decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF161A21) : const Color(0xFFF9FBFD),
+            color: colorScheme.surface,
             borderRadius: BorderRadius.circular(24),
             border: Border.all(
-              color: isDark
-                  ? const Color(0xFF2A303A)
-                  : const Color(0xFFE3EAF3),
+              color: colorScheme.outline.withValues(alpha: 0.75),
             ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: isDark ? 0.24 : 0.08),
+                color: theme.shadowColor.withValues(alpha: 0.14),
                 blurRadius: 22,
                 offset: const Offset(0, 8),
               ),

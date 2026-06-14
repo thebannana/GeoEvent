@@ -113,4 +113,14 @@ public class ChatController : ControllerBase
         var result = await _chatService.GetParticipantsAsync(threadId, userId);
         return result.Success ? Ok(result.Data) : StatusCode(result.StatusCode, new { error = result.Error });
     }
+
+    [HttpDelete("threads/{threadId:long}")]
+    public async Task<IActionResult> LeaveThread(long threadId)
+    {
+        var userId = User.GetUserId();
+        var result = await _chatService.LeaveThreadAsync(threadId, userId);
+        return result.Success
+            ? NoContent()
+            : StatusCode(result.StatusCode, new { error = result.Error });
+    }
 }

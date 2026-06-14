@@ -10,32 +10,21 @@ class EventsRepository {
 
   const EventsRepository(this._api);
 
-  Future<List<SegmentItem>> getSegments() {
-    return _api.getSegments();
-  }
+  Future<List<SegmentItem>> getSegments() => _api.getSegments();
 
-  Future<List<GenreItem>> getGenresBySegment(int segmentId) {
-    return _api.getGenresBySegment(segmentId);
-  }
+  Future<List<GenreItem>> getGenresBySegment(int segmentId) =>
+      _api.getGenresBySegment(segmentId);
 
-  Future<List<SubGenreItem>> getSubGenresByGenre(int genreId) {
-    return _api.getSubGenresByGenre(genreId);
-  }
+  Future<List<SubGenreItem>> getSubGenresByGenre(int genreId) =>
+      _api.getSubGenresByGenre(genreId);
 
-  Future<EventItem> createEvent(CreateEventRequest payload) {
-    return _api.createEvent(payload);
-  }
+  Future<EventItem> createEvent(CreateEventRequest payload) =>
+      _api.createEvent(payload);
 
-  Future<EventItem> updateEvent(
-    int eventId,
-    CreateEventRequest payload,
-  ) {
-    return _api.updateEvent(eventId, payload);
-  }
+  Future<EventItem> updateEvent(int eventId, CreateEventRequest payload) =>
+      _api.updateEvent(eventId, payload);
 
-  Future<void> publishEvent(int eventId) {
-    return _api.publishEvent(eventId);
-  }
+  Future<void> publishEvent(int eventId) => _api.publishEvent(eventId);
 
   Future<void> addEventImage({
     required int eventId,
@@ -133,7 +122,5 @@ class EventsRepository {
     );
   }
 
-  Future<EventItem> getEventById(int eventId) {
-    return _api.getEventById(eventId);
-  }
+  Future<EventItem> getEventById(int eventId) => _api.getEventById(eventId);
 }

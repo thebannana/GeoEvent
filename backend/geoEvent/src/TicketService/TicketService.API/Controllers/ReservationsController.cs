@@ -123,7 +123,7 @@ public class ReservationsController : ControllerBase
     }
 
     [HttpGet("events/{eventId:int}/reservations")]
-    [Authorize(Roles = "Organizer,Admin")]
+    [Authorize]
     public async Task<IActionResult> GetEventReservations(
         int eventId,
         [FromQuery] ReservationFilterDto filter)
@@ -142,8 +142,26 @@ public class ReservationsController : ControllerBase
             : StatusCode(result.StatusCode, new { error = result.Error });
     }
 
+    [HttpPatch("events/{eventId:int}/reservations/{reservationId:int}/remove")]
+    [Authorize]
+    public async Task<IActionResult> RemoveAttendeeReservation(int eventId, int reservationId)
+    {
+        var userId = User.GetUserId();
+        var role = User.GetRole();
+
+        var result = await _ticketService.RemoveAttendeeReservationAsync(
+            eventId,
+            reservationId,
+            userId,
+            role);
+
+        return result.Success
+            ? NoContent()
+            : StatusCode(result.StatusCode, new { error = result.Error });
+    }
+
     [HttpGet("events/{eventId:int}/summary")]
-    [Authorize(Roles = "Organizer,Admin")]
+    [Authorize]
     public async Task<IActionResult> GetEventSummary(int eventId)
     {
         var userId = User.GetUserId();

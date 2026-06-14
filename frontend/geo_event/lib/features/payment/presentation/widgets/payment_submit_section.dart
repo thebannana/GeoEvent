@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/widgets/app_spinner.dart';
 import '../../../../shared/payment/models/payment_method.dart';
 
 class PaymentSubmitSection extends StatelessWidget {
@@ -40,10 +41,10 @@ class PaymentSubmitSection extends StatelessWidget {
           ),
         ),
         child: loading
-            ? const SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2.4),
+            ? const AppSpinner(
+                size: 20,
+                strokeWidth: 2.4,
+                color: Colors.white,
               )
             : Text(label),
       ),

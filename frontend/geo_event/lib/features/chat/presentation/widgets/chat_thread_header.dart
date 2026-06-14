@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../../../../shared/chat/models/chat_thread_details.dart';
 import '../../../../shared/chat/models/chat_thread_type.dart';
 import 'chat_avatar.dart';
@@ -13,6 +14,7 @@ class ChatThreadHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final effectiveType = _effectiveType(details);
     final isDirect = effectiveType == ChatThreadType.direct;
 
@@ -48,7 +50,7 @@ class ChatThreadHeader extends StatelessWidget {
                   subtitle,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodySmall,
+                  style: theme.textTheme.bodySmall,
                 ),
               ],
             ],
@@ -60,7 +62,9 @@ class ChatThreadHeader extends StatelessWidget {
 
   static ChatThreadType _effectiveType(ChatThreadDetails details) {
     if (details.eventInfo != null) return ChatThreadType.eventGroup;
-    if (details.type == ChatThreadType.eventGroup) return ChatThreadType.eventGroup;
+    if (details.type == ChatThreadType.eventGroup) {
+      return ChatThreadType.eventGroup;
+    }
     if (details.participants.length > 2) return ChatThreadType.eventGroup;
     return ChatThreadType.direct;
   }
@@ -76,7 +80,8 @@ class ChatThreadHeader extends StatelessWidget {
       }
 
       final threadTitle = details.title.trim();
-      if (threadTitle.isNotEmpty && threadTitle.toLowerCase() != 'direct chat') {
+      if (threadTitle.isNotEmpty &&
+          threadTitle.toLowerCase() != 'direct chat') {
         return threadTitle;
       }
 

@@ -13,6 +13,5 @@ public class Person
     public bool IsDeleted { get; set; } = false;
     public DateTime? DeletedAt { get; set; }
 
-    //Navigation
     public User? User { get; set; }
 }

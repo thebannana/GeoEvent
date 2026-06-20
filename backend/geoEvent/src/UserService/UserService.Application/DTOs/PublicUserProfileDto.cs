@@ -12,7 +12,6 @@ public class PublicUserProfileDto
     public string? Bio { get; set; }
     public string? CityName { get; set; }
 
-    public bool IsVerified { get; set; }
 
     public int EventsCount { get; set; }
     public int FollowersCount { get; set; }

@@ -19,13 +19,6 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(u => u.LastLoginIp).HasMaxLength(45);
         builder.Property(u => u.ConsentVersion).HasMaxLength(20);
         builder.Property(u => u.FailedLoginAttempts).HasDefaultValue(0);
-        builder.Property(u => u.EmailVerificationToken).HasMaxLength(512);
-        builder.Property(u => u.PasswordResetToken).HasMaxLength(512);
-
-        builder.HasIndex(u => u.EmailVerificationToken)
-            .HasFilter("[EmailVerificationToken] IS NOT NULL");
-        builder.HasIndex(u => u.PasswordResetToken)
-            .HasFilter("[PasswordResetToken] IS NOT NULL");
 
         builder.HasIndex(u => u.Email).IsUnique();
         builder.HasIndex(u => u.Username).IsUnique();

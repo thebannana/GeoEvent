@@ -1,7 +1,5 @@
 ﻿using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Storage;
 
 namespace UserService.API.Extensions;
 
@@ -89,11 +87,13 @@ public static class DatabaseStartupExtensions
         await using var conn = new SqlConnection(masterCsb.ConnectionString);
         await conn.OpenAsync();
 
+        var escapedDbName = dbName.Replace("]", "]]").Replace("'", "''");
+
         var sql = $@"
-IF EXISTS (SELECT 1 FROM sys.databases WHERE name = N'{dbName}')
+IF EXISTS (SELECT 1 FROM sys.databases WHERE name = N'{escapedDbName}')
 BEGIN
-    ALTER DATABASE [{dbName}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
-    DROP DATABASE [{dbName}];
+    ALTER DATABASE [{escapedDbName}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
+    DROP DATABASE [{escapedDbName}];
 END";
 
         await using var cmd = new SqlCommand(sql, conn);

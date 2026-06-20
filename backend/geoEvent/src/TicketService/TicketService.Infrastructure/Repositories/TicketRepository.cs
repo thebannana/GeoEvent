@@ -1,7 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using TicketService.Application.Common;
 using TicketService.Application.DTOs;
-using TicketService.Application.Interfaces.Repositories;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 using TicketService.Infrastructure.Persistence;
@@ -69,19 +68,6 @@ public class TicketRepository : ITicketRepository
         return await _context.EventTickets
             .Where(t => t.EventId == eventId && t.IsActive)
             .SumAsync(t => (int?)t.TotalQuantity) ?? 0;
-    }
-
-    public async Task<int> GetEventReservedQuantityAsync(int eventId, ReservationStatus status)
-    {
-        return await _context.Reservations
-            .Where(r => r.EventId == eventId && r.Status == status)
-            .SumAsync(r => (int?)r.Quantity) ?? 0;
-    }
-
-    public async Task<int> GetEventReservationCountAsync(int eventId)
-    {
-        return await _context.Reservations
-            .CountAsync(r => r.EventId == eventId);
     }
 
     public async Task<PagedResult<Reservation>> GetUserReservationsAsync(

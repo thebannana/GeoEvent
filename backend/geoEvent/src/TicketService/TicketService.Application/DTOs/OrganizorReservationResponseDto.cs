@@ -16,7 +16,6 @@
     public string? PaymentReference { get; set; }
     public string? Notes { get; set; }
 
-    // new
     public string? ParticipantUsername { get; set; }
     public string? ParticipantAvatarUrl { get; set; }
 }

@@ -1,13 +1,13 @@
-﻿using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
+﻿using EventService.Application.Common.Settings;
 using EventService.Application.Interfaces.Repositories;
 using EventService.Application.Interfaces.Services;
 using EventService.Infrastructure.Persistence;
 using EventService.Infrastructure.Repositories;
 using EventService.Infrastructure.Services;
 using MassTransit;
-using EventService.Application.Common.Settings;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace EventService.Infrastructure;
 
@@ -17,8 +17,11 @@ public static class DependencyInjection
         this IServiceCollection services,
         IConfiguration configuration)
     {
+        services.AddHttpContextAccessor();
+        services.AddScoped<ICurrentUserService, CurrentUserService>();
+
         services.Configure<SupabaseStorageSettings>(
-        configuration.GetSection(SupabaseStorageSettings.SectionName));
+            configuration.GetSection(SupabaseStorageSettings.SectionName));
 
         services.AddHttpClient<IImageStorageService, SupabaseImageStorageService>();
 
@@ -28,16 +31,16 @@ public static class DependencyInjection
                 sqlOptions => sqlOptions.EnableRetryOnFailure(
                     maxRetryCount: 10,
                     maxRetryDelay: TimeSpan.FromSeconds(15),
-                    errorNumbersToAdd: null
-                )
-            )
-        );
+                    errorNumbersToAdd: null)));
 
-        services.AddTransient<ServiceAuthHandler>();
+        services.AddScoped<ServiceAuthHandler>();
+
+        var userServiceBaseUrl = configuration["Services:UserServiceBaseUrl"]
+            ?? throw new InvalidOperationException("Services:UserServiceBaseUrl is not configured.");
 
         services.AddHttpClient<IUserProfileService, UserProfileService>(client =>
         {
-            client.BaseAddress = new Uri("http://user-service:8080/");
+            client.BaseAddress = new Uri(userServiceBaseUrl);
         })
         .AddHttpMessageHandler<ServiceAuthHandler>();
 

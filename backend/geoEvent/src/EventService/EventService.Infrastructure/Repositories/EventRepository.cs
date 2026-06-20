@@ -1,10 +1,10 @@
-﻿using Microsoft.EntityFrameworkCore;
-using EventService.Application.Common;
+﻿using EventService.Application.Common;
 using EventService.Application.DTOs;
 using EventService.Application.Interfaces.Repositories;
 using EventService.Domain.Entities;
 using EventService.Domain.Enums;
 using EventService.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
 
 namespace EventService.Infrastructure.Repositories;
 
@@ -24,15 +24,11 @@ public class EventRepository : IEventRepository
         var query = _context.Events
             .AsNoTracking()
             .Include(e => e.Images)
-            .Include(e => e.Venue)
             .Include(e => e.Segment)
             .Include(e => e.Genre)
             .Include(e => e.SubGenre)
-            .Where(e => e.Status == EventStatus.Active)
+            .Where(e => e.Status == EventStatus.Confirmed)
             .AsQueryable();
-
-        if (filter.CityId.HasValue)
-            query = query.Where(e => e.CityId == filter.CityId.Value);
 
         if (filter.SegmentId.HasValue)
             query = query.Where(e => e.SegmentId == filter.SegmentId.Value);
@@ -64,6 +60,7 @@ public class EventRepository : IEventRepository
         if (!string.IsNullOrWhiteSpace(filter.SearchTerm))
         {
             var term = filter.SearchTerm.Trim();
+
             query = query.Where(e =>
                 e.Title.Contains(term) ||
                 e.Description.Contains(term) ||
@@ -124,13 +121,7 @@ public class EventRepository : IEventRepository
 
     public async Task LikeCommentAsync(int commentId, int userId)
     {
-        _context.CommentLikes.Add(new CommentLike
-        {
-            CommentId = commentId,
-            UserId = userId,
-            LikedAt = DateTime.UtcNow
-        });
-
+        _context.CommentLikes.Add(new CommentLike(commentId, userId));
         await _context.SaveChangesAsync();
 
         await _context.Comments
@@ -151,11 +142,11 @@ public class EventRepository : IEventRepository
                 .ExecuteUpdateAsync(s => s.SetProperty(c => c.LikesCount, c => c.LikesCount - 1));
         }
     }
+
     public async Task<Event?> GetByIdAsync(int eventId) =>
         await _context.Events
             .AsNoTracking()
             .Include(e => e.Images)
-            .Include(e => e.Venue)
             .Include(e => e.Segment)
             .Include(e => e.Genre)
             .Include(e => e.SubGenre)
@@ -165,7 +156,6 @@ public class EventRepository : IEventRepository
         await _context.Events
             .AsNoTracking()
             .Include(e => e.Images)
-            .Include(e => e.Venue)
             .Include(e => e.Segment)
             .Include(e => e.Genre)
             .Include(e => e.SubGenre)
@@ -178,7 +168,6 @@ public class EventRepository : IEventRepository
         var query = _context.Events
             .AsNoTracking()
             .Include(e => e.Images)
-            .Include(e => e.Venue)
             .Include(e => e.Segment)
             .Include(e => e.Genre)
             .Include(e => e.SubGenre)
@@ -186,9 +175,6 @@ public class EventRepository : IEventRepository
 
         if (filter.Status.HasValue)
             query = query.Where(e => e.Status == filter.Status.Value);
-
-        if (filter.CityId.HasValue)
-            query = query.Where(e => e.CityId == filter.CityId.Value);
 
         if (filter.SegmentId.HasValue)
             query = query.Where(e => e.SegmentId == filter.SegmentId.Value);
@@ -252,7 +238,7 @@ public class EventRepository : IEventRepository
         };
 
         var page = filter.Page <= 0 ? 1 : filter.Page;
-        var pageSize = filter.PageSize <= 0 ? 20 : Math.Min(filter.PageSize, 100);
+        var pageSize = filter.Page <= 0 ? 20 : Math.Min(filter.PageSize <= 0 ? 20 : filter.PageSize, 100);
 
         var totalCount = await query.CountAsync();
 
@@ -270,47 +256,6 @@ public class EventRepository : IEventRepository
         };
     }
 
-    // Segments
-    public async Task<Segment> CreateSegmentAsync(Segment segment)
-    {
-        _context.Segments.Add(segment);
-        await _context.SaveChangesAsync();
-        return segment;
-    }
-
-    public async Task UpdateSegmentAsync(Segment segment)
-    {
-        _context.Segments.Update(segment);
-        await _context.SaveChangesAsync();
-    }
-
-    // Genres
-    public async Task<Genre> CreateGenreAsync(Genre genre)
-    {
-        _context.Genres.Add(genre);
-        await _context.SaveChangesAsync();
-        return genre;
-    }
-
-    public async Task UpdateGenreAsync(Genre genre)
-    {
-        _context.Genres.Update(genre);
-        await _context.SaveChangesAsync();
-    }
-
-    // SubGenres
-    public async Task<SubGenre> CreateSubGenreAsync(SubGenre subGenre)
-    {
-        _context.SubGenres.Add(subGenre);
-        await _context.SaveChangesAsync();
-        return subGenre;
-    }
-
-    public async Task UpdateSubGenreAsync(SubGenre subGenre)
-    {
-        _context.SubGenres.Update(subGenre);
-        await _context.SaveChangesAsync();
-    }
     public async Task<List<Event>> GetNearbyAsync(NearbyEventSearchDto dto)
     {
         var latitude = dto.Latitude!.Value;
@@ -330,12 +275,10 @@ public class EventRepository : IEventRepository
         IQueryable<Event> query = _context.Events
             .AsNoTracking()
             .Include(e => e.Images)
-            .Include(e => e.Venue)
             .Include(e => e.Segment)
             .Include(e => e.Genre)
             .Include(e => e.SubGenre)
-            .Where(e =>
-                e.Status == EventStatus.Active &&
+            .Where(e => e.Status == EventStatus.Confirmed &&
                 e.Latitude >= latitude - latDelta &&
                 e.Latitude <= latitude + latDelta &&
                 e.Longitude >= longitude - lonDelta &&
@@ -375,7 +318,6 @@ public class EventRepository : IEventRepository
 
     public async Task<Event> CreateAsync(Event entity)
     {
-        entity.CreatedAt = DateTime.UtcNow;
         await _context.Events.AddAsync(entity);
         await _context.SaveChangesAsync();
         return entity;
@@ -383,7 +325,6 @@ public class EventRepository : IEventRepository
 
     public async Task UpdateAsync(Event entity)
     {
-        entity.UpdatedAt = DateTime.UtcNow;
         _context.Events.Update(entity);
         await _context.SaveChangesAsync();
     }
@@ -412,27 +353,13 @@ public class EventRepository : IEventRepository
 
     public async Task LikeAsync(int eventId, int userId)
     {
-        try
-        {
-            await _context.EventLikes.AddAsync(new EventLike
-            {
-                EventId = eventId,
-                UserId = userId,
-                LikedAt = DateTime.UtcNow
-            });
+        await _context.EventLikes.AddAsync(new EventLike(eventId, userId));
+        await _context.SaveChangesAsync();
 
-            await _context.SaveChangesAsync();
-
-            await _context.Events
-                .Where(e => e.EventId == eventId)
-                .ExecuteUpdateAsync(s =>
-                    s.SetProperty(e => e.LikesCount, e => e.LikesCount + 1));
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine(ex.ToString());
-            throw;
-        }
+        await _context.Events
+            .Where(e => e.EventId == eventId)
+            .ExecuteUpdateAsync(s =>
+                s.SetProperty(e => e.LikesCount, e => e.LikesCount + 1));
     }
 
     public async Task UnlikeAsync(int eventId, int userId)
@@ -452,7 +379,6 @@ public class EventRepository : IEventRepository
 
     public async Task AddImageAsync(EventImage image)
     {
-        image.UploadedAt = DateTime.UtcNow;
         await _context.EventImages.AddAsync(image);
         await _context.SaveChangesAsync();
     }
@@ -482,20 +408,18 @@ public class EventRepository : IEventRepository
     {
         await _context.EventImages
             .Where(i => i.EventId == eventId)
-            .ExecuteUpdateAsync(s =>
-                s.SetProperty(i => i.IsCover, false));
+            .ExecuteUpdateAsync(s => s.SetProperty(i => i.IsCover, false));
 
         await _context.EventImages
             .Where(i => i.EventId == eventId && i.ImageId == imageId)
-            .ExecuteUpdateAsync(s =>
-                s.SetProperty(i => i.IsCover, true));
+            .ExecuteUpdateAsync(s => s.SetProperty(i => i.IsCover, true));
     }
 
     public async Task<List<Segment>> GetAllSegmentsAsync() =>
         await _context.Segments
             .AsNoTracking()
             .Include(s => s.Genres)
-            .ThenInclude(g => g.SubGenres)
+                .ThenInclude(g => g.SubGenres)
             .Where(s => s.IsActive)
             .OrderBy(s => s.Name)
             .ToListAsync();
@@ -504,7 +428,7 @@ public class EventRepository : IEventRepository
         await _context.Segments
             .AsNoTracking()
             .Include(s => s.Genres)
-            .ThenInclude(g => g.SubGenres)
+                .ThenInclude(g => g.SubGenres)
             .FirstOrDefaultAsync(s => s.SegmentId == segmentId);
 
     public async Task<List<Genre>> GetGenresBySegmentAsync(int segmentId) =>
@@ -533,50 +457,50 @@ public class EventRepository : IEventRepository
             .AsNoTracking()
             .FirstOrDefaultAsync(s => s.SubGenreId == subGenreId);
 
-    public async Task<Venue?> GetVenueByIdAsync(int venueId) =>
-        await _context.Venues
-            .AsNoTracking()
-            .Include(v => v.PriceZones.Where(p => p.IsActive))
-            .FirstOrDefaultAsync(v => v.VenueId == venueId);
-
-    public async Task<List<Venue>> GetVenuesByCityAsync(int cityId) =>
-        await _context.Venues
-            .AsNoTracking()
-            .Where(v => v.CityId == cityId)
-            .OrderBy(v => v.Name)
-            .ToListAsync();
-
-    public async Task<Venue> CreateVenueAsync(Venue venue)
+    public async Task<Segment> CreateSegmentAsync(Segment segment)
     {
-        venue.CreatedAt = DateTime.UtcNow;
-        _context.Venues.Add(venue);
+        _context.Segments.Add(segment);
         await _context.SaveChangesAsync();
-        return venue;
+        return segment;
     }
 
-    public async Task<List<PriceZone>> GetPriceZonesByVenueAsync(int venueId) =>
-        await _context.PriceZones
-            .AsNoTracking()
-            .Where(p => p.VenueId == venueId && p.IsActive)
-            .OrderBy(p => p.Name)
-            .ToListAsync();
-
-    public async Task<PriceZone?> GetPriceZoneByIdAsync(int priceZoneId) =>
-        await _context.PriceZones
-            .AsNoTracking()
-            .FirstOrDefaultAsync(p => p.PriceZoneId == priceZoneId);
-
-    public async Task<PriceZone> CreatePriceZoneAsync(PriceZone priceZone)
+    public async Task UpdateSegmentAsync(Segment segment)
     {
-        _context.PriceZones.Add(priceZone);
+        _context.Segments.Update(segment);
         await _context.SaveChangesAsync();
-        return priceZone;
+    }
+
+    public async Task<Genre> CreateGenreAsync(Genre genre)
+    {
+        _context.Genres.Add(genre);
+        await _context.SaveChangesAsync();
+        return genre;
+    }
+
+    public async Task UpdateGenreAsync(Genre genre)
+    {
+        _context.Genres.Update(genre);
+        await _context.SaveChangesAsync();
+    }
+
+    public async Task<SubGenre> CreateSubGenreAsync(SubGenre subGenre)
+    {
+        _context.SubGenres.Add(subGenre);
+        await _context.SaveChangesAsync();
+        return subGenre;
+    }
+
+    public async Task UpdateSubGenreAsync(SubGenre subGenre)
+    {
+        _context.SubGenres.Update(subGenre);
+        await _context.SaveChangesAsync();
     }
 
     public async Task<Bookmark?> GetBookmarkByIdAsync(int bookmarkId) =>
         await _context.Bookmarks
             .AsNoTracking()
             .Include(b => b.Event)
+                .ThenInclude(e => e!.Images)
             .FirstOrDefaultAsync(b => b.BookmarkId == bookmarkId);
 
     public async Task<Bookmark?> GetBookmarkByUserAndEventAsync(int userId, int eventId) =>
@@ -588,17 +512,20 @@ public class EventRepository : IEventRepository
         await _context.Bookmarks
             .AsNoTracking()
             .Include(b => b.Event)
+                .ThenInclude(e => e!.Images)
             .Where(b => b.UserId == userId)
             .OrderByDescending(b => b.SavedAt)
             .ToListAsync();
 
     public async Task<List<EventLike>> GetLikedEventsByUserAsync(int userId) =>
         await _context.EventLikes
+            .AsNoTracking()
             .Include(x => x.Event)
                 .ThenInclude(e => e!.Images)
             .Where(x => x.UserId == userId)
             .OrderByDescending(x => x.LikedAt)
             .ToListAsync();
+
     public async Task<Bookmark> CreateBookmarkAsync(Bookmark bookmark)
     {
         _context.Bookmarks.Add(bookmark);

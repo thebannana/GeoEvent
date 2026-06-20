@@ -3,11 +3,12 @@ using MessageService.Application.DTOs;
 using MessageService.Application.Interfaces.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace MessageService.API.Controllers;
 
 [ApiController]
-[Route("api/messages")]
+[Route("api/chat")]
 [Authorize]
 public class ChatController : ControllerBase
 {
@@ -23,7 +24,10 @@ public class ChatController : ControllerBase
     {
         var userId = User.GetUserId();
         var result = await _chatService.OpenDirectThreadAsync(userId, dto.OtherUserId);
-        return result.Success ? Ok(result.Data) : StatusCode(result.StatusCode, new { error = result.Error });
+
+        return result.Success
+            ? Ok(result.Data)
+            : StatusCode(result.StatusCode, new { error = result.Error });
     }
 
     [HttpGet("threads")]
@@ -31,7 +35,10 @@ public class ChatController : ControllerBase
     {
         var userId = User.GetUserId();
         var result = await _chatService.GetThreadsAsync(userId);
-        return result.Success ? Ok(result.Data) : StatusCode(result.StatusCode, new { error = result.Error });
+
+        return result.Success
+            ? Ok(result.Data)
+            : StatusCode(result.StatusCode, new { error = result.Error });
     }
 
     [HttpGet("threads/{threadId:long}")]
@@ -39,7 +46,10 @@ public class ChatController : ControllerBase
     {
         var userId = User.GetUserId();
         var result = await _chatService.GetThreadDetailAsync(threadId, userId);
-        return result.Success ? Ok(result.Data) : StatusCode(result.StatusCode, new { error = result.Error });
+
+        return result.Success
+            ? Ok(result.Data)
+            : StatusCode(result.StatusCode, new { error = result.Error });
     }
 
     [HttpGet("threads/{threadId:long}/messages")]
@@ -47,15 +57,22 @@ public class ChatController : ControllerBase
     {
         var userId = User.GetUserId();
         var result = await _chatService.GetMessagesAsync(threadId, userId, page, pageSize);
-        return result.Success ? Ok(result.Data) : StatusCode(result.StatusCode, new { error = result.Error });
+
+        return result.Success
+            ? Ok(result.Data)
+            : StatusCode(result.StatusCode, new { error = result.Error });
     }
 
+    [EnableRateLimiting("send-message")]
     [HttpPost("threads/{threadId:long}/messages")]
     public async Task<IActionResult> SendMessage(long threadId, [FromBody] SendThreadMessageDto dto)
     {
         var userId = User.GetUserId();
         var result = await _chatService.SendMessageAsync(threadId, userId, dto);
-        return result.Success ? StatusCode(StatusCodes.Status201Created, result.Data) : StatusCode(result.StatusCode, new { error = result.Error });
+
+        return result.Success
+            ? StatusCode(StatusCodes.Status201Created, result.Data)
+            : StatusCode(result.StatusCode, new { error = result.Error });
     }
 
     [HttpPatch("messages/{messageId:long}")]
@@ -63,7 +80,10 @@ public class ChatController : ControllerBase
     {
         var userId = User.GetUserId();
         var result = await _chatService.EditMessageAsync(messageId, userId, dto);
-        return result.Success ? Ok(result.Data) : StatusCode(result.StatusCode, new { error = result.Error });
+
+        return result.Success
+            ? Ok(result.Data)
+            : StatusCode(result.StatusCode, new { error = result.Error });
     }
 
     [HttpDelete("messages/{messageId:long}")]
@@ -71,7 +91,10 @@ public class ChatController : ControllerBase
     {
         var userId = User.GetUserId();
         var result = await _chatService.DeleteMessageAsync(messageId, userId);
-        return result.Success ? NoContent() : StatusCode(result.StatusCode, new { error = result.Error });
+
+        return result.Success
+            ? NoContent()
+            : StatusCode(result.StatusCode, new { error = result.Error });
     }
 
     [HttpPost("messages/{messageId:long}/like")]
@@ -79,7 +102,10 @@ public class ChatController : ControllerBase
     {
         var userId = User.GetUserId();
         var result = await _chatService.LikeMessageAsync(messageId, userId);
-        return result.Success ? Ok(result.Data) : StatusCode(result.StatusCode, new { error = result.Error });
+
+        return result.Success
+            ? Ok(result.Data)
+            : StatusCode(result.StatusCode, new { error = result.Error });
     }
 
     [HttpDelete("messages/{messageId:long}/like")]
@@ -87,7 +113,10 @@ public class ChatController : ControllerBase
     {
         var userId = User.GetUserId();
         var result = await _chatService.UnlikeMessageAsync(messageId, userId);
-        return result.Success ? Ok(result.Data) : StatusCode(result.StatusCode, new { error = result.Error });
+
+        return result.Success
+            ? Ok(result.Data)
+            : StatusCode(result.StatusCode, new { error = result.Error });
     }
 
     [HttpPatch("threads/{threadId:long}/read")]
@@ -95,7 +124,10 @@ public class ChatController : ControllerBase
     {
         var userId = User.GetUserId();
         var result = await _chatService.MarkThreadReadAsync(threadId, userId);
-        return result.Success ? Ok(new { message = "Thread marked as read." }) : StatusCode(result.StatusCode, new { error = result.Error });
+
+        return result.Success
+            ? Ok(new { message = "Thread marked as read." })
+            : StatusCode(result.StatusCode, new { error = result.Error });
     }
 
     [HttpGet("unread-count")]
@@ -103,7 +135,10 @@ public class ChatController : ControllerBase
     {
         var userId = User.GetUserId();
         var result = await _chatService.GetUnreadCountAsync(userId);
-        return result.Success ? Ok(result.Data) : StatusCode(result.StatusCode, new { error = result.Error });
+
+        return result.Success
+            ? Ok(result.Data)
+            : StatusCode(result.StatusCode, new { error = result.Error });
     }
 
     [HttpGet("threads/{threadId:long}/participants")]
@@ -111,7 +146,10 @@ public class ChatController : ControllerBase
     {
         var userId = User.GetUserId();
         var result = await _chatService.GetParticipantsAsync(threadId, userId);
-        return result.Success ? Ok(result.Data) : StatusCode(result.StatusCode, new { error = result.Error });
+
+        return result.Success
+            ? Ok(result.Data)
+            : StatusCode(result.StatusCode, new { error = result.Error });
     }
 
     [HttpDelete("threads/{threadId:long}")]
@@ -119,6 +157,7 @@ public class ChatController : ControllerBase
     {
         var userId = User.GetUserId();
         var result = await _chatService.LeaveThreadAsync(threadId, userId);
+
         return result.Success
             ? NoContent()
             : StatusCode(result.StatusCode, new { error = result.Error });

@@ -24,12 +24,20 @@ public class ChatMessage
 
     public void Edit(string content)
     {
-        Content = content.Trim();
+        var trimmed = content.Trim();
+
+        if (string.IsNullOrWhiteSpace(trimmed))
+            throw new InvalidOperationException("Message content cannot be empty.");
+
+        Content = trimmed;
         EditedAt = DateTime.UtcNow;
     }
 
     public void SoftDelete()
     {
+        if (IsDeleted)
+            return;
+
         DeletedAt = DateTime.UtcNow;
         Content = "[message deleted]";
     }

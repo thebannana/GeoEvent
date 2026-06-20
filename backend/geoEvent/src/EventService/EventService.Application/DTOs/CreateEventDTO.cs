@@ -9,14 +9,15 @@ public class CreateEventDto
     public string Title { get; set; } = string.Empty;
 
     [Required]
-    [StringLength(5000, MinimumLength = 10)]
+    [StringLength(4000, MinimumLength = 10)]
     public string Description { get; set; } = string.Empty;
 
-    public int? SegmentId { get; set; }
-    public int? GenreId { get; set; }
+    [Required]
+    public int SegmentId { get; set; }
+
+    [Required]
+    public int GenreId { get; set; }
     public int? SubGenreId { get; set; }
-    public int? VenueId { get; set; }
-    public int? CityId { get; set; }
 
     [Required]
     [Range(-90.0, 90.0)]
@@ -38,7 +39,7 @@ public class CreateEventDto
     [Range(0, 100_000)]
     public decimal Price { get; set; } = 0;
 
-    public bool IsOnline { get; set; } = false;
+    public bool IsOnline { get; set; }
 
     [StringLength(500)]
     public string? Tags { get; set; }

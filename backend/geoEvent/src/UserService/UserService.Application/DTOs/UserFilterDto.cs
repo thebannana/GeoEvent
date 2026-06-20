@@ -6,6 +6,5 @@ public class UserFilterDto
     public int PageSize { get; set; } = 20;
     public string? Role { get; set; }
     public bool? IsBanned { get; set; }
-    public bool? IsVerified { get; set; }
     public string? Search { get; set; }
 }

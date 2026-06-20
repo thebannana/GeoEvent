@@ -1,4 +1,4 @@
-﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
 
 namespace UserService.Application.DTOs;
 
@@ -16,6 +16,8 @@ public class RegisterRequestDto
     public DateTime BirthDate { get; set; }
 
     [Required]
+    [Phone]
+    [RegularExpression(@"^\+?[1-9]\d{1,14}$", ErrorMessage = "Invalid phone number format.")]
     public string PhoneNumber { get; set; } = string.Empty;
 
     [Required]
@@ -28,6 +30,10 @@ public class RegisterRequestDto
     [RegularExpression(@"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).+$",
         ErrorMessage = "Password must contain uppercase, lowercase, number and special character.")]
     public string Password { get; set; } = string.Empty;
+
+    [Required]
+    [Compare("Password", ErrorMessage = "Passwords do not match.")]
+    public string ConfirmPassword { get; set; } = string.Empty;
 
     [Required]
     [StringLength(100, MinimumLength = 2)]

@@ -163,11 +163,6 @@ public class UserRepository : IUserRepository
             query = query.Where(u => u.IsBanned == filter.IsBanned.Value);
         }
 
-        if (filter.IsVerified.HasValue)
-        {
-            query = query.Where(u => u.IsVerified == filter.IsVerified.Value);
-        }
-
         var total = await query.CountAsync();
         var items = await query.OrderByDescending(u => u.CreatedAt)
             .Skip((filter.Page - 1) * filter.PageSize)
@@ -191,12 +186,6 @@ public class UserRepository : IUserRepository
     public async Task CleanupExpiredTokensAsync(int userId) =>
         await _context.RefreshTokens.Where(r => r.UserId == userId && r.ExpiresAt <= DateTime.UtcNow).ExecuteDeleteAsync();
 
-    public async Task<User?> GetByResetTokenAsync(string token) =>
-        await _context.Users.Include(u => u.Person).FirstOrDefaultAsync(u => u.PasswordResetToken == token);
-
-    public async Task<User?> GetByVerificationTokenAsync(string token) =>
-        await _context.Users.Include(u => u.Person).FirstOrDefaultAsync(u => u.EmailVerificationToken == token);
-
     public async Task<RefreshToken?> GetRefreshTokenAsync(string tokenHash) =>
         await _context.RefreshTokens.Include(r => r.User).ThenInclude(u => u!.Person)
             .FirstOrDefaultAsync(r => r.TokenHash == tokenHash);
@@ -218,20 +207,6 @@ public class UserRepository : IUserRepository
     public async Task RevokeAllUserTokensAsync(int userId) =>
         await _context.RefreshTokens.Where(r => r.UserId == userId && r.RevokedAt == null)
             .ExecuteUpdateAsync(s => s.SetProperty(r => r.RevokedAt, DateTime.UtcNow));
-
-    public async Task<List<ActivityLog>> GetUserActivityLogsAsync(int userId, int page, int pageSize) =>
-        await _context.ActivityLogs.Where(a => a.UserId == userId)
-            .OrderByDescending(a => a.CreatedAt)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .ToListAsync();
-
-    public async Task<ActivityLog> CreateActivityLogAsync(ActivityLog log)
-    {
-        _context.ActivityLogs.Add(log);
-        await _context.SaveChangesAsync();
-        return log;
-    }
 
     public async Task<Report?> GetReportByIdAsync(int reportId) =>
         await _context.Reports.Include(r => r.Reporter).Include(r => r.ResolvedBy)

@@ -1,15 +1,13 @@
 using System.Text;
+using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using MessageService.API.Extensions;
 using MessageService.API.Hubs;
 using MessageService.API.Middleware;
 using MessageService.API.Realtime;
-using MessageService.Application.Interfaces.Repositories;
 using MessageService.Application.Interfaces.Services;
 using MessageService.Infrastructure;
 using MessageService.Infrastructure.Persistence;
-using MessageService.Infrastructure.Repositories;
-using MessageService.Infrastructure.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
@@ -17,11 +15,15 @@ using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+    });
+
 builder.Services.AddEndpointsApiExplorer();
 
 builder.Services.AddInfrastructure(builder.Configuration);
-
 builder.Services.AddSignalR();
 
 builder.Services.AddScoped<IChatRealtimeNotifier, SignalRChatRealtimeNotifier>();
@@ -64,16 +66,24 @@ builder.Services.AddSwaggerGen(options =>
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
-        policy
-            .WithOrigins(builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? new[]
-            {
-                "http://localhost:3000",
-                "http://localhost:5173"
-            })
+        policy.WithOrigins(
+                builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ??
+                Array.Empty<string>())
             .AllowAnyHeader()
             .AllowAnyMethod()
             .AllowCredentials());
 });
+
+var jwtSecret = builder.Configuration["Jwt:Secret"];
+var jwtIssuer = builder.Configuration["Jwt:Issuer"];
+var jwtAudience = builder.Configuration["Jwt:Audience"];
+
+if (string.IsNullOrWhiteSpace(jwtSecret))
+    throw new InvalidOperationException("Jwt:Secret is not configured.");
+if (string.IsNullOrWhiteSpace(jwtIssuer))
+    throw new InvalidOperationException("Jwt:Issuer is not configured.");
+if (string.IsNullOrWhiteSpace(jwtAudience))
+    throw new InvalidOperationException("Jwt:Audience is not configured.");
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -82,11 +92,11 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         {
             ValidateIssuerSigningKey = true,
             IssuerSigningKey = new SymmetricSecurityKey(
-                Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Secret"]!)),
+                Encoding.UTF8.GetBytes(jwtSecret)),
             ValidateIssuer = true,
-            ValidIssuer = builder.Configuration["Jwt:Issuer"],
+            ValidIssuer = jwtIssuer,
             ValidateAudience = true,
-            ValidAudience = builder.Configuration["Jwt:Audience"],
+            ValidAudience = jwtAudience,
             ValidateLifetime = true,
             ClockSkew = TimeSpan.Zero
         };
@@ -98,11 +108,8 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 var accessToken = context.Request.Query["access_token"];
                 var path = context.HttpContext.Request.Path;
 
-                if (!string.IsNullOrEmpty(accessToken) &&
-                    path.StartsWithSegments("/hubs/chat"))
-                {
+                if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs/chat"))
                     context.Token = accessToken;
-                }
 
                 return Task.CompletedTask;
             }

@@ -22,7 +22,7 @@ public class PaymentDetailConfiguration : IEntityTypeConfiguration<PaymentDetail
 
         builder.Property(p => p.Amount).HasPrecision(18, 2);
         builder.Property(p => p.TransactionId).HasMaxLength(255);
-        builder.Property(p => p.Currency).HasMaxLength(3).HasDefaultValue("EUR");
+        builder.Property(p => p.Currency).HasMaxLength(3).HasDefaultValue("BAM");
 
         builder.HasOne(p => p.Reservation)
             .WithMany(r => r.PaymentDetails)

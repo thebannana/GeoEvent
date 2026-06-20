@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using EventService.API.Security;
 using EventService.Application.DTOs;
 using EventService.Application.Interfaces.Services;
 
@@ -26,7 +27,7 @@ public class SubGenresController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = AppRoles.Admin)]
     public async Task<IActionResult> Create([FromBody] CreateSubGenreDto dto)
     {
         var result = await _eventService.CreateSubGenreAsync(dto);
@@ -36,7 +37,7 @@ public class SubGenresController : ControllerBase
     }
 
     [HttpPut("{subGenreId:int}")]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = AppRoles.Admin)]
     public async Task<IActionResult> Update(int subGenreId, [FromBody] UpdateSubGenreDto dto)
     {
         var result = await _eventService.UpdateSubGenreAsync(subGenreId, dto);

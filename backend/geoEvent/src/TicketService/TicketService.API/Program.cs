@@ -20,10 +20,8 @@ builder.Services
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
     });
 
-// ── Infrastructure ─────────────────────────────────────────────
 builder.Services.AddInfrastructure(builder.Configuration);
 
-// ── CORS ───────────────────────────────────────────────────────
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
@@ -38,7 +36,6 @@ builder.Services.AddCors(options =>
     });
 });
 
-// ── Rate Limiting ──────────────────────────────────────────────
 builder.Services.AddRateLimiter(options =>
 {
     options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
@@ -70,7 +67,6 @@ builder.Services.AddRateLimiter(options =>
 
 });
 
-// ── JWT Authentication ─────────────────────────────────────────
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
@@ -89,9 +85,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 
 builder.Services.AddAuthorization();
-builder.Services.AddControllers();
 
-// ── Swagger with JWT support ───────────────────────────────────
 builder.Services.AddSwaggerGen(options =>
 {
     options.SwaggerDoc("v1", new OpenApiInfo
@@ -130,7 +124,6 @@ builder.Services.AddSwaggerGen(options =>
 var app = builder.Build();
 
 
-// ── Middleware pipeline ────────────────────────────────────────
 app.UseMiddleware<SecurityHeadersMiddleware>();
 app.UseMiddleware<ExceptionMiddleware>();
 app.UseCors("AllowFrontend");

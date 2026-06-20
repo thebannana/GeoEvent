@@ -1,15 +1,12 @@
-﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using EventService.API.Extensions;
 using EventService.Application.DTOs;
 using EventService.Application.Interfaces.Services;
-using System.Security.Claims;
+using EventService.API.Extensions;
 
 namespace EventService.API.Controllers;
 
 [ApiController]
 [Route("api/public/events")]
-[AllowAnonymous]
 public class PublicEventsController : ControllerBase
 {
     private readonly IEventService _eventService;
@@ -22,12 +19,7 @@ public class PublicEventsController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> GetAll([FromQuery] EventFilterDto filter)
     {
-        int? requesterId = null;
-
-        var userIdValue = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (int.TryParse(userIdValue, out var parsedUserId))
-            requesterId = parsedUserId;
-
+        int? requesterId = User.Identity?.IsAuthenticated == true ? User.GetUserId() : null;
         var result = await _eventService.GetPublicAsync(filter, requesterId);
 
         return result.Success
@@ -38,12 +30,7 @@ public class PublicEventsController : ControllerBase
     [HttpGet("{eventId:int}")]
     public async Task<IActionResult> GetById(int eventId)
     {
-        int? requesterId = null;
-
-        var userIdValue = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (int.TryParse(userIdValue, out var parsedUserId))
-            requesterId = parsedUserId;
-
+        int? requesterId = User.Identity?.IsAuthenticated == true ? User.GetUserId() : null;
         var result = await _eventService.GetPublicByIdAsync(eventId, requesterId);
 
         return result.Success

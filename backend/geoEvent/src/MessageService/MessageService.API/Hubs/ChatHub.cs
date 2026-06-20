@@ -1,7 +1,7 @@
-﻿using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.SignalR;
+﻿using System.Security.Claims;
 using MessageService.Application.Interfaces.Services;
-using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.SignalR;
 
 namespace MessageService.API.Hubs;
 
@@ -38,6 +38,7 @@ public class ChatHub : Hub
     {
         var userId = GetUserId();
         var isParticipant = await _chatService.IsParticipantAsync(threadId, userId);
+
         if (!isParticipant)
             throw new HubException("You are not a participant of this thread.");
 
@@ -52,8 +53,12 @@ public class ChatHub : Hub
     private int GetUserId()
     {
         var raw = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value
-            ?? Context.User?.FindFirst("sub")?.Value;
+            ?? Context.User?.FindFirst("sub")?.Value
+            ?? throw new HubException("User ID claim not found.");
 
-        return int.Parse(raw!);
+        if (!int.TryParse(raw, out var userId))
+            throw new HubException("Invalid user ID claim.");
+
+        return userId;
     }
 }

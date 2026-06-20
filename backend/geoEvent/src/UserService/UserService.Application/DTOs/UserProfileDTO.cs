@@ -10,7 +10,6 @@ public class UserProfileDto
     public string? PhoneNumber { get; set; }
     public string? ImageUrl { get; set; }
     public string Role { get; set; } = string.Empty;
-    public bool IsVerified { get; set; }
     public DateTime CreatedAt { get; set; }
     public int? CityId { get; set; }
     public string? CityName { get; set; }

@@ -11,5 +11,15 @@ public class ChatThreadParticipantConfiguration : IEntityTypeConfiguration<ChatT
         builder.ToTable("ChatThreadParticipants");
 
         builder.HasKey(x => new { x.ThreadId, x.UserId });
+
+        builder.Property(x => x.JoinedAt)
+            .IsRequired();
+
+        builder.Property(x => x.LeftAt);
+
+        builder.Property(x => x.LastReadAt);
+
+        builder.HasIndex(x => new { x.UserId, x.LeftAt });
+        builder.HasIndex(x => new { x.ThreadId, x.UserId });
     }
 }

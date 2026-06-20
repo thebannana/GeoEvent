@@ -6,9 +6,15 @@ public static class ClaimsPrincipalExtensions
 {
     public static int GetUserId(this ClaimsPrincipal user)
     {
-        var value = user.FindFirstValue(ClaimTypes.NameIdentifier)
-            ?? throw new UnauthorizedAccessException("User ID claim not found.");
-        return int.Parse(value);
+        var value = user.FindFirstValue(ClaimTypes.NameIdentifier);
+
+        if (string.IsNullOrWhiteSpace(value))
+            throw new UnauthorizedAccessException("User ID claim not found.");
+
+        if (!int.TryParse(value, out var userId))
+            throw new UnauthorizedAccessException("Invalid user ID claim.");
+
+        return userId;
     }
 
     public static string GetEmail(this ClaimsPrincipal user) =>
@@ -18,5 +24,4 @@ public static class ClaimsPrincipalExtensions
     public static string GetRole(this ClaimsPrincipal user) =>
         user.FindFirstValue(ClaimTypes.Role)
             ?? throw new UnauthorizedAccessException("Role claim not found.");
-
 }

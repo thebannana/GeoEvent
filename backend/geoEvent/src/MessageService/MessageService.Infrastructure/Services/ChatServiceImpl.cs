@@ -9,7 +9,6 @@ using Shared.Contracts.Chat;
 
 namespace MessageService.Infrastructure.Services;
 
-
 public class ChatServiceImpl : IChatService
 {
     private readonly IChatRepository _repository;
@@ -18,7 +17,6 @@ public class ChatServiceImpl : IChatService
     private readonly IUserPresenceTracker _presenceTracker;
     private readonly IChatRealtimeNotifier _realtimeNotifier;
     private readonly IPublishEndpoint _publishEndpoint;
-
 
     public ChatServiceImpl(
         IChatRepository repository,
@@ -52,10 +50,10 @@ public class ChatServiceImpl : IChatService
                 CreatedByUserId = userId,
                 CreatedAt = DateTime.UtcNow,
                 Participants =
-            {
-                new ChatThreadParticipant { UserId = userId, JoinedAt = DateTime.UtcNow },
-                new ChatThreadParticipant { UserId = otherUserId, JoinedAt = DateTime.UtcNow }
-            }
+                {
+                    new ChatThreadParticipant { UserId = userId, JoinedAt = DateTime.UtcNow },
+                    new ChatThreadParticipant { UserId = otherUserId, JoinedAt = DateTime.UtcNow }
+                }
             };
 
             thread = await _repository.AddThreadAsync(thread);
@@ -99,9 +97,7 @@ public class ChatServiceImpl : IChatService
         var result = new List<ChatThreadSummaryDto>();
 
         foreach (var thread in threads)
-        {
             result.Add(await MapThreadSummaryAsync(thread, userId));
-        }
 
         return ServiceResult<List<ChatThreadSummaryDto>>.Ok(result);
     }
@@ -121,6 +117,7 @@ public class ChatServiceImpl : IChatService
 
         return ServiceResult<bool>.Ok(true);
     }
+
     public async Task<ServiceResult<ChatThreadDetailDto>> GetThreadDetailAsync(long threadId, int userId)
     {
         var thread = await _repository.GetThreadByIdAsync(threadId);
@@ -147,6 +144,7 @@ public class ChatServiceImpl : IChatService
                     StartDateTime = EnsureUtc(evt.StartDateTime),
                     EndDateTime = EnsureUtc(evt.EndDateTime),
                     VenueName = evt.VenueName,
+                    CityName = null,
                     CoverImageUrl = evt.CoverImageUrl,
                     IsOnline = evt.IsOnline
                 };
@@ -218,8 +216,15 @@ public class ChatServiceImpl : IChatService
         participant.LeftAt = DateTime.UtcNow;
         await _repository.UpdateParticipantAsync(participant);
     }
+
     public async Task<ServiceResult<PagedResult<ChatMessageDto>>> GetMessagesAsync(long threadId, int userId, int page, int pageSize)
     {
+        if (page <= 0)
+            return ServiceResult<PagedResult<ChatMessageDto>>.Fail("Page must be greater than 0.");
+
+        if (pageSize <= 0 || pageSize > 100)
+            return ServiceResult<PagedResult<ChatMessageDto>>.Fail("PageSize must be between 1 and 100.");
+
         if (!await _repository.IsParticipantAsync(threadId, userId))
             return ServiceResult<PagedResult<ChatMessageDto>>.Forbidden("You are not a participant of this thread.");
 
@@ -356,7 +361,10 @@ public class ChatServiceImpl : IChatService
         await _repository.UpdateMessageAsync(message);
 
         var mapped = await MapMessageAsync(message, userId);
-        var participantIds = (await _repository.GetParticipantsAsync(message.ThreadId)).Select(x => x.UserId).ToList();
+        var participantIds = (await _repository.GetParticipantsAsync(message.ThreadId))
+            .Select(x => x.UserId)
+            .ToList();
+
         await _realtimeNotifier.MessageUpdatedAsync(mapped, participantIds);
 
         return ServiceResult<ChatMessageDto>.Ok(mapped);
@@ -371,10 +379,16 @@ public class ChatServiceImpl : IChatService
         if (!message.CanDelete(userId))
             return ServiceResult<bool>.Forbidden("You can only delete your own messages.");
 
+        if (message.IsDeleted)
+            return ServiceResult<bool>.Conflict("Message is already deleted.");
+
         message.SoftDelete();
         await _repository.UpdateMessageAsync(message);
 
-        var participantIds = (await _repository.GetParticipantsAsync(message.ThreadId)).Select(x => x.UserId).ToList();
+        var participantIds = (await _repository.GetParticipantsAsync(message.ThreadId))
+            .Select(x => x.UserId)
+            .ToList();
+
         await _realtimeNotifier.MessageDeletedAsync(message.ThreadId, message.Id, participantIds);
 
         return ServiceResult<bool>.Ok(true);
@@ -420,24 +434,17 @@ public class ChatServiceImpl : IChatService
         string threadTitle = string.Empty;
         string? threadImageUrl = null;
 
-        if (thread != null)
+        if (thread != null && thread.Type != ChatThreadType.Direct)
         {
-            if (thread.Type == ChatThreadType.Direct)
-            {
-                threadTitle = string.Empty;
-            }
-            else
-            {
-                threadTitle = thread.Title;
+            threadTitle = thread.Title;
 
-                if (thread.EventId.HasValue)
+            if (thread.EventId.HasValue)
+            {
+                var evt = await _eventDirectoryClient.GetEventAsync(thread.EventId.Value);
+                if (evt != null)
                 {
-                    var evt = await _eventDirectoryClient.GetEventAsync(thread.EventId.Value);
-                    if (evt != null)
-                    {
-                        threadTitle = evt.Title;
-                        threadImageUrl = evt.CoverImageUrl;
-                    }
+                    threadTitle = evt.Title;
+                    threadImageUrl = evt.CoverImageUrl;
                 }
             }
         }
@@ -456,17 +463,6 @@ public class ChatServiceImpl : IChatService
         });
 
         return ServiceResult<ChatMessageDto>.Ok(mapped);
-    }
-
-    private static string BuildPreview(string? content, int maxLength = 120)
-    {
-        if (string.IsNullOrWhiteSpace(content))
-            return string.Empty;
-
-        var normalized = content.Trim();
-        return normalized.Length <= maxLength
-            ? normalized
-            : normalized[..maxLength];
     }
 
     public async Task<ServiceResult<ChatMessageDto>> UnlikeMessageAsync(long messageId, int userId)
@@ -587,7 +583,6 @@ public class ChatServiceImpl : IChatService
             existing.LeftAt = null;
             existing.JoinedAt = DateTime.UtcNow;
             await _repository.UpdateParticipantAsync(existing);
-
             wasAdded = true;
         }
 
@@ -623,6 +618,25 @@ public class ChatServiceImpl : IChatService
         });
     }
 
+    public async Task HandleDeletedUserAsync(int userId)
+    {
+        var participations = await _repository.GetUserParticipationsAsync(userId);
+
+        foreach (var participant in participations.Where(p => p.LeftAt == null))
+        {
+            participant.LeftAt = DateTime.UtcNow;
+            await _repository.UpdateParticipantAsync(participant);
+        }
+
+        var messages = await _repository.GetMessagesBySenderAsync(userId);
+
+        foreach (var message in messages.Where(m => m.DeletedAt == null))
+        {
+            message.SoftDelete();
+            await _repository.UpdateMessageAsync(message);
+        }
+    }
+
     private async Task<List<ChatParticipantDto>> BuildParticipantsAsync(long threadId)
     {
         var participants = await _repository.GetParticipantsAsync(threadId);
@@ -648,24 +662,7 @@ public class ChatServiceImpl : IChatService
 
         return result;
     }
-    public async Task HandleDeletedUserAsync(int userId)
-    {
-        var participations = await _repository.GetUserParticipationsAsync(userId);
 
-        foreach (var participant in participations.Where(p => p.LeftAt == null))
-        {
-            participant.LeftAt = DateTime.UtcNow;
-            await _repository.UpdateParticipantAsync(participant);
-        }
-
-        var messages = await _repository.GetMessagesBySenderAsync(userId);
-
-        foreach (var message in messages.Where(m => m.DeletedAt == null))
-        {
-            message.SoftDelete();
-            await _repository.UpdateMessageAsync(message);
-        }
-    }
     private async Task<ChatThreadSummaryDto> MapThreadSummaryAsync(ChatThread thread, int currentUserId)
     {
         var unreadCount = await _repository.GetThreadUnreadCountAsync(thread.Id, currentUserId);
@@ -676,27 +673,42 @@ public class ChatServiceImpl : IChatService
         {
             var otherUserId = thread.Participants
                 .Where(x => x.UserId != currentUserId && x.LeftAt == null)
-                .Select(x => x.UserId)
+                .Select(x => (int?)x.UserId)
                 .FirstOrDefault();
 
-            var users = await _userDirectoryClient.GetPublicUsersAsync(new[] { otherUserId });
-            users.TryGetValue(otherUserId, out var otherUser);
+            if (!otherUserId.HasValue)
+            {
+                return new ChatThreadSummaryDto
+                {
+                    ThreadId = thread.Id,
+                    Title = "Unknown user",
+                    ThreadType = thread.Type.ToString(),
+                    EventId = thread.EventId,
+                    IsGroup = false,
+                    LastMessageContent = last?.Content,
+                    LastMessageSentAt = EnsureUtc(last?.SentAt),
+                    UnreadCount = unreadCount
+                };
+            }
+
+            var users = await _userDirectoryClient.GetPublicUsersAsync(new[] { otherUserId.Value });
+            users.TryGetValue(otherUserId.Value, out var otherUser);
 
             return new ChatThreadSummaryDto
             {
                 ThreadId = thread.Id,
                 Title = !string.IsNullOrWhiteSpace(otherUser?.Username)
                     ? otherUser.Username
-                    : otherUser?.DisplayName ?? $"User {otherUserId}",
+                    : otherUser?.DisplayName ?? $"User {otherUserId.Value}",
                 ThreadType = thread.Type.ToString(),
                 EventId = thread.EventId,
                 ImageUrl = otherUser?.ImageUrl,
                 IsGroup = false,
-                OtherUserId = otherUserId,
+                OtherUserId = otherUserId.Value,
                 OtherUserDisplayName = otherUser?.DisplayName,
                 OtherUserAvatarUrl = otherUser?.ImageUrl,
-                OtherUserIsOnline = await _presenceTracker.IsOnlineAsync(otherUserId),
-                OtherUserLastActiveAt = EnsureUtc(await _presenceTracker.GetLastActiveAtAsync(otherUserId)),
+                OtherUserIsOnline = await _presenceTracker.IsOnlineAsync(otherUserId.Value),
+                OtherUserLastActiveAt = EnsureUtc(await _presenceTracker.GetLastActiveAtAsync(otherUserId.Value)),
                 LastMessageContent = last?.Content,
                 LastMessageSentAt = EnsureUtc(last?.SentAt),
                 UnreadCount = unreadCount
@@ -724,24 +736,12 @@ public class ChatServiceImpl : IChatService
         };
     }
 
-    private async Task<string> ResolveDirectTitleAsync(ChatThread thread, int currentUserId)
-    {
-        var otherUserId = thread.Participants
-            .Where(x => x.UserId != currentUserId && x.LeftAt == null)
-            .Select(x => x.UserId)
-            .FirstOrDefault();
-
-        var users = await _userDirectoryClient.GetPublicUsersAsync(new[] { otherUserId });
-        return users.TryGetValue(otherUserId, out var user) ? (!string.IsNullOrWhiteSpace(user.Username) ? user.Username : user.DisplayName) : $"User {otherUserId}";
-    }
-
     private async Task<List<ChatMessageDto>> MapMessagesAsync(IEnumerable<ChatMessage> messages, int currentUserId)
     {
         var list = new List<ChatMessageDto>();
+
         foreach (var message in messages)
-        {
             list.Add(await MapMessageAsync(message, currentUserId));
-        }
 
         return list;
     }
@@ -789,13 +789,24 @@ public class ChatServiceImpl : IChatService
         };
     }
 
-    private static DateTime EnsureUtc(DateTime value) =>
-    value.Kind switch
+    private static string BuildPreview(string? content, int maxLength = 120)
     {
-        DateTimeKind.Utc => value,
-        DateTimeKind.Local => value.ToUniversalTime(),
-        _ => DateTime.SpecifyKind(value, DateTimeKind.Utc)
-    };
+        if (string.IsNullOrWhiteSpace(content))
+            return string.Empty;
+
+        var normalized = content.Trim();
+        return normalized.Length <= maxLength
+            ? normalized
+            : normalized[..maxLength];
+    }
+
+    private static DateTime EnsureUtc(DateTime value) =>
+        value.Kind switch
+        {
+            DateTimeKind.Utc => value,
+            DateTimeKind.Local => value.ToUniversalTime(),
+            _ => DateTime.SpecifyKind(value, DateTimeKind.Utc)
+        };
 
     private static DateTime? EnsureUtc(DateTime? value) =>
         value.HasValue ? EnsureUtc(value.Value) : null;

@@ -9,7 +9,10 @@ public static class ClaimsPrincipalExtensions
         var claim = user.FindFirst(ClaimTypes.NameIdentifier)
             ?? user.FindFirst("sub")
             ?? throw new UnauthorizedAccessException("User ID claim not found.");
-        return int.Parse(claim.Value);
+
+        return int.TryParse(claim.Value, out var userId) && userId > 0
+            ? userId
+            : throw new UnauthorizedAccessException("Invalid user ID claim.");
     }
 
     public static string GetRole(this ClaimsPrincipal user) =>

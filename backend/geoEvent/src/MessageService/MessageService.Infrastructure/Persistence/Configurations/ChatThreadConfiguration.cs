@@ -13,7 +13,18 @@ public class ChatThreadConfiguration : IEntityTypeConfiguration<ChatThread>
         builder.HasKey(x => x.Id);
 
         builder.Property(x => x.Title)
+            .IsRequired()
             .HasMaxLength(200);
+
+        builder.Property(x => x.Type)
+            .HasConversion<string>()
+            .HasMaxLength(50)
+            .IsRequired();
+
+        builder.Property(x => x.CreatedAt)
+            .IsRequired();
+
+        builder.Property(x => x.LastMessageAt);
 
         builder.HasIndex(x => new { x.Type, x.EventId });
 

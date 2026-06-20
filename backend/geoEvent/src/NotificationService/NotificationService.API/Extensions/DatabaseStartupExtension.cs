@@ -1,17 +1,15 @@
 ﻿using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Storage;
 
 namespace NotificationService.API.Extensions;
 
 public static class DatabaseStartupExtensions
 {
     public static async Task InitializeDatabaseAsync<TContext>(
-    this IServiceProvider services,
-    IConfiguration configuration,
-    IHostEnvironment environment)
-    where TContext : DbContext
+        this IServiceProvider services,
+        IConfiguration configuration,
+        IHostEnvironment environment)
+        where TContext : DbContext
     {
         await using var scope = services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<TContext>();
@@ -27,7 +25,9 @@ public static class DatabaseStartupExtensions
             {
                 logger.LogInformation(
                     "Database init attempt {Attempt}/{MaxRetries} for {Context}",
-                    attempt, maxRetries, typeof(TContext).Name);
+                    attempt,
+                    maxRetries,
+                    typeof(TContext).Name);
 
                 await db.Database.MigrateAsync();
 
@@ -39,7 +39,8 @@ public static class DatabaseStartupExtensions
             }
             catch (SqlException ex) when (IsDatabaseAlreadyExists(ex))
             {
-                logger.LogError(ex,
+                logger.LogError(
+                    ex,
                     "Migration attempted to create an existing database. This usually means the database already exists but is not aligned with EF migration history.");
                 throw;
             }
@@ -47,9 +48,11 @@ public static class DatabaseStartupExtensions
             {
                 var isLast = attempt == maxRetries;
 
-                logger.LogWarning(ex,
+                logger.LogWarning(
+                    ex,
                     "Database initialization failed on attempt {Attempt}/{MaxRetries}.",
-                    attempt, maxRetries);
+                    attempt,
+                    maxRetries);
 
                 if (isLast)
                 {
@@ -75,7 +78,10 @@ public static class DatabaseStartupExtensions
     private static async Task RebuildDatabaseAsync<TContext>(TContext db, ILogger logger)
         where TContext : DbContext
     {
-        var csb = new SqlConnectionStringBuilder(db.Database.GetConnectionString());
+        var connectionString = db.Database.GetConnectionString()
+            ?? throw new InvalidOperationException("Database connection string is missing.");
+
+        var csb = new SqlConnectionStringBuilder(connectionString);
         var dbName = csb.InitialCatalog;
 
         if (string.IsNullOrWhiteSpace(dbName))

@@ -1,104 +1,119 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using UserService.API.Extensions;
 using UserService.Application.DTOs;
 using UserService.Application.Interfaces.Services;
-using UserService.API.Extensions;
 
 namespace UserService.API.Controllers;
 
 [ApiController]
-[Route("api/auth")]
-[EnableRateLimiting("auth")]
+[Route("api/[controller]")]
 public class AuthController : ControllerBase
 {
     private readonly IAuthService _authService;
-    private readonly IUserService _userService;
 
-    public AuthController(IAuthService authService, IUserService userService)
+    public AuthController(IAuthService authService)
     {
         _authService = authService;
-        _userService = userService;
+    }
+
+    [HttpPost("forgot-password")]
+    [AllowAnonymous]
+    public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordDto dto)
+    {
+        var result = await _authService.ForgotPasswordAsync(dto);
+
+        return result.Success
+            ? Ok(new { message = "If the account exists, a password reset email has been sent." })
+            : StatusCode(result.StatusCode, new { error = result.Error });
+    }
+
+    [HttpPost("reset-password")]
+    [AllowAnonymous]
+    public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordDto dto)
+    {
+        var result = await _authService.ResetPasswordAsync(dto);
+
+        return result.Success
+            ? Ok(new { message = "Password has been reset successfully." })
+            : StatusCode(result.StatusCode, new { error = result.Error });
     }
 
     [HttpPost("register")]
+    [EnableRateLimiting("auth")]
+    [AllowAnonymous]
     public async Task<IActionResult> Register([FromBody] RegisterRequestDto request)
     {
-        var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-        var result = await _authService.RegisterAsync(request, ip);
-        return result.Success
-            ? StatusCode(StatusCodes.Status201Created, result.Data)
-            : StatusCode(result.StatusCode, new { error = result.Error });
+        var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        var result = await _authService.RegisterAsync(request, ipAddress);
+
+        if (!result.Success)
+            return StatusCode(result.StatusCode, new { error = result.Error });
+
+        return Ok(result.Data);
     }
 
     [HttpPost("login")]
+    [EnableRateLimiting("auth")]
+    [AllowAnonymous]
     public async Task<IActionResult> Login([FromBody] LoginRequestDto request)
     {
-        var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-        var result = await _authService.LoginAsync(request, ip);
-        return result.Success
-            ? Ok(result.Data)
-            : StatusCode(result.StatusCode, new { error = result.Error });
+        var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        var result = await _authService.LoginAsync(request, ipAddress);
+
+        if (!result.Success)
+            return StatusCode(result.StatusCode, new { error = result.Error });
+
+        return Ok(result.Data);
     }
 
     [HttpPost("refresh")]
-    public async Task<IActionResult> Refresh([FromBody] string refreshToken)
+    [EnableRateLimiting("auth")]
+    [AllowAnonymous]
+    public async Task<IActionResult> Refresh([FromBody] RefreshTokenRequestDto request)
     {
-        var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-        var result = await _authService.RefreshTokenAsync(refreshToken, ip);
-        return result.Success
-            ? Ok(result.Data)
-            : StatusCode(result.StatusCode, new { error = result.Error });
+        var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        var result = await _authService.RefreshTokenAsync(request.RefreshToken, ipAddress);
+
+        if (!result.Success)
+            return StatusCode(result.StatusCode, new { error = result.Error });
+
+        return Ok(result.Data);
     }
 
     [HttpPost("logout")]
     [Authorize]
-    public async Task<IActionResult> Logout([FromBody] string refreshToken)
+    public async Task<IActionResult> Logout([FromBody] RefreshTokenRequestDto request)
     {
-        var result = await _authService.LogoutAsync(refreshToken);
-        return result.Success
-            ? Ok(new { message = "Logged out successfully." })
-            : StatusCode(result.StatusCode, new { error = result.Error });
-    }
+        var result = await _authService.LogoutAsync(request.RefreshToken);
 
-    [HttpPost("forgot-password")]
-    public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordDto dto)
-    {
-        var result = await _authService.ForgotPasswordAsync(dto);
-        // Always return 200 to prevent email enumeration
-        return Ok(new { message = "If that email exists, a reset link has been sent." });
-    }
+        if (!result.Success)
+            return StatusCode(result.StatusCode, new { error = result.Error });
 
-    [HttpPost("reset-password")]
-    public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordDto dto)
-    {
-        var result = await _authService.ResetPasswordAsync(dto);
-        return result.Success
-            ? Ok(new { message = "Password reset successfully." })
-            : StatusCode(result.StatusCode, new { error = result.Error });
-    }
-
-    [HttpGet("verify-email")]
-    public async Task<IActionResult> VerifyEmail([FromQuery] string token)
-    {
-        if (string.IsNullOrWhiteSpace(token))
-            return BadRequest(new { error = "Token is required." });
-
-        var result = await _userService.VerifyEmailAsync(token);
-        return result.Success
-            ? Ok(new { message = "Email verified successfully." })
-            : StatusCode(result.StatusCode, new { error = result.Error });
+        return Ok(new { message = "Logged out successfully." });
     }
 
     [HttpPost("revoke-all")]
     [Authorize]
-    public async Task<IActionResult> RevokeAll()
+    public async Task<IActionResult> RevokeAllSessions()
     {
-        var userId = User.GetUserId();
-        var result = await _authService.RevokeAllSessionsAsync(userId);
-        return result.Success
-            ? Ok(new { message = "All sessions revoked." })
-            : StatusCode(result.StatusCode, new { error = result.Error });
-    }
+        int userId;
 
+        try
+        {
+            userId = User.GetUserId();
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Unauthorized(new { error = ex.Message });
+        }
+
+        var result = await _authService.RevokeAllSessionsAsync(userId);
+
+        if (!result.Success)
+            return StatusCode(result.StatusCode, new { error = result.Error });
+
+        return Ok(new { message = "All sessions revoked successfully." });
+    }
 }

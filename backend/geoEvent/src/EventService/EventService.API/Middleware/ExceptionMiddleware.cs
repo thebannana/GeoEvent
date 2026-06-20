@@ -20,30 +20,68 @@ public class ExceptionMiddleware
         {
             await _next(context);
         }
-        catch (EventNotFoundException ex) { await Write(context, 404, ex.Message); }
-        catch (VenueNotFoundException ex) { await Write(context, 404, ex.Message); }
-        catch (CommentNotFoundException ex) { await Write(context, 404, ex.Message); }
-        catch (BookmarkNotFoundException ex) { await Write(context, 404, ex.Message); }
-        catch (InvalidOperationException ex) { await Write(context, 400, ex.Message); }
-        catch (EventAccessDeniedException ex) { await Write(context, 403, ex.Message); }
-        catch (CommentAccessDeniedException ex) { await Write(context, 403, ex.Message); }
-        catch (DuplicateLikeException ex) { await Write(context, 400, ex.Message); }
-        catch (DuplicateBookmarkException ex) { await Write(context, 409, ex.Message); }
-        catch (EventCapacityExceededException ex) { await Write(context, 409, ex.Message); }
-        catch (EventNotActiveException ex) { await Write(context, 422, ex.Message); }
-        catch (UnauthorizedAccessException ex) { await Write(context, 401, ex.Message); }
+        catch (Exception ex) when (ex is
+            EventNotFoundException or
+            CommentNotFoundException or
+            BookmarkNotFoundException or
+            GenreNotFoundException or
+            SegmentNotFoundException or
+            SubGenreNotFoundException)
+        {
+            await WriteAsync(context, StatusCodes.Status404NotFound, ex.Message);
+        }
+        catch (Exception ex) when (ex is
+            EventAccessDeniedException or
+            CommentAccessDeniedException)
+        {
+            await WriteAsync(context, StatusCodes.Status403Forbidden, ex.Message);
+        }
+        catch (Exception ex) when (ex is
+            DuplicateLikeException or
+            DuplicateBookmarkException or
+            DuplicateCommentLikeException or
+            EventCapacityExceededException)
+        {
+            await WriteAsync(context, StatusCodes.Status409Conflict, ex.Message);
+        }
+        catch (Exception ex) when (ex is
+            InvalidOperationException or
+            InvalidBookmarkException or
+            InvalidCommentException or
+            InvalidCommentLikeException or
+            InvalidEventDataException or
+            InvalidEventImageException or
+            InvalidEventLikeException or
+            InvalidEventStateException or
+            InvalidReferenceDataException or
+            CommentAlreadyDeletedException)
+        {
+            await WriteAsync(context, StatusCodes.Status400BadRequest, ex.Message);
+        }
+        catch (EventNotActiveException ex)
+        {
+            await WriteAsync(context, StatusCodes.Status422UnprocessableEntity, ex.Message);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            await WriteAsync(context, StatusCodes.Status401Unauthorized, ex.Message);
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unhandled exception: {Message}", ex.Message);
-            await Write(context, 500, "An unexpected error occurred.");
+            await WriteAsync(context, StatusCodes.Status500InternalServerError, "An unexpected error occurred.");
         }
     }
 
-    private static Task Write(HttpContext context, int statusCode, string message)
+    private static Task WriteAsync(HttpContext context, int statusCode, string message)
     {
         context.Response.StatusCode = statusCode;
         context.Response.ContentType = "application/json";
+
         return context.Response.WriteAsync(
-            JsonSerializer.Serialize(new { error = message }));
+            JsonSerializer.Serialize(new
+            {
+                error = message
+            }));
     }
 }

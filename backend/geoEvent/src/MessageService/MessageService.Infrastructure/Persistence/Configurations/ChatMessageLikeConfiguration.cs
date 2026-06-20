@@ -12,9 +12,14 @@ public class ChatMessageLikeConfiguration : IEntityTypeConfiguration<ChatMessage
 
         builder.HasKey(x => new { x.MessageId, x.UserId });
 
+        builder.Property(x => x.LikedAt)
+            .IsRequired();
+
         builder.HasOne(x => x.Message)
             .WithMany(x => x.Likes)
             .HasForeignKey(x => x.MessageId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasIndex(x => new { x.UserId, x.LikedAt });
     }
 }

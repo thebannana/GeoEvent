@@ -12,6 +12,7 @@ public interface IUserRepository
     Task UpdatePreferenceAsync(UserPreference preference);
     Task<List<UserPreference>> GetUserPreferencesAsync(int userId);
     Task DeletePreferenceAsync(UserPreference preference);
+
     Task<User?> GetByIdAsync(int userId);
     Task<User?> GetPublicByIdAsync(int userId);
     Task<List<User>> GetPublicByIdsAsync(IEnumerable<int> userIds);
@@ -21,8 +22,8 @@ public interface IUserRepository
     Task<List<Report>> GetUserReportsAsync(int userId);
     Task<Report> CreateReportAsync(Report report);
     Task UpdateReportAsync(Report report);
-
     Task<bool> HasOpenReportAsync(int reporterId, ReportTargetType targetType, int targetId);
+
     Task<User?> GetByEmailAsync(string email);
     Task<User?> GetByUsernameAsync(string username);
     Task<User?> GetByEmailOrUsernameAsync(string identifier);
@@ -35,15 +36,11 @@ public interface IUserRepository
 
     Task<RefreshToken?> GetActiveRefreshTokenAsync(string tokenHash);
     Task CleanupExpiredTokensAsync(int userId);
-    Task<User?> GetByResetTokenAsync(string token);
-    Task<User?> GetByVerificationTokenAsync(string token);
     Task<RefreshToken?> GetRefreshTokenAsync(string tokenHash);
     Task AddRefreshTokenAsync(RefreshToken token);
     Task RevokeRefreshTokenAsync(string tokenHash);
     Task RevokeAllUserTokensAsync(int userId);
 
-    Task<List<ActivityLog>> GetUserActivityLogsAsync(int userId, int page, int pageSize);
-    Task<ActivityLog> CreateActivityLogAsync(ActivityLog log);
     Task<UserRating?> GetUserRatingAsync(int raterId, int ratedUserId);
     Task<UserRating> CreateUserRatingAsync(UserRating rating);
     Task UpdateUserRatingAsync(UserRating rating);

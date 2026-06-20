@@ -1,0 +1,17 @@
+{
+  "profiles": {
+    "GeoEvent.HelperWorkers": {
+      "commandName": "Project",
+      "dotnetRunMessages": true,
+      "environmentVariables": {
+        "DOTNET_ENVIRONMENT": "Development"
+      }
+    },
+    "Docker": {
+      "commandName": "Docker",
+      "launchBrowser": false,
+      "publishAllPorts": false,
+      "useSSL": false
+    }
+  }
+}

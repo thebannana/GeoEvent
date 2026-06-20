@@ -1,10 +1,10 @@
-﻿using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
 using EventService.API.Extensions;
+using EventService.Application.Common;
 using EventService.Application.DTOs;
 using EventService.Application.Interfaces.Services;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using System.ComponentModel.DataAnnotations;
-using System.Security.Claims;
 
 namespace EventService.API.Controllers;
 
@@ -26,11 +26,10 @@ public class EventsController : ControllerBase
         filter ??= new EventFilterDto();
         filter.OrganizerId = User.GetUserId();
 
-        var result = await _eventService.GetMyDraftsAsync(filter, User.GetUserId());
-        return result.Success
-            ? Ok(result.Data)
-            : StatusCode(result.StatusCode, new { error = result.Error });
+        var result = await _eventService.GetMyPendingAsync(filter, User.GetUserId());
+        return ToDataResult(result);
     }
+
     [HttpGet("mine")]
     public async Task<IActionResult> GetMine([FromQuery] EventFilterDto filter)
     {
@@ -38,15 +37,14 @@ public class EventsController : ControllerBase
         filter.OrganizerId = User.GetUserId();
 
         var result = await _eventService.GetAllAsync(filter);
-        return result.Success
-            ? Ok(result.Data)
-            : StatusCode(result.StatusCode, new { error = result.Error });
+        return ToDataResult(result);
     }
 
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateEventDto dto)
     {
         var result = await _eventService.CreateAsync(dto, User.GetUserId());
+
         return result.Success
             ? CreatedAtAction(
                 nameof(PublicEventsController.GetById),
@@ -60,99 +58,56 @@ public class EventsController : ControllerBase
     public async Task<IActionResult> Update(int eventId, [FromBody] UpdateEventDto dto)
     {
         var result = await _eventService.UpdateAsync(eventId, dto, User.GetUserId());
-        return result.Success
-            ? Ok(result.Data)
-            : StatusCode(result.StatusCode, new { error = result.Error });
+        return ToDataResult(result);
     }
 
     [HttpDelete("{eventId:int}")]
     public async Task<IActionResult> Delete(int eventId)
     {
         var result = await _eventService.DeleteAsync(eventId, User.GetUserId());
-        return result.Success
-            ? Ok(new { message = "Event deleted." })
-            : StatusCode(result.StatusCode, new { error = result.Error });
+        return ToMessageResult(result, "Event deleted.");
     }
 
     [HttpPost("{eventId:int}/publish")]
     public async Task<IActionResult> Publish(int eventId)
     {
         var result = await _eventService.PublishAsync(eventId, User.GetUserId());
-        return result.Success
-            ? Ok(new { message = "Event published." })
-            : StatusCode(result.StatusCode, new { error = result.Error });
+        return ToMessageResult(result, "Event published.");
     }
 
     [HttpGet("liked")]
-    [Authorize]
-    public async Task<IActionResult> GetLikedEvents()
+    public async Task<IActionResult> GetLikedEvents([FromQuery] int page = 1, [FromQuery] int pageSize = 20)
     {
-        var userIdValue = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (!int.TryParse(userIdValue, out var userId))
-            return Unauthorized(new { error = "Invalid user token." });
-
-        var result = await _eventService.GetLikedEventsAsync(userId);
-
-        return result.Success
-            ? Ok(result.Data)
-            : StatusCode(result.StatusCode, new { error = result.Error });
+        var result = await _eventService.GetLikedEventsAsync(User.GetUserId(), page, pageSize);
+        return ToDataResult(result);
     }
 
     [HttpPost("{eventId:int}/like")]
-    [Authorize]
     public async Task<IActionResult> LikeEvent(int eventId)
     {
-        var userIdValue = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (!int.TryParse(userIdValue, out var userId))
-            return Unauthorized(new { error = "Invalid user token." });
-
-        var result = await _eventService.LikeAsync(eventId, userId);
-
-        return result.Success
-            ? Ok(new { message = "Event liked." })
-            : StatusCode(result.StatusCode, new { error = result.Error });
+        var result = await _eventService.LikeAsync(eventId, User.GetUserId());
+        return ToMessageResult(result, "Event liked.");
     }
 
     [HttpDelete("{eventId:int}/like")]
-    [Authorize]
     public async Task<IActionResult> UnlikeEvent(int eventId)
     {
-        var userIdValue = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (!int.TryParse(userIdValue, out var userId))
-            return Unauthorized(new { error = "Invalid user token." });
-
-        var result = await _eventService.UnlikeAsync(eventId, userId);
-
-        return result.Success
-            ? Ok(new { message = "Event unliked." })
-            : StatusCode(result.StatusCode, new { error = result.Error });
+        var result = await _eventService.UnlikeAsync(eventId, User.GetUserId());
+        return ToMessageResult(result, "Event unliked.");
     }
 
     [HttpPost("{eventId:int}/cancel")]
     public async Task<IActionResult> Cancel(int eventId)
     {
         var result = await _eventService.CancelAsync(eventId, User.GetUserId());
-        return result.Success
-            ? Ok(new { message = "Event cancelled." })
-            : StatusCode(result.StatusCode, new { error = result.Error });
-    }
-
-    [HttpPost("{eventId:int}/postpone")]
-    public async Task<IActionResult> Postpone(int eventId)
-    {
-        var result = await _eventService.PostponeAsync(eventId, User.GetUserId());
-        return result.Success
-            ? Ok(new { message = "Event postponed." })
-            : StatusCode(result.StatusCode, new { error = result.Error });
+        return ToMessageResult(result, "Event cancelled.");
     }
 
     [HttpPost("{eventId:int}/complete")]
     public async Task<IActionResult> Complete(int eventId)
     {
         var result = await _eventService.CompleteAsync(eventId, User.GetUserId());
-        return result.Success
-            ? Ok(new { message = "Event completed." })
-            : StatusCode(result.StatusCode, new { error = result.Error });
+        return ToMessageResult(result, "Event completed.");
     }
 
     [HttpPost("{eventId:int}/images")]
@@ -164,36 +119,44 @@ public class EventsController : ControllerBase
             dto.IsCover,
             User.GetUserId());
 
-        return result.Success
-            ? Ok(new { message = "Image added." })
-            : StatusCode(result.StatusCode, new { error = result.Error });
+        return ToMessageResult(result, "Image added.");
     }
 
     [HttpDelete("{eventId:int}/images/{imageId:int}")]
     public async Task<IActionResult> DeleteImage(int eventId, int imageId)
     {
         var result = await _eventService.DeleteImageAsync(imageId, User.GetUserId());
-        return result.Success
-            ? Ok(new { message = "Image deleted." })
-            : StatusCode(result.StatusCode, new { error = result.Error });
+        return ToMessageResult(result, "Image deleted.");
     }
 
     [HttpPatch("{eventId:int}/images/{imageId:int}/cover")]
     public async Task<IActionResult> SetCover(int eventId, int imageId)
     {
         var result = await _eventService.SetCoverImageAsync(eventId, imageId, User.GetUserId());
+        return ToMessageResult(result, "Cover image set.");
+    }
+
+    private IActionResult ToDataResult<T>(ServiceResult<T> result)
+    {
         return result.Success
-            ? Ok(new { message = "Cover image set." })
+            ? Ok(result.Data)
+            : StatusCode(result.StatusCode, new { error = result.Error });
+    }
+
+    private IActionResult ToMessageResult(ServiceResult<bool> result, string successMessage)
+    {
+        return result.Success
+            ? Ok(new { message = successMessage })
             : StatusCode(result.StatusCode, new { error = result.Error });
     }
 }
 
 public class AddImageDto
 {
-    [Required]
-    [Url]
-    [StringLength(500)]
+    [Required(ErrorMessage = "Image URL is required.")]
+    [Url(ErrorMessage = "Image URL must be a valid absolute URL.")]
+    [StringLength(500, ErrorMessage = "Image URL cannot be longer than 500 characters.")]
     public string ImageUrl { get; set; } = string.Empty;
 
-    public bool IsCover { get; set; } = false;
+    public bool IsCover { get; set; }
 }

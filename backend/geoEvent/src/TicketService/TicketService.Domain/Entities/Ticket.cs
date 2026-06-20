@@ -19,10 +19,8 @@ public class Ticket
     public string? SeatNumber { get; set; }
     public string? Section { get; set; }
 
-    // Navigation
     public Reservation? Reservation { get; set; }
 
-    // Domain logic
     public bool IsValid() =>
         Status == TicketStatus.Active;
 

@@ -16,7 +16,24 @@ public class ChatMessageConfiguration : IEntityTypeConfiguration<ChatMessage>
             .IsRequired()
             .HasMaxLength(4000);
 
+        builder.Property(x => x.SentAt)
+            .IsRequired();
+
+        builder.Property(x => x.EditedAt);
+
+        builder.Property(x => x.DeletedAt);
+
+        builder.Property(x => x.LikesCount)
+            .HasDefaultValue(0);
+
         builder.HasIndex(x => new { x.ThreadId, x.SentAt });
+        builder.HasIndex(x => x.ThreadId);
+        builder.HasIndex(x => x.SenderId);
+
+        builder.HasOne(x => x.Thread)
+            .WithMany(x => x.Messages)
+            .HasForeignKey(x => x.ThreadId)
+            .OnDelete(DeleteBehavior.Cascade);
 
         builder.HasOne(x => x.ReplyToMessage)
             .WithMany(x => x.Replies)

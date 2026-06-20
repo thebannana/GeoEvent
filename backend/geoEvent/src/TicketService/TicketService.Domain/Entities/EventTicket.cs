@@ -16,10 +16,8 @@ public class EventTicket
     public string? Description { get; set; }
     public int? PriceZoneId { get; set; }
 
-    // Navigation
     public ICollection<Reservation> Reservations { get; set; } = [];
 
-    // Domain logic
     public int AvailableQuantity => TotalQuantity - SoldQuantity;
 
     public bool IsAvailable() =>
@@ -37,9 +35,13 @@ public class EventTicket
     {
         if (quantity <= 0)
             throw new ArgumentException("Quantity must be greater than zero.");
+
+        if (!IsAvailable())
+            throw new InvalidOperationException("Ticket is not currently available for sale.");
+
         if (quantity > AvailableQuantity)
-            throw new InvalidOperationException(
-                $"Only {AvailableQuantity} tickets available.");
+            throw new InvalidOperationException($"Only {AvailableQuantity} tickets available.");
+
         SoldQuantity += quantity;
     }
 

@@ -18,9 +18,7 @@ services:
       interval: 15s
       timeout: 10s
       retries: 10
-      start_period: 180s
-    mem_limit: 512m
-    cpus: 0.50
+      start_period: 60s
     restart: unless-stopped
     networks:
       - geoevent-network
@@ -43,8 +41,6 @@ services:
       timeout: 10s
       retries: 20
       start_period: 120s
-    mem_limit: 1400m
-    cpus: 1.00
     restart: unless-stopped
     networks:
       - geoevent-network
@@ -67,8 +63,6 @@ services:
       timeout: 10s
       retries: 20
       start_period: 120s
-    mem_limit: 1400m
-    cpus: 1.00
     restart: unless-stopped
     networks:
       - geoevent-network
@@ -91,8 +85,6 @@ services:
       timeout: 10s
       retries: 20
       start_period: 120s
-    mem_limit: 1200m
-    cpus: 0.90
     restart: unless-stopped
     networks:
       - geoevent-network
@@ -115,8 +107,6 @@ services:
       timeout: 10s
       retries: 20
       start_period: 120s
-    mem_limit: 1200m
-    cpus: 0.90
     restart: unless-stopped
     networks:
       - geoevent-network
@@ -139,8 +129,6 @@ services:
       timeout: 10s
       retries: 20
       start_period: 120s
-    mem_limit: 1200m
-    cpus: 0.90
     restart: unless-stopped
     networks:
       - geoevent-network
@@ -163,37 +151,16 @@ services:
       timeout: 10s
       retries: 20
       start_period: 120s
-    mem_limit: 1200m
-    cpus: 0.90
     restart: unless-stopped
     networks:
       - geoevent-network
 
-  event-service:
-    build:
-      context: .
-      dockerfile: src/EventService/EventService.API/Dockerfile
-    image: geoevent-event-service
-    container_name: geoevent-event-service
+  mailhog:
+    image: mailhog/mailhog:v1.0.1
+    container_name: geoevent-mailhog
     ports:
-      - "5002:8080"
-    environment:
-      ASPNETCORE_ENVIRONMENT: Production
-      ConnectionStrings__EventDb: "Server=sqlserver-event,1433;Database=EventDb;User Id=sa;Password=${DB_PASSWORD};TrustServerCertificate=True"
-      RabbitMq__Host: rabbitmq
-      RabbitMq__VirtualHost: /
-      RabbitMq__Username: ${RABBITMQ_USER}
-      RabbitMq__Password: ${RABBITMQ_PASS}
-      Jwt__Secret: ${JWT_SECRET}
-      Jwt__Issuer: ${JWT_ISSUER}
-      Jwt__Audience: ${JWT_AUDIENCE}
-    depends_on:
-      sqlserver-event:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-    mem_limit: 768m
-    cpus: 0.75
+      - "1025:1025"
+      - "8025:8025"
     restart: unless-stopped
     networks:
       - geoevent-network
@@ -202,21 +169,32 @@ services:
     build:
       context: .
       dockerfile: src/UserService/UserService.API/Dockerfile
-    image: geoevent-user-service
+    image: geoevent-user-service:1.0.0
     container_name: geoevent-user-service
     ports:
       - "5001:8080"
     environment:
-      ASPNETCORE_ENVIRONMENT: Production
-      ConnectionStrings__UserDb: "Server=sqlserver-user,1433;Database=UserDb;User Id=sa;Password=${DB_PASSWORD};TrustServerCertificate=True"
-      RabbitMq__Host: rabbitmq
-      RabbitMq__VirtualHost: /
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT}
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__UserDb: ${USER_DB_CONNECTION}
+      RabbitMq__Host: ${RABBITMQ_HOST}
+      RabbitMq__VirtualHost: ${RABBITMQ_VHOST}
       RabbitMq__Username: ${RABBITMQ_USER}
       RabbitMq__Password: ${RABBITMQ_PASS}
-      Jwt__Secret: ${JWT_SECRET}
+      Jwt__Secret: ${JWT_SECRET_KEY}
       Jwt__Issuer: ${JWT_ISSUER}
       Jwt__Audience: ${JWT_AUDIENCE}
-      Services__EventServiceBaseUrl: http://event-service:8080
+      Services__EventService: ${EVENT_SERVICE_BASE_URL}
+      Cors__AllowedOrigins__0: ${CORS_ORIGIN_0}
+      Cors__AllowedOrigins__1: ${CORS_ORIGIN_1}
+      Cors__AllowedOrigins__2: ${CORS_ORIGIN_2}
+      Smtp__Host: ${SMTP_HOST}
+      Smtp__Port: ${SMTP_PORT}
+      Smtp__FromEmail: ${SMTP_FROM_EMAIL}
+      Smtp__FromName: ${SMTP_FROM_NAME}
+      Smtp__EnableSsl: ${SMTP_ENABLE_SSL}
+      Smtp__Username: ${SMTP_USERNAME}
+      Smtp__Password: ${SMTP_PASSWORD}
     depends_on:
       sqlserver-user:
         condition: service_healthy
@@ -224,8 +202,44 @@ services:
         condition: service_healthy
       event-service:
         condition: service_started
-    mem_limit: 768m
-    cpus: 0.75
+      mailhog:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - geoevent-network
+
+  event-service:
+    build:
+      context: .
+      dockerfile: src/EventService/EventService.API/Dockerfile
+    image: geoevent-event-service:1.0.0
+    container_name: geoevent-event-service
+    ports:
+      - "5002:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT}
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__EventDb: ${EVENT_DB_CONNECTION}
+      RabbitMq__Host: ${RABBITMQ_HOST}
+      RabbitMq__VirtualHost: ${RABBITMQ_VHOST}
+      RabbitMq__Username: ${RABBITMQ_USER}
+      RabbitMq__Password: ${RABBITMQ_PASS}
+      Jwt__Secret: ${JWT_SECRET_KEY}
+      Jwt__Issuer: ${JWT_ISSUER}
+      Jwt__Audience: ${JWT_AUDIENCE}
+      Services__UserServiceBaseUrl: ${USER_SERVICE_BASE_URL}
+      Cors__AllowedOrigins__0: ${CORS_ORIGIN_0}
+      Cors__AllowedOrigins__1: ${CORS_ORIGIN_1}
+      Cors__AllowedOrigins__2: ${CORS_ORIGIN_2}
+      SupabaseStorage__Url: ${SUPABASE_URL}
+      SupabaseStorage__ServiceRoleKey: ${SUPABASE_SERVICE_ROLE_KEY}
+      SupabaseStorage__Bucket: ${SUPABASE_BUCKET}
+      SupabaseStorage__Folder: ${SUPABASE_FOLDER}
+    depends_on:
+      sqlserver-event:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
     restart: unless-stopped
     networks:
       - geoevent-network
@@ -234,27 +248,35 @@ services:
     build:
       context: .
       dockerfile: src/TicketService/TicketService.API/Dockerfile
-    image: geoevent-ticket-service
+    image: geoevent-ticket-service:1.0.0
     container_name: geoevent-ticket-service
     ports:
       - "5003:8080"
     environment:
-      ASPNETCORE_ENVIRONMENT: Production
-      ConnectionStrings__TicketDb: "Server=sqlserver-ticket,1433;Database=TicketDb;User Id=sa;Password=${DB_PASSWORD};TrustServerCertificate=True"
-      RabbitMq__Host: rabbitmq
-      RabbitMq__VirtualHost: /
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT}
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__TicketDb: ${TICKET_DB_CONNECTION}
+      RabbitMq__Host: ${RABBITMQ_HOST}
+      RabbitMq__VirtualHost: ${RABBITMQ_VHOST}
       RabbitMq__Username: ${RABBITMQ_USER}
       RabbitMq__Password: ${RABBITMQ_PASS}
-      Jwt__Secret: ${JWT_SECRET}
+      Jwt__Secret: ${JWT_SECRET_KEY}
       Jwt__Issuer: ${JWT_ISSUER}
       Jwt__Audience: ${JWT_AUDIENCE}
+      Services__UserService: ${USER_SERVICE_BASE_URL}
+      Services__EventService: ${EVENT_SERVICE_BASE_URL}
+      Cors__AllowedOrigins__0: ${CORS_ORIGIN_0}
+      Cors__AllowedOrigins__1: ${CORS_ORIGIN_1}
+      Cors__AllowedOrigins__2: ${CORS_ORIGIN_2}
     depends_on:
       sqlserver-ticket:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
-    mem_limit: 640m
-    cpus: 0.60
+      user-service:
+        condition: service_started
+      event-service:
+        condition: service_started
     restart: unless-stopped
     networks:
       - geoevent-network
@@ -263,27 +285,39 @@ services:
     build:
       context: .
       dockerfile: src/NotificationService/NotificationService.API/Dockerfile
-    image: geoevent-notification-service
+    image: geoevent-notification-service:1.0.0
     container_name: geoevent-notification-service
     ports:
       - "5004:8080"
     environment:
-      ASPNETCORE_ENVIRONMENT: Production
-      ConnectionStrings__NotificationDb: "Server=sqlserver-notification,1433;Database=NotificationDb;User Id=sa;Password=${DB_PASSWORD};TrustServerCertificate=True"
-      RabbitMq__Host: rabbitmq
-      RabbitMq__VirtualHost: /
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT}
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__NotificationDb: ${NOTIFICATION_DB_CONNECTION}
+      RabbitMq__Host: ${RABBITMQ_HOST}
+      RabbitMq__VirtualHost: ${RABBITMQ_VHOST}
       RabbitMq__Username: ${RABBITMQ_USER}
       RabbitMq__Password: ${RABBITMQ_PASS}
-      Jwt__Secret: ${JWT_SECRET}
+      Jwt__Secret: ${JWT_SECRET_KEY}
       Jwt__Issuer: ${JWT_ISSUER}
       Jwt__Audience: ${JWT_AUDIENCE}
+      Cors__AllowedOrigins__0: ${CORS_ORIGIN_0}
+      Cors__AllowedOrigins__1: ${CORS_ORIGIN_1}
+      Cors__AllowedOrigins__2: ${CORS_ORIGIN_2}
+      Smtp__Host: ${SMTP_HOST}
+      Smtp__Port: ${SMTP_PORT}
+      Smtp__FromEmail: ${SMTP_FROM_EMAIL}
+      Smtp__FromName: ${SMTP_FROM_NAME}
+      Smtp__EnableSsl: ${SMTP_ENABLE_SSL}
+      Smtp__Username: ${SMTP_USERNAME}
+      Smtp__Password: ${SMTP_PASSWORD}
+      InternalApi__Key: ${INTERNAL_API_KEY}
     depends_on:
       sqlserver-notification:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
-    mem_limit: 640m
-    cpus: 0.60
+      mailhog:
+        condition: service_started
     restart: unless-stopped
     networks:
       - geoevent-network
@@ -292,27 +326,36 @@ services:
     build:
       context: .
       dockerfile: src/MessageService/MessageService.API/Dockerfile
-    image: geoevent-message-service
+    image: geoevent-message-service:1.0.0
     container_name: geoevent-message-service
     ports:
       - "5005:8080"
     environment:
-      ASPNETCORE_ENVIRONMENT: Production
-      ConnectionStrings__MessageDb: "Server=sqlserver-message,1433;Database=MessageDb;User Id=sa;Password=${DB_PASSWORD};TrustServerCertificate=True"
-      RabbitMq__Host: rabbitmq
-      RabbitMq__VirtualHost: /
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT}
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__MessageDb: ${MESSAGE_DB_CONNECTION}
+      RabbitMq__Host: ${RABBITMQ_HOST}
+      RabbitMq__VirtualHost: ${RABBITMQ_VHOST}
       RabbitMq__Username: ${RABBITMQ_USER}
       RabbitMq__Password: ${RABBITMQ_PASS}
-      Jwt__Secret: ${JWT_SECRET}
+      Jwt__Secret: ${JWT_SECRET_KEY}
       Jwt__Issuer: ${JWT_ISSUER}
       Jwt__Audience: ${JWT_AUDIENCE}
+      Cors__AllowedOrigins__0: ${CORS_ORIGIN_0}
+      Cors__AllowedOrigins__1: ${CORS_ORIGIN_1}
+      Cors__AllowedOrigins__2: ${CORS_ORIGIN_2}
+      Services__UserServiceBaseUrl: ${USER_SERVICE_BASE_URL}
+      Services__EventServiceBaseUrl: ${EVENT_SERVICE_BASE_URL}
+      InternalApi__Key: ${INTERNAL_API_KEY}
     depends_on:
       sqlserver-message:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
-    mem_limit: 768m
-    cpus: 0.75
+      user-service:
+        condition: service_started
+      event-service:
+        condition: service_started
     restart: unless-stopped
     networks:
       - geoevent-network
@@ -321,21 +364,79 @@ services:
     build:
       context: .
       dockerfile: src/LocationService/LocationService.API/Dockerfile
-    image: geoevent-location-service
+    image: geoevent-location-service:1.0.0
     container_name: geoevent-location-service
     ports:
       - "5006:8080"
     environment:
-      ASPNETCORE_ENVIRONMENT: Production
-      ConnectionStrings__LocationDb: "Server=sqlserver-location,1433;Database=LocationDb;User Id=sa;Password=${DB_PASSWORD};TrustServerCertificate=True"
-      Jwt__Secret: ${JWT_SECRET}
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT}
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__LocationDb: ${LOCATION_DB_CONNECTION}
+      Jwt__Secret: ${JWT_SECRET_KEY}
       Jwt__Issuer: ${JWT_ISSUER}
       Jwt__Audience: ${JWT_AUDIENCE}
+      Cors__AllowedOrigins__0: ${CORS_ORIGIN_0}
+      Cors__AllowedOrigins__1: ${CORS_ORIGIN_1}
+      Cors__AllowedOrigins__2: ${CORS_ORIGIN_2}
     depends_on:
       sqlserver-location:
         condition: service_healthy
-    mem_limit: 640m
-    cpus: 0.60
+    restart: unless-stopped
+    networks:
+      - geoevent-network
+
+  helper-workers:
+    build:
+      context: .
+      dockerfile: src/HelperWorkers/GeoEvent.HelperWorkers/Dockerfile
+    image: geoevent-helper-workers:1.0.0
+    container_name: geoevent-helper-workers
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT}
+      DOTNET_ENVIRONMENT: ${DOTNET_ENVIRONMENT}
+      ConnectionStrings__UserDb: ${USER_DB_CONNECTION}
+      ConnectionStrings__NotificationDb: ${NOTIFICATION_DB_CONNECTION}
+      ConnectionStrings__TicketDb: ${TICKET_DB_CONNECTION}
+      RabbitMq__Host: ${RABBITMQ_HOST}
+      RabbitMq__VirtualHost: ${RABBITMQ_VHOST}
+      RabbitMq__Username: ${RABBITMQ_USER}
+      RabbitMq__Password: ${RABBITMQ_PASS}
+      Jwt__Secret: ${JWT_SECRET_KEY}
+      Jwt__Issuer: ${JWT_ISSUER}
+      Jwt__Audience: ${JWT_AUDIENCE}
+      Smtp__Host: ${SMTP_HOST}
+      Smtp__Port: ${SMTP_PORT}
+      Smtp__FromEmail: ${SMTP_FROM_EMAIL}
+      Smtp__FromName: ${SMTP_FROM_NAME}
+      Smtp__UseSsl: ${SMTP_ENABLE_SSL}
+      Smtp__Username: ${SMTP_USERNAME}
+      Smtp__Password: ${SMTP_PASSWORD}
+      Services__EventService: ${EVENT_SERVICE_BASE_URL}
+      Services__NotificationService__BaseUrl: ${NOTIFICATION_SERVICE_BASE_URL}
+      Services__NotificationService__InternalApiKey: ${INTERNAL_API_KEY}
+      Services__MessageService__BaseUrl: ${MESSAGE_SERVICE_BASE_URL}
+      Services__MessageService__InternalApiKey: ${INTERNAL_API_KEY}
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      sqlserver-user:
+        condition: service_healthy
+      sqlserver-ticket:
+        condition: service_healthy
+      sqlserver-notification:
+        condition: service_healthy
+      user-service:
+        condition: service_started
+      event-service:
+        condition: service_started
+      ticket-service:
+        condition: service_started
+      notification-service:
+        condition: service_started
+      message-service:
+        condition: service_started
+      mailhog:
+        condition: service_started
     restart: unless-stopped
     networks:
       - geoevent-network
@@ -344,21 +445,24 @@ services:
     build:
       context: .
       dockerfile: src/ApiGateway/ApiGateway/Dockerfile
-    image: geoevent-api-gateway
+    image: geoevent-api-gateway:1.0.0
     container_name: geoevent-api-gateway
     ports:
       - "5000:8080"
     environment:
-      ASPNETCORE_ENVIRONMENT: Production
-      Jwt__SecretKey: ${JWT_SECRET}
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT}
+      ASPNETCORE_URLS: http://+:8080
+      Jwt__Secret: ${JWT_SECRET_KEY}
       Jwt__Issuer: ${JWT_ISSUER}
       Jwt__Audience: ${JWT_AUDIENCE}
-      ReverseProxy__Clusters__user-cluster__Destinations__user-service__Address: http://user-service:8080
-      ReverseProxy__Clusters__event-cluster__Destinations__event-service__Address: http://event-service:8080
-      ReverseProxy__Clusters__ticket-cluster__Destinations__ticket-service__Address: http://ticket-service:8080
-      ReverseProxy__Clusters__notification-cluster__Destinations__notification-service__Address: http://notification-service:8080
-      ReverseProxy__Clusters__message-cluster__Destinations__message-service__Address: http://message-service:8080
-      ReverseProxy__Clusters__location-cluster__Destinations__location-service__Address: http://location-service:8080
+      Cors__AllowedOrigins__0: ${CORS_ORIGIN_0}
+      Cors__AllowedOrigins__1: ${CORS_ORIGIN_1}
+      Cors__AllowedOrigins__2: ${CORS_ORIGIN_2}
+      ReverseProxy__Clusters__user-cluster__Destinations__user-service__Address: ${USER_SERVICE_BASE_URL}
+      ReverseProxy__Clusters__event-cluster__Destinations__event-service__Address: ${EVENT_SERVICE_BASE_URL}
+      ReverseProxy__Clusters__ticket-cluster__Destinations__ticket-service__Address: ${TICKET_SERVICE_BASE_URL}
+      ReverseProxy__Clusters__notification-cluster__Destinations__notification-service__Address: ${NOTIFICATION_SERVICE_BASE_URL}
+      ReverseProxy__Clusters__message-cluster__Destinations__message-service__Address: ${MESSAGE_SERVICE_BASE_URL}
     depends_on:
       user-service:
         condition: service_started
@@ -370,10 +474,6 @@ services:
         condition: service_started
       message-service:
         condition: service_started
-      location-service:
-        condition: service_started
-    mem_limit: 512m
-    cpus: 0.50
     restart: unless-stopped
     networks:
       - geoevent-network

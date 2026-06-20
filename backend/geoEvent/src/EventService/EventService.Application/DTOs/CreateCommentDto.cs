@@ -8,7 +8,7 @@ public class CreateCommentDto
     public int EventId { get; set; }
 
     [Required]
-    [MaxLength(2000)]
+    [MaxLength(1000)]
     public string Content { get; set; } = string.Empty;
 
     public int? ParentCommentId { get; set; }

@@ -11,10 +11,8 @@ public class RefreshToken
     public string? DeviceInfo { get; set; }
     public string? IpAddress { get; set; }
 
-    // Navigation
     public User? User { get; set; }
 
-    // Domain logic
     public bool IsExpired() => DateTime.UtcNow >= ExpiresAt;
     public bool IsRevoked() => RevokedAt.HasValue;
     public bool IsActive() => !IsExpired() && !IsRevoked();

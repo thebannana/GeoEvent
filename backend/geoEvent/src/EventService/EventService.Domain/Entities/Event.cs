@@ -1,95 +1,224 @@
 ﻿using EventService.Domain.Enums;
+using EventService.Domain.Exceptions;
 
 namespace EventService.Domain.Entities;
 
 public class Event
 {
-    public int EventId { get; set; }
-    public int? OrganizerId { get; set; }
-    public int? VenueId { get; set; }
-    public int? CityId { get; set; }
-    public string Title { get; set; } = string.Empty;
-    public string Description { get; set; } = string.Empty;
-    public decimal Latitude { get; set; }
-    public decimal Longitude { get; set; }
-    public DateTime StartDateTime { get; set; }
-    public DateTime EndDateTime { get; set; }
-    public int Capacity { get; set; } = 0;
-    public decimal Price { get; set; } = 0;
-    public EventStatus Status { get; set; } = EventStatus.Draft;
-    public bool IsOnline { get; set; } = false;
-    public bool IsFeatured { get; set; } = false;
-    public int ViewCount { get; set; } = 0;
-    public int LikesCount { get; set; } = 0;
-    public string? Tags { get; set; }
-    public string? ExternalUrl { get; set; }
-    public string? ExternalSource { get; set; }
-    public string? ExternalId { get; set; }
-    public string? AccessibilityInfo { get; set; }
-    public string? PromoterName { get; set; }
-    public string Locale { get; set; } = "bs-BA";
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-    public DateTime? UpdatedAt { get; set; }
-    public int? SegmentId { get; set; }
-    public int? GenreId { get; set; }
-    public int? SubGenreId { get; set; }
+    public int EventId { get; private set; }
+    public int OrganizerId { get; private set; }
 
-    // Navigation
-    public Segment? Segment { get; set; }
-    public Genre? Genre { get; set; }
-    public SubGenre? SubGenre { get; set; }
-    public Venue? Venue { get; set; }
-    public ICollection<EventImage> Images { get; set; } = [];
-    public ICollection<EventLike> Likes { get; set; } = [];
-    public ICollection<Bookmark> Bookmarks { get; set; } = [];
-    public ICollection<Comment> Comments { get; set; } = [];
+    public int SegmentId { get; private set; }
+    public int GenreId { get; private set; }
+    public int? SubGenreId { get; private set; }
 
-    // Domain logic
+    public string Title { get; private set; } = string.Empty;
+    public string Description { get; private set; } = string.Empty;
+
+    public decimal Latitude { get; private set; }
+    public decimal Longitude { get; private set; }
+
+    public DateTime StartDateTime { get; private set; }
+    public DateTime EndDateTime { get; private set; }
+
+    public int Capacity { get; private set; }
+    public decimal Price { get; private set; }
+
+    public EventStatus Status { get; private set; } = EventStatus.Pending;
+    public bool IsOnline { get; private set; }
+    public bool IsFeatured { get; private set; }
+
+    public int ViewCount { get; private set; }
+    public int LikesCount { get; private set; }
+
+    public string? Tags { get; private set; }
+    public string? ExternalUrl { get; private set; }
+    public string? ExternalSource { get; private set; }
+    public string? ExternalId { get; private set; }
+    public string? AccessibilityInfo { get; private set; }
+    public string? PromoterName { get; private set; }
+    public string Locale { get; private set; } = "bs-BA";
+
+    public DateTime CreatedAt { get; private set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; private set; }
+
+    public Segment? Segment { get; private set; }
+    public Genre? Genre { get; private set; }
+    public SubGenre? SubGenre { get; private set; }
+
+    public ICollection<EventImage> Images { get; private set; } = [];
+    public ICollection<EventLike> Likes { get; private set; } = [];
+    public ICollection<Bookmark> Bookmarks { get; private set; } = [];
+    public ICollection<Comment> Comments { get; private set; } = [];
+
+    private Event() { }
+
+    public Event(
+        int organizerId,
+        int segmentId,
+        int genreId,
+        int? subGenreId,
+        string title,
+        string description,
+        decimal latitude,
+        decimal longitude,
+        DateTime startDateTime,
+        DateTime endDateTime,
+        int capacity,
+        decimal price,
+        bool isOnline,
+        bool isFeatured,
+        string? tags = null,
+        string? externalUrl = null,
+        string? externalSource = null,
+        string? externalId = null,
+        string? accessibilityInfo = null,
+        string? promoterName = null,
+        string? locale = null)
+    {
+        ValidateCoreData(
+            organizerId,
+            segmentId,
+            genreId,
+            title,
+            description,
+            latitude,
+            longitude,
+            startDateTime,
+            endDateTime,
+            capacity,
+            price);
+
+        OrganizerId = organizerId;
+        SegmentId = segmentId;
+        GenreId = genreId;
+        SubGenreId = subGenreId;
+        Title = title.Trim();
+        Description = description.Trim();
+        Latitude = latitude;
+        Longitude = longitude;
+        StartDateTime = startDateTime;
+        EndDateTime = endDateTime;
+        Capacity = capacity;
+        Price = price;
+        IsOnline = isOnline;
+        IsFeatured = isFeatured;
+        Tags = Normalize(tags);
+        ExternalUrl = Normalize(externalUrl);
+        ExternalSource = Normalize(externalSource);
+        ExternalId = Normalize(externalId);
+        AccessibilityInfo = Normalize(accessibilityInfo);
+        PromoterName = Normalize(promoterName);
+        Locale = string.IsNullOrWhiteSpace(locale) ? "bs-BA" : locale.Trim();
+    }
+
+    public void UpdateDetails(
+        int segmentId,
+        int genreId,
+        int? subGenreId,
+        string title,
+        string description,
+        decimal latitude,
+        decimal longitude,
+        DateTime startDateTime,
+        DateTime endDateTime,
+        int capacity,
+        decimal price,
+        bool isOnline,
+        bool isFeatured,
+        string? tags = null,
+        string? externalUrl = null,
+        string? externalSource = null,
+        string? externalId = null,
+        string? accessibilityInfo = null,
+        string? promoterName = null,
+        string? locale = null)
+    {
+        ValidateCoreData(
+            OrganizerId,
+            segmentId,
+            genreId,
+            title,
+            description,
+            latitude,
+            longitude,
+            startDateTime,
+            endDateTime,
+            capacity,
+            price);
+
+        SegmentId = segmentId;
+        GenreId = genreId;
+        SubGenreId = subGenreId;
+        Title = title.Trim();
+        Description = description.Trim();
+        Latitude = latitude;
+        Longitude = longitude;
+        StartDateTime = startDateTime;
+        EndDateTime = endDateTime;
+        Capacity = capacity;
+        Price = price;
+        IsOnline = isOnline;
+        IsFeatured = isFeatured;
+        Tags = Normalize(tags);
+        ExternalUrl = Normalize(externalUrl);
+        ExternalSource = Normalize(externalSource);
+        ExternalId = Normalize(externalId);
+        AccessibilityInfo = Normalize(accessibilityInfo);
+        PromoterName = Normalize(promoterName);
+        Locale = string.IsNullOrWhiteSpace(locale) ? "bs-BA" : locale.Trim();
+        UpdatedAt = DateTime.UtcNow;
+    }
+
     public bool IsUpcoming() => StartDateTime > DateTime.UtcNow;
     public bool IsPast() => EndDateTime < DateTime.UtcNow;
-    public bool IsActive() => Status == EventStatus.Active;
+    public bool IsActive() => Status == EventStatus.Confirmed;
 
     public bool CanBePublished() =>
-        Status == EventStatus.Draft &&
+        Status == EventStatus.Pending &&
         !string.IsNullOrWhiteSpace(Title) &&
-        StartDateTime > DateTime.UtcNow;
-
-    public bool CanBeCancelled() =>
-        Status == EventStatus.Active ||
-        Status == EventStatus.Draft ||
-        Status == EventStatus.Postponed;
+        !string.IsNullOrWhiteSpace(Description) &&
+        StartDateTime > DateTime.UtcNow &&
+        EndDateTime > StartDateTime &&
+        Capacity >= 0 &&
+        Price >= 0;
 
     public void Publish()
     {
         if (!CanBePublished())
-            throw new InvalidOperationException(
-                "Event cannot be published in its current state.");
-        Status = EventStatus.Active;
+            throw new InvalidEventStateException("Only a valid pending event can be published.");
+
+        Status = EventStatus.Confirmed;
         UpdatedAt = DateTime.UtcNow;
     }
 
     public void Cancel()
     {
-        if (!CanBeCancelled())
-            throw new InvalidOperationException(
-                "Event cannot be cancelled in its current state.");
-        Status = EventStatus.Cancelled;
-        UpdatedAt = DateTime.UtcNow;
-    }
+        if (Status is not (EventStatus.Pending or EventStatus.Confirmed))
+            throw new InvalidEventStateException("Only pending or confirmed events can be cancelled.");
 
-    public void Postpone()
-    {
-        if (Status != EventStatus.Active)
-            throw new InvalidOperationException("Only active events can be postponed.");
-        Status = EventStatus.Postponed;
+        Status = EventStatus.Cancelled;
         UpdatedAt = DateTime.UtcNow;
     }
 
     public void Complete()
     {
-        if (Status != EventStatus.Active)
-            throw new InvalidOperationException("Only active events can be completed.");
+        if (Status != EventStatus.Confirmed)
+            throw new InvalidEventStateException("Only confirmed events can be completed.");
+
         Status = EventStatus.Completed;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void MarkAsFeatured()
+    {
+        IsFeatured = true;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void UnmarkAsFeatured()
+    {
+        IsFeatured = false;
         UpdatedAt = DateTime.UtcNow;
     }
 
@@ -97,4 +226,57 @@ public class Event
 
     public void IncrementLike() => LikesCount++;
     public void DecrementLike() => LikesCount = Math.Max(0, LikesCount - 1);
+
+    private static void ValidateCoreData(
+        int organizerId,
+        int segmentId,
+        int genreId,
+        string title,
+        string description,
+        decimal latitude,
+        decimal longitude,
+        DateTime startDateTime,
+        DateTime endDateTime,
+        int capacity,
+        decimal price)
+    {
+        if (organizerId <= 0)
+            throw new InvalidEventDataException("OrganizerId must be greater than 0.");
+
+        if (segmentId <= 0)
+            throw new InvalidEventDataException("SegmentId must be greater than 0.");
+
+        if (genreId <= 0)
+            throw new InvalidEventDataException("GenreId must be greater than 0.");
+
+        if (string.IsNullOrWhiteSpace(title))
+            throw new InvalidEventDataException("Title is required.");
+
+        if (title.Trim().Length > 200)
+            throw new InvalidEventDataException("Title cannot be longer than 200 characters.");
+
+        if (string.IsNullOrWhiteSpace(description))
+            throw new InvalidEventDataException("Description is required.");
+
+        if (description.Trim().Length > 4000)
+            throw new InvalidEventDataException("Description cannot be longer than 4000 characters.");
+
+        if (latitude < -90 || latitude > 90)
+            throw new InvalidEventDataException("Latitude must be between -90 and 90.");
+
+        if (longitude < -180 || longitude > 180)
+            throw new InvalidEventDataException("Longitude must be between -180 and 180.");
+
+        if (endDateTime <= startDateTime)
+            throw new InvalidEventDataException("EndDateTime must be greater than StartDateTime.");
+
+        if (capacity < 0)
+            throw new InvalidEventDataException("Capacity cannot be negative.");
+
+        if (price < 0)
+            throw new InvalidEventDataException("Price cannot be negative.");
+    }
+
+    private static string? Normalize(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }

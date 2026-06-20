@@ -2,24 +2,24 @@ using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.Interfaces.Services;
 using TicketService.Infrastructure.Persistence;
 using TicketService.Infrastructure.Repositories;
 using TicketService.Infrastructure.Services;
-using TicketService.Infrastructure.Consumers;
 
 namespace TicketService.Infrastructure;
 
 public static class DependencyInjection
 {
-    public static IServiceCollection AddInfrastructure(
-        this IServiceCollection services,
-        IConfiguration configuration)
+    public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
+        var ticketDbConnectionString = configuration.GetConnectionString("TicketDb");
+        if (string.IsNullOrWhiteSpace(ticketDbConnectionString))
+            throw new InvalidOperationException("ConnectionStrings:TicketDb is not configured.");
+
         services.AddDbContext<TicketDbContext>(options =>
             options.UseSqlServer(
-                configuration.GetConnectionString("TicketDb"),
+                ticketDbConnectionString,
                 sqlOptions => sqlOptions.EnableRetryOnFailure(
                     maxRetryCount: 10,
                     maxRetryDelay: TimeSpan.FromSeconds(15),
@@ -28,6 +28,7 @@ public static class DependencyInjection
         services.AddScoped<ITicketRepository, TicketRepository>();
         services.AddScoped<ITicketService, TicketServiceImpl>();
         services.AddScoped<IEventAuthorizationService, EventAuthorizationService>();
+        services.AddHttpClient<IPayPalService, PayPalService>();
 
         var userServiceUrl = configuration["Services:UserService"];
         if (string.IsNullOrWhiteSpace(userServiceUrl))
@@ -47,22 +48,29 @@ public static class DependencyInjection
             client.BaseAddress = new Uri(eventServiceUrl);
         });
 
+        var rabbitMqHost = configuration["RabbitMq:Host"];
+        var rabbitMqVirtualHost = configuration["RabbitMq:VirtualHost"] ?? "/";
+        var rabbitMqUsername = configuration["RabbitMq:Username"];
+        var rabbitMqPassword = configuration["RabbitMq:Password"];
+
+        if (string.IsNullOrWhiteSpace(rabbitMqHost))
+            throw new InvalidOperationException("RabbitMq:Host is not configured.");
+        if (string.IsNullOrWhiteSpace(rabbitMqUsername))
+            throw new InvalidOperationException("RabbitMq:Username is not configured.");
+        if (string.IsNullOrWhiteSpace(rabbitMqPassword))
+            throw new InvalidOperationException("RabbitMq:Password is not configured.");
+
         services.AddMassTransit(x =>
         {
-            x.AddConsumer<EventCreatedConsumer>();
+            x.SetKebabCaseEndpointNameFormatter();
 
-            x.UsingRabbitMq((ctx, cfg) =>
+            x.UsingRabbitMq((context, cfg) =>
             {
-                cfg.Host(
-                    configuration["RabbitMq:Host"],
-                    configuration["RabbitMq:VirtualHost"],
-                    h =>
-                    {
-                        h.Username(configuration["RabbitMq:Username"]!);
-                        h.Password(configuration["RabbitMq:Password"]!);
-                    });
-
-                cfg.ConfigureEndpoints(ctx);
+                cfg.Host(rabbitMqHost, rabbitMqVirtualHost, h =>
+                {
+                    h.Username(rabbitMqUsername);
+                    h.Password(rabbitMqPassword);
+                });
             });
         });
 

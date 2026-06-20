@@ -1,6 +1,6 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using EventService.Domain.Entities;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
-using EventService.Domain.Entities;
 
 namespace EventService.Infrastructure.Persistence.Configurations;
 
@@ -8,7 +8,12 @@ public class GenreConfiguration : IEntityTypeConfiguration<Genre>
 {
     public void Configure(EntityTypeBuilder<Genre> builder)
     {
+        builder.ToTable("Genres");
+
         builder.HasKey(g => g.GenreId);
+
+        builder.Property(g => g.SegmentId)
+            .IsRequired();
 
         builder.Property(g => g.Name)
             .HasMaxLength(100)
@@ -26,5 +31,7 @@ public class GenreConfiguration : IEntityTypeConfiguration<Genre>
         builder.HasIndex(g => g.IsActive);
         builder.HasIndex(g => g.SegmentId);
         builder.HasIndex(g => new { g.SegmentId, g.IsActive });
+        builder.HasIndex(g => new { g.SegmentId, g.Name })
+            .IsUnique();
     }
 }

@@ -14,7 +14,6 @@ try
 {
     var builder = WebApplication.CreateBuilder(args);
 
-    // Serilog
     if (!builder.Environment.IsEnvironment("Testing"))
     {
         builder.Host.UseSerilog((ctx, cfg) =>
@@ -22,7 +21,6 @@ try
                .WriteTo.Console());
     }
 
-    // Forwarded headers for proxy/container environments
     builder.Services.Configure<ForwardedHeadersOptions>(options =>
     {
         options.ForwardedHeaders =
@@ -34,11 +32,10 @@ try
         options.KnownProxies.Clear();
     });
 
-    // YARP Reverse Proxy
-    builder.Services.AddReverseProxy()
+    builder.Services
+        .AddReverseProxy()
         .LoadFromConfig(builder.Configuration.GetSection("ReverseProxy"));
 
-    // JWT Authentication
     var jwtSettings = builder.Configuration.GetSection("Jwt");
     var issuer = jwtSettings["Issuer"];
     var audience = jwtSettings["Audience"];
@@ -55,7 +52,7 @@ try
         .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         .AddJwtBearer(options =>
         {
-            options.RequireHttpsMetadata = !builder.Environment.IsDevelopment();
+            options.RequireHttpsMetadata = false;
             options.SaveToken = false;
 
             options.TokenValidationParameters = new TokenValidationParameters
@@ -68,7 +65,8 @@ try
                 ValidAudience = audience,
                 IssuerSigningKey = new SymmetricSecurityKey(
                     Encoding.UTF8.GetBytes(secretKey)),
-                ClockSkew = TimeSpan.Zero
+                ClockSkew = TimeSpan.Zero,
+                RoleClaimType = "role"
             };
 
             options.Events = new JwtBearerEvents
@@ -93,9 +91,12 @@ try
     {
         options.AddPolicy("authenticated", policy =>
             policy.RequireAuthenticatedUser());
+
+        options.AddPolicy("admin", policy =>
+            policy.RequireAuthenticatedUser()
+                  .RequireRole("Admin"));
     });
 
-    // Rate Limiting
     builder.Services.AddMemoryCache();
     builder.Services.Configure<IpRateLimitOptions>(
         builder.Configuration.GetSection("IpRateLimiting"));
@@ -104,24 +105,24 @@ try
     builder.Services.AddInMemoryRateLimiting();
     builder.Services.AddSingleton<IRateLimitConfiguration, RateLimitConfiguration>();
 
-    // CORS
+    var corsOrigins = builder.Configuration
+        .GetSection("Cors:AllowedOrigins")
+        .Get<string[]>();
+
+    if (corsOrigins == null || corsOrigins.Length == 0)
+        throw new InvalidOperationException("Cors:AllowedOrigins is not configured.");
+
     builder.Services.AddCors(options =>
     {
         options.AddPolicy("GeoEventCors", policy =>
         {
-            policy
-                .WithOrigins(
-                    "http://localhost:3000",
-                    "https://localhost:3000",
-                    "http://localhost:5173",
-                    "https://localhost:5173")
-                .AllowAnyHeader()
-                .AllowAnyMethod()
-                .AllowCredentials();
+            policy.WithOrigins(corsOrigins)
+                  .AllowAnyHeader()
+                  .AllowAnyMethod()
+                  .AllowCredentials();
         });
     });
 
-    // OpenAPI
     builder.Services.AddOpenApi();
 
     var app = builder.Build();
@@ -132,8 +133,6 @@ try
     }
 
     app.UseForwardedHeaders();
-
-    // Security headers
     app.UseMiddleware<SecurityHeadersMiddleware>();
 
     if (!app.Environment.IsDevelopment())
@@ -141,14 +140,9 @@ try
         app.UseHsts();
     }
 
-    app.UseHttpsRedirection();
-
     app.UseRouting();
-
     app.UseCors("GeoEventCors");
-
     app.UseIpRateLimiting();
-
     app.UseAuthentication();
     app.UseAuthorization();
 

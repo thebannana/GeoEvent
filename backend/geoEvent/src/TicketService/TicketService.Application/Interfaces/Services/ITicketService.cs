@@ -6,11 +6,11 @@ namespace TicketService.Application.Interfaces.Services;
 public interface ITicketService
 {
     Task<ServiceResult<bool>> RemoveAttendeeReservationAsync(
-    int eventId,
-    int reservationId,
-    int requesterId,
-    string requesterRole);
-    // Reservations
+        int eventId,
+        int reservationId,
+        int requesterId,
+        string requesterRole);
+
     Task<ServiceResult<ReservationResponseDto>> CreateReservationAsync(
         CreateReservationDto dto, int userId);
 
@@ -19,8 +19,7 @@ public interface ITicketService
 
     Task<ServiceResult<List<EventAttendeePreviewDto>>> GetPublicEventAttendeesAsync(int eventId);
     Task<ServiceResult<bool>> CancelReservationAsync(int reservationId, int userId);
-    Task<ServiceResult<ReservationResponseDto>> GetReservationAsync(
-        int reservationId, int userId);
+    Task<ServiceResult<ReservationResponseDto>> GetReservationAsync(int reservationId, int userId);
 
     Task<ServiceResult<PagedResult<ReservationResponseDto>>> GetUserReservationsAsync(
         int userId, ReservationFilterDto filter);
@@ -38,16 +37,9 @@ public interface ITicketService
         int requesterId,
         string requesterRole);
 
-    Task<ServiceResult<ReservationResponseDto>> CompleteCheckoutAsync(
-    CompleteCheckoutDto dto,
-    int userId);
-
-    // Event tickets
     Task<ServiceResult<List<EventTicketResponseDto>>> GetEventTicketsAsync(int eventId);
-
     Task<ServiceResult<EventTicketResponseDto>> GetEventTicketAsync(int eventId, int eventTicketId);
 
-    // Issued tickets
     Task<ServiceResult<TicketResponseDto>> GetTicketAsync(int ticketId, int userId);
 
     Task<ServiceResult<PagedResult<TicketResponseDto>>> GetUserTicketsAsync(
@@ -57,17 +49,15 @@ public interface ITicketService
         int reservationId, int userId);
 
     Task<ServiceResult<TicketScanResultDto>> ValidateTicketScanAsync(
-    ValidateTicketScanDto dto,
-    int validatorUserId,
-    string validatorRole);
+        ValidateTicketScanDto dto,
+        int validatorUserId,
+        string validatorRole);
 
     Task<ServiceResult<bool>> CancelTicketAsync(int ticketId, int userId);
 
-    // Payments
     Task<ServiceResult<List<PaymentDetailResponseDto>>> GetReservationPaymentsAsync(
         int reservationId, int userId);
 
-    // Consumers
     Task CancelUserReservationsAsync(int userId);
     Task CancelTicketsByEventAsync(int eventId);
 }

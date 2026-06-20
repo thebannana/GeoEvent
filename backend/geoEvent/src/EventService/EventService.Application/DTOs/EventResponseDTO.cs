@@ -1,4 +1,6 @@
-﻿public class EventResponseDto
+﻿namespace EventService.Application.DTOs;
+
+public class EventResponseDto
 {
     public int EventId { get; set; }
     public int? OrganizerId { get; set; }
@@ -9,9 +11,6 @@
     public string? GenreName { get; set; }
     public int? SubGenreId { get; set; }
     public string? SubGenreName { get; set; }
-    public int? VenueId { get; set; }
-    public string? VenueName { get; set; }
-    public int? CityId { get; set; }
     public string Title { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
     public decimal Latitude { get; set; }

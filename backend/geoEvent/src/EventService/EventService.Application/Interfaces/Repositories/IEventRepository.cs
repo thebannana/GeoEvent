@@ -8,7 +8,7 @@ public interface IEventRepository
 {
     Task IncrementViewCountAsync(int eventId);
     Task<List<Event>> GetPublicCandidatesAsync(EventFilterDto filter, int take = 200);
-    // ── Events ────────────────────────────────────────────────
+
     Task<Event?> GetByIdAsync(int eventId);
     Task<Event?> GetByIdWithDetailsAsync(int eventId);
     Task<PagedResult<Event>> GetAllAsync(EventFilterDto filter);
@@ -18,49 +18,32 @@ public interface IEventRepository
     Task DeleteAsync(int eventId);
     Task<bool> ExistsAsync(int eventId);
 
-    // ── Likes ─────────────────────────────────────────────────
     Task<bool> IsLikedByUserAsync(int eventId, int userId);
     Task LikeAsync(int eventId, int userId);
     Task UnlikeAsync(int eventId, int userId);
     Task<List<EventLike>> GetLikedEventsByUserAsync(int userId);
 
-    // ── Images ────────────────────────────────────────────────
     Task AddImageAsync(EventImage image);
     Task DeleteImageAsync(int imageId);
     Task<EventImage?> GetImageAsync(int imageId);
     Task<List<EventImage>> GetEventImagesAsync(int eventId);
     Task SetCoverImageAsync(int eventId, int imageId);
 
-    // ── Segments ──────────────────────────────────────────────
-    // Segments
     Task<List<Segment>> GetAllSegmentsAsync();
     Task<Segment?> GetSegmentByIdAsync(int segmentId);
     Task<Segment> CreateSegmentAsync(Segment segment);
     Task UpdateSegmentAsync(Segment segment);
 
-    // Genres
     Task<List<Genre>> GetGenresBySegmentAsync(int segmentId);
     Task<Genre?> GetGenreByIdAsync(int genreId);
     Task<Genre> CreateGenreAsync(Genre genre);
     Task UpdateGenreAsync(Genre genre);
 
-    // SubGenres
     Task<List<SubGenre>> GetSubGenresByGenreAsync(int genreId);
     Task<SubGenre?> GetSubGenreByIdAsync(int subGenreId);
     Task<SubGenre> CreateSubGenreAsync(SubGenre subGenre);
     Task UpdateSubGenreAsync(SubGenre subGenre);
 
-    // ── Venues ────────────────────────────────────────────────
-    Task<Venue?> GetVenueByIdAsync(int venueId);
-    Task<List<Venue>> GetVenuesByCityAsync(int cityId);
-    Task<Venue> CreateVenueAsync(Venue venue);
-
-    // ── PriceZones ────────────────────────────────────────────
-    Task<List<PriceZone>> GetPriceZonesByVenueAsync(int venueId);
-    Task<PriceZone?> GetPriceZoneByIdAsync(int priceZoneId);
-    Task<PriceZone> CreatePriceZoneAsync(PriceZone priceZone);
-
-    // ── Bookmarks ─────────────────────────────────────────────
     Task<Bookmark?> GetBookmarkByIdAsync(int bookmarkId);
     Task<Bookmark?> GetBookmarkByUserAndEventAsync(int userId, int eventId);
     Task<List<Bookmark>> GetUserBookmarksAsync(int userId);
@@ -68,7 +51,6 @@ public interface IEventRepository
     Task UpdateBookmarkAsync(Bookmark bookmark);
     Task DeleteBookmarkAsync(Bookmark bookmark);
 
-    // ── Comments ──────────────────────────────────────────────
     Task<Comment?> GetCommentByIdAsync(int commentId);
     Task<List<Comment>> GetEventCommentsAsync(int eventId);
     Task<Comment> CreateCommentAsync(Comment comment);

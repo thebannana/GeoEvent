@@ -1,5 +1,4 @@
-﻿using System.Net;
-using System.Text.Json;
+﻿using System.Text.Json;
 using UserService.Domain.Exceptions;
 
 namespace UserService.API.Middleware;
@@ -37,10 +36,6 @@ public class ExceptionMiddleware
         {
             await Write(context, StatusCodes.Status423Locked, ex.Message);
         }
-        catch (EmailNotVerifiedException ex)
-        {
-            await Write(context, StatusCodes.Status403Forbidden, ex.Message);
-        }
         catch (EmailAlreadyTakenException ex)
         {
             await Write(context, StatusCodes.Status409Conflict, ex.Message);
@@ -50,6 +45,10 @@ public class ExceptionMiddleware
             await Write(context, StatusCodes.Status409Conflict, ex.Message);
         }
         catch (InvalidRefreshTokenException ex)
+        {
+            await Write(context, StatusCodes.Status401Unauthorized, ex.Message);
+        }
+        catch (UnauthorizedAccessException ex)
         {
             await Write(context, StatusCodes.Status401Unauthorized, ex.Message);
         }

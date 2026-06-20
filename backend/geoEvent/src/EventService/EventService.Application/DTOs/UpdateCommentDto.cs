@@ -5,6 +5,6 @@ namespace EventService.Application.DTOs;
 public class UpdateCommentDto
 {
     [Required]
-    [MaxLength(2000)]
+    [MaxLength(1000)]
     public string Content { get; set; } = string.Empty;
 }

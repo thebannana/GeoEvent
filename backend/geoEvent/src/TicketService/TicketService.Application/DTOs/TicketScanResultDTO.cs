@@ -3,7 +3,7 @@
 public class TicketScanResultDto
 {
     public bool IsValid { get; set; }
-    public string Status { get; set; } = string.Empty; // valid, already_used, invalid, wrong_event, cancelled
+    public string Status { get; set; } = string.Empty;
     public string Message { get; set; } = string.Empty;
 
     public int? TicketId { get; set; }

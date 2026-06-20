@@ -1,7 +1,6 @@
 using MassTransit;
 using MessageService.Application.Interfaces.Repositories;
 using MessageService.Application.Interfaces.Services;
-using MessageService.Infrastructure.Consumers;
 using MessageService.Infrastructure.Persistence;
 using MessageService.Infrastructure.Repositories;
 using MessageService.Infrastructure.Services;
@@ -15,25 +14,35 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
+        var messageDbConnectionString = configuration.GetConnectionString("MessageDb");
+        if (string.IsNullOrWhiteSpace(messageDbConnectionString))
+            throw new InvalidOperationException("ConnectionStrings:MessageDb is not configured.");
+
         services.AddDbContext<MessageDbContext>(options =>
             options.UseSqlServer(
-                configuration.GetConnectionString("MessageDb"),
+                messageDbConnectionString,
                 sqlOptions => sqlOptions.EnableRetryOnFailure(
                     maxRetryCount: 10,
                     maxRetryDelay: TimeSpan.FromSeconds(15),
                     errorNumbersToAdd: null)));
 
+        var userServiceBaseUrl = configuration["Services:UserServiceBaseUrl"];
+        if (string.IsNullOrWhiteSpace(userServiceBaseUrl))
+            throw new InvalidOperationException("Services:UserServiceBaseUrl is not configured.");
+
+        var eventServiceBaseUrl = configuration["Services:EventServiceBaseUrl"];
+        if (string.IsNullOrWhiteSpace(eventServiceBaseUrl))
+            throw new InvalidOperationException("Services:EventServiceBaseUrl is not configured.");
+
         services.AddHttpClient<IUserDirectoryClient, UserDirectoryClient>(client =>
         {
-            var baseUrl = configuration["Services:UserServiceBaseUrl"] ?? "http://user-service:8080";
-            client.BaseAddress = new Uri(baseUrl);
+            client.BaseAddress = new Uri(userServiceBaseUrl);
             client.Timeout = TimeSpan.FromSeconds(10);
         });
 
         services.AddHttpClient<IEventDirectoryClient, EventDirectoryClient>(client =>
         {
-            var baseUrl = configuration["Services:EventServiceBaseUrl"] ?? "http://event-service:8080";
-            client.BaseAddress = new Uri(baseUrl);
+            client.BaseAddress = new Uri(eventServiceBaseUrl);
             client.Timeout = TimeSpan.FromSeconds(10);
         });
 
@@ -41,21 +50,29 @@ public static class DependencyInjection
         services.AddScoped<IChatService, ChatServiceImpl>();
         services.AddSingleton<IUserPresenceTracker, InMemoryUserPresenceTracker>();
 
+        var rabbitMqHost = configuration["RabbitMq:Host"];
+        var rabbitMqVirtualHost = configuration["RabbitMq:VirtualHost"] ?? "/";
+        var rabbitMqUsername = configuration["RabbitMq:Username"];
+        var rabbitMqPassword = configuration["RabbitMq:Password"];
+
+        if (string.IsNullOrWhiteSpace(rabbitMqHost))
+            throw new InvalidOperationException("RabbitMq:Host is not configured.");
+        if (string.IsNullOrWhiteSpace(rabbitMqUsername))
+            throw new InvalidOperationException("RabbitMq:Username is not configured.");
+        if (string.IsNullOrWhiteSpace(rabbitMqPassword))
+            throw new InvalidOperationException("RabbitMq:Password is not configured.");
+
         services.AddMassTransit(x =>
         {
-            x.AddConsumer<UserDeletedConsumer>();
-            x.AddConsumer<ReservationConfirmedConsumer>();
-            x.AddConsumer<ReservationCancelledIntegrationConsumer>();
+            x.SetKebabCaseEndpointNameFormatter();
 
-            x.UsingRabbitMq((ctx, cfg) =>
+            x.UsingRabbitMq((context, cfg) =>
             {
-                cfg.Host(configuration["RabbitMq:Host"], configuration["RabbitMq:VirtualHost"], h =>
+                cfg.Host(rabbitMqHost, rabbitMqVirtualHost, h =>
                 {
-                    h.Username(configuration["RabbitMq:Username"]!);
-                    h.Password(configuration["RabbitMq:Password"]!);
+                    h.Username(rabbitMqUsername);
+                    h.Password(rabbitMqPassword);
                 });
-
-                cfg.ConfigureEndpoints(ctx);
             });
         });
 

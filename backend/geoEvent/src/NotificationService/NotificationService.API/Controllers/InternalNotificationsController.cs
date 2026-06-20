@@ -7,7 +7,7 @@ namespace NotificationService.API.Controllers;
 
 [ApiController]
 [Route("api/internal/notifications")]
-[ApiKeyAuth]                           // custom attribute — see below
+[ApiKeyAuth]
 public class InternalNotificationsController : ControllerBase
 {
     private readonly INotificationService _notificationService;
@@ -21,15 +21,7 @@ public class InternalNotificationsController : ControllerBase
     public async Task<IActionResult> Create([FromBody] CreateNotificationDto dto)
     {
         var result = await _notificationService.CreateNotificationAsync(dto);
-        return result.Success
-            ? StatusCode(StatusCodes.Status201Created, result.Data)
-            : StatusCode(result.StatusCode, new { error = result.Error });
-    }
 
-    [HttpPost("queue")]
-    public async Task<IActionResult> Queue([FromBody] QueueNotificationDto dto)
-    {
-        var result = await _notificationService.QueueNotificationAsync(dto);
         return result.Success
             ? StatusCode(StatusCodes.Status201Created, result.Data)
             : StatusCode(result.StatusCode, new { error = result.Error });

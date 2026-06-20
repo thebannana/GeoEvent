@@ -11,8 +11,9 @@ public class ConfirmReservationDto
     [Required]
     public PaymentMethod PaymentMethod { get; set; }
 
-    [Required]
-    public decimal Amount { get; set; }
+    public string Currency { get; set; } = "BAM";
 
-    public string Currency { get; set; } = "EUR";
+    public string? ProviderPaymentId { get; set; }
+
+    public string? ProviderOrderId { get; set; }
 }

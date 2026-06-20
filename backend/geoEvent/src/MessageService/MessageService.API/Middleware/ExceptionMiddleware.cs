@@ -1,5 +1,4 @@
 ﻿using System.Text.Json;
-using MessageService.Domain.Exceptions;
 
 namespace MessageService.API.Middleware;
 
@@ -20,31 +19,14 @@ public class ExceptionMiddleware
         {
             await _next(context);
         }
-        catch (MessageNotFoundException ex)
+        catch (UnauthorizedAccessException ex)
         {
-            await Write(context, StatusCodes.Status404NotFound, ex.Message);
-        }
-        catch (MessageAccessDeniedException ex)
-        {
-            await Write(context, StatusCodes.Status403Forbidden, ex.Message);
-        }
-        catch (MessageAlreadyDeletedException ex)
-        {
-            await Write(context, StatusCodes.Status409Conflict, ex.Message);
-        }
-        catch (CannotMessageYourselfException ex)
-        {
-            await Write(context, StatusCodes.Status400BadRequest, ex.Message);
-        }
-        catch (MessageEditNotAllowedException ex)
-        {
-            await Write(context, StatusCodes.Status403Forbidden, ex.Message);
+            await Write(context, StatusCodes.Status401Unauthorized, ex.Message);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unhandled exception: {Message}", ex.Message);
-            await Write(context, StatusCodes.Status500InternalServerError,
-                "An unexpected error occurred.");
+            await Write(context, StatusCodes.Status500InternalServerError, "An unexpected error occurred.");
         }
     }
 
@@ -52,7 +34,6 @@ public class ExceptionMiddleware
     {
         context.Response.StatusCode = statusCode;
         context.Response.ContentType = "application/json";
-        return context.Response.WriteAsync(
-            JsonSerializer.Serialize(new { error = message }));
+        return context.Response.WriteAsync(JsonSerializer.Serialize(new { error = message }));
     }
 }

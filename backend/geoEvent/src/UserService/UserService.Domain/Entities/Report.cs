@@ -17,12 +17,9 @@ public class Report
     public string? ResolutionNote { get; set; }
     public string? ModeratorAction { get; set; }
 
-
-    // Navigation
     public User? Reporter { get; set; }
     public User? ResolvedBy { get; set; }
 
-    // Domain logic
     public void Resolve(int resolvedById)
     {
         Status = ReportStatus.Resolved;

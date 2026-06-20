@@ -13,10 +13,12 @@ namespace TicketService.API.Controllers;
 public class ReservationsController : ControllerBase
 {
     private readonly ITicketService _ticketService;
+    private readonly IPayPalService _payPalService;
 
-    public ReservationsController(ITicketService ticketService)
+    public ReservationsController(ITicketService ticketService, IPayPalService payPalService)
     {
         _ticketService = ticketService;
+        _payPalService = payPalService;
     }
 
     [AllowAnonymous]
@@ -45,17 +47,6 @@ public class ReservationsController : ControllerBase
             : StatusCode(result.StatusCode, new { error = result.Error });
     }
 
-    [HttpPost("checkout")]
-    public async Task<IActionResult> CompleteCheckout([FromBody] CompleteCheckoutDto dto)
-    {
-        var userId = User.GetUserId();
-        var result = await _ticketService.CompleteCheckoutAsync(dto, userId);
-
-        return result.Success
-            ? Ok(result.Data)
-            : StatusCode(result.StatusCode, new { error = result.Error });
-    }
-
     [HttpPost("{reservationId:int}/confirm")]
     public async Task<IActionResult> Confirm(int reservationId, [FromBody] ConfirmReservationDto dto)
     {
@@ -75,6 +66,57 @@ public class ReservationsController : ControllerBase
 
         return result.Success
             ? NoContent()
+            : StatusCode(result.StatusCode, new { error = result.Error });
+    }
+
+    [HttpPost("{reservationId:int}/paypal-order")]
+    public async Task<IActionResult> CreatePayPalOrder(int reservationId)
+    {
+        var userId = User.GetUserId();
+        var res = await _ticketService.GetReservationAsync(reservationId, userId);
+        if (!res.Success || res.Data == null)
+            return StatusCode(res.StatusCode, new { error = res.Error });
+
+        if (res.Data.Status != TicketService.Domain.Enums.ReservationStatus.Pending.ToString())
+            return BadRequest(new { error = "Reservation is not pending." });
+
+        var orderResult = await _payPalService.CreateOrderAsync(res.Data.TotalAmount, res.Data.Currency, reservationId.ToString());
+        return orderResult.Success
+            ? Ok(orderResult.Data)
+            : StatusCode(orderResult.StatusCode, new { error = orderResult.Error });
+    }
+
+    [HttpPost("{reservationId:int}/paypal-capture")]
+    public async Task<IActionResult> CapturePayPalOrder(int reservationId, [FromBody] CapturePayPalOrderDto dto)
+    {
+        var userId = User.GetUserId();
+        var captureResult = await _payPalService.CaptureOrderAsync(dto.OrderId);
+        
+        if (!captureResult.Success || captureResult.Data == null)
+            return StatusCode(captureResult.StatusCode, new { error = captureResult.Error });
+
+        if (captureResult.Data.Status != "COMPLETED")
+            return BadRequest(new { error = "PayPal order not completed." });
+
+        var confirmDto = new ConfirmReservationDto
+        {
+            PaymentReference = captureResult.Data.Id,
+            ProviderPaymentId = captureResult.Data.Id,
+            ProviderOrderId = dto.OrderId,
+            PaymentMethod = TicketService.Domain.Enums.PaymentMethod.PayPal,
+            Currency = "EUR" // Usually need to get from reservation or default, but let's assume EUR or from res
+        };
+
+        var res = await _ticketService.GetReservationAsync(reservationId, userId);
+        if (res.Success && res.Data != null)
+        {
+            confirmDto.Currency = res.Data.Currency;
+        }
+
+        var result = await _ticketService.ConfirmReservationAsync(reservationId, confirmDto, userId);
+
+        return result.Success
+            ? Ok(result.Data)
             : StatusCode(result.StatusCode, new { error = result.Error });
     }
 
@@ -176,4 +218,9 @@ public class ReservationsController : ControllerBase
             ? Ok(result.Data)
             : StatusCode(result.StatusCode, new { error = result.Error });
     }
+}
+
+public class CapturePayPalOrderDto
+{
+    public string OrderId { get; set; } = string.Empty;
 }

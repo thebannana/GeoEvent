@@ -41,7 +41,6 @@ public class TicketsController : ControllerBase
     }
 
     [HttpPost("validate")]
-    [Authorize(Roles = "Admin,User")]
     public async Task<IActionResult> Validate([FromBody] ValidateTicketScanDto dto)
     {
         if (dto == null || string.IsNullOrWhiteSpace(dto.QrCode))

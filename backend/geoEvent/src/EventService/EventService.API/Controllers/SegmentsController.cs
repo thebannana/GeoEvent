@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using EventService.API.Security;
 using EventService.Application.DTOs;
 using EventService.Application.Interfaces.Services;
 
@@ -44,7 +45,7 @@ public class SegmentsController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = AppRoles.Admin)]
     public async Task<IActionResult> Create([FromBody] CreateSegmentDto dto)
     {
         var result = await _eventService.CreateSegmentAsync(dto);
@@ -54,7 +55,7 @@ public class SegmentsController : ControllerBase
     }
 
     [HttpPut("{segmentId:int}")]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = AppRoles.Admin)]
     public async Task<IActionResult> Update(int segmentId, [FromBody] UpdateSegmentDto dto)
     {
         var result = await _eventService.UpdateSegmentAsync(segmentId, dto);

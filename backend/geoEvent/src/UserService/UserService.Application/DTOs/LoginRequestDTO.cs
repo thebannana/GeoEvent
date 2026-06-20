@@ -7,7 +7,7 @@ public class LoginRequestDto
 {
     [Required]
     [JsonPropertyName("emailOrUsername")]
-    public string Identifier { get; set; } = string.Empty; // email or username
+    public string Identifier { get; set; } = string.Empty;
 
     [Required]
     public string Password { get; set; } = string.Empty;

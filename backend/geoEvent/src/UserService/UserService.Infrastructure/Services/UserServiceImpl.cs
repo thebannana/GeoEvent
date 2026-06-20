@@ -1,4 +1,4 @@
-﻿using System.Security.Cryptography;
+using System.Security.Cryptography;
 using MassTransit;
 using Shared.Contracts.Users;
 using UserService.Application.Common;
@@ -128,7 +128,6 @@ public class UserServiceImpl : IUserService
             LastName = user.Person?.LastName ?? string.Empty,
             ImageUrl = string.IsNullOrWhiteSpace(user.Person?.ImageUrl) ? null : user.Person.ImageUrl,
             CityName = null,
-            IsVerified = user.IsVerified,
             EventsCount = 0,
             FollowersCount = 0,
             FollowingCount = 0,
@@ -149,14 +148,7 @@ public class UserServiceImpl : IUserService
         if (distinctIds.Count == 0)
             return new List<CommentUserProfileDto>();
 
-        var users = new List<UserService.Domain.Entities.User>();
-
-        foreach (var id in distinctIds)
-        {
-            var user = await _userRepository.GetByIdAsync(id);
-            if (user is not null)
-                users.Add(user);
-        }
+        var users = await _userRepository.GetPublicByIdsAsync(distinctIds);
 
         return users.Select(u => new CommentUserProfileDto
         {
@@ -166,9 +158,7 @@ public class UserServiceImpl : IUserService
             AvatarUrl = string.IsNullOrWhiteSpace(u.Person?.ImageUrl) ? null : u.Person.ImageUrl
         }).ToList();
     }
-    public async Task<ServiceResult<UserProfileDto>> UpdateProfileAsync(
-    int userId,
-    UpdateProfileDto request)
+    public async Task<ServiceResult<UserProfileDto>> UpdateProfileAsync(int userId, UpdateProfileDto request)
     {
         var user = await _userRepository.GetByIdAsync(userId);
         if (user is null)
@@ -201,17 +191,6 @@ public class UserServiceImpl : IUserService
                     throw new EmailAlreadyTakenException(normalizedEmail);
 
                 user.Email = normalizedEmail;
-
-                user.IsVerified = false;
-                user.EmailVerifiedAt = null;
-                user.EmailVerificationToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(64));
-                user.EmailVerificationTokenExpiresAt = DateTime.UtcNow.AddHours(24);
-
-                await _publishEndpoint.Publish(new EmailVerificationRequestedMessage(
-                    user.PersonId,
-                    user.Email,
-                    user.EmailVerificationToken,
-                    user.EmailVerificationTokenExpiresAt.Value));
             }
         }
 
@@ -233,6 +212,7 @@ public class UserServiceImpl : IUserService
         person.UpdatedAt = DateTime.UtcNow;
 
         await _userRepository.UpdateAsync(user);
+
         return ServiceResult<UserProfileDto>.Ok(MapToProfile(user));
     }
 
@@ -268,17 +248,6 @@ public class UserServiceImpl : IUserService
         return ServiceResult<bool>.Ok(true);
     }
 
-    public async Task<ServiceResult<bool>> VerifyEmailAsync(string token)
-    {
-        var user = await _userRepository.GetByVerificationTokenAsync(token);
-        if (user is null || !user.IsEmailVerificationTokenValid(token))
-            return ServiceResult<bool>.Unauthorized("Invalid or expired verification token.");
-
-        user.VerifyEmail();
-        await _userRepository.UpdateAsync(user);
-        return ServiceResult<bool>.Ok(true);
-    }
-
     public async Task<ServiceResult<bool>> ChangePasswordAsync(int userId, ChangePasswordDto dto)
     {
         var user = await _userRepository.GetByIdAsync(userId);
@@ -308,49 +277,6 @@ public class UserServiceImpl : IUserService
             PageSize = result.PageSize
         };
         return ServiceResult<PagedResult<UserProfileDto>>.Ok(mapped);
-    }
-
-    public async Task<ServiceResult<bool>> AdminVerifyUserAsync(int userId)
-    {
-        var user = await _userRepository.GetByIdAsync(userId);
-        if (user is null) return ServiceResult<bool>.NotFound($"User {userId} not found.");
-
-        user.IsVerified = true;
-        user.EmailVerifiedAt = DateTime.UtcNow;
-        user.EmailVerificationToken = null;
-        user.EmailVerificationTokenExpiresAt = null;
-        await _userRepository.UpdateAsync(user);
-
-        return ServiceResult<bool>.Ok(true);
-    }
-
-    public async Task<ServiceResult<List<ActivityLogResponseDto>>> GetUserActivityLogsAsync(int userId, int page, int pageSize)
-    {
-        var logs = await _userRepository.GetUserActivityLogsAsync(userId, page, pageSize);
-        return ServiceResult<List<ActivityLogResponseDto>>.Ok(logs.Select(MapActivityLog).ToList());
-    }
-
-    public async Task<ServiceResult<ActivityLogResponseDto>> LogActivityAsync(
-        int userId,
-        ActivityActionType actionType,
-        ActivityTargetType targetType,
-        int targetId,
-        string metadata,
-        Guid sessionId)
-    {
-        var log = new ActivityLog
-        {
-            UserId = userId,
-            ActionType = actionType,
-            TargetType = targetType,
-            TargetId = targetId,
-            Metadata = metadata,
-            SessionId = sessionId,
-            CreatedAt = DateTime.UtcNow
-        };
-
-        var created = await _userRepository.CreateActivityLogAsync(log);
-        return ServiceResult<ActivityLogResponseDto>.Ok(MapActivityLog(created));
     }
 
     public async Task<ServiceResult<List<UserPreferenceResponseDto>>> GetUserPreferencesAsync(int userId)
@@ -393,8 +319,8 @@ public class UserServiceImpl : IUserService
         var prefs = await _userRepository.GetUserPreferencesAsync(userId);
         var pref = prefs.FirstOrDefault(p => p.PrefId == prefId);
 
-        if (pref is null) return ServiceResult<bool>.NotFound("Preference not found.");
-        if (pref.UserId != userId) return ServiceResult<bool>.Forbidden("Not your preference.");
+        if (pref is null)
+            return ServiceResult<bool>.NotFound("Preference not found.");
 
         await _userRepository.DeletePreferenceAsync(pref);
         return ServiceResult<bool>.Ok(true);
@@ -587,7 +513,6 @@ public class UserServiceImpl : IUserService
         LastName = user.Person?.LastName ?? string.Empty,
         ImageUrl = string.IsNullOrWhiteSpace(user.Person?.ImageUrl) ? null : user.Person.ImageUrl,
         CityName = null,
-        IsVerified = user.IsVerified,
         AverageRating = averageRating,
         RatingsCount = ratingsCount,
         MyRating = myRating
@@ -612,7 +537,6 @@ public class UserServiceImpl : IUserService
                 LastName = user.Person?.LastName ?? string.Empty,
                 ImageUrl = string.IsNullOrWhiteSpace(user.Person?.ImageUrl) ? null : user.Person.ImageUrl,
                 CityName = null,
-                IsVerified = user.IsVerified,
                 EventsCount = 0,
                 FollowersCount = 0,
                 FollowingCount = 0,
@@ -701,7 +625,6 @@ public class UserServiceImpl : IUserService
             PhoneNumber = person.PhoneNumber,
             ImageUrl = person.ImageUrl,
             Role = user.Role.ToString(),
-            IsVerified = user.IsVerified,
             CreatedAt = user.CreatedAt,
             CityId = person.CityId,
             CityName = null
@@ -716,7 +639,6 @@ public class UserServiceImpl : IUserService
         LastName = user.Person?.LastName ?? string.Empty,
         ImageUrl = string.IsNullOrWhiteSpace(user.Person?.ImageUrl) ? null : user.Person.ImageUrl,
         CityName = null,
-        IsVerified = user.IsVerified,
         EventsCount = 0,
         FollowersCount = 0,
         FollowingCount = 0,
@@ -724,20 +646,6 @@ public class UserServiceImpl : IUserService
         RatingsCount = 0,
         MyRating = null,
         MyReviewComment = null
-    };
-
-    private static ActivityLogResponseDto MapActivityLog(ActivityLog a) => new()
-    {
-        LogId = a.LogId,
-        TargetId = a.TargetId,
-        SessionId = a.SessionId,
-        ActionType = a.ActionType.ToString(),
-        TargetType = a.TargetType.ToString(),
-        Metadata = a.Metadata,
-        UserId = a.UserId,
-        SegmentId = a.SegmentId,
-        GenreId = a.GenreId,
-        CreatedAt = a.CreatedAt
     };
     private static UserPreferenceResponseDto MapPreference(UserPreference p) => new()
     {

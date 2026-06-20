@@ -1,39 +1,71 @@
-﻿using System.Text;
-using System.Threading.RateLimiting;
+﻿using DotNetEnv;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.RateLimiting;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using System.Text;
+using System.Threading.RateLimiting;
+using UserService.API.Extensions;
 using UserService.API.Middleware;
 using UserService.Infrastructure;
 using UserService.Infrastructure.Persistence;
-using UserService.API.Extensions;
+
+static string? FindSharedEnvFile(string startDirectory)
+{
+    var directory = new DirectoryInfo(startDirectory);
+
+    while (directory is not null)
+    {
+        var candidate = Path.Combine(directory.FullName, ".env");
+        if (File.Exists(candidate))
+            return candidate;
+
+        directory = directory.Parent;
+    }
+
+    return null;
+}
 
 var builder = WebApplication.CreateBuilder(args);
 
-// ── Infrastructure ─────────────────────────────────────────────
+if (builder.Environment.IsDevelopment())
+{
+    var sharedEnvPath = FindSharedEnvFile(builder.Environment.ContentRootPath);
+    if (!string.IsNullOrWhiteSpace(sharedEnvPath))
+    {
+        Env.Load(sharedEnvPath);
+    }
+}
+
+builder.Configuration.AddEnvironmentVariables();
 builder.Services.AddInfrastructure(builder.Configuration);
 
-// ── CORS ───────────────────────────────────────────────────────
+var allowedOrigins = builder.Configuration
+    .GetSection("Cors:AllowedOrigins")
+    .Get<string[]>()?
+    .Where(origin => !string.IsNullOrWhiteSpace(origin))
+    .Distinct(StringComparer.OrdinalIgnoreCase)
+    .ToArray()
+    ?? Array.Empty<string>();
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
+        if (allowedOrigins.Length == 0)
+            throw new InvalidOperationException("At least one CORS origin must be configured.");
+
         policy
-            .WithOrigins(
-                builder.Configuration.GetSection("Cors:AllowedOrigins")
-                    .Get<string[]>() ?? ["http://localhost:3000"])
+            .WithOrigins(allowedOrigins)
             .AllowAnyHeader()
             .AllowAnyMethod()
             .AllowCredentials();
     });
 });
 
-// ── Rate Limiting ──────────────────────────────────────────────
 builder.Services.AddRateLimiter(options =>
 {
-    // Global fixed window — 100 requests per minute per IP
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
     options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
         RateLimitPartition.GetFixedWindowLimiter(
             partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
@@ -42,40 +74,56 @@ builder.Services.AddRateLimiter(options =>
                 PermitLimit = 100,
                 Window = TimeSpan.FromMinutes(1),
                 QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
-                QueueLimit = 0
+                QueueLimit = 0,
+                AutoReplenishment = true
             }));
 
-    // Strict limiter for auth endpoints — 10 requests per minute per IP
-    options.AddFixedWindowLimiter("auth", opt =>
-    {
-        opt.PermitLimit = 10;
-        opt.Window = TimeSpan.FromMinutes(1);
-        opt.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
-        opt.QueueLimit = 0;
-    });
+    options.AddPolicy("auth", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(1),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
 
     options.OnRejected = async (context, token) =>
     {
         context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
         context.HttpContext.Response.ContentType = "application/json";
         await context.HttpContext.Response.WriteAsync(
-            "{\"error\": \"Too many requests. Please slow down.\"}", token);
+            "{\"error\":\"Too many requests. Please slow down.\"}",
+            token);
     };
 });
 
-// ── JWT Authentication ─────────────────────────────────────────
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+var jwtSecret = builder.Configuration["Jwt:Secret"];
+if (string.IsNullOrWhiteSpace(jwtSecret))
+    throw new InvalidOperationException("Missing configuration: Jwt:Secret");
+
+var jwtIssuer = builder.Configuration["Jwt:Issuer"];
+if (string.IsNullOrWhiteSpace(jwtIssuer))
+    throw new InvalidOperationException("Missing configuration: Jwt:Issuer");
+
+var jwtAudience = builder.Configuration["Jwt:Audience"];
+if (string.IsNullOrWhiteSpace(jwtAudience))
+    throw new InvalidOperationException("Missing configuration: Jwt:Audience");
+
+builder.Services
+    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuerSigningKey = true,
-            IssuerSigningKey = new SymmetricSecurityKey(
-                Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Secret"]!)),
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret)),
             ValidateIssuer = true,
-            ValidIssuer = builder.Configuration["Jwt:Issuer"],
+            ValidIssuer = jwtIssuer,
             ValidateAudience = true,
-            ValidAudience = builder.Configuration["Jwt:Audience"],
+            ValidAudience = jwtAudience,
             ValidateLifetime = true,
             ClockSkew = TimeSpan.Zero
         };
@@ -90,24 +138,23 @@ builder.Services.AddControllers()
 
 builder.Services.AddEndpointsApiExplorer();
 
-// ── Swagger with JWT support ───────────────────────────────────
 builder.Services.AddSwaggerGen(options =>
 {
     options.SwaggerDoc("v1", new OpenApiInfo
     {
         Title = "UserService API",
         Version = "v1",
-        Description = "Authentication and user management for geoEvent"
+        Description = "Authentication and user management for GeoEvent"
     });
 
     options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Name = "Authorization",
         Type = SecuritySchemeType.Http,
-        Scheme = "Bearer",
+        Scheme = "bearer",
         BearerFormat = "JWT",
         In = ParameterLocation.Header,
-        Description = "Enter your JWT token. Example: eyJhbGci..."
+        Description = "Enter Bearer {your JWT token}"
     });
 
     options.AddSecurityRequirement(new OpenApiSecurityRequirement
@@ -121,23 +168,29 @@ builder.Services.AddSwaggerGen(options =>
                     Id = "Bearer"
                 }
             },
-            []
+            Array.Empty<string>()
         }
     });
 });
 
 var app = builder.Build();
 
-// ── Middleware pipeline ────────────────────────────────────────
-app.UseMiddleware<SecurityHeadersMiddleware>();
 app.UseMiddleware<ExceptionMiddleware>();
+app.UseMiddleware<SecurityHeadersMiddleware>();
+
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHsts();
+}
+
+app.UseHttpsRedirection();
 app.UseCors("AllowFrontend");
+
 if (!app.Environment.IsEnvironment("Testing"))
 {
     app.UseRateLimiter();
 }
 
-// ── Always show Swagger if in develeopment ────────────────────────────────────────
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -148,9 +201,9 @@ if (app.Environment.IsDevelopment())
     });
 }
 
-
 app.UseAuthentication();
 app.UseAuthorization();
+
 app.MapControllers();
 
 await app.Services.InitializeDatabaseAsync<UserDbContext>(

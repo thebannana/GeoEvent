@@ -1,38 +1,69 @@
-﻿using System.Text;
+﻿using DotNetEnv;
+using System.Text;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using NotificationService.API.Extensions;
 using NotificationService.API.Middleware;
 using NotificationService.Infrastructure;
-using NotificationService.Infrastructure.BackgroundServices;
 using NotificationService.Infrastructure.Persistence;
-using NotificationService.API.Extensions;
+
+static string? FindSharedEnvFile(string startDirectory)
+{
+    var directory = new DirectoryInfo(startDirectory);
+
+    while (directory is not null)
+    {
+        var candidate = Path.Combine(directory.FullName, ".env");
+        if (File.Exists(candidate))
+            return candidate;
+
+        directory = directory.Parent;
+    }
+
+    return null;
+}
 
 var builder = WebApplication.CreateBuilder(args);
 
-// ── Infrastructure ─────────────────────────────────────────────
+if (builder.Environment.IsDevelopment())
+{
+    var sharedEnvPath = FindSharedEnvFile(builder.Environment.ContentRootPath);
+    if (!string.IsNullOrWhiteSpace(sharedEnvPath))
+    {
+        Env.Load(sharedEnvPath);
+    }
+}
+
+builder.Configuration.AddEnvironmentVariables();
 builder.Services.AddInfrastructure(builder.Configuration);
 
-// ── CORS ───────────────────────────────────────────────────────
+var allowedOrigins = builder.Configuration
+    .GetSection("Cors:AllowedOrigins")
+    .Get<string[]>()?
+    .Where(origin => !string.IsNullOrWhiteSpace(origin))
+    .Distinct(StringComparer.OrdinalIgnoreCase)
+    .ToArray()
+    ?? Array.Empty<string>();
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
+        if (allowedOrigins.Length == 0)
+            throw new InvalidOperationException("At least one CORS origin must be configured.");
+
         policy
-            .WithOrigins(
-                builder.Configuration.GetSection("Cors:AllowedOrigins")
-                    .Get<string[]>() ?? ["http://localhost:3000"])
+            .WithOrigins(allowedOrigins)
             .AllowAnyHeader()
             .AllowAnyMethod()
             .AllowCredentials();
     });
 });
 
-// ── Rate Limiting ──────────────────────────────────────────────
 builder.Services.AddRateLimiter(options =>
 {
     options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
@@ -43,7 +74,8 @@ builder.Services.AddRateLimiter(options =>
                 PermitLimit = 100,
                 Window = TimeSpan.FromMinutes(1),
                 QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
-                QueueLimit = 0
+                QueueLimit = 0,
+                AutoReplenishment = true
             }));
 
     options.OnRejected = async (context, token) =>
@@ -51,23 +83,35 @@ builder.Services.AddRateLimiter(options =>
         context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
         context.HttpContext.Response.ContentType = "application/json";
         await context.HttpContext.Response.WriteAsync(
-            "{\"error\": \"Too many requests. Please slow down.\"}", token);
+            "{\"error\":\"Too many requests. Please slow down.\"}",
+            token);
     };
 });
 
-// ── JWT Authentication ─────────────────────────────────────────
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+var jwtSecret = builder.Configuration["Jwt:Secret"];
+if (string.IsNullOrWhiteSpace(jwtSecret))
+    throw new InvalidOperationException("Jwt:Secret is not configured.");
+
+var jwtIssuer = builder.Configuration["Jwt:Issuer"];
+if (string.IsNullOrWhiteSpace(jwtIssuer))
+    throw new InvalidOperationException("Jwt:Issuer is not configured.");
+
+var jwtAudience = builder.Configuration["Jwt:Audience"];
+if (string.IsNullOrWhiteSpace(jwtAudience))
+    throw new InvalidOperationException("Jwt:Audience is not configured.");
+
+builder.Services
+    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuerSigningKey = true,
-            IssuerSigningKey = new SymmetricSecurityKey(
-                Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Secret"]!)),
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret)),
             ValidateIssuer = true,
-            ValidIssuer = builder.Configuration["Jwt:Issuer"],
+            ValidIssuer = jwtIssuer,
             ValidateAudience = true,
-            ValidAudience = builder.Configuration["Jwt:Audience"],
+            ValidAudience = jwtAudience,
             ValidateLifetime = true,
             ClockSkew = TimeSpan.Zero
         };
@@ -76,20 +120,17 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 builder.Services.AddAuthorization();
 
 builder.Services.AddControllers()
-    .AddJsonOptions(o =>
-        o.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+    .AddJsonOptions(o => o.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddHostedService<QueueProcessorBackgroundService>();
 
-// ── Swagger with JWT support ───────────────────────────────────
 builder.Services.AddSwaggerGen(options =>
 {
     options.SwaggerDoc("v1", new OpenApiInfo
     {
         Title = "NotificationService API",
         Version = "v1",
-        Description = "Notifications for geoEvent"
+        Description = "Notifications for GeoEvent"
     });
 
     options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
@@ -113,14 +154,13 @@ builder.Services.AddSwaggerGen(options =>
                     Id = "Bearer"
                 }
             },
-            []
+            Array.Empty<string>()
         }
     });
 });
 
 var app = builder.Build();
 
-// ── Middleware pipeline ────────────────────────────────────────
 app.UseMiddleware<SecurityHeadersMiddleware>();
 app.UseMiddleware<ExceptionMiddleware>();
 app.UseCors("AllowFrontend");
@@ -136,9 +176,9 @@ if (app.Environment.IsDevelopment())
     });
 }
 
-
 app.UseAuthentication();
 app.UseAuthorization();
+
 app.MapControllers();
 
 await app.Services.InitializeDatabaseAsync<NotificationDbContext>(

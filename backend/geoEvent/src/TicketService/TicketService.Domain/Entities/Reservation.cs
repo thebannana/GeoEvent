@@ -21,12 +21,10 @@ public class Reservation
     public string? PaymentReference { get; set; }
     public string? Notes { get; set; }
 
-    // Navigation
     public EventTicket? EventTicket { get; set; }
     public ICollection<Ticket> Tickets { get; set; } = [];
     public ICollection<PaymentDetail> PaymentDetails { get; set; } = [];
 
-    // Domain logic
     public bool IsExpired() =>
         Status == ReservationStatus.Pending && DateTime.UtcNow > ExpiresAt;
 
@@ -37,15 +35,6 @@ public class Reservation
         Status == ReservationStatus.Pending ||
         Status == ReservationStatus.Confirmed;
 
-    public void Confirm(string paymentReference)
-    {
-        if (!CanBeConfirmed())
-            throw new InvalidOperationException(
-                "Reservation cannot be confirmed in its current state.");
-        Status = ReservationStatus.Confirmed;
-        ConfirmedAt = DateTime.UtcNow;
-        PaymentReference = paymentReference;
-    }
 
     public void Cancel()
     {
@@ -56,14 +45,33 @@ public class Reservation
         CancelledAt = DateTime.UtcNow;
     }
 
+    public void Confirm(string paymentReference)
+    {
+        if (!CanBeConfirmed())
+            throw new InvalidOperationException("Reservation cannot be confirmed in its current state.");
+
+        if (string.IsNullOrWhiteSpace(paymentReference))
+            throw new ArgumentException("Payment reference is required.");
+
+        Status = ReservationStatus.Confirmed;
+        ConfirmedAt = DateTime.UtcNow;
+        PaymentReference = paymentReference;
+    }
+
     public void Expire()
     {
+        if (Status != ReservationStatus.Pending)
+            throw new InvalidOperationException("Only pending reservations can expire.");
+
         Status = ReservationStatus.Expired;
         ExpiredAt = DateTime.UtcNow;
     }
 
     public void Refund()
     {
+        if (Status != ReservationStatus.Confirmed)
+            throw new InvalidOperationException("Only confirmed reservations can be refunded.");
+
         Status = ReservationStatus.Refunded;
     }
 }

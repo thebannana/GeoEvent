@@ -18,13 +18,31 @@ public class UserProfileService : IUserProfileService
 
     public async Task<IReadOnlyList<UserPreferenceDto>> GetUserPreferencesAsync(int userId)
     {
-        var response = await _httpClient.GetAsync($"api/preferences/users/{userId}");
-
-        if (!response.IsSuccessStatusCode)
+        if (userId <= 0)
             return Array.Empty<UserPreferenceDto>();
 
-        var data = await response.Content.ReadFromJsonAsync<List<UserPreferenceDto>>();
-        return data ?? new List<UserPreferenceDto>();
+        try
+        {
+            var response = await _httpClient.GetAsync($"api/preferences/users/{userId}");
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning(
+                    "Failed to fetch user preferences. StatusCode: {StatusCode}, UserId: {UserId}",
+                    response.StatusCode,
+                    userId);
+
+                return Array.Empty<UserPreferenceDto>();
+            }
+
+            var data = await response.Content.ReadFromJsonAsync<List<UserPreferenceDto>>();
+            return data is not null ? data : [];
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error while fetching user preferences for user {UserId}.", userId);
+            return Array.Empty<UserPreferenceDto>();
+        }
     }
 
     public async Task<IReadOnlyDictionary<int, CommentUserProfileDto>> GetProfilesByIdsAsync(IEnumerable<int> userIds)

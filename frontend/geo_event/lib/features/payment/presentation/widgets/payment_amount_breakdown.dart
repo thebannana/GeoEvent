@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:geo_event/shared/payment/models/payment_summary.dart';
 
-import '../../../../core/widgets/app_surface_card.dart';
+import '../../../../core/widgets/surfaces/app_surface_card.dart';
 
 class PaymentAmountBreakdown extends StatelessWidget {
   final PaymentSummary summary;
@@ -54,7 +54,11 @@ class PaymentAmountBreakdown extends StatelessWidget {
           row('Subtotal', _formatPrice(summary.subtotal, summary.currency)),
           row('Service fee', _formatPrice(summary.serviceFee, summary.currency)),
           const Divider(height: 24),
-          row('Total', _formatPrice(summary.total, summary.currency), strong: true),
+          row(
+            'Total',
+            _formatPrice(summary.total, summary.currency),
+            strong: true,
+          ),
         ],
       ),
     );

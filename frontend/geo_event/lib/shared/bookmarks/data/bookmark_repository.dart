@@ -2,9 +2,9 @@ import '../models/bookmark.dart';
 import 'bookmark_api.dart';
 
 class BookmarkRepository {
-  final BookmarkApi _api;
-
   const BookmarkRepository(this._api);
+
+  final BookmarkApi _api;
 
   Future<List<Bookmark>> getBookmarks() => _api.getBookmarks();
 

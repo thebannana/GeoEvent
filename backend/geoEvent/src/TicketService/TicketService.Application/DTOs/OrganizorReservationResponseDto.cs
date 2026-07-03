@@ -18,4 +18,18 @@
 
     public string? ParticipantUsername { get; set; }
     public string? ParticipantAvatarUrl { get; set; }
+    public string? RefundRequestStatus { get; set; }
+    public string? RefundReason { get; set; }
+    public DateTime? RefundRequestedAt { get; set; }
+    public DateTime? RefundReviewedAt { get; set; }
+    public int? RefundReviewedByUserId { get; set; }
+    public string? RefundDecisionReason { get; set; }
+
+    public string? PaymentMethod { get; set; }
+    public string? PaymentStatus { get; set; }
+    public string? PaymentMessage { get; set; }
+    public bool HasIssuedTickets { get; set; }
+    public bool HasValidatedTicket { get; set; }
+    public DateTime? ValidatedAt { get; set; }
+    public bool CanCollectCash { get; set; }
 }

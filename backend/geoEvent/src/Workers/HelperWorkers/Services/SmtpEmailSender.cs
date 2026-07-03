@@ -1,8 +1,8 @@
 ﻿using System.Net;
 using System.Net.Mail;
-using GeoEvent.HelperWorkers.DTOs;
 using GeoEvent.HelperWorkers.Interfaces;
 using Microsoft.Extensions.Options;
+using NotificationService.Worker.Options;
 
 namespace GeoEvent.HelperWorkers.Services;
 

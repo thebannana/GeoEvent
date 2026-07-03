@@ -13,14 +13,20 @@ Future<void> main() async {
 
   final prefs = await SharedPreferences.getInstance();
 
-  const accessToken = String.fromEnvironment('ACCESS_TOKEN');
-  MapboxOptions.setAccessToken(accessToken);
+  const accessToken = String.fromEnvironment('MAPBOX_ACCESS_TOKEN');
+  if (accessToken.isNotEmpty) {
+    MapboxOptions.setAccessToken(accessToken);
+  }
+
+  final container = ProviderContainer(
+    overrides: [
+      sharedPreferencesProvider.overrideWithValue(prefs),
+    ],
+  );
 
   runApp(
-    ProviderScope(
-      overrides: [
-        sharedPreferencesProvider.overrideWithValue(prefs),
-      ],
+    UncontrolledProviderScope(
+      container: container,
       child: const GeoEventApp(),
     ),
   );
@@ -34,17 +40,12 @@ class GeoEventApp extends ConsumerStatefulWidget {
 }
 
 class _GeoEventAppState extends ConsumerState<GeoEventApp> {
-  bool _initialized = false;
-
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
+  void initState() {
+    super.initState();
 
-    if (_initialized) return;
-    _initialized = true;
-
-    Future.microtask(() async {
-      await ref.read(authStateProvider.notifier).restoreSession();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(authStateProvider.notifier).restoreSession();
     });
   }
 
@@ -52,8 +53,10 @@ class _GeoEventAppState extends ConsumerState<GeoEventApp> {
   Widget build(BuildContext context) {
     final themeMode = ref.watch(themeModeControllerProvider);
     final router = ref.watch(appRouterProvider);
+    final sessionUserId = ref.watch(sessionUserIdProvider);
 
     return MaterialApp.router(
+      key: ValueKey('app-session-$sessionUserId'),
       debugShowCheckedModeBanner: false,
       title: 'GeoEvent',
       themeMode: themeMode,

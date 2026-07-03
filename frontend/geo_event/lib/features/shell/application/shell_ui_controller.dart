@@ -55,7 +55,8 @@ class ShellUiController extends StateNotifier<ShellUiState> {
     ShellOverlayPage page, {
     bool fullScreen = false,
   }) {
-    if (state.overlayPage == page && state.isSheetOpen) {
+    final isSameOpenPage = state.overlayPage == page && state.isSheetOpen;
+    if (isSameOpenPage) {
       closeSheet();
       return;
     }

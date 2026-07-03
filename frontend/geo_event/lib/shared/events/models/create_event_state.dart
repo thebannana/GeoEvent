@@ -1,5 +1,6 @@
 import 'create_event_models.dart';
 import 'event_taxonomy_models.dart';
+import 'my_event_response_dto.dart';
 
 class CreateEventState {
   final bool loadingInitial;
@@ -25,10 +26,12 @@ class CreateEventState {
 
   final EventImageUploadItem? featuredImage;
   final bool clearFeaturedImage;
+
   final List<EventImageUploadItem> galleryImages;
+  final List<EventImageDto> existingImages;
+  final List<int> removedImageIds;
 
   final int? eventId;
-
   final String? errorMessage;
   final String? successMessage;
 
@@ -51,10 +54,15 @@ class CreateEventState {
     this.featuredImage,
     this.clearFeaturedImage = false,
     this.galleryImages = const [],
+    this.existingImages = const [],
+    this.removedImageIds = const [],
     this.eventId,
     this.errorMessage,
     this.successMessage,
   });
+
+  bool get isLoadingAny =>
+      loadingInitial || genresLoading || subGenresLoading || submitting;
 
   CreateEventState copyWith({
     bool? loadingInitial,
@@ -65,10 +73,10 @@ class CreateEventState {
     List<GenreItem>? genres,
     List<SubGenreItem>? subGenres,
     int? segmentId,
-    int? genreId,
-    int? subGenreId,
     bool clearSegmentId = false,
+    int? genreId,
     bool clearGenreId = false,
+    int? subGenreId,
     bool clearSubGenreId = false,
     bool? isFree,
     MapboxPlace? selectedLocation,
@@ -76,6 +84,8 @@ class CreateEventState {
     EventImageUploadItem? featuredImage,
     bool clearFeaturedImage = false,
     List<EventImageUploadItem>? galleryImages,
+    List<EventImageDto>? existingImages,
+    List<int>? removedImageIds,
     int? eventId,
     bool clearEventId = false,
     String? errorMessage,
@@ -106,13 +116,13 @@ class CreateEventState {
           : (featuredImage ?? this.featuredImage),
       clearFeaturedImage: clearFeaturedImage,
       galleryImages: galleryImages ?? this.galleryImages,
+      existingImages: existingImages ?? this.existingImages,
+      removedImageIds: removedImageIds ?? this.removedImageIds,
       eventId: clearEventId ? null : (eventId ?? this.eventId),
-      errorMessage: clearErrorMessage
-          ? null
-          : (errorMessage ?? this.errorMessage),
-      successMessage: clearSuccessMessage
-          ? null
-          : (successMessage ?? this.successMessage),
+      errorMessage:
+          clearErrorMessage ? null : (errorMessage ?? this.errorMessage),
+      successMessage:
+          clearSuccessMessage ? null : (successMessage ?? this.successMessage),
     );
   }
 }

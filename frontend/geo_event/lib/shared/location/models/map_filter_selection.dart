@@ -13,11 +13,13 @@ class MapFilterSelection {
   final double? minPrice;
   final double? maxPrice;
 
+  static const double defaultRadiusKm = 10.0;
+
   const MapFilterSelection({
     this.segmentId,
     this.genreId,
     this.subGenreId,
-    this.radiusKm = 10,
+    this.radiusKm = defaultRadiusKm,
     this.freeOnly = false,
     this.todayOnly = false,
     this.usePreferences = true,
@@ -25,6 +27,20 @@ class MapFilterSelection {
     this.minPrice,
     this.maxPrice,
   });
+
+  const MapFilterSelection.defaults() : this();
+
+  bool get hasActiveFilters =>
+      segmentId != null ||
+      genreId != null ||
+      subGenreId != null ||
+      freeOnly ||
+      todayOnly ||
+      radiusKm != defaultRadiusKm ||
+      !usePreferences ||
+      showGlobalEvents ||
+      minPrice != null ||
+      maxPrice != null;
 
   MapFilterSelection copyWith({
     int? segmentId,
@@ -57,36 +73,37 @@ class MapFilterSelection {
     );
   }
 
-  bool get hasActiveFilters =>
-      segmentId != null ||
-      genreId != null ||
-      subGenreId != null ||
-      freeOnly ||
-      todayOnly ||
-      radiusKm != 10 ||
-      !usePreferences ||
-      showGlobalEvents ||
-      minPrice != null ||
-      maxPrice != null;
+  MapFilterSelection clearCategories() {
+    return copyWith(
+      clearSegment: true,
+      clearGenre: true,
+      clearSubGenre: true,
+    );
+  }
 
-  factory MapFilterSelection.defaults() => const MapFilterSelection();
+  MapFilterSelection clearPrices() {
+    return copyWith(
+      clearMinPrice: true,
+      clearMaxPrice: true,
+    );
+  }
+
+  MapFilterSelection reset() => const MapFilterSelection.defaults();
 
   @override
-  bool operator ==(Object other) {
-    if (identical(this, other)) return true;
-
-    return other is MapFilterSelection &&
-        other.segmentId == segmentId &&
-        other.genreId == genreId &&
-        other.subGenreId == subGenreId &&
-        other.radiusKm == radiusKm &&
-        other.freeOnly == freeOnly &&
-        other.todayOnly == todayOnly &&
-        other.usePreferences == usePreferences &&
-        other.showGlobalEvents == showGlobalEvents &&
-        other.minPrice == minPrice &&
-        other.maxPrice == maxPrice;
-  }
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is MapFilterSelection &&
+          other.segmentId == segmentId &&
+          other.genreId == genreId &&
+          other.subGenreId == subGenreId &&
+          other.radiusKm == radiusKm &&
+          other.freeOnly == freeOnly &&
+          other.todayOnly == todayOnly &&
+          other.usePreferences == usePreferences &&
+          other.showGlobalEvents == showGlobalEvents &&
+          other.minPrice == minPrice &&
+          other.maxPrice == maxPrice;
 
   @override
   int get hashCode => Object.hash(

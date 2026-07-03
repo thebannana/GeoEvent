@@ -13,28 +13,23 @@ class AuthResponse {
     required this.user,
   });
 
-  bool get hasTokens =>
-      accessToken.isNotEmpty && refreshToken.isNotEmpty && user != null;
+  bool get hasAccessToken => accessToken.trim().isNotEmpty;
+  bool get hasRefreshToken => refreshToken.trim().isNotEmpty;
+  bool get hasTokens => hasAccessToken && hasRefreshToken;
 
   factory AuthResponse.fromJson(Map<String, dynamic> json) {
     final rawUser = json['user'] ?? json['User'];
     final rawExpiresAt = json['expiresAt'] ?? json['ExpiresAt'];
 
     return AuthResponse(
-      accessToken:
-          (json['accessToken'] ?? json['AccessToken'] ?? '').toString(),
-      refreshToken:
-          (json['refreshToken'] ?? json['RefreshToken'] ?? '').toString(),
-      expiresAt: rawExpiresAt is String && rawExpiresAt.isNotEmpty
-          ? DateTime.tryParse(rawExpiresAt)
-          : rawExpiresAt is DateTime
-              ? rawExpiresAt
-              : null,
-      user: rawUser is Map<String, dynamic>
-          ? AuthUser.fromJson(rawUser)
-          : rawUser is Map
-              ? AuthUser.fromJson(Map<String, dynamic>.from(rawUser))
-              : null,
+      accessToken: (json['accessToken'] ?? json['AccessToken'] ?? '')
+          .toString()
+          .trim(),
+      refreshToken: (json['refreshToken'] ?? json['RefreshToken'] ?? '')
+          .toString()
+          .trim(),
+      expiresAt: _parseDate(rawExpiresAt),
+      user: _parseUser(rawUser),
     );
   }
 
@@ -45,5 +40,34 @@ class AuthResponse {
       'expiresAt': expiresAt?.toUtc().toIso8601String(),
       'user': user?.toJson(),
     };
+  }
+
+  static DateTime? _parseDate(dynamic raw) {
+    if (raw == null) {
+      return null;
+    }
+
+    if (raw is DateTime) {
+      return raw;
+    }
+
+    final value = raw.toString().trim();
+    if (value.isEmpty) {
+      return null;
+    }
+
+    return DateTime.tryParse(value);
+  }
+
+  static AuthUser? _parseUser(dynamic raw) {
+    if (raw is Map<String, dynamic>) {
+      return AuthUser.fromJson(raw);
+    }
+
+    if (raw is Map) {
+      return AuthUser.fromJson(Map<String, dynamic>.from(raw));
+    }
+
+    return null;
   }
 }

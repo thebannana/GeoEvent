@@ -17,12 +17,13 @@ class UserPreference {
 
   factory UserPreference.fromJson(Map<String, dynamic> json) {
     return UserPreference(
-      prefId: (json['prefId'] as num).toInt(),
+      prefId: (json['prefId'] as num?)?.toInt() ?? 0,
       segmentId: (json['segmentId'] as num?)?.toInt(),
       genreId: (json['genreId'] as num?)?.toInt(),
       subGenreId: (json['subGenreId'] as num?)?.toInt(),
       score: (json['score'] as num?)?.toDouble() ?? 0,
-      lastUpdated: DateTime.parse((json['lastUpdated'] ?? '').toString()),
+      lastUpdated: DateTime.tryParse((json['lastUpdated'] ?? '').toString()) ??
+          DateTime.fromMillisecondsSinceEpoch(0),
     );
   }
 }

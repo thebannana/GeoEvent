@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/widgets/app_icon_circle_button.dart';
+import '../../../../core/widgets/inputs/app_icon_circle_button.dart';
 
 class ShellTopBar extends StatelessWidget {
+  static const String _menuTooltip = 'Menu';
+  static const String _directionsTooltip = 'Directions';
+  static const String _searchTooltip = 'Search';
+  static const String _filterTooltip = 'Filter';
+
   final bool showAll;
   final VoidCallback onMenu;
   final VoidCallback onSearch;
@@ -32,7 +37,7 @@ class ShellTopBar extends StatelessWidget {
             if (showAll)
               AppIconCircleButton(
                 icon: Icons.menu_rounded,
-                tooltip: 'Menu',
+                tooltip: _menuTooltip,
                 onPressed: onMenu,
               )
             else
@@ -43,20 +48,20 @@ class ShellTopBar extends StatelessWidget {
                   if (showDirectionsButton) ...[
                     AppIconCircleButton(
                       icon: Icons.navigation_rounded,
-                      tooltip: 'Directions',
+                      tooltip: _directionsTooltip,
                       onPressed: onDirections,
                     ),
                     const SizedBox(width: 10),
                   ],
                   AppIconCircleButton(
                     icon: Icons.search_rounded,
-                    tooltip: 'Search',
+                    tooltip: _searchTooltip,
                     onPressed: onSearch,
                   ),
                   const SizedBox(width: 10),
                   AppIconCircleButton(
                     icon: Icons.tune_rounded,
-                    tooltip: 'Filter',
+                    tooltip: _filterTooltip,
                     onPressed: onFilter,
                   ),
                 ],

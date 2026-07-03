@@ -1,6 +1,9 @@
 import 'package:dio/dio.dart';
 
+import '../../../core/network/api_endpoints.dart';
 import '../models/create_report_request.dart';
+import '../models/get_my_reports_request.dart';
+import '../models/paged_result.dart';
 import '../models/report.dart';
 
 class ReportsApi {
@@ -10,19 +13,27 @@ class ReportsApi {
 
   Future<Report> createReport(CreateReportRequest request) async {
     final response = await _dio.post(
-      '/api/reports',
+      ApiEndpoints.reportsBase,
       data: request.toJson(),
     );
 
-    return Report.fromJson(Map<String, dynamic>.from(response.data as Map));
+    final json = Map<String, dynamic>.from(response.data as Map);
+    return Report.fromJson(json);
   }
 
-  Future<List<Report>> getMyReports() async {
-    final response = await _dio.get('/api/reports/my');
-    final data = response.data as List<dynamic>? ?? const [];
+  Future<PagedResult<Report>> getMyReports(GetMyReportsRequest request) async {
+    final response = await _dio.get(
+      ApiEndpoints.myReports,
+      queryParameters: request.toQuery(),
+    );
 
-    return data
-        .map((e) => Report.fromJson(Map<String, dynamic>.from(e as Map)))
-        .toList();
+    final json = Map<String, dynamic>.from(response.data as Map);
+
+    return PagedResult<Report>.fromJson(
+      json,
+      fromJsonT: (item) => Report.fromJson(
+        Map<String, dynamic>.from(item as Map),
+      ),
+    );
   }
 }

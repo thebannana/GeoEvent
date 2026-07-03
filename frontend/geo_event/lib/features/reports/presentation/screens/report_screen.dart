@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/widgets/glass_scaffold.dart';
+import '../../../../core/widgets/layout/app_scaffold.dart';
 import '../../../../shared/reports/models/report_state.dart';
 import '../../../../shared/reports/models/report_target_type.dart';
 import '../../application/report_controller.dart';
@@ -31,6 +31,12 @@ class ReportScreen extends ConsumerStatefulWidget {
 }
 
 class _ReportScreenState extends ConsumerState<ReportScreen> {
+  static const String _screenTitlePrefix = 'Report ';
+  static const String _headingText = 'What is the reason for your report?';
+  static const String _descriptionText =
+      'Choose the option that best describes the issue. You can add more details below.';
+  static const String _successMessage = 'Report submitted successfully.';
+
   late final TextEditingController _detailsController;
   late final ReportState _initialState;
 
@@ -53,17 +59,31 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
     super.dispose();
   }
 
+  Future<void> _submitReport(ReportController controller) async {
+    final success = await controller.submit();
+    if (!mounted) return;
+
+    if (success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(_successMessage),
+        ),
+      );
+      Navigator.of(context).pop(true);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final provider = reportControllerProvider(_initialState);
     final state = ref.watch(provider);
-    final ctrl = ref.read(provider.notifier);
+    final controller = ref.read(provider.notifier);
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    return GlassScaffold(
+    return AppScaffold(
       appBar: AppBar(
-        title: Text('Report ${widget.targetType.displayName}'),
+        title: Text('$_screenTitlePrefix${widget.targetType.displayName}'),
         backgroundColor: Colors.transparent,
         elevation: 0,
       ),
@@ -75,16 +95,15 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
           padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
           children: [
             Text(
-              'What is the reason for your report?',
+              _headingText,
               style: theme.textTheme.titleLarge?.copyWith(
                 fontWeight: FontWeight.w800,
               ),
             ),
             const SizedBox(height: 8),
             Text(
-              'Choose the option that best describes the issue. You can add more details below.',
-              style: TextStyle(
-                fontSize: 13,
+              _descriptionText,
+              style: theme.textTheme.bodySmall?.copyWith(
                 color: colorScheme.onSurfaceVariant,
               ),
             ),
@@ -98,44 +117,24 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
             const SizedBox(height: 18),
             ReportReasonSelector(
               selected: state.selectedReason,
-              onSelected: ctrl.selectReason,
+              onSelected: controller.selectReason,
             ),
             const SizedBox(height: 8),
             ReportTextField(
               controller: _detailsController,
-              onChanged: ctrl.setDescription,
+              onChanged: controller.setDescription,
             ),
             if (state.errorMessage != null) ...[
               const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 10,
-                ),
-                decoration: BoxDecoration(
-                  color: colorScheme.errorContainer.withValues(alpha: 0.65),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(
-                      Icons.error_outline_rounded,
-                      size: 18,
-                      color: colorScheme.error,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        state.errorMessage!,
-                        style: TextStyle(
-                          color: colorScheme.onErrorContainer,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ],
+              _ReportErrorMessage(message: state.errorMessage!),
+            ],
+            if (state.submitAvailabilityMessage != null &&
+                state.errorMessage == null) ...[
+              const SizedBox(height: 10),
+              Text(
+                state.submitAvailabilityMessage!,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
                 ),
               ),
             ],
@@ -143,22 +142,56 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
             ReportSubmitButton(
               enabled: state.canSubmit,
               loading: state.isSubmitting,
-              onPressed: () async {
-                final success = await ctrl.submit();
-                if (!mounted) return;
-
-                if (success) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Report submitted successfully.'),
-                    ),
-                  );
-                  Navigator.of(context).pop(true);
-                }
-              },
+              disabledReason: state.submitAvailabilityMessage,
+              onPressed: () => _submitReport(controller),
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _ReportErrorMessage extends StatelessWidget {
+  final String message;
+
+  const _ReportErrorMessage({
+    required this.message,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: 12,
+        vertical: 10,
+      ),
+      decoration: BoxDecoration(
+        color: colorScheme.errorContainer.withValues(alpha: 0.65),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            Icons.error_outline_rounded,
+            size: 18,
+            color: colorScheme.error,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              style: TextStyle(
+                color: colorScheme.onErrorContainer,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

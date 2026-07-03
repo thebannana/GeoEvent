@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/widgets/app_surface_card.dart';
+import '../../../../core/widgets/surfaces/app_surface_card.dart';
 import '../../../../shared/public_profile/models/public_profile_user.dart';
 
 class PublicProfileStatsRow extends StatelessWidget {
@@ -23,6 +23,20 @@ class PublicProfileStatsRow extends StatelessWidget {
             child: StatItem(
               label: 'Events',
               value: eventsCount.toString(),
+            ),
+          ),
+          Expanded(
+            child: StatItem(
+              label: 'Ratings',
+              value: user.ratingsCount.toString(),
+            ),
+          ),
+          Expanded(
+            child: StatItem(
+              label: 'Average',
+              value: user.ratingsCount == 0
+                  ? '—'
+                  : user.averageRating.toStringAsFixed(1),
             ),
           ),
         ],

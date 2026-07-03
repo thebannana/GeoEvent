@@ -24,16 +24,26 @@ public class TicketRepository : ITicketRepository
     }
 
     public async Task<Reservation?> GetReservationByIdAsync(int reservationId) =>
+await _context.Reservations
+    .Include(r => r.EventTicket)
+    .Include(r => r.Tickets)
+    .Include(r => r.PaymentDetails)
+    .FirstOrDefaultAsync(r => r.ReservationId == reservationId);
+
+    public async Task<Reservation?> GetReservationByPendingProviderOrderIdAsync(string providerOrderId) =>
         await _context.Reservations
             .Include(r => r.EventTicket)
             .Include(r => r.Tickets)
-            .FirstOrDefaultAsync(r => r.ReservationId == reservationId);
+            .FirstOrDefaultAsync(r => r.PendingProviderOrderId == providerOrderId);
 
-    public async Task<PagedResult<Reservation>> GetEventReservationsAsync(int eventId, ReservationFilterDto filter)
+    public async Task<PagedResult<Reservation>> GetEventReservationsAsync(
+        int eventId,
+        ReservationFilterDto filter)
     {
         var query = _context.Reservations
             .Include(r => r.EventTicket)
             .Include(r => r.Tickets)
+            .Include(r => r.PaymentDetails)
             .Where(r => r.EventId == eventId);
 
         if (filter.Status.HasValue)
@@ -63,6 +73,7 @@ public class TicketRepository : ITicketRepository
         await _context.SaveChangesAsync();
         return eventTicket;
     }
+
     public async Task<int> GetEventCapacityAsync(int eventId)
     {
         return await _context.EventTickets
@@ -71,7 +82,7 @@ public class TicketRepository : ITicketRepository
     }
 
     public async Task<PagedResult<Reservation>> GetUserReservationsAsync(
-    int userId, ReservationFilterDto filter)
+        int userId, ReservationFilterDto filter)
     {
         var query = _context.Reservations
             .Include(r => r.EventTicket)
@@ -100,7 +111,6 @@ public class TicketRepository : ITicketRepository
             PageSize = filter.PageSize
         };
     }
-
 
     public async Task<Reservation> CreateReservationAsync(Reservation reservation)
     {
@@ -136,7 +146,7 @@ public class TicketRepository : ITicketRepository
             .ToListAsync();
 
     public async Task<PagedResult<Ticket>> GetUserTicketsAsync(
-    int userId, TicketFilterDto filter)
+        int userId, TicketFilterDto filter)
     {
         var query = _context.IssuedTickets
             .Include(t => t.Reservation)
@@ -165,9 +175,8 @@ public class TicketRepository : ITicketRepository
         };
     }
 
-
     public async Task<PagedResult<Ticket>> GetEventTicketsAsync(
-    int eventId, TicketFilterDto filter)
+        int eventId, TicketFilterDto filter)
     {
         var query = _context.IssuedTickets
             .Where(t => t.EventId == eventId);
@@ -193,18 +202,18 @@ public class TicketRepository : ITicketRepository
     }
 
     public async Task<bool> HasActiveReservationAsync(int userId, int eventTicketId) =>
-    await _context.Reservations
-        .AnyAsync(r =>
-            r.UserId == userId &&
-            r.EventTicketId == eventTicketId &&
-            (r.Status == ReservationStatus.Pending ||
-             r.Status == ReservationStatus.Confirmed));
+        await _context.Reservations
+            .AnyAsync(r =>
+                r.UserId == userId &&
+                r.EventTicketId == eventTicketId &&
+                (r.Status == ReservationStatus.Pending ||
+                 r.Status == ReservationStatus.Confirmed));
 
     public async Task<List<EventTicket>> GetEventTicketsByEventAsync(int eventId) =>
-    await _context.EventTickets
-        .Where(t => t.EventId == eventId && t.IsActive)
-        .OrderBy(t => t.Price)
-        .ToListAsync();
+        await _context.EventTickets
+            .Where(t => t.EventId == eventId && t.IsActive)
+            .OrderBy(t => t.Price)
+            .ToListAsync();
 
     public async Task UpdateEventTicketAsync(EventTicket eventTicket)
     {
@@ -213,15 +222,14 @@ public class TicketRepository : ITicketRepository
     }
 
     public async Task<List<PaymentDetail>> GetPaymentsByReservationAsync(int reservationId) =>
-    await _context.PaymentDetails
-        .Where(p => p.ReservationId == reservationId)
-        .OrderByDescending(p => p.PaidAt)
-        .ToListAsync();
+        await _context.PaymentDetails
+            .Where(p => p.ReservationId == reservationId)
+            .OrderByDescending(p => p.PaidAt)
+            .ToListAsync();
 
     public async Task<PaymentDetail?> GetPaymentByTransactionIdAsync(string transactionId) =>
-    await _context.PaymentDetails
-        .FirstOrDefaultAsync(p => p.TransactionId == transactionId);
-
+        await _context.PaymentDetails
+            .FirstOrDefaultAsync(p => p.TransactionId == transactionId);
 
     public async Task AddTicketsAsync(IEnumerable<Ticket> tickets)
     {
@@ -275,9 +283,10 @@ public class TicketRepository : ITicketRepository
     }
 
     public async Task<Ticket?> GetTicketForValidationAsync(string qrCode) =>
-    await _context.IssuedTickets
-        .Include(t => t.Reservation)
-        .FirstOrDefaultAsync(t => t.QrCode == qrCode);
+        await _context.IssuedTickets
+            .Include(t => t.Reservation!)
+                .ThenInclude(r => r.PaymentDetails)
+            .FirstOrDefaultAsync(t => t.QrCode == qrCode);
 
     public async Task<int> GetEventReservedQuantityAsync(int eventId, params ReservationStatus[] statuses)
     {
@@ -289,4 +298,9 @@ public class TicketRepository : ITicketRepository
         return await query.SumAsync(r => (int?)r.Quantity) ?? 0;
     }
 
+    public async Task UpdatePaymentDetailAsync(PaymentDetail payment)
+    {
+        _context.PaymentDetails.Update(payment);
+        await _context.SaveChangesAsync();
+    }
 }

@@ -34,4 +34,5 @@ public class EventResponseDto
     public DateTime? UpdatedAt { get; set; }
     public List<string> ImageUrls { get; set; } = new();
     public string? CoverImageUrl { get; set; }
+    public List<EventImageResponseDto> Images { get; set; } = new();
 }

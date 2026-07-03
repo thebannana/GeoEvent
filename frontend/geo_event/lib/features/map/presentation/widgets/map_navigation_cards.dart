@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/widgets/app_bottom_sheet_container.dart';
-import '../../../../core/widgets/app_spinner.dart';
+import '../../../../core/widgets/feedback/app_spinner.dart';
+import '../../../../core/widgets/layout/app_bottom_sheet_container.dart';
 
 class _MapActionCard extends StatelessWidget {
   final String title;
@@ -51,6 +51,7 @@ class _MapActionCard extends StatelessWidget {
               ),
               IconButton(
                 onPressed: onClose,
+                tooltip: 'Close',
                 icon: const Icon(Icons.close_rounded),
               ),
             ],
@@ -131,7 +132,7 @@ class ActiveNavigationCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final scheme = Theme.of(context).colorScheme;
 
     return _MapActionCard(
       title: title,
@@ -140,8 +141,8 @@ class ActiveNavigationCard extends StatelessWidget {
       primaryAction: FilledButton.tonal(
         onPressed: onStopNavigation,
         style: FilledButton.styleFrom(
-          backgroundColor: colorScheme.errorContainer,
-          foregroundColor: colorScheme.onErrorContainer,
+          backgroundColor: scheme.errorContainer,
+          foregroundColor: scheme.onErrorContainer,
         ),
         child: const Text('Stop navigation'),
       ),

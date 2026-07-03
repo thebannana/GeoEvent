@@ -11,10 +11,15 @@ public class UserProfileDto
     public string? ImageUrl { get; set; }
     public string Role { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; }
+
     public int? CityId { get; set; }
     public string? CityName { get; set; }
-
     public double AverageRating { get; set; }
     public int RatingsCount { get; set; }
     public int? MyRating { get; set; }
+
+    public bool HasPayPalConnected { get; set; }
+    public string? PayPalEmail { get; set; }
+    public string? PayPalMerchantId { get; set; }
+    public string? PayPalConnectionStatus { get; set; }
 }

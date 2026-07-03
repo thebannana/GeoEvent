@@ -15,7 +15,9 @@ final authLocalStorageProvider = Provider<AuthLocalStorage>((ref) {
 });
 
 final authApiProvider = Provider<AuthApi>((ref) {
-  return AuthApi(ref.watch(baseDioProvider));
+  return AuthApi(
+    publicDio: ref.watch(baseDioProvider),
+  );
 });
 
 final authRepositoryProvider = Provider<AuthRepository>((ref) {

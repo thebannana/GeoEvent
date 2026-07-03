@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/widgets/app_surface_card.dart';
+import '../../../../core/widgets/surfaces/app_surface_card.dart';
 
 class PaymentEventInfoCard extends StatelessWidget {
   final String? ownerName;

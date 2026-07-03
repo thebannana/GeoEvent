@@ -2,9 +2,11 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-import '../../../../core/widgets/app_icon_circle_button.dart';
+import '../../../../core/widgets/inputs/app_icon_circle_button.dart';
 
 class ShellCompassButton extends StatelessWidget {
+  static const String _tooltip = 'Recenter map';
+
   final double bearing;
   final VoidCallback onTap;
 
@@ -20,7 +22,7 @@ class ShellCompassButton extends StatelessWidget {
 
     return AppIconCircleButton(
       onPressed: onTap,
-      tooltip: 'Recenter map',
+      tooltip: _tooltip,
       child: Transform.rotate(
         angle: -bearing * (math.pi / 180),
         child: Icon(

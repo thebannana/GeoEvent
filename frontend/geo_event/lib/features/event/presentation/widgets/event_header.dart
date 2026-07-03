@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/widgets/app_icon_circle_button.dart';
-import '../../../../core/widgets/app_surface_card.dart';
+import '../../../../core/widgets/inputs/app_icon_circle_button.dart';
+import '../../../../core/widgets/surfaces/app_surface_card.dart';
 import 'event_price_badge.dart';
 
 class EventHeader extends StatelessWidget {
@@ -79,7 +79,8 @@ class EventHeader extends StatelessWidget {
             (avatarUrl != null && avatarUrl.isNotEmpty);
 
     final accent = categoryColor ?? scheme.primary;
-    final muted = text.bodyMedium?.color ?? scheme.onSurface.withValues(alpha: 0.72);
+    final muted =
+        text.bodyMedium?.color ?? scheme.onSurface.withValues(alpha: 0.72);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -256,7 +257,7 @@ class _OwnerAvatar extends StatelessWidget {
         radius: 22,
         backgroundColor: scheme.surfaceContainerHighest,
         backgroundImage: NetworkImage(trimmed),
-        onBackgroundImageError: (_, __) {},
+        onBackgroundImageError: (_, _) {},
       );
     }
 

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-import '../../../../core/widgets/app_empty_state.dart';
-import '../../../../core/widgets/app_surface_card.dart';
+import '../../../../core/widgets/feedback/app_empty_state.dart';
+import '../../../../core/widgets/surfaces/app_surface_card.dart';
 import '../../../../shared/chat/models/chat_participant.dart';
 import '../../../../shared/chat/models/chat_thread_details.dart';
 import '../../../../shared/chat/models/chat_thread_type.dart';
@@ -32,10 +32,14 @@ class ChatDetailsScreen extends StatelessWidget {
     final effectiveType = effectiveThreadType(details);
     final isDirect = effectiveType == ChatThreadType.direct;
     final otherParticipant = resolveOtherParticipant(details, currentUserId);
-    final resolvedHeroTitle = heroTitle(details, effectiveType, otherParticipant);
-    final resolvedHeroSubtitle = heroSubtitle(details, effectiveType, otherParticipant);
-    final resolvedHeroImage = heroImage(details, effectiveType, otherParticipant);
-    final resolvedAvatarSeed = avatarSeed(details, effectiveType, otherParticipant);
+    final resolvedHeroTitle =
+        heroTitle(details, effectiveType, otherParticipant);
+    final resolvedHeroSubtitle =
+        heroSubtitle(details, effectiveType, otherParticipant);
+    final resolvedHeroImage =
+        heroImage(details, effectiveType, otherParticipant);
+    final resolvedAvatarSeed =
+        avatarSeed(details, effectiveType, otherParticipant);
 
     return Scaffold(
       appBar: AppBar(
@@ -100,8 +104,10 @@ class ChatDetailsScreen extends StatelessWidget {
                             width: 68,
                             height: 68,
                             fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) {
-                              return EventImageFallback(title: details.eventInfo!.title);
+                            errorBuilder: (_, _, _) {
+                              return EventImageFallback(
+                                title: details.eventInfo!.title,
+                              );
                             },
                           ),
                         )
@@ -119,24 +125,6 @@ class ChatDetailsScreen extends StatelessWidget {
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
-                            if (details.eventInfo!.venueName?.trim().isNotEmpty ?? false) ...[
-                              const SizedBox(height: 6),
-                              Text(
-                                details.eventInfo!.venueName!.trim(),
-                                style: theme.textTheme.bodyMedium?.copyWith(
-                                  color: colorScheme.onSurfaceVariant,
-                                ),
-                              ),
-                            ],
-                            if (details.eventInfo!.cityName?.trim().isNotEmpty ?? false) ...[
-                              const SizedBox(height: 4),
-                              Text(
-                                details.eventInfo!.cityName!.trim(),
-                                style: theme.textTheme.bodyMedium?.copyWith(
-                                  color: colorScheme.onSurfaceVariant,
-                                ),
-                              ),
-                            ],
                             if (details.eventInfo!.startsAt != null) ...[
                               const SizedBox(height: 6),
                               Text(
@@ -232,7 +220,9 @@ class ChatDetailsScreen extends StatelessWidget {
                 SizedBox(
                   width: double.infinity,
                   child: OutlinedButton.icon(
-                    onPressed: onLeaveThread == null ? null : () => confirmLeaveThread(context),
+                    onPressed: onLeaveThread == null
+                        ? null
+                        : () => confirmLeaveThread(context),
                     icon: const Icon(Icons.exit_to_app_rounded),
                     label: Text(isDirect ? 'Remove chat' : 'Leave group'),
                   ),
@@ -283,7 +273,10 @@ class ChatDetailsScreen extends StatelessWidget {
 
   static ChatThreadType effectiveThreadType(ChatThreadDetails details) {
     if (details.eventInfo != null) return ChatThreadType.eventGroup;
-    if (details.type == ChatThreadType.eventGroup) return ChatThreadType.eventGroup;
+    if (details.type == ChatThreadType.eventGroup) {
+      return ChatThreadType.eventGroup;
+    }
+    if (details.participants.length > 2) return ChatThreadType.eventGroup;
     return ChatThreadType.direct;
   }
 
@@ -355,13 +348,12 @@ class ChatDetailsScreen extends StatelessWidget {
       return count == 1 ? '1 attendee' : '$count attendees';
     }
 
-    final directUsername = cleanUsername(details.otherUserUsername);
-    if (directUsername != null) return directUsername;
-
     if (details.otherUserIsOnline) return 'Online';
 
     final directLastActive = details.otherUserLastActiveAt;
-    if (directLastActive != null) return 'Active ${relativeTime(directLastActive)}';
+    if (directLastActive != null) {
+      return 'Active ${relativeTime(directLastActive)}';
+    }
 
     if (otherParticipant != null) {
       if (otherParticipant.isOnline) return 'Online';
@@ -369,6 +361,9 @@ class ChatDetailsScreen extends StatelessWidget {
         return 'Active ${relativeTime(otherParticipant.lastActiveAt!)}';
       }
     }
+
+    final directUsername = cleanUsername(details.otherUserUsername);
+    if (directUsername != null) return directUsername;
 
     return null;
   }
@@ -431,9 +426,9 @@ class ChatDetailsScreen extends StatelessWidget {
   }
 
   static String? cleanUsername(String? value) {
-    final cleaned = value?.trim().replaceFirst(RegExp(r'^@'), '');
+    final cleaned = value?.trim().replaceFirst(RegExp(r'^@+'), '');
     if (cleaned == null || cleaned.isEmpty) return null;
-    return cleaned;
+    return '@$cleaned';
   }
 
   static String relativeTime(DateTime value) {
@@ -524,7 +519,7 @@ class ParticipantTile extends StatelessWidget {
     final displayName = participant.displayName.trim();
     if (displayName.isNotEmpty) return displayName;
 
-    final username = cleanUsername(participant.username);
+    final username = ChatDetailsScreen.cleanUsername(participant.username);
     if (username != null) return username;
 
     return 'User ${participant.userId}';
@@ -532,7 +527,7 @@ class ParticipantTile extends StatelessWidget {
 
   static String? participantSubtitle(ChatParticipant participant) {
     final displayName = participant.displayName.trim();
-    final username = cleanUsername(participant.username);
+    final username = ChatDetailsScreen.cleanUsername(participant.username);
     if (displayName.isNotEmpty && username != null) return username;
     return null;
   }
@@ -541,16 +536,10 @@ class ParticipantTile extends StatelessWidget {
     final displayName = participant.displayName.trim();
     if (displayName.isNotEmpty) return displayName;
 
-    final username = cleanUsername(participant.username);
+    final username = ChatDetailsScreen.cleanUsername(participant.username);
     if (username != null) return username;
 
     return 'User';
-  }
-
-  static String? cleanUsername(String? value) {
-    final cleaned = value?.trim().replaceFirst(RegExp(r'^@'), '');
-    if (cleaned == null || cleaned.isEmpty) return null;
-    return cleaned;
   }
 }
 
@@ -599,9 +588,11 @@ class EventImageFallback extends StatelessWidget {
   }
 
   static String initials(String value) {
-    final parts = value.trim().split(RegExp(r'\s+')).where((e) => e.isNotEmpty).toList();
+    final parts =
+        value.trim().split(RegExp(r'\s+')).where((e) => e.isNotEmpty).toList();
     if (parts.isEmpty) return '?';
     if (parts.length == 1) return parts.first.substring(0, 1).toUpperCase();
-    return (parts.first.substring(0, 1) + parts.last.substring(0, 1)).toUpperCase();
+    return (parts.first.substring(0, 1) + parts.last.substring(0, 1))
+        .toUpperCase();
   }
 }

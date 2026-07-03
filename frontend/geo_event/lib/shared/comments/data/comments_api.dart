@@ -1,22 +1,30 @@
 import 'package:dio/dio.dart';
 
+import '../../../core/errors/error_mapper.dart';
+import '../../../core/network/api_endpoints.dart';
 import '../models/comment_item.dart';
 
 class CommentsApi {
-  final Dio dio;
+  const CommentsApi(this._dio);
 
-  CommentsApi(this.dio);
+  final Dio _dio;
 
   Future<List<CommentItem>> getEventComments(int eventId) async {
-    final response = await dio.get('/api/comments/event/$eventId');
-    final items = _extractList(response.data);
-    return items.map(CommentItem.fromJson).toList();
+    try {
+      final response = await _dio.get(ApiEndpoints.commentsForEvent(eventId));
+      return _parseList(response.data);
+    } catch (e, st) {
+      throw ErrorMapper.toAppException(e, stackTrace: st);
+    }
   }
 
   Future<List<CommentItem>> getReplies(int commentId) async {
-    final response = await dio.get('/api/comments/$commentId/replies');
-    final items = _extractList(response.data);
-    return items.map(CommentItem.fromJson).toList();
+    try {
+      final response = await _dio.get(ApiEndpoints.commentReplies(commentId));
+      return _parseList(response.data);
+    } catch (e, st) {
+      throw ErrorMapper.toAppException(e, stackTrace: st);
+    }
   }
 
   Future<CommentItem> createComment({
@@ -24,56 +32,77 @@ class CommentsApi {
     required String content,
     int? parentCommentId,
   }) async {
-    final response = await dio.post(
-      '/api/comments',
-      data: {
-        'eventId': eventId,
-        'content': content,
-        if (parentCommentId != null) 'parentCommentId': parentCommentId,
-      },
-    );
-
-    return CommentItem.fromJson(_asMap(response.data));
+    try {
+      final response = await _dio.post(
+        ApiEndpoints.commentsBase,
+        data: {
+          'eventId': eventId,
+          'content': content,
+          'parentCommentId': ?parentCommentId,
+        },
+      );
+      return CommentItem.fromJson(_asMap(response.data));
+    } catch (e, st) {
+      throw ErrorMapper.toAppException(e, stackTrace: st);
+    }
   }
 
   Future<CommentItem> updateComment({
     required int commentId,
     required String content,
   }) async {
-    final response = await dio.put(
-      '/api/comments/$commentId',
-      data: {
-        'content': content,
-      },
-    );
-
-    return CommentItem.fromJson(_asMap(response.data));
+    try {
+      final response = await _dio.put(
+        ApiEndpoints.commentById(commentId),
+        data: {'content': content},
+      );
+      return CommentItem.fromJson(_asMap(response.data));
+    } catch (e, st) {
+      throw ErrorMapper.toAppException(e, stackTrace: st);
+    }
   }
 
   Future<void> deleteComment(int commentId) async {
-    await dio.delete('/api/comments/$commentId');
+    try {
+      await _dio.delete(ApiEndpoints.commentById(commentId));
+    } catch (e, st) {
+      throw ErrorMapper.toAppException(e, stackTrace: st);
+    }
   }
 
   Future<void> likeComment(int commentId) async {
-    await dio.post('/api/comments/$commentId/like');
+    try {
+      await _dio.post(ApiEndpoints.likeComment(commentId));
+    } catch (e, st) {
+      throw ErrorMapper.toAppException(e, stackTrace: st);
+    }
   }
 
   Future<void> unlikeComment(int commentId) async {
-    await dio.delete('/api/comments/$commentId/like');
+    try {
+      await _dio.delete(ApiEndpoints.likeComment(commentId));
+    } catch (e, st) {
+      throw ErrorMapper.toAppException(e, stackTrace: st);
+    }
   }
 
-  Map<String, dynamic> _asMap(dynamic raw) {
+  static Map<String, dynamic> _asMap(dynamic raw) {
     if (raw is Map<String, dynamic>) return raw;
     if (raw is Map) return Map<String, dynamic>.from(raw);
-    throw Exception('Invalid response format.');
+    throw const FormatException('Invalid response format.');
   }
 
-  List<Map<String, dynamic>> _extractList(dynamic raw) {
+  static List<CommentItem> _parseList(dynamic raw) {
+    final maps = _extractMaps(raw);
+    return maps.map(CommentItem.fromJson).toList(growable: false);
+  }
+
+  static List<Map<String, dynamic>> _extractMaps(dynamic raw) {
     if (raw is List) {
       return raw
           .whereType<Map>()
           .map((e) => Map<String, dynamic>.from(e))
-          .toList();
+          .toList(growable: false);
     }
 
     if (raw is Map) {
@@ -84,7 +113,7 @@ class CommentsApi {
           return value
               .whereType<Map>()
               .map((e) => Map<String, dynamic>.from(e))
-              .toList();
+              .toList(growable: false);
         }
       }
     }

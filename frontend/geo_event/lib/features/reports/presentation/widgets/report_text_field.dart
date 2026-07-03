@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
 
 class ReportTextField extends StatelessWidget {
+  static const int _minLines = 4;
+  static const int _maxLines = 6;
+  static const int _maxLength = 2000;
+  static const String _hintText = 'Add extra details (optional)';
+
   final TextEditingController controller;
   final ValueChanged<String> onChanged;
 
@@ -17,12 +22,12 @@ class ReportTextField extends StatelessWidget {
     return TextField(
       controller: controller,
       onChanged: onChanged,
-      minLines: 4,
-      maxLines: 6,
-      maxLength: 2000,
+      minLines: _minLines,
+      maxLines: _maxLines,
+      maxLength: _maxLength,
       textInputAction: TextInputAction.newline,
       decoration: InputDecoration(
-        hintText: 'Add extra details (optional)',
+        hintText: _hintText,
         filled: true,
         fillColor: colorScheme.surface,
         alignLabelWithHint: true,

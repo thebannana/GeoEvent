@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:geo_event/core/widgets/app_spinner.dart';
+
+import 'package:geo_event/core/widgets/feedback/app_spinner.dart';
 
 class ReportSubmitButton extends StatelessWidget {
+  static const String _buttonText = 'Submit report';
+
   final bool enabled;
   final bool loading;
+  final String? disabledReason;
   final VoidCallback onPressed;
 
   const ReportSubmitButton({
@@ -11,11 +15,14 @@ class ReportSubmitButton extends StatelessWidget {
     required this.enabled,
     required this.loading,
     required this.onPressed,
+    this.disabledReason,
   });
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
+    final resolvedDisabledReason = disabledReason?.trim();
+
+    final button = SizedBox(
       width: double.infinity,
       child: FilledButton(
         onPressed: enabled && !loading ? onPressed : null,
@@ -34,8 +41,27 @@ class ReportSubmitButton extends StatelessWidget {
                   strokeWidth: 2.4,
                 ),
               )
-            : const Text('Submit report'),
+            : const Text(_buttonText),
       ),
+    );
+
+    if (enabled ||
+        resolvedDisabledReason == null ||
+        resolvedDisabledReason.isEmpty) {
+      return button;
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        button,
+        const SizedBox(height: 8),
+        Text(
+          resolvedDisabledReason,
+          textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+      ],
     );
   }
 }

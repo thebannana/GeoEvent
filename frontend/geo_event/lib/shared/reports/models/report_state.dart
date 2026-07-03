@@ -26,6 +26,18 @@ class ReportState {
 
   bool get canSubmit => selectedReason != null && !isSubmitting;
 
+  String? get submitAvailabilityMessage {
+    if (isSubmitting) {
+      return 'Report is being submitted.';
+    }
+
+    if (selectedReason == null) {
+      return 'Select a reason to enable report submission.';
+    }
+
+    return null;
+  }
+
   ReportState copyWith({
     ReportTargetType? targetType,
     int? targetId,
@@ -45,9 +57,8 @@ class ReportState {
       targetTitle: targetTitle ?? this.targetTitle,
       targetSubtitle: targetSubtitle ?? this.targetSubtitle,
       targetImageUrl: targetImageUrl ?? this.targetImageUrl,
-      selectedReason: clearReason
-          ? null
-          : (selectedReason ?? this.selectedReason),
+      selectedReason:
+          clearReason ? null : (selectedReason ?? this.selectedReason),
       description: description ?? this.description,
       isSubmitting: isSubmitting ?? this.isSubmitting,
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),

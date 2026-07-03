@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/utils/date_time_extensions.dart';
-import '../../../../shared/notifications/models/notification_item.dart';
+import '../../../../shared/notifications/models/notification_model.dart';
 
 class InboxNotificationTile extends StatelessWidget {
-  final NotificationItem item;
+  final NotificationModel item;
   final VoidCallback? onTap;
   final VoidCallback? onMarkAsRead;
   final VoidCallback? onDelete;
@@ -18,69 +18,63 @@ class InboxNotificationTile extends StatelessWidget {
   });
 
   Color _accentColor(BuildContext context) {
-    final type = item.type.toLowerCase();
-
-    if (type.contains('message') || type.contains('chat')) {
-      return const Color(0xFF5B8DEF);
+    switch (item.type) {
+      case NotificationType.message:
+        return const Color(0xFF5B8DEF);
+      case NotificationType.eventInvite:
+        return const Color(0xFF4DB6AC);
+      case NotificationType.eventUpdate:
+      case NotificationType.eventCancelled:
+        return const Color(0xFF8E7CFF);
+      case NotificationType.ticketConfirmed:
+        return const Color(0xFF66BB6A);
+      case NotificationType.ticketCancelled:
+        return const Color(0xFFFF8A65);
+      case NotificationType.newFollower:
+        return const Color(0xFFE57373);
+      case NotificationType.system:
+      case NotificationType.unknown:
+        return Theme.of(context).colorScheme.primary;
     }
-    if (type.contains('warning') || type.contains('alert')) {
-      return const Color(0xFFFF8A65);
-    }
-    if (type.contains('event')) {
-      return const Color(0xFF8E7CFF);
-    }
-    if (type.contains('invite')) {
-      return const Color(0xFF4DB6AC);
-    }
-    return Theme.of(context).colorScheme.primary;
   }
 
   IconData _leadingIcon() {
-    final type = item.type.toLowerCase();
-
-    if (type.contains('message') || type.contains('chat')) {
-      return Icons.chat_bubble_rounded;
+    switch (item.type) {
+      case NotificationType.message:
+        return Icons.chat_bubble_rounded;
+      case NotificationType.eventInvite:
+        return Icons.mail_rounded;
+      case NotificationType.eventUpdate:
+      case NotificationType.eventCancelled:
+        return Icons.event_rounded;
+      case NotificationType.ticketConfirmed:
+        return Icons.confirmation_number_rounded;
+      case NotificationType.ticketCancelled:
+        return Icons.event_busy_rounded;
+      case NotificationType.newFollower:
+        return Icons.person_add_alt_1_rounded;
+      case NotificationType.system:
+      case NotificationType.unknown:
+        return Icons.notifications_rounded;
     }
-    if (type.contains('warning') || type.contains('alert')) {
-      return Icons.notifications_active_rounded;
-    }
-    if (type.contains('event')) {
-      return Icons.event_rounded;
-    }
-    if (type.contains('invite')) {
-      return Icons.mail_rounded;
-    }
-    return Icons.notifications_rounded;
   }
 
-Widget _leadingVisual(BuildContext context, Color accent) {
-  final imageUrl = item.imageUrl?.trim();
-
-  return Container(
-    width: 42,
-    height: 42,
-    decoration: BoxDecoration(
-      color: accent.withValues(alpha: 0.12),
-      borderRadius: BorderRadius.circular(14),
-    ),
-    clipBehavior: Clip.antiAlias,
-    child: imageUrl != null && imageUrl.isNotEmpty
-        ? Image.network(
-            imageUrl,
-            fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => Icon(
-              _leadingIcon(),
-              color: accent,
-              size: 20,
-            ),
-          )
-        : Icon(
-            _leadingIcon(),
-            color: accent,
-            size: 20,
-          ),
-  );
-}
+  Widget _leadingVisual(BuildContext context, Color accent) {
+    return Container(
+      width: 42,
+      height: 42,
+      decoration: BoxDecoration(
+        color: accent.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      alignment: Alignment.center,
+      child: Icon(
+        _leadingIcon(),
+        color: accent,
+        size: 20,
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -90,7 +84,7 @@ Widget _leadingVisual(BuildContext context, Color accent) {
     final accent = _accentColor(context);
 
     return Dismissible(
-      key: ValueKey(item.notificationId),
+      key: ValueKey(item.id),
       direction: DismissDirection.endToStart,
       confirmDismiss: (_) async {
         onDelete?.call();
@@ -161,7 +155,7 @@ Widget _leadingVisual(BuildContext context, Color accent) {
                             ),
                             const SizedBox(width: 8),
                             Text(
-                              item.createdAt.timeAgo(short: true), // e.g. "2h", "5m", "now"
+                              item.createdAt.timeAgo(short: true),
                               style: theme.textTheme.labelSmall?.copyWith(
                                 color: colorScheme.onSurfaceVariant,
                               ),
@@ -170,7 +164,7 @@ Widget _leadingVisual(BuildContext context, Color accent) {
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          item.description,
+                          item.body,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: theme.textTheme.bodyMedium?.copyWith(

@@ -2,17 +2,17 @@ import '../models/event_taxonomy_models.dart';
 import 'event_taxonomy_api.dart';
 
 class EventTaxonomyRepository {
-  final EventTaxonomyApi _api;
+  const EventTaxonomyRepository(this.api);
 
-  EventTaxonomyRepository(this._api);
+  final EventTaxonomyApi api;
 
-  Future<List<SegmentLookup>> getSegments() => _api.getSegments();
+  Future<List<SegmentLookup>> getSegments() => api.getSegments();
 
   Future<List<GenreLookup>> getGenresForSegment(int segmentId) {
-    return _api.getGenresForSegment(segmentId);
+    return api.getGenresForSegment(segmentId);
   }
 
   Future<List<SubGenreLookup>> getSubGenresForGenre(int genreId) {
-    return _api.getSubGenresForGenre(genreId);
+    return api.getSubGenresForGenre(genreId);
   }
 }

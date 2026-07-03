@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/widgets/app_spinner.dart';
-import '../../../../core/widgets/app_surface_card.dart';
-import '../../../../core/widgets/glass_scaffold.dart';
+import '../../../../core/widgets/feedback/app_spinner.dart';
+import '../../../../core/widgets/layout/app_scaffold.dart';
+import '../../../../core/widgets/surfaces/app_surface_card.dart';
 
 class WriteReviewScreen extends StatefulWidget {
   final int? initialRating;
@@ -47,13 +47,27 @@ class _WriteReviewScreenState extends State<WriteReviewScreen> {
 
     setState(() => isBusy = true);
     try {
-      await widget.onSave(rating!, commentController.text.trim().isEmpty
-          ? null
-          : commentController.text.trim());
+      await widget.onSave(
+        rating!,
+        commentController.text.trim().isEmpty
+            ? null
+            : commentController.text.trim(),
+      );
+
       if (!mounted) return;
       Navigator.pop(context, true);
+    } catch (_) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not save review. Please try again.'),
+        ),
+      );
     } finally {
-      if (mounted) setState(() => isBusy = false);
+      if (mounted) {
+        setState(() => isBusy = false);
+      }
     }
   }
 
@@ -63,19 +77,31 @@ class _WriteReviewScreenState extends State<WriteReviewScreen> {
     setState(() => isBusy = true);
     try {
       await widget.onDelete!();
+
       if (!mounted) return;
       Navigator.pop(context, true);
+    } catch (_) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not delete review. Please try again.'),
+        ),
+      );
     } finally {
-      if (mounted) setState(() => isBusy = false);
+      if (mounted) {
+        setState(() => isBusy = false);
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     final canSave = rating != null && !isBusy;
 
-    return GlassScaffold(
+    return AppScaffold(
       appBar: AppBar(
         title: const Text('Write review'),
         backgroundColor: Colors.transparent,
@@ -103,12 +129,15 @@ class _WriteReviewScreenState extends State<WriteReviewScreen> {
 
                     return IconButton(
                       tooltip: 'Rate $star out of 5',
-                      onPressed: isBusy ? null : () => setState(() => rating = star),
+                      onPressed:
+                          isBusy ? null : () => setState(() => rating = star),
                       icon: Icon(
                         active
                             ? Icons.star_rounded
                             : Icons.star_border_rounded,
-                        color: active ? const Color(0xFFFFC857) : Colors.grey,
+                        color: active
+                            ? colorScheme.tertiary
+                            : colorScheme.onSurfaceVariant,
                         size: 30,
                       ),
                     );

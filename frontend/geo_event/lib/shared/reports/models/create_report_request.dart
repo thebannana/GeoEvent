@@ -14,11 +14,13 @@ class CreateReportRequest {
   });
 
   Map<String, dynamic> toJson() {
+    final trimmedDescription = description.trim();
+
     return {
       'targetType': targetType.apiValue,
       'targetId': targetId,
       'reason': reason,
-      'description': description,
+      if (trimmedDescription.isNotEmpty) 'description': trimmedDescription,
     };
   }
 }

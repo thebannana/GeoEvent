@@ -1,18 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/widgets/app_empty_state.dart';
-import '../../../../core/widgets/app_error_view.dart';
-import '../../../../core/widgets/app_spinner.dart';
-import '../../../../core/widgets/app_surface_card.dart';
+import '../../../../core/widgets/feedback/app_empty_state.dart';
+import '../../../../core/widgets/feedback/app_error_state.dart';
+import '../../../../core/widgets/feedback/app_spinner.dart';
+import '../../../../core/widgets/surfaces/app_surface_card.dart';
 import '../../../../shared/chat/models/chat_participant.dart';
 import '../../../../shared/chat/models/chat_thread_args.dart';
+import '../../../../shared/chat/models/chat_thread_state.dart';
+import '../../../../shared/chat/models/chat_thread_type.dart';
 import '../../../../shared/chat/models/message_item.dart';
 import '../../../auth/application/auth_controller.dart';
 import '../../../event/presentation/screens/event_detail_screen.dart';
 import '../../../public_profile/presentation/screens/public_profile_screen.dart';
 import '../../application/chat_thread_controller.dart';
-import '../../application/messages_controller.dart';
 import '../widgets/chat_message_bubble.dart';
 import '../widgets/chat_reply_preview.dart';
 import '../widgets/chat_thread_header.dart';
@@ -40,25 +41,24 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
   void initState() {
     super.initState();
 
-    Future.microtask(() async {
-      if (!mounted) return;
+    ref.listenManual<ChatThreadState>(
+      chatThreadControllerProvider(widget.args),
+      (previous, next) {
+        final previousCount = previous?.messages.valueOrNull?.length ?? 0;
+        final nextCount = next.messages.valueOrNull?.length ?? 0;
 
-      final controller = ref.read(chatThreadControllerProvider(widget.args).notifier);
-
-      try {
-        await controller.connectRealtime();
-        if (!mounted) return;
-
-        await controller.markThreadRead();
-        if (!mounted) return;
-
-        ref.read(messagesInboxControllerProvider.notifier)
-            .markThreadLocallyRead(widget.args.threadId);
-      } catch (e, st) {
-        debugPrint('ChatThreadScreen init error: $e');
-        debugPrintStack(stackTrace: st);
-      }
-    });
+        if (nextCount > previousCount) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!scrollController.hasClients) return;
+            scrollController.animateTo(
+              scrollController.position.maxScrollExtent,
+              duration: const Duration(milliseconds: 260),
+              curve: Curves.easeOutCubic,
+            );
+          });
+        }
+      },
+    );
   }
 
   @override
@@ -72,31 +72,16 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final state = ref.watch(chatThreadControllerProvider(widget.args));
-    final controller = ref.read(chatThreadControllerProvider(widget.args).notifier);
-    final myUserId = ref.watch(authStateProvider).user?.userId;
-
-    ref.listen(chatThreadControllerProvider(widget.args), (previous, next) {
-      final previousCount = previous?.messages.valueOrNull?.length ?? 0;
-      final nextCount = next.messages.valueOrNull?.length ?? 0;
-
-      if (nextCount > previousCount) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!scrollController.hasClients) return;
-          scrollController.animateTo(
-            scrollController.position.maxScrollExtent,
-            duration: const Duration(milliseconds: 260),
-            curve: Curves.easeOutCubic,
-          );
-        });
-      }
-    });
+    final controller =
+        ref.read(chatThreadControllerProvider(widget.args).notifier);
+    final myUserId = ref.watch(sessionUserIdProvider);
 
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 0,
         title: state.details.when(
           data: (details) => ChatThreadHeader(details: details),
-          error: (_, __) => Text(widget.args.title),
+          error: (_, _) => Text(widget.args.title),
           loading: () => Text(widget.args.title),
         ),
         actions: [
@@ -110,7 +95,12 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
                       builder: (_) => ChatDetailsScreen(
                         details: details,
                         currentUserId: myUserId,
-                        onLeaveThread: controller.leaveThread,
+                        onLeaveThread: () async {
+                          await controller.leaveThread();
+                          if (context.mounted) {
+                            Navigator.of(context).pop();
+                          }
+                        },
                         onOpenEventDetails: details.eventInfo == null
                             ? null
                             : () {
@@ -119,14 +109,17 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
 
                                 Navigator.of(context).push(
                                   MaterialPageRoute(
-                                    builder: (_) => EventDetailsScreen(eventId: eventId),
+                                    builder: (_) =>
+                                        EventDetailsScreen(eventId: eventId),
                                   ),
                                 );
                               },
                         onOpenParticipant: (ChatParticipant participant) {
                           Navigator.of(context).push(
                             MaterialPageRoute(
-                              builder: (_) => PublicProfileScreen(userId: participant.userId),
+                              builder: (_) => PublicProfileScreen(
+                                userId: participant.userId,
+                              ),
                             ),
                           );
                         },
@@ -179,7 +172,8 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
                       ThreadTopStateCard(
                         child: AppEmptyState(
                           title: 'No messages yet',
-                          message: 'Start the conversation with your first message.',
+                          message:
+                              'Start the conversation with your first message.',
                           icon: Icons.chat_bubble_outline_rounded,
                           padding: EdgeInsets.zero,
                         ),
@@ -190,17 +184,20 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
 
                 return ListView.separated(
                   controller: scrollController,
-                  reverse: false,
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
                   itemCount: items.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 10),
+                  separatorBuilder: (_, _) => const SizedBox(height: 10),
                   itemBuilder: (context, index) {
                     final message = items[index];
-                    final isMine = myUserId != null && message.senderId == myUserId;
+                    final isMine =
+                        myUserId != null && message.senderId == myUserId;
 
                     return ChatMessageBubble(
                       message: message,
                       isMine: isMine,
+                      threadType: state.details.valueOrNull?.eventInfo != null
+                          ? ChatThreadType.eventGroup
+                          : widget.args.type,
                       onReply: () => controller.setReplyingTo(message),
                       onDelete: isMine ? () => controller.deleteMessage(message.id) : null,
                       onLike: () => controller.toggleLike(message),
@@ -211,7 +208,7 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
                   },
                 );
               },
-              error: (_, __) => ListView(
+              error: (_, _) => ListView(
                 controller: scrollController,
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
@@ -262,7 +259,8 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
                             color: theme.colorScheme.surface,
                             borderRadius: BorderRadius.circular(22),
                             border: Border.all(
-                              color: theme.colorScheme.outline.withValues(alpha: 0.28),
+                              color: theme.colorScheme.outline
+                                  .withValues(alpha: 0.28),
                             ),
                           ),
                           child: TextField(
@@ -273,7 +271,9 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
                             onSubmitted: state.sending
                                 ? null
                                 : (_) async {
-                                    final ok = await controller.sendMessage(messageController.text);
+                                    final ok = await controller.sendMessage(
+                                      messageController.text,
+                                    );
                                     if (ok) {
                                       messageController.clear();
                                       jumpToBottom();
@@ -298,7 +298,9 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
                           onPressed: state.sending
                               ? null
                               : () async {
-                                  final ok = await controller.sendMessage(messageController.text);
+                                  final ok = await controller.sendMessage(
+                                    messageController.text,
+                                  );
                                   if (ok) {
                                     messageController.clear();
                                     jumpToBottom();
@@ -381,7 +383,10 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
 class ThreadTopStateCard extends StatelessWidget {
   final Widget child;
 
-  const ThreadTopStateCard({super.key, required this.child});
+  const ThreadTopStateCard({
+    super.key,
+    required this.child,
+  });
 
   @override
   Widget build(BuildContext context) {

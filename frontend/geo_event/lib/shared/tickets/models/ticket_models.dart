@@ -1,3 +1,44 @@
+import 'request_refund_status.dart';
+
+enum ReservationStatus {
+  pending,
+  confirmed,
+  cancelled,
+  expired,
+  refunded,
+  unknown;
+
+  static ReservationStatus fromValue(String? value) {
+    switch (value?.trim().toLowerCase()) {
+      case 'pending':
+        return ReservationStatus.pending;
+      case 'confirmed':
+        return ReservationStatus.confirmed;
+      case 'cancelled':
+        return ReservationStatus.cancelled;
+      case 'expired':
+        return ReservationStatus.expired;
+      case 'refunded':
+        return ReservationStatus.refunded;
+      default:
+        return ReservationStatus.unknown;
+    }
+  }
+}
+
+DateTime? _tryParseDate(dynamic value) {
+  if (value == null) return null;
+  return DateTime.tryParse(value.toString());
+}
+
+DateTime _parseRequiredDate(dynamic value, String fieldName) {
+  final parsed = _tryParseDate(value);
+  if (parsed == null) {
+    throw FormatException('Invalid or missing "$fieldName" date value.');
+  }
+  return parsed;
+}
+
 class EventTicketItem {
   final int ticketId;
   final int eventId;
@@ -30,11 +71,6 @@ class EventTicketItem {
   });
 
   factory EventTicketItem.fromJson(Map<String, dynamic> json) {
-    DateTime? parseDate(dynamic value) {
-      if (value == null) return null;
-      return DateTime.tryParse(value.toString());
-    }
-
     return EventTicketItem(
       ticketId: (json['ticketId'] as num?)?.toInt() ?? 0,
       eventId: (json['eventId'] as num?)?.toInt() ?? 0,
@@ -44,8 +80,8 @@ class EventTicketItem {
       soldQuantity: (json['soldQuantity'] as num?)?.toInt() ?? 0,
       availableQuantity: (json['availableQuantity'] as num?)?.toInt() ?? 0,
       isAvailable: json['isAvailable'] as bool? ?? false,
-      saleStartDate: parseDate(json['saleStartDate']),
-      saleEndDate: parseDate(json['saleEndDate']),
+      saleStartDate: _tryParseDate(json['saleStartDate']),
+      saleEndDate: _tryParseDate(json['saleEndDate']),
       isActive: json['isActive'] as bool? ?? true,
       description: json['description']?.toString(),
       priceZoneId: (json['priceZoneId'] as num?)?.toInt(),
@@ -83,29 +119,44 @@ class CreateReservationRequest {
           'seatNumber': seatNumber!.trim(),
         if (section != null && section!.trim().isNotEmpty)
           'section': section!.trim(),
-        if (notes != null && notes!.trim().isNotEmpty) 'notes': notes!.trim(),
+        if (notes != null && notes!.trim().isNotEmpty)
+          'notes': notes!.trim(),
       };
 }
 
 class ConfirmReservationRequest {
-  final String paymentReference;
+  final String? paymentReference;
   final String paymentMethod;
-  final double amount;
   final String currency;
+  final String? providerPaymentId;
+  final String? providerOrderId;
 
   const ConfirmReservationRequest({
-    required this.paymentReference,
+    this.paymentReference,
     required this.paymentMethod,
-    required this.amount,
     required this.currency,
+    this.providerPaymentId,
+    this.providerOrderId,
   });
 
   Map<String, dynamic> toJson() => {
-        'paymentReference': paymentReference,
         'paymentMethod': paymentMethod,
-        'amount': amount,
         'currency': currency,
+        if (paymentReference != null && paymentReference!.trim().isNotEmpty)
+          'paymentReference': paymentReference!.trim(),
+        if (providerPaymentId != null && providerPaymentId!.trim().isNotEmpty)
+          'providerPaymentId': providerPaymentId!.trim(),
+        if (providerOrderId != null && providerOrderId!.trim().isNotEmpty)
+          'providerOrderId': providerOrderId!.trim(),
       };
+}
+
+class CapturePayPalOrderRequest {
+  final String orderId;
+
+  const CapturePayPalOrderRequest({required this.orderId});
+
+  Map<String, dynamic> toJson() => {'orderId': orderId};
 }
 
 class ReservationItem {
@@ -117,6 +168,7 @@ class ReservationItem {
   final double totalAmount;
   final String currency;
   final String status;
+  final ReservationStatus reservationStatus;
   final DateTime createdAt;
   final DateTime? confirmedAt;
   final DateTime? cancelledAt;
@@ -124,6 +176,14 @@ class ReservationItem {
   final DateTime expiresAt;
   final String? paymentReference;
   final String? notes;
+
+  final String? refundRequestStatusRaw;
+  final RefundRequestStatus refundRequestStatus;
+  final String? refundReason;
+  final DateTime? refundRequestedAt;
+  final DateTime? refundReviewedAt;
+  final int? refundReviewedByUserId;
+  final String? refundDecisionReason;
 
   const ReservationItem({
     required this.reservationId,
@@ -134,6 +194,7 @@ class ReservationItem {
     required this.totalAmount,
     required this.currency,
     required this.status,
+    required this.reservationStatus,
     required this.createdAt,
     required this.confirmedAt,
     required this.cancelledAt,
@@ -141,13 +202,18 @@ class ReservationItem {
     required this.expiresAt,
     required this.paymentReference,
     required this.notes,
+    required this.refundRequestStatusRaw,
+    required this.refundRequestStatus,
+    required this.refundReason,
+    required this.refundRequestedAt,
+    required this.refundReviewedAt,
+    required this.refundReviewedByUserId,
+    required this.refundDecisionReason,
   });
 
   factory ReservationItem.fromJson(Map<String, dynamic> json) {
-    DateTime? parseDate(dynamic value) {
-      if (value == null) return null;
-      return DateTime.tryParse(value.toString());
-    }
+    final rawStatus = json['status']?.toString() ?? '';
+    final rawRefundStatus = json['refundRequestStatus']?.toString();
 
     return ReservationItem(
       reservationId: (json['reservationId'] as num?)?.toInt() ?? 0,
@@ -157,18 +223,72 @@ class ReservationItem {
       quantity: (json['quantity'] as num?)?.toInt() ?? 0,
       totalAmount: (json['totalAmount'] as num?)?.toDouble() ?? 0,
       currency: json['currency']?.toString() ?? 'BAM',
-      status: json['status']?.toString() ?? '',
-      createdAt: parseDate(json['createdAt']) ?? DateTime.now(),
-      confirmedAt: parseDate(json['confirmedAt']),
-      cancelledAt: parseDate(json['cancelledAt']),
-      expiredAt: parseDate(json['expiredAt']),
-      expiresAt: parseDate(json['expiresAt']) ?? DateTime.now(),
+      status: rawStatus,
+      reservationStatus: ReservationStatus.fromValue(rawStatus),
+      createdAt: _parseRequiredDate(json['createdAt'], 'createdAt'),
+      confirmedAt: _tryParseDate(json['confirmedAt']),
+      cancelledAt: _tryParseDate(json['cancelledAt']),
+      expiredAt: _tryParseDate(json['expiredAt']),
+      expiresAt: _parseRequiredDate(json['expiresAt'], 'expiresAt'),
       paymentReference: json['paymentReference']?.toString(),
       notes: json['notes']?.toString(),
+      refundRequestStatusRaw: rawRefundStatus,
+      refundRequestStatus: RefundRequestStatus.fromValue(rawRefundStatus),
+      refundReason: json['refundReason']?.toString(),
+      refundRequestedAt: _tryParseDate(json['refundRequestedAt']),
+      refundReviewedAt: _tryParseDate(json['refundReviewedAt']),
+      refundReviewedByUserId: (json['refundReviewedByUserId'] as num?)?.toInt(),
+      refundDecisionReason: json['refundDecisionReason']?.toString(),
     );
   }
 
-  bool get isConfirmed => status.toLowerCase() == 'confirmed';
+  bool get isConfirmed => reservationStatus == ReservationStatus.confirmed;
+  bool get isPending => reservationStatus == ReservationStatus.pending;
+  bool get isCancelled => reservationStatus == ReservationStatus.cancelled;
+  bool get isExpired => reservationStatus == ReservationStatus.expired;
+  bool get isRefunded => reservationStatus == ReservationStatus.refunded;
+
+  bool get hasRefundRequest =>
+      refundRequestStatus != RefundRequestStatus.none &&
+      refundRequestStatus != RefundRequestStatus.unknown;
+
+  bool get canBeCancelled => reservationStatus == ReservationStatus.pending;
+
+  bool get canRequestRefund =>
+      reservationStatus == ReservationStatus.confirmed &&
+      totalAmount > 0 &&
+      (refundRequestStatus == RefundRequestStatus.none ||
+          refundRequestStatus == RefundRequestStatus.rejected ||
+          refundRequestStatus == RefundRequestStatus.failed);
+
+  bool get hasPendingRefundRequest =>
+      refundRequestStatus == RefundRequestStatus.pending;
+
+  bool get isRefundUnderReview =>
+      refundRequestStatus == RefundRequestStatus.pending ||
+      refundRequestStatus == RefundRequestStatus.processing;
+}
+
+class PayPalOrderResponse {
+  final String orderId;
+  final String approveUrl;
+
+  const PayPalOrderResponse({
+    required this.orderId,
+    required this.approveUrl,
+  });
+
+  factory PayPalOrderResponse.fromJson(Map<String, dynamic> json) {
+    return PayPalOrderResponse(
+      orderId: json['orderId']?.toString() ?? '',
+      approveUrl:
+          json['approveUrl']?.toString() ??
+          json['approveLink']?.toString() ??
+          '',
+    );
+  }
+
+  bool get isValid => orderId.trim().isNotEmpty && approveUrl.trim().isNotEmpty;
 }
 
 class EventReservationSummaryItem {
@@ -254,7 +374,7 @@ class PagedResponse<T> {
             .toList()
         : <T>[];
 
-    return PagedResponse(
+    return PagedResponse<T>(
       items: items,
       totalCount: (json['totalCount'] as num?)?.toInt() ?? items.length,
       page: (json['page'] as num?)?.toInt() ?? 1,

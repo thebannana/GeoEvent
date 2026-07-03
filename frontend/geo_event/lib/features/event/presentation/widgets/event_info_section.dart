@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/widgets/app_chip.dart';
+import '../../../../core/widgets/inputs/app_chip.dart';
 import 'event_meta_row.dart';
 
 class EventInfoSection extends StatelessWidget {
@@ -10,7 +10,6 @@ class EventInfoSection extends StatelessWidget {
   final String countdownText;
   final String description;
   final int capacity;
-  final bool isOnline;
   final int? participantCount;
   final String? tags;
   final String? accessibilityInfo;
@@ -24,7 +23,6 @@ class EventInfoSection extends StatelessWidget {
     required this.countdownText,
     required this.description,
     required this.capacity,
-    required this.isOnline,
     this.participantCount,
     this.tags,
     this.accessibilityInfo,
@@ -39,9 +37,7 @@ class EventInfoSection extends StatelessWidget {
 
     final capacityText = participantCount != null
         ? '$participantCount / $capacity going'
-        : isOnline
-            ? 'Online event'
-            : 'Capacity: $capacity people';
+        : 'Capacity: $capacity people';
 
     final tagItems = (tags ?? '')
         .split(',')
@@ -58,7 +54,7 @@ class EventInfoSection extends StatelessWidget {
       children: [
         if (location != null && location!.trim().isNotEmpty) ...[
           EventMetaRow(
-            icon: Icons.public,
+            icon: Icons.location_on_outlined,
             text: location!,
             onTap: onDirectionsTap,
           ),
@@ -80,14 +76,14 @@ class EventInfoSection extends StatelessWidget {
         ),
         const SizedBox(height: 10),
         EventMetaRow(
-          icon: isOnline ? Icons.wifi : Icons.groups_2_outlined,
+          icon: Icons.groups_2_outlined,
           text: capacityText,
         ),
         if (accessibilityInfo != null && accessibilityInfo!.trim().isNotEmpty) ...[
           const SizedBox(height: 10),
           EventMetaRow(
             icon: Icons.accessible_forward,
-            text: accessibilityInfo!,
+            text: accessibilityInfo!.trim(),
           ),
         ],
         const SizedBox(height: 18),
@@ -119,11 +115,7 @@ class EventInfoSection extends StatelessWidget {
           Wrap(
             spacing: 8,
             runSpacing: 8,
-            children: tagItems
-                .map(
-                  (tag) => AppChip(label: tag),
-                )
-                .toList(),
+            children: tagItems.map((tag) => AppChip(label: tag)).toList(),
           ),
         ],
       ],

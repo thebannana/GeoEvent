@@ -3,25 +3,25 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
-import '../../../../core/widgets/app_surface_card.dart';
+import '../../../../core/widgets/surfaces/app_surface_card.dart';
 import '../../../../shared/events/models/create_event_models.dart';
 import '../../../../shared/events/models/create_event_state.dart';
 import 'create_event_form.dart';
 
 class CreateEventImagePicker extends StatelessWidget {
   final CreateEventState state;
-  final VoidCallback onPickFeaturedImage;
-  final VoidCallback onPickGalleryImages;
-  final VoidCallback onClearFeaturedImage;
-  final ValueChanged<int> onRemoveGalleryImageAt;
+  final VoidCallback? onPickFeaturedImage;
+  final VoidCallback? onPickGalleryImages;
+  final VoidCallback? onClearFeaturedImage;
+  final ValueChanged<int>? onRemoveGalleryImageAt;
 
   const CreateEventImagePicker({
     super.key,
     required this.state,
-    required this.onPickFeaturedImage,
-    required this.onPickGalleryImages,
-    required this.onClearFeaturedImage,
-    required this.onRemoveGalleryImageAt,
+    this.onPickFeaturedImage,
+    this.onPickGalleryImages,
+    this.onClearFeaturedImage,
+    this.onRemoveGalleryImageAt,
   });
 
   @override
@@ -54,7 +54,7 @@ class CreateEventImagePicker extends StatelessWidget {
               item: state.featuredImage!,
               title: 'Featured image',
               subtitle: 'This will be used as the cover image.',
-              onRemove: onClearFeaturedImage,
+              onRemove: state.submitting ? null : onClearFeaturedImage,
             ),
           ],
           const SizedBox(height: 16),
@@ -80,7 +80,9 @@ class CreateEventImagePicker extends StatelessWidget {
                   final image = state.galleryImages[index];
                   return GalleryImageCard(
                     item: image,
-                    onRemove: () => onRemoveGalleryImageAt(index),
+                    onRemove: state.submitting || onRemoveGalleryImageAt == null
+                        ? null
+                        : () => onRemoveGalleryImageAt!(index),
                   );
                 },
               ),
@@ -96,14 +98,14 @@ class ImagePreviewTile extends StatelessWidget {
   final EventImageUploadItem item;
   final String title;
   final String subtitle;
-  final VoidCallback onRemove;
+  final VoidCallback? onRemove;
 
   const ImagePreviewTile({
     super.key,
     required this.item,
     required this.title,
     required this.subtitle,
-    required this.onRemove,
+    this.onRemove,
   });
 
   @override
@@ -154,12 +156,12 @@ class ImagePreviewTile extends StatelessWidget {
 
 class GalleryImageCard extends StatelessWidget {
   final EventImageUploadItem item;
-  final VoidCallback onRemove;
+  final VoidCallback? onRemove;
 
   const GalleryImageCard({
     super.key,
     required this.item,
-    required this.onRemove,
+    this.onRemove,
   });
 
   @override
@@ -207,7 +209,7 @@ class LocalImage extends StatelessWidget {
         width: width,
         height: height,
         fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => ImageFallback(
+        errorBuilder: (context, error, stackTrace) => ImageFallback(
           width: width,
           height: height,
         ),
@@ -220,7 +222,7 @@ class LocalImage extends StatelessWidget {
         width: width,
         height: height,
         fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => ImageFallback(
+        errorBuilder: (context, error, stackTrace) => ImageFallback(
           width: width,
           height: height,
         ),

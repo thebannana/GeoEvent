@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
-import '../../../../core/widgets/app_bottom_sheet_container.dart';
-import '../../../../core/widgets/app_surface_card.dart';
+import '../../../../core/widgets/layout/app_bottom_sheet_container.dart';
+import '../../../../core/widgets/surfaces/app_surface_card.dart';
 import '../../../../shared/reservations/models/ticket.dart';
 
 class TicketBottomSheet extends StatelessWidget {
@@ -20,7 +20,7 @@ class TicketBottomSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final title = (eventTitle ?? '').trim();
+    final title = eventTitle?.trim() ?? '';
 
     return AppBottomSheetContainer(
       maxHeightFactor: 0.92,
@@ -74,8 +74,8 @@ class TicketBottomSheet extends StatelessWidget {
               shrinkWrap: true,
               padding: const EdgeInsets.fromLTRB(16, 14, 16, 32),
               itemCount: tickets.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 12),
-              itemBuilder: (context, i) => _TicketItem(
+              separatorBuilder: (_, _) => const SizedBox(height: 12),
+              itemBuilder: (context, i) => TicketItem(
                 ticket: tickets[i],
                 eventTitle: title,
               ),
@@ -87,11 +87,12 @@ class TicketBottomSheet extends StatelessWidget {
   }
 }
 
-class _TicketItem extends StatelessWidget {
+class TicketItem extends StatelessWidget {
   final Ticket ticket;
   final String? eventTitle;
 
-  const _TicketItem({
+  const TicketItem({
+    super.key,
     required this.ticket,
     this.eventTitle,
   });
@@ -100,8 +101,18 @@ class _TicketItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final dotColor = _ticketStatusColor(ticket.status);
-    final title = (eventTitle ?? '').trim();
+    final dotColor = ticketStatusColor(context, ticket.typedStatus);
+    final title = eventTitle?.trim() ?? '';
+
+    final seatText = [
+      if (ticket.seatNumber?.trim().isNotEmpty ?? false)
+        'Seat ${ticket.seatNumber!.trim()}',
+      if (ticket.section?.trim().isNotEmpty ?? false) ticket.section!.trim(),
+    ].join(' · ');
+
+    final isInvalid = ticket.typedStatus == TicketStatus.refunded ||
+        ticket.typedStatus == TicketStatus.cancelled ||
+        ticket.typedStatus == TicketStatus.expired;
 
     return AppSurfaceCard(
       child: Column(
@@ -121,10 +132,13 @@ class _TicketItem extends StatelessWidget {
                   ),
                 ),
                 padding: const EdgeInsets.all(6),
-                child: QrImageView(
-                  data: ticket.qrCode,
-                  version: QrVersions.auto,
-                  backgroundColor: Colors.white,
+                child: Opacity(
+                  opacity: isInvalid ? 0.45 : 1,
+                  child: QrImageView(
+                    data: ticket.qrCode,
+                    version: QrVersions.auto,
+                    backgroundColor: Colors.white,
+                  ),
                 ),
               ),
               const SizedBox(width: 14),
@@ -156,11 +170,10 @@ class _TicketItem extends StatelessWidget {
                         color: colorScheme.onSurfaceVariant,
                       ),
                     ),
-                    if (ticket.seatNumber != null) ...[
+                    if (seatText.isNotEmpty) ...[
                       const SizedBox(height: 2),
                       Text(
-                        'Seat ${ticket.seatNumber}'
-                        '${ticket.section != null ? ' · ${ticket.section}' : ''}',
+                        seatText,
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: colorScheme.onSurfaceVariant,
                         ),
@@ -175,10 +188,10 @@ class _TicketItem extends StatelessWidget {
                         Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            _StatusDot(color: dotColor),
+                            StatusDot(color: dotColor),
                             const SizedBox(width: 5),
                             Text(
-                              ticket.status,
+                              ticket.displayStatus,
                               style: theme.textTheme.bodySmall?.copyWith(
                                 fontWeight: FontWeight.w600,
                               ),
@@ -198,6 +211,16 @@ class _TicketItem extends StatelessWidget {
               ),
             ],
           ),
+          if (isInvalid) ...[
+            const SizedBox(height: 12),
+            Text(
+              'This ticket is no longer valid for entry.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colorScheme.error,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
           const SizedBox(height: 12),
           Container(
             width: double.infinity,
@@ -218,7 +241,7 @@ class _TicketItem extends StatelessWidget {
                     ),
                     const SizedBox(width: 6),
                     Text(
-                      'QR value',
+                      isInvalid ? 'Inactive QR value' : 'QR value',
                       style: theme.textTheme.labelMedium?.copyWith(
                         color: colorScheme.onSurfaceVariant,
                         fontWeight: FontWeight.w700,
@@ -237,7 +260,9 @@ class _TicketItem extends StatelessWidget {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'Use this code manually if scanning does not work.',
+                  isInvalid
+                      ? 'Stored for reference only. This code is not valid for entry.'
+                      : 'Use this code manually if scanning does not work.',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: colorScheme.onSurfaceVariant,
                   ),
@@ -251,10 +276,11 @@ class _TicketItem extends StatelessWidget {
   }
 }
 
-class _StatusDot extends StatelessWidget {
+class StatusDot extends StatelessWidget {
   final Color color;
 
-  const _StatusDot({
+  const StatusDot({
+    super.key,
     required this.color,
   });
 
@@ -271,15 +297,19 @@ class _StatusDot extends StatelessWidget {
   }
 }
 
-Color _ticketStatusColor(String status) {
-  final normalized = status.toLowerCase();
+Color ticketStatusColor(BuildContext context, TicketStatus status) {
+  final colorScheme = Theme.of(context).colorScheme;
 
-  return switch (normalized) {
-    'active' => const Color(0xFF437A22),
-    'used' => const Color(0xFF006494),
-    'cancelled' => const Color(0xFFA12C7B),
-    'expired' => const Color(0xFF7A7974),
-    'refunded' => const Color(0xFFD19900),
-    _ => const Color(0xFF7A7974),
-  };
+  switch (status) {
+    case TicketStatus.active:
+      return colorScheme.primary;
+    case TicketStatus.used:
+      return colorScheme.secondary;
+    case TicketStatus.cancelled:
+      return colorScheme.error;
+    case TicketStatus.expired:
+      return colorScheme.onSurfaceVariant;
+    case TicketStatus.refunded:
+      return colorScheme.tertiary;
+  }
 }

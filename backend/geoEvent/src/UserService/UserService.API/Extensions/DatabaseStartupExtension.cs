@@ -37,9 +37,10 @@ public static class DatabaseStartupExtensions
             }
             catch (SqlException ex) when (IsDatabaseAlreadyExists(ex))
             {
-                logger.LogError(ex,
-                    "Migration attempted to create an existing database. This usually means the database already exists but is not aligned with EF migration history.");
-                throw;
+                logger.LogWarning(
+                    "Database already exists but has no EF migration history. Context: {Context}. Skipping CREATE.",
+                    typeof(TContext).Name);
+                return;
             }
             catch (Exception ex)
             {

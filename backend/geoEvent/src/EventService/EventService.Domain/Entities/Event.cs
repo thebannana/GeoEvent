@@ -171,7 +171,7 @@ public class Event
     }
 
     public bool IsUpcoming() => StartDateTime > DateTime.UtcNow;
-    public bool IsPast() => EndDateTime < DateTime.UtcNow;
+    public bool IsPast() => EndDateTime <= DateTime.UtcNow;
     public bool IsActive() => Status == EventStatus.Confirmed;
 
     public bool CanBePublished() =>

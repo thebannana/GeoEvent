@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/utils/date_time_extensions.dart';
-import '../../../../core/widgets/app_empty_state.dart';
-import '../../../../core/widgets/app_spinner.dart';
-import '../../../../core/widgets/app_surface_card.dart';
+import '../../../../core/widgets/feedback/app_empty_state.dart';
+import '../../../../core/widgets/feedback/app_spinner.dart';
+import '../../../../core/widgets/surfaces/app_surface_card.dart';
 import '../../../../shared/comments/models/comment_item.dart';
 import '../../../../shared/reports/models/report_target_type.dart';
 import '../../../auth/application/auth_controller.dart';
@@ -119,16 +119,17 @@ class _InlineEventCommentsSectionState
               if (text.isEmpty) return;
 
               final editingId = state.editingCommentId;
-              if (editingId != null) {
-                await controller.saveEdit(
-                  commentId: editingId,
-                  rawText: text,
-                );
-              } else {
-                await controller.submitComment(text);
-              }
+              final ok = editingId != null
+                  ? await controller.saveEdit(
+                      commentId: editingId,
+                      rawText: text,
+                    )
+                  : await controller.submitComment(text);
 
-              _composerController.clear();
+              if (!mounted) return;
+              if (ok) {
+                _composerController.clear();
+              }
             },
           ),
           const SizedBox(height: 18),
@@ -161,6 +162,7 @@ class _InlineEventCommentsSectionState
                         onReplyTap: comment.isDeleted
                             ? null
                             : () {
+                                controller.cancelEdit();
                                 controller.startReply(comment.commentId);
                                 _composerController.clear();
                               },
@@ -170,8 +172,13 @@ class _InlineEventCommentsSectionState
                                 ) &&
                                 !comment.isDeleted
                             ? () {
+                                controller.cancelReply();
                                 controller.startEdit(comment.commentId);
                                 _composerController.text = comment.content;
+                                _composerController.selection =
+                                    TextSelection.collapsed(
+                                  offset: _composerController.text.length,
+                                );
                               }
                             : null,
                         onDeleteTap: _canManageComment(
@@ -189,12 +196,18 @@ class _InlineEventCommentsSectionState
                             : null,
                         onReplyLikeTap: (reply) => controller.toggleLike(reply),
                         onReplyReplyTap: (reply) {
+                          controller.cancelEdit();
                           controller.startReply(reply.commentId);
                           _composerController.clear();
                         },
                         onReplyEditTap: (reply) {
+                          controller.cancelReply();
                           controller.startEdit(reply.commentId);
                           _composerController.text = reply.content;
+                          _composerController.selection =
+                              TextSelection.collapsed(
+                            offset: _composerController.text.length,
+                          );
                         },
                         onReplyDeleteTap: (reply) =>
                             controller.deleteComment(reply.commentId),
@@ -358,6 +371,8 @@ class _CommentComposer extends StatelessWidget {
               controller: controller,
               minLines: 1,
               maxLines: 5,
+              enabled: !isSubmitting,
+              textInputAction: TextInputAction.newline,
               style: TextStyle(
                 color: colorScheme.onSurface,
                 height: 1.3,
@@ -706,7 +721,7 @@ class _CommentBubble extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final authorName = commentAuthorName(comment);
-    final username = commentUsername(comment);
+    final handle = commentAuthorHandle(comment);
 
     return Container(
       width: double.infinity,
@@ -738,9 +753,9 @@ class _CommentBubble extends StatelessWidget {
                     height: 1.35,
                   ),
                 ),
-                if (username.isNotEmpty)
+                if (handle.isNotEmpty)
                   Text(
-                    '@$username',
+                    handle,
                     style: TextStyle(
                       color: colorScheme.onSurfaceVariant,
                       fontSize: 12,
@@ -801,7 +816,7 @@ class _AvatarBubble extends StatelessWidget {
         radius: size / 2,
         backgroundColor: colorScheme.surfaceContainerHighest,
         backgroundImage: NetworkImage(avatarUrl!),
-        onBackgroundImageError: (_, __) {},
+        onBackgroundImageError: (_, _) {},
       );
     }
 
@@ -838,10 +853,18 @@ class _AvatarBubble extends StatelessWidget {
     final parts =
         cleaned.split(RegExp(r'\s+')).where((e) => e.isNotEmpty).toList();
     if (parts.isEmpty) return '?';
-    if (parts.length == 1) return parts.first.characters.first.toUpperCase();
 
-    return '${parts.first.characters.first}${parts[1].characters.first}'
-        .toUpperCase();
+    final first = _firstVisibleChar(parts.first);
+    if (parts.length == 1) return first.toUpperCase();
+
+    final second = _firstVisibleChar(parts[1]);
+    return '$first$second'.toUpperCase();
+  }
+
+  String _firstVisibleChar(String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return '?';
+    return trimmed.substring(0, 1);
   }
 }
 
@@ -906,16 +929,22 @@ String commentAuthorName(CommentItem comment) {
   if (displayName != null && displayName.isNotEmpty) return displayName;
 
   final username = comment.username?.trim();
-  if (username != null && username.isNotEmpty) return username;
+  if (username != null && username.isNotEmpty) {
+    return username.replaceFirst(RegExp(r'^@+'), '');
+  }
 
   if (comment.userId != null) return 'User #${comment.userId}';
   return 'User';
 }
 
-String commentUsername(CommentItem comment) {
+String commentAuthorHandle(CommentItem comment) {
   if (comment.isDeleted) return '';
 
   final username = comment.username?.trim();
   if (username == null || username.isEmpty) return '';
-  return username;
+
+  final cleaned = username.replaceFirst(RegExp(r'^@+'), '');
+  if (cleaned.isEmpty) return '';
+
+  return '@$cleaned';
 }

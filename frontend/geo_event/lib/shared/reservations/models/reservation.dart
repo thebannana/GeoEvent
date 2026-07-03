@@ -1,3 +1,4 @@
+import 'reservation_status.dart';
 import 'ticket.dart';
 
 class Reservation {
@@ -18,6 +19,13 @@ class Reservation {
   final String? notes;
   final List<Ticket> tickets;
 
+  final String? refundRequestStatus;
+  final String? refundReason;
+  final DateTime? refundRequestedAt;
+  final DateTime? refundReviewedAt;
+  final int? refundReviewedByUserId;
+  final String? refundDecisionReason;
+
   const Reservation({
     required this.reservationId,
     required this.userId,
@@ -35,123 +43,212 @@ class Reservation {
     this.paymentReference,
     this.notes,
     required this.tickets,
+    this.refundRequestStatus,
+    this.refundReason,
+    this.refundRequestedAt,
+    this.refundReviewedAt,
+    this.refundReviewedByUserId,
+    this.refundDecisionReason,
   });
 
-  String get displayStatus {
-    final normalized = status.trim().toLowerCase();
-    final now = DateTime.now();
+  ReservationStatus get typedStatus {
+  final normalized = status.trim().toLowerCase();
+  final now = DateTime.now();
 
-    if (normalized == 'cancelled') return 'Cancelled';
-    if (normalized == 'refunded') return 'Refunded';
-    if (normalized == 'expired') return 'Expired';
-
-    if (expiresAt.isBefore(now) || expiresAt.isAtSameMomentAs(now)) {
-      return 'Expired';
-    }
-
-    if (normalized == 'confirmed') return 'Confirmed';
-    if (normalized == 'pending') return 'Pending';
-
-    return _capitalize(status);
+  if (normalized == ReservationStatus.cancelled.apiValue.toLowerCase()) {
+    return ReservationStatus.cancelled;
   }
 
+  if (normalized == ReservationStatus.refunded.apiValue.toLowerCase()) {
+    return ReservationStatus.refunded;
+  }
+
+  if (normalized == ReservationStatus.expired.apiValue.toLowerCase()) {
+    return ReservationStatus.expired;
+  }
+
+  if (normalized == ReservationStatus.confirmed.apiValue.toLowerCase()) {
+    return ReservationStatus.confirmed;
+  }
+
+  if (normalized == ReservationStatus.pending.apiValue.toLowerCase()) {
+    if (expiresAt.isBefore(now) || expiresAt.isAtSameMomentAs(now)) {
+      return ReservationStatus.expired;
+    }
+
+    return ReservationStatus.pending;
+  }
+
+  return ReservationStatus.unknown;
+}
+
+String get displayStatus {
+  switch (typedStatus) {
+    case ReservationStatus.pending:
+      return 'Pending';
+    case ReservationStatus.confirmed:
+      return 'Confirmed';
+    case ReservationStatus.cancelled:
+      return 'Cancelled';
+    case ReservationStatus.expired:
+      return 'Expired';
+    case ReservationStatus.refunded:
+      return 'Refunded';
+    case ReservationStatus.unknown:
+      return 'Unknown';
+  }
+}
+
   bool get isExpiredByTime {
+    if (typedStatus != ReservationStatus.pending) {
+      return false;
+    }
+
     final now = DateTime.now();
     return expiresAt.isBefore(now) || expiresAt.isAtSameMomentAs(now);
   }
 
-  bool get canBeCancelled {
-    final normalized = displayStatus.toLowerCase();
-    return normalized == 'pending' || normalized == 'confirmed';
-  }
-
-  bool get isActive {
-    final normalized = displayStatus.toLowerCase();
-    return normalized != 'cancelled' &&
-        normalized != 'expired' &&
-        normalized != 'refunded';
-  }
-
-  factory Reservation.fromJson(Map<String, dynamic> json) => Reservation(
-        reservationId: (json['reservationId'] as num).toInt(),
-        userId: (json['userId'] as num).toInt(),
-        eventId: (json['eventId'] as num).toInt(),
-        eventTicketId: (json['eventTicketId'] as num?)?.toInt(),
-        quantity: (json['quantity'] as num).toInt(),
-        totalAmount: (json['totalAmount'] as num).toDouble(),
-        currency: (json['currency'] ?? '').toString(),
-        status: (json['status'] ?? '').toString(),
-        createdAt: DateTime.parse((json['createdAt'] ?? '').toString()).toLocal(),
-        confirmedAt: json['confirmedAt'] != null
-            ? DateTime.parse(json['confirmedAt'].toString()).toLocal()
-            : null,
-        cancelledAt: json['cancelledAt'] != null
-            ? DateTime.parse(json['cancelledAt'].toString()).toLocal()
-            : null,
-        expiredAt: json['expiredAt'] != null
-            ? DateTime.parse(json['expiredAt'].toString()).toLocal()
-            : null,
-        expiresAt: DateTime.parse((json['expiresAt'] ?? '').toString()).toLocal(),
-        paymentReference: json['paymentReference']?.toString(),
-        notes: json['notes']?.toString(),
-        tickets: (json['tickets'] as List<dynamic>? ?? const [])
-            .map((t) => Ticket.fromJson(Map<String, dynamic>.from(t as Map)))
-            .toList(),
-      );
-
-  Reservation copyWith({
-    int? reservationId,
-    int? userId,
-    int? eventId,
-    Object? eventTicketId = _sentinel,
-    int? quantity,
-    double? totalAmount,
-    String? currency,
-    String? status,
-    DateTime? createdAt,
-    Object? confirmedAt = _sentinel,
-    Object? cancelledAt = _sentinel,
-    Object? expiredAt = _sentinel,
-    DateTime? expiresAt,
-    Object? paymentReference = _sentinel,
-    Object? notes = _sentinel,
-    List<Ticket>? tickets,
-  }) {
-    return Reservation(
-      reservationId: reservationId ?? this.reservationId,
-      userId: userId ?? this.userId,
-      eventId: eventId ?? this.eventId,
-      eventTicketId: identical(eventTicketId, _sentinel)
-          ? this.eventTicketId
-          : eventTicketId as int?,
-      quantity: quantity ?? this.quantity,
-      totalAmount: totalAmount ?? this.totalAmount,
-      currency: currency ?? this.currency,
-      status: status ?? this.status,
-      createdAt: createdAt ?? this.createdAt,
-      confirmedAt: identical(confirmedAt, _sentinel)
-          ? this.confirmedAt
-          : confirmedAt as DateTime?,
-      cancelledAt: identical(cancelledAt, _sentinel)
-          ? this.cancelledAt
-          : cancelledAt as DateTime?,
-      expiredAt: identical(expiredAt, _sentinel)
-          ? this.expiredAt
-          : expiredAt as DateTime?,
-      expiresAt: expiresAt ?? this.expiresAt,
-      paymentReference: identical(paymentReference, _sentinel)
-          ? this.paymentReference
-          : paymentReference as String?,
-      notes: identical(notes, _sentinel) ? this.notes : notes as String?,
-      tickets: tickets ?? this.tickets,
-    );
-  }
-
-  static String _capitalize(String value) {
-    final trimmed = value.trim();
-    if (trimmed.isEmpty) return trimmed;
-    return '${trimmed[0].toUpperCase()}${trimmed.substring(1).toLowerCase()}';
-  }
+bool get canBeCancelled {
+  return typedStatus == ReservationStatus.pending;
 }
 
-const _sentinel = Object();
+bool get canBeRefunded {
+  return typedStatus == ReservationStatus.confirmed && totalAmount > 0;
+}
+
+bool get hasPendingRefundRequest =>
+    (refundRequestStatus ?? '').trim().toLowerCase() == 'pending';
+
+bool get isRefundRejected =>
+    (refundRequestStatus ?? '').trim().toLowerCase() == 'rejected';
+
+bool get isRefundCompleted =>
+    (refundRequestStatus ?? '').trim().toLowerCase() == 'refunded' ||
+    typedStatus == ReservationStatus.refunded;
+
+bool get canRequestRefund {
+  final refundState = (refundRequestStatus ?? '').trim().toLowerCase();
+
+  return typedStatus == ReservationStatus.confirmed &&
+      totalAmount > 0 &&
+      refundState != 'pending' &&
+      refundState != 'processing' &&
+      refundState != 'approved' &&
+      refundState != 'refunded';
+}
+
+  bool get isActive {
+    return typedStatus != ReservationStatus.cancelled &&
+        typedStatus != ReservationStatus.expired &&
+        typedStatus != ReservationStatus.refunded;
+  }
+
+  factory Reservation.fromJson(Map<String, dynamic> json) {
+  DateTime? tryParse(dynamic value) {
+    if (value == null) return null;
+    return DateTime.tryParse(value.toString())?.toLocal();
+  }
+
+  return Reservation(
+    reservationId: (json['reservationId'] as num).toInt(),
+    userId: (json['userId'] as num).toInt(),
+    eventId: (json['eventId'] as num).toInt(),
+    eventTicketId: (json['eventTicketId'] as num?)?.toInt(),
+    quantity: (json['quantity'] as num).toInt(),
+    totalAmount: (json['totalAmount'] as num).toDouble(),
+    currency: (json['currency'] ?? '').toString(),
+    status: (json['status'] ?? '').toString(),
+    createdAt: DateTime.parse((json['createdAt'] ?? '').toString()).toLocal(),
+    confirmedAt: tryParse(json['confirmedAt']),
+    cancelledAt: tryParse(json['cancelledAt']),
+    expiredAt: tryParse(json['expiredAt']),
+    expiresAt: DateTime.parse((json['expiresAt'] ?? '').toString()).toLocal(),
+    paymentReference: json['paymentReference']?.toString(),
+    notes: json['notes']?.toString(),
+    tickets: (json['tickets'] as List<dynamic>? ?? const [])
+        .whereType<Map>()
+        .map((t) => Ticket.fromJson(Map<String, dynamic>.from(t)))
+        .toList(),
+    refundRequestStatus: json['refundRequestStatus']?.toString(),
+    refundReason: json['refundReason']?.toString(),
+    refundRequestedAt: tryParse(json['refundRequestedAt']),
+    refundReviewedAt: tryParse(json['refundReviewedAt']),
+    refundReviewedByUserId: (json['refundReviewedByUserId'] as num?)?.toInt(),
+    refundDecisionReason: json['refundDecisionReason']?.toString(),
+  );
+}
+
+  Reservation copyWith({
+  int? reservationId,
+  int? userId,
+  int? eventId,
+  Object? eventTicketId = sentinel,
+  int? quantity,
+  double? totalAmount,
+  String? currency,
+  String? status,
+  DateTime? createdAt,
+  Object? confirmedAt = sentinel,
+  Object? cancelledAt = sentinel,
+  Object? expiredAt = sentinel,
+  DateTime? expiresAt,
+  Object? paymentReference = sentinel,
+  Object? notes = sentinel,
+  List<Ticket>? tickets,
+  Object? refundRequestStatus = sentinel,
+  Object? refundReason = sentinel,
+  Object? refundRequestedAt = sentinel,
+  Object? refundReviewedAt = sentinel,
+  Object? refundReviewedByUserId = sentinel,
+  Object? refundDecisionReason = sentinel,
+}) {
+  return Reservation(
+    reservationId: reservationId ?? this.reservationId,
+    userId: userId ?? this.userId,
+    eventId: eventId ?? this.eventId,
+    eventTicketId: identical(eventTicketId, sentinel)
+        ? this.eventTicketId
+        : eventTicketId as int?,
+    quantity: quantity ?? this.quantity,
+    totalAmount: totalAmount ?? this.totalAmount,
+    currency: currency ?? this.currency,
+    status: status ?? this.status,
+    createdAt: createdAt ?? this.createdAt,
+    confirmedAt: identical(confirmedAt, sentinel)
+        ? this.confirmedAt
+        : confirmedAt as DateTime?,
+    cancelledAt: identical(cancelledAt, sentinel)
+        ? this.cancelledAt
+        : cancelledAt as DateTime?,
+    expiredAt: identical(expiredAt, sentinel)
+        ? this.expiredAt
+        : expiredAt as DateTime?,
+    expiresAt: expiresAt ?? this.expiresAt,
+    paymentReference: identical(paymentReference, sentinel)
+        ? this.paymentReference
+        : paymentReference as String?,
+    notes: identical(notes, sentinel) ? this.notes : notes as String?,
+    tickets: tickets ?? this.tickets,
+    refundRequestStatus: identical(refundRequestStatus, sentinel)
+        ? this.refundRequestStatus
+        : refundRequestStatus as String?,
+    refundReason: identical(refundReason, sentinel)
+        ? this.refundReason
+        : refundReason as String?,
+    refundRequestedAt: identical(refundRequestedAt, sentinel)
+        ? this.refundRequestedAt
+        : refundRequestedAt as DateTime?,
+    refundReviewedAt: identical(refundReviewedAt, sentinel)
+        ? this.refundReviewedAt
+        : refundReviewedAt as DateTime?,
+    refundReviewedByUserId: identical(refundReviewedByUserId, sentinel)
+        ? this.refundReviewedByUserId
+        : refundReviewedByUserId as int?,
+    refundDecisionReason: identical(refundDecisionReason, sentinel)
+        ? this.refundDecisionReason
+        : refundDecisionReason as String?,
+  );
+}
+
+  static const sentinel = Object();
+}

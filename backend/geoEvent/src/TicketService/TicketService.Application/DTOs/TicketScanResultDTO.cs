@@ -18,4 +18,8 @@ public class TicketScanResultDto
     public DateTime? IssuedAt { get; set; }
     public DateTime? UsedAt { get; set; }
     public DateTime ScannedAt { get; set; }
+
+    public string? PaymentMethod { get; set; }
+    public string? PaymentStatus { get; set; }
+    public string? PaymentMessage { get; set; }
 }

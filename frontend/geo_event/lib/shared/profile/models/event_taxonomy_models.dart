@@ -17,15 +17,21 @@ class SegmentLookup {
 
   factory SegmentLookup.fromJson(Map<String, dynamic> json) {
     return SegmentLookup(
-      segmentId: (json['segmentId'] as num).toInt(),
+      segmentId: (json['segmentId'] as num?)?.toInt() ?? 0,
       name: (json['name'] ?? '').toString(),
-      iconUrl: json['iconUrl']?.toString(),
-      color: json['color']?.toString(),
+      iconUrl: _normalizeNullableString(json['iconUrl']),
+      color: _normalizeNullableString(json['color']),
       isActive: json['isActive'] as bool? ?? true,
       genres: ((json['genres'] as List?) ?? const [])
-          .map((e) => GenreLookup.fromJson(Map<String, dynamic>.from(e as Map)))
+          .whereType<Map>()
+          .map((item) => GenreLookup.fromJson(Map<String, dynamic>.from(item)))
           .toList(),
     );
+  }
+
+  static String? _normalizeNullableString(dynamic value) {
+    final text = value?.toString().trim();
+    return (text == null || text.isEmpty) ? null : text;
   }
 }
 
@@ -48,15 +54,16 @@ class GenreLookup {
 
   factory GenreLookup.fromJson(Map<String, dynamic> json) {
     return GenreLookup(
-      genreId: (json['genreId'] as num).toInt(),
+      genreId: (json['genreId'] as num?)?.toInt() ?? 0,
       name: (json['name'] ?? '').toString(),
       segmentId: (json['segmentId'] as num?)?.toInt(),
-      segmentName: json['segmentName']?.toString(),
+      segmentName: SegmentLookup._normalizeNullableString(json['segmentName']),
       isActive: json['isActive'] as bool? ?? true,
       subGenres: ((json['subGenres'] as List?) ?? const [])
+          .whereType<Map>()
           .map(
-            (e) => SubGenreLookup.fromJson(
-              Map<String, dynamic>.from(e as Map),
+            (item) => SubGenreLookup.fromJson(
+              Map<String, dynamic>.from(item),
             ),
           )
           .toList(),
@@ -79,7 +86,7 @@ class SubGenreLookup {
 
   factory SubGenreLookup.fromJson(Map<String, dynamic> json) {
     return SubGenreLookup(
-      subGenreId: (json['subGenreId'] as num).toInt(),
+      subGenreId: (json['subGenreId'] as num?)?.toInt() ?? 0,
       name: (json['name'] ?? '').toString(),
       genreId: (json['genreId'] as num?)?.toInt(),
       isActive: json['isActive'] as bool? ?? true,

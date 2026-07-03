@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/widgets/app_surface_card.dart';
+import '../../../../core/widgets/surfaces/app_surface_card.dart';
 import '../../../../shared/payment/models/payment_summary.dart';
 
 class PaymentOrderSummary extends StatelessWidget {
@@ -26,7 +26,7 @@ class PaymentOrderSummary extends StatelessWidget {
                     width: 74,
                     height: 74,
                     fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => const _FallbackImage(),
+                    errorBuilder: (_, _, _) => const _FallbackImage(),
                   )
                 : const _FallbackImage(),
           ),

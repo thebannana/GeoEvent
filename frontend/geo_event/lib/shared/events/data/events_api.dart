@@ -1,57 +1,70 @@
-import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http_parser/http_parser.dart';
 
+import '../../../core/network/api_endpoints.dart';
 import '../models/create_event_models.dart';
 import '../models/event_taxonomy_models.dart';
 import '../models/paged_result.dart';
 
 class EventsApi {
+  const EventsApi(this.dio);
+
   final Dio dio;
 
-  EventsApi(this.dio);
-
   Future<List<SegmentItem>> getSegments() async {
-    final response = await dio.get('/api/segments');
+    final response = await dio.get(ApiEndpoints.segments);
     final items = _extractList(response.data);
     return items.map(SegmentItem.fromJson).toList();
   }
 
   Future<List<GenreItem>> getGenresBySegment(int segmentId) async {
-    final response = await dio.get('/api/segments/$segmentId/genres');
+    final response = await dio.get(ApiEndpoints.genresForSegment(segmentId));
     final items = _extractList(response.data);
     return items.map(GenreItem.fromJson).toList();
   }
 
   Future<List<SubGenreItem>> getSubGenresByGenre(int genreId) async {
-    final response = await dio.get('/api/genres/$genreId/subgenres');
+    final response = await dio.get(ApiEndpoints.subGenresForGenre(genreId));
     final items = _extractList(response.data);
     return items.map(SubGenreItem.fromJson).toList();
   }
 
   Future<EventItem> createEvent(CreateEventRequest payload) async {
     final response = await dio.post(
-      '/api/events',
+      ApiEndpoints.events,
       data: payload.toJson(),
     );
-
     return _parseEvent(response.data);
   }
 
   Future<EventItem> updateEvent(int eventId, CreateEventRequest payload) async {
     final response = await dio.put(
-      '/api/events/$eventId',
+      ApiEndpoints.eventById(eventId),
       data: payload.toJson(),
     );
-
     return _parseEvent(response.data);
   }
 
   Future<void> publishEvent(int eventId) async {
-    await dio.post('/api/events/$eventId/publish');
+    await dio.post(ApiEndpoints.publishEvent(eventId));
   }
+
+Future<void> deleteEventImage({
+  required int eventId,
+  required int imageId,
+}) {
+  return dio.delete(
+    '${ApiEndpoints.eventImages(eventId)}/$imageId',
+    options: Options(
+      contentType: Headers.jsonContentType,
+      headers: const {
+        'Accept': 'application/json',
+      },
+    ),
+  );
+}
 
   Future<void> addEventImage({
     required int eventId,
@@ -59,7 +72,7 @@ class EventsApi {
     required bool isCover,
   }) async {
     await dio.post(
-      '/api/events/$eventId/images',
+      ApiEndpoints.eventImages(eventId),
       data: {
         'imageUrl': imageUrl,
         'isCover': isCover,
@@ -72,10 +85,7 @@ class EventsApi {
     String? fileName,
     Uint8List? bytes,
   }) async {
-    final resolvedFileName = (fileName == null || fileName.trim().isEmpty)
-        ? _fileNameFromPath(localPath)
-        : fileName.trim();
-
+    final resolvedFileName = _resolveFileName(localPath, fileName);
     final contentType = _contentTypeFromFileName(resolvedFileName);
 
     final MultipartFile multipartFile;
@@ -99,13 +109,9 @@ class EventsApi {
       );
     }
 
-    final formData = FormData.fromMap({
-      'file': multipartFile,
-    });
-
     final response = await dio.post(
-      '/api/uploads/images',
-      data: formData,
+      ApiEndpoints.uploadImage,
+      data: FormData.fromMap({'file': multipartFile}),
       options: Options(contentType: 'multipart/form-data'),
     );
 
@@ -114,11 +120,11 @@ class EventsApi {
         data['url']?.toString() ??
         data['location']?.toString();
 
-    if (imageUrl == null || imageUrl.isEmpty) {
+    if (imageUrl == null || imageUrl.trim().isEmpty) {
       throw Exception('Image upload succeeded but no image URL was returned.');
     }
 
-    return imageUrl;
+    return imageUrl.trim();
   }
 
   Future<List<EventItem>> getNearbyEvents({
@@ -135,15 +141,15 @@ class EventsApi {
     bool? todayOnly,
   }) async {
     final response = await dio.get(
-      '/api/public/events/nearby',
+      '${ApiEndpoints.publicEventsBase}/nearby',
       queryParameters: {
         'latitude': latitude,
         'longitude': longitude,
         'radiusKm': radiusKm,
         'limit': limit,
-        if (segmentId != null) 'segmentId': segmentId,
-        if (genreId != null) 'genreId': genreId,
-        if (subGenreId != null) 'subGenreId': subGenreId,
+        'segmentId': ?segmentId,
+        'genreId': ?genreId,
+        'subGenreId': ?subGenreId,
         if (freeOnly == true) 'maxPrice': 0,
         if (freeOnly != true && minPrice != null) 'minPrice': minPrice,
         if (freeOnly != true && maxPrice != null) 'maxPrice': maxPrice,
@@ -170,7 +176,7 @@ class EventsApi {
     bool? todayOnly,
   }) async {
     final response = await dio.get(
-      '/api/public/events',
+      ApiEndpoints.publicEventsBase,
       queryParameters: {
         if (searchTerm != null && searchTerm.trim().isNotEmpty)
           'searchTerm': searchTerm.trim(),
@@ -178,9 +184,9 @@ class EventsApi {
         'pageSize': pageSize,
         'sortBy': sortBy,
         'sortDescending': sortDescending,
-        if (segmentId != null) 'segmentId': segmentId,
-        if (genreId != null) 'genreId': genreId,
-        if (subGenreId != null) 'subGenreId': subGenreId,
+        'segmentId': ?segmentId,
+        'genreId': ?genreId,
+        'subGenreId': ?subGenreId,
         if (freeOnly == true) 'maxPrice': 0,
         if (freeOnly != true && minPrice != null) 'minPrice': minPrice,
         if (freeOnly != true && maxPrice != null) 'maxPrice': maxPrice,
@@ -203,7 +209,7 @@ class EventsApi {
     int? subGenreId,
   }) async {
     final response = await dio.get(
-      '/api/public/events',
+      ApiEndpoints.publicEventsBase,
       queryParameters: {
         if (searchTerm != null && searchTerm.trim().isNotEmpty)
           'searchTerm': searchTerm.trim(),
@@ -211,21 +217,17 @@ class EventsApi {
         'pageSize': pageSize,
         'sortBy': sortBy,
         'sortDescending': sortDescending,
-        if (segmentId != null) 'segmentId': segmentId,
-        if (genreId != null) 'genreId': genreId,
-        if (subGenreId != null) 'subGenreId': subGenreId,
+        'segmentId': ?segmentId,
+        'genreId': ?genreId,
+        'subGenreId': ?subGenreId,
       },
     );
 
     final raw = response.data;
-
     if (raw is Map) {
       final map = Map<String, dynamic>.from(raw);
-      if (map.containsKey('items')) {
-        return PagedResult<EventItem>.fromJson(
-          map,
-          EventItem.fromJson,
-        );
+      if (map.containsKey('items') || map.containsKey('Items')) {
+        return PagedResult<EventItem>.fromJson(map, EventItem.fromJson);
       }
     }
 
@@ -266,18 +268,23 @@ class EventsApi {
   }
 
   Future<EventItem> getEventById(int eventId) async {
-    final response = await dio.get('/api/public/events/$eventId');
+    final response = await dio.get(ApiEndpoints.publicEventById(eventId));
     return _parseEvent(response.data);
   }
 
   EventItem _parseEvent(dynamic raw) {
-    final data = _asMap(raw);
-    return EventItem.fromJson(data);
+    return EventItem.fromJson(_asMap(raw));
   }
 
   Map<String, dynamic> _asMap(dynamic raw) {
-    if (raw is Map<String, dynamic>) return raw;
-    if (raw is Map) return Map<String, dynamic>.from(raw);
+    if (raw is Map<String, dynamic>) {
+      return raw;
+    }
+
+    if (raw is Map) {
+      return Map<String, dynamic>.from(raw);
+    }
+
     throw Exception('Invalid response format.');
   }
 
@@ -294,11 +301,17 @@ class EventsApi {
 
       for (final key in [
         'items',
+        'Items',
         'data',
+        'Data',
         'results',
+        'Results',
         'segments',
+        'Segments',
         'genres',
+        'Genres',
         'subGenres',
+        'SubGenres',
       ]) {
         final value = map[key];
         if (value is List) {
@@ -313,13 +326,17 @@ class EventsApi {
     return const [];
   }
 
-  String _fileNameFromPath(String path) {
-    final normalized = path.replaceAll('\\', '/');
-    final parts = normalized.split('/');
-    final fileName = parts.isNotEmpty ? parts.last.trim() : '';
+  String _resolveFileName(String localPath, String? fileName) {
+    final trimmed = fileName?.trim();
+    if (trimmed != null && trimmed.isNotEmpty) {
+      return trimmed;
+    }
 
-    if (fileName.isEmpty) return 'image.jpg';
-    return fileName;
+    final normalized = localPath.replaceAll('\\', '/');
+    final parts = normalized.split('/');
+    final resolved = parts.isNotEmpty ? parts.last.trim() : '';
+
+    return resolved.isEmpty ? 'image.jpg' : resolved;
   }
 
   MediaType _contentTypeFromFileName(String fileName) {

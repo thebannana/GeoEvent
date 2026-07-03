@@ -6,32 +6,48 @@ import '../models/paged_result.dart';
 import 'events_api.dart';
 
 class EventsRepository {
-  final EventsApi _api;
+  const EventsRepository(this.api);
 
-  const EventsRepository(this._api);
+  final EventsApi api;
 
-  Future<List<SegmentItem>> getSegments() => _api.getSegments();
+  Future<List<SegmentItem>> getSegments() => api.getSegments();
 
-  Future<List<GenreItem>> getGenresBySegment(int segmentId) =>
-      _api.getGenresBySegment(segmentId);
+  Future<List<GenreItem>> getGenresBySegment(int segmentId) {
+    return api.getGenresBySegment(segmentId);
+  }
 
-  Future<List<SubGenreItem>> getSubGenresByGenre(int genreId) =>
-      _api.getSubGenresByGenre(genreId);
+  Future<List<SubGenreItem>> getSubGenresByGenre(int genreId) {
+    return api.getSubGenresByGenre(genreId);
+  }
 
-  Future<EventItem> createEvent(CreateEventRequest payload) =>
-      _api.createEvent(payload);
+  Future<EventItem> createEvent(CreateEventRequest payload) {
+    return api.createEvent(payload);
+  }
 
-  Future<EventItem> updateEvent(int eventId, CreateEventRequest payload) =>
-      _api.updateEvent(eventId, payload);
+  Future<EventItem> updateEvent(int eventId, CreateEventRequest payload) {
+    return api.updateEvent(eventId, payload);
+  }
 
-  Future<void> publishEvent(int eventId) => _api.publishEvent(eventId);
+  Future<void> publishEvent(int eventId) {
+    return api.publishEvent(eventId);
+  }
+
+  Future<void> deleteEventImage({
+  required int eventId,
+  required int imageId,
+}) {
+  return api.deleteEventImage(
+    eventId: eventId,
+    imageId: imageId,
+  );
+}
 
   Future<void> addEventImage({
     required int eventId,
     required String imageUrl,
     required bool isCover,
   }) {
-    return _api.addEventImage(
+    return api.addEventImage(
       eventId: eventId,
       imageUrl: imageUrl,
       isCover: isCover,
@@ -43,7 +59,7 @@ class EventsRepository {
     String? fileName,
     Uint8List? bytes,
   }) {
-    return _api.uploadImage(
+    return api.uploadImage(
       localPath,
       fileName: fileName,
       bytes: bytes,
@@ -63,7 +79,7 @@ class EventsRepository {
     bool? freeOnly,
     bool? todayOnly,
   }) {
-    return _api.getNearbyEvents(
+    return api.getNearbyEvents(
       latitude: latitude,
       longitude: longitude,
       radiusKm: radiusKm,
@@ -88,7 +104,7 @@ class EventsRepository {
     int? genreId,
     int? subGenreId,
   }) {
-    return _api.searchEventsPaged(
+    return api.searchEventsPaged(
       searchTerm: searchTerm,
       page: page,
       pageSize: pageSize,
@@ -110,7 +126,7 @@ class EventsRepository {
     int? genreId,
     int? subGenreId,
   }) {
-    return _api.searchEvents(
+    return api.searchEvents(
       searchTerm: searchTerm,
       page: page,
       pageSize: pageSize,
@@ -122,5 +138,37 @@ class EventsRepository {
     );
   }
 
-  Future<EventItem> getEventById(int eventId) => _api.getEventById(eventId);
+  Future<List<EventItem>> getGlobalEvents({
+    String? searchTerm,
+    int page = 1,
+    int pageSize = 100,
+    String sortBy = 'StartDateTime',
+    bool sortDescending = false,
+    int? segmentId,
+    int? genreId,
+    int? subGenreId,
+    double? minPrice,
+    double? maxPrice,
+    bool? freeOnly,
+    bool? todayOnly,
+  }) {
+    return api.getGlobalEvents(
+      searchTerm: searchTerm,
+      page: page,
+      pageSize: pageSize,
+      sortBy: sortBy,
+      sortDescending: sortDescending,
+      segmentId: segmentId,
+      genreId: genreId,
+      subGenreId: subGenreId,
+      minPrice: minPrice,
+      maxPrice: maxPrice,
+      freeOnly: freeOnly,
+      todayOnly: todayOnly,
+    );
+  }
+
+  Future<EventItem> getEventById(int eventId) {
+    return api.getEventById(eventId);
+  }
 }

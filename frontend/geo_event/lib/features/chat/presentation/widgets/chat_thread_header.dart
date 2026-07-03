@@ -95,7 +95,7 @@ class ChatThreadHeader extends StatelessWidget {
 
     final username = _cleanUsername(details.otherUserUsername);
     if (username != null) {
-      return '@$username';
+      return username;
     }
 
     final threadTitle = details.title.trim();
@@ -190,6 +190,6 @@ class ChatThreadHeader extends StatelessWidget {
   static String? _cleanUsername(String? value) {
     final cleaned = (value ?? '').trim().replaceFirst(RegExp(r'^@+'), '');
     if (cleaned.isEmpty) return null;
-    return cleaned;
+    return '@$cleaned';
   }
 }

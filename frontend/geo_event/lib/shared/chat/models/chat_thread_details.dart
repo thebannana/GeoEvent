@@ -8,13 +8,11 @@ class ChatThreadDetails {
   final String title;
   final String? imageUrl;
   final int? otherUserId;
-
   final String? otherUserDisplayName;
   final String? otherUserUsername;
   final String? otherUserAvatarUrl;
   final bool otherUserIsOnline;
   final DateTime? otherUserLastActiveAt;
-
   final ChatEventInfo? eventInfo;
   final List<ChatParticipant> participants;
 
@@ -37,25 +35,26 @@ class ChatThreadDetails {
     final rawParticipants = json['participants'] as List<dynamic>? ?? const [];
 
     return ChatThreadDetails(
-      threadId: (json['threadId'] as num).toInt(),
-      type: ChatThreadTypeX.fromJson(json['type'] as String?),
-      title: json['title'] as String? ?? '',
-      imageUrl: json['imageUrl'] as String?,
+      threadId: (json['threadId'] as num?)?.toInt() ?? 0,
+      type: ChatThreadTypeX.fromJson(json['type']?.toString()),
+      title: json['title']?.toString() ?? '',
+      imageUrl: json['imageUrl']?.toString(),
       otherUserId: (json['otherUserId'] as num?)?.toInt(),
-      otherUserDisplayName: json['otherUserDisplayName'] as String?,
-      otherUserUsername: json['otherUserUsername'] as String?,
-      otherUserAvatarUrl: json['otherUserAvatarUrl'] as String?,
+      otherUserDisplayName: json['otherUserDisplayName']?.toString(),
+      otherUserUsername: json['otherUserUsername']?.toString(),
+      otherUserAvatarUrl: json['otherUserAvatarUrl']?.toString(),
       otherUserIsOnline: json['otherUserIsOnline'] as bool? ?? false,
       otherUserLastActiveAt: json['otherUserLastActiveAt'] != null
           ? DateTime.tryParse(json['otherUserLastActiveAt'].toString())?.toLocal()
           : null,
-      eventInfo: json['eventInfo'] != null
+      eventInfo: json['eventInfo'] is Map
           ? ChatEventInfo.fromJson(
               Map<String, dynamic>.from(json['eventInfo'] as Map),
             )
           : null,
       participants: rawParticipants
-          .map((e) => ChatParticipant.fromJson(Map<String, dynamic>.from(e as Map)))
+          .whereType<Map>()
+          .map((e) => ChatParticipant.fromJson(Map<String, dynamic>.from(e)))
           .toList(growable: false),
     );
   }

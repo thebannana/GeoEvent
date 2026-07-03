@@ -19,11 +19,7 @@ public class SignalRChatRealtimeNotifier : IChatRealtimeNotifier
         await _hub.Clients.Group(ChatHub.ThreadGroup(message.ThreadId))
             .SendAsync("MessageCreated", message);
 
-        foreach (var userId in participantUserIds)
-        {
-            await _hub.Clients.Group(ChatHub.UserGroup(userId))
-                .SendAsync("ThreadUpdated", new { threadId = message.ThreadId });
-        }
+        await ThreadUpdatedAsync(message.ThreadId, participantUserIds);
     }
 
     public async Task MessageUpdatedAsync(ChatMessageDto message, IReadOnlyCollection<int> participantUserIds)
@@ -31,11 +27,7 @@ public class SignalRChatRealtimeNotifier : IChatRealtimeNotifier
         await _hub.Clients.Group(ChatHub.ThreadGroup(message.ThreadId))
             .SendAsync("MessageUpdated", message);
 
-        foreach (var userId in participantUserIds)
-        {
-            await _hub.Clients.Group(ChatHub.UserGroup(userId))
-                .SendAsync("ThreadUpdated", new { threadId = message.ThreadId });
-        }
+        await ThreadUpdatedAsync(message.ThreadId, participantUserIds);
     }
 
     public async Task MessageDeletedAsync(long threadId, long messageId, IReadOnlyCollection<int> participantUserIds)
@@ -43,11 +35,7 @@ public class SignalRChatRealtimeNotifier : IChatRealtimeNotifier
         await _hub.Clients.Group(ChatHub.ThreadGroup(threadId))
             .SendAsync("MessageDeleted", new { threadId, messageId });
 
-        foreach (var userId in participantUserIds)
-        {
-            await _hub.Clients.Group(ChatHub.UserGroup(userId))
-                .SendAsync("ThreadUpdated", new { threadId });
-        }
+        await ThreadUpdatedAsync(threadId, participantUserIds);
     }
 
     public async Task MessageLikedAsync(ChatMessageDto message)
@@ -61,10 +49,23 @@ public class SignalRChatRealtimeNotifier : IChatRealtimeNotifier
         await _hub.Clients.Group(ChatHub.ThreadGroup(threadId))
             .SendAsync("ThreadRead", new { threadId, userId });
 
-        foreach (var participantUserId in participantUserIds)
+        await ThreadUpdatedAsync(threadId, participantUserIds);
+    }
+
+    public async Task ThreadUpdatedAsync(long threadId, IReadOnlyCollection<int> participantUserIds)
+    {
+        foreach (var userId in participantUserIds)
         {
-            await _hub.Clients.Group(ChatHub.UserGroup(participantUserId))
+            await _hub.Clients.Group(ChatHub.UserGroup(userId))
                 .SendAsync("ThreadUpdated", new { threadId });
         }
+    }
+
+    public async Task ParticipantLeftAsync(long threadId, int userId, IReadOnlyCollection<int> participantUserIds)
+    {
+        await _hub.Clients.Group(ChatHub.ThreadGroup(threadId))
+            .SendAsync("ParticipantLeft", new { threadId, userId });
+
+        await ThreadUpdatedAsync(threadId, participantUserIds);
     }
 }

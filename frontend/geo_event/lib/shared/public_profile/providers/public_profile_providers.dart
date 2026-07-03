@@ -5,11 +5,9 @@ import '../data/public_profile_api.dart';
 import '../data/public_profile_repository.dart';
 
 final publicProfileApiProvider = Provider<PublicProfileApi>((ref) {
-  final dio = ref.watch(authorizedDioProvider);
-  return PublicProfileApi(dio);
+  return PublicProfileApi(ref.watch(authorizedDioProvider));
 });
 
 final publicProfileRepositoryProvider = Provider<PublicProfileRepository>((ref) {
-  final api = ref.watch(publicProfileApiProvider);
-  return PublicProfileRepository(api);
+  return PublicProfileRepository(ref.watch(publicProfileApiProvider));
 });

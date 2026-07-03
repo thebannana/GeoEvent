@@ -33,38 +33,40 @@ class MessageItem {
     required this.replySenderName,
   });
 
-factory MessageItem.fromJson(Map<String, dynamic> json) {
-  final replyTo = json['replyTo'];
-  final replyMap = replyTo is Map ? Map<String, dynamic>.from(replyTo) : null;
+  factory MessageItem.fromJson(Map<String, dynamic> json) {
+    final replyTo = json['replyTo'];
+    final replyMap = replyTo is Map ? Map<String, dynamic>.from(replyTo) : null;
 
-  return MessageItem(
-    id: (json['id'] as num).toInt(),
-    threadId: (json['threadId'] as num).toInt(),
-    senderId: (json['senderId'] as num).toInt(),
-    content: json['content'] as String? ?? '',
-    isRead: json['isRead'] as bool? ?? false,
-    likesCount: (json['likesCount'] as num?)?.toInt() ?? 0,
-    isLikedByMe: json['isLikedByMe'] as bool? ?? false,
-    sentAt: DateTime.parse(json['sentAt'] as String).toLocal(),
-    readAt: json['readAt'] != null
-        ? DateTime.tryParse(json['readAt'] as String)?.toLocal()
-        : null,
-    editedAt: json['editedAt'] != null
-        ? DateTime.tryParse(json['editedAt'] as String)?.toLocal()
-        : null,
-    senderDisplayName: json['senderDisplayName'] as String?,
-    senderAvatarUrl: json['senderAvatarUrl'] as String?,
-    replyToMessageId: (json['replyToMessageId'] as num?)?.toInt()
-        ?? (replyMap?['messageId'] as num?)?.toInt()
-        ?? (replyMap?['id'] as num?)?.toInt(),
-    replyPreview: json['replyPreview'] as String?
-        ?? replyMap?['contentPreview'] as String?
-        ?? replyMap?['content'] as String?,
-    replySenderName: json['replySenderName'] as String?
-        ?? replyMap?['senderDisplayName'] as String?
-        ?? replyMap?['senderName'] as String?,
-  );
-}
+    return MessageItem(
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      threadId: (json['threadId'] as num?)?.toInt() ?? 0,
+      senderId: (json['senderId'] as num?)?.toInt() ?? 0,
+      content: json['content']?.toString() ?? '',
+      isRead: json['isRead'] as bool? ?? false,
+      likesCount: (json['likesCount'] as num?)?.toInt() ?? 0,
+      isLikedByMe: json['isLikedByMe'] as bool? ?? false,
+      sentAt: DateTime.tryParse(json['sentAt']?.toString() ?? '')
+              ?.toLocal() ??
+          DateTime.fromMillisecondsSinceEpoch(0),
+      readAt: json['readAt'] != null
+          ? DateTime.tryParse(json['readAt'].toString())?.toLocal()
+          : null,
+      editedAt: json['editedAt'] != null
+          ? DateTime.tryParse(json['editedAt'].toString())?.toLocal()
+          : null,
+      senderDisplayName: json['senderDisplayName']?.toString(),
+      senderAvatarUrl: json['senderAvatarUrl']?.toString(),
+      replyToMessageId: (json['replyToMessageId'] as num?)?.toInt() ??
+          (replyMap?['messageId'] as num?)?.toInt() ??
+          (replyMap?['id'] as num?)?.toInt(),
+      replyPreview: json['replyPreview']?.toString() ??
+          replyMap?['contentPreview']?.toString() ??
+          replyMap?['content']?.toString(),
+      replySenderName: json['replySenderName']?.toString() ??
+          replyMap?['senderDisplayName']?.toString() ??
+          replyMap?['senderName']?.toString(),
+    );
+  }
 
   MessageItem copyWith({
     int? id,

@@ -17,6 +17,15 @@ public class ReservationConfiguration : IEntityTypeConfiguration<Reservation>
         builder.Property(r => r.Notes).HasMaxLength(500);
         builder.Property(r => r.Status).HasConversion<string>().HasMaxLength(50);
 
+        builder.Property(r => r.PendingProviderOrderId)
+            .HasMaxLength(255);
+
+        builder.Property(r => r.PendingPaymentMethod)
+            .HasConversion<string>()
+            .HasMaxLength(50);
+
+        builder.Property(r => r.PendingPaymentCreatedAt);
+
         builder.HasOne(r => r.EventTicket)
             .WithMany(t => t.Reservations)
             .HasForeignKey(r => r.EventTicketId)
@@ -33,5 +42,23 @@ public class ReservationConfiguration : IEntityTypeConfiguration<Reservation>
         builder.HasIndex(r => new { r.Status, r.ExpiresAt });
         builder.HasIndex(r => r.ExpiresAt);
         builder.HasIndex(r => r.ReservedAt);
+        builder.HasIndex(r => r.PendingProviderOrderId);
+        builder.Property(r => r.RefundRequestStatus)
+    .HasConversion<string>()
+    .HasMaxLength(50);
+
+        builder.Property(r => r.RefundReason)
+            .HasMaxLength(1000);
+
+        builder.Property(r => r.RefundRequestedAt);
+
+        builder.Property(r => r.RefundReviewedAt);
+
+        builder.Property(r => r.RefundReviewedByUserId);
+
+        builder.Property(r => r.RefundDecisionReason)
+            .HasMaxLength(1000);
+
+        builder.HasIndex(r => r.RefundRequestStatus);
     }
 }

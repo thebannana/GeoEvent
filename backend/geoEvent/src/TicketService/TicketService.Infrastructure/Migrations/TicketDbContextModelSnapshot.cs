@@ -97,15 +97,24 @@ namespace TicketService.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasMaxLength(3)
                         .HasColumnType("nvarchar(3)")
-                        .HasDefaultValue("EUR");
+                        .HasDefaultValue("BAM");
 
                     b.Property<string>("Method")
                         .IsRequired()
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
 
-                    b.Property<DateTime>("PaidAt")
+                    b.Property<DateTime?>("PaidAt")
                         .HasColumnType("datetime2");
+
+                    b.Property<string>("ProviderOrderId")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("ProviderPaymentId")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("RefundTransactionId")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<int?>("ReservationId")
                         .HasColumnType("int");
@@ -181,7 +190,40 @@ namespace TicketService.Infrastructure.Persistence.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("nvarchar(256)");
 
+                    b.Property<DateTime?>("PendingPaymentCreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("PendingPaymentMethod")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("PendingProviderOrderId")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
                     b.Property<int>("Quantity")
+                        .HasColumnType("int");
+
+                    b.Property<string>("RefundDecisionReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("RefundReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("RefundRequestStatus")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<DateTime?>("RefundRequestedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("RefundReviewedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("RefundReviewedByUserId")
                         .HasColumnType("int");
 
                     b.Property<DateTime>("ReservedAt")
@@ -206,6 +248,10 @@ namespace TicketService.Infrastructure.Persistence.Migrations
                     b.HasIndex("EventTicketId");
 
                     b.HasIndex("ExpiresAt");
+
+                    b.HasIndex("PendingProviderOrderId");
+
+                    b.HasIndex("RefundRequestStatus");
 
                     b.HasIndex("ReservedAt");
 

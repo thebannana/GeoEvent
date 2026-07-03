@@ -20,16 +20,6 @@ public class EventsController : ControllerBase
         _eventService = eventService;
     }
 
-    [HttpGet("mine/drafts")]
-    public async Task<IActionResult> GetMyDrafts([FromQuery] EventFilterDto filter)
-    {
-        filter ??= new EventFilterDto();
-        filter.OrganizerId = User.GetUserId();
-
-        var result = await _eventService.GetMyPendingAsync(filter, User.GetUserId());
-        return ToDataResult(result);
-    }
-
     [HttpGet("mine")]
     public async Task<IActionResult> GetMine([FromQuery] EventFilterDto filter)
     {

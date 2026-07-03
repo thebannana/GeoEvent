@@ -40,8 +40,10 @@ class ReportReasonSelector extends StatelessWidget {
                         : colorScheme.outline.withValues(alpha: 0.75),
                   ),
                 ),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 15,
+                ),
                 child: Row(
                   children: [
                     Expanded(

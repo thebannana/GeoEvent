@@ -13,4 +13,5 @@ public interface INotificationRepository
     Task UpdateAsync(Notification notification);
     Task DeleteAsync(Notification notification);
     Task MarkAllAsReadAsync(int userId);
+    Task DeleteAllAsync(int userId);
 }

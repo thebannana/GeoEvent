@@ -1,61 +1,96 @@
 import 'package:dio/dio.dart';
 
+import '../../../core/network/api_endpoints.dart';
 import '../models/chat_participant.dart';
 import '../models/chat_thread_details.dart';
 import '../models/conversation_summary.dart';
 import '../models/message_item.dart';
+import '../models/message_paged_result.dart';
 
 class ChatApi {
-  final Dio dio;
-
   const ChatApi(this.dio);
 
-  Future<List<ConversationSummary>> getThreads() async {
-    final response = await dio.get('/api/messages/threads');
-    final data = response.data;
+  final Dio dio;
 
-    if (data is! List) {
+  Future<List<ConversationSummary>> getThreads() async {
+    final response = await dio.get(ApiEndpoints.threads);
+    final raw = response.data;
+
+    if (raw is! List) {
       throw const FormatException('Invalid threads response format.');
     }
 
-    return data
-        .map((e) => ConversationSummary.fromJson(Map<String, dynamic>.from(e as Map)))
+    return raw
+        .whereType<Map>()
+        .map((e) => ConversationSummary.fromJson(Map<String, dynamic>.from(e)))
         .toList(growable: false);
   }
 
   Future<int> getUnreadCount() async {
-    final response = await dio.get('/api/messages/unread-count');
-    final data = Map<String, dynamic>.from(response.data as Map);
-    return (data['unreadCount'] as num?)?.toInt() ?? 0;
+    final response = await dio.get(ApiEndpoints.unreadChatCount);
+    final raw = response.data;
+
+    if (raw is Map<String, dynamic>) {
+      return (raw['unreadCount'] as num?)?.toInt() ?? 0;
+    }
+
+    if (raw is Map) {
+      final map = Map<String, dynamic>.from(raw);
+      return (map['unreadCount'] as num?)?.toInt() ?? 0;
+    }
+
+    return 0;
   }
 
   Future<Map<String, dynamic>> openDirectThread({
     required int otherUserId,
   }) async {
     final response = await dio.post(
-      '/api/messages/threads/direct/open',
+      ApiEndpoints.openDirectThread,
       data: {'otherUserId': otherUserId},
     );
 
-    return Map<String, dynamic>.from(response.data as Map);
+    final raw = response.data;
+    if (raw is Map<String, dynamic>) return raw;
+    if (raw is Map) return Map<String, dynamic>.from(raw);
+
+    throw const FormatException('Invalid direct thread response format.');
   }
 
   Future<ChatThreadDetails> getThreadDetails(int threadId) async {
-    final response = await dio.get('/api/messages/threads/$threadId');
-    return ChatThreadDetails.fromJson(
-      Map<String, dynamic>.from(response.data as Map),
-    );
+    final response = await dio.get(ApiEndpoints.threadById(threadId));
+    return _parseThreadDetails(response.data);
   }
 
-Future<List<MessageItem>> getThreadMessages(int threadId) async {
-  final response = await dio.get('/api/messages/threads/$threadId/messages');
-  final data = Map<String, dynamic>.from(response.data as Map);
-  final rawItems = data['items'] as List? ?? const [];
+  Future<List<MessageItem>> getThreadMessages(int threadId) async {
+    final response = await dio.get(ApiEndpoints.threadMessages(threadId));
+    final raw = response.data;
 
-  return rawItems
-      .map((e) => MessageItem.fromJson(Map<String, dynamic>.from(e as Map)))
-      .toList(growable: false);
-}
+    if (raw is List) {
+      return raw
+          .whereType<Map>()
+          .map((e) => MessageItem.fromJson(Map<String, dynamic>.from(e)))
+          .toList(growable: false);
+    }
+
+    if (raw is Map<String, dynamic>) {
+      final paged = MessagePagedResult<MessageItem>.fromJson(
+        raw,
+        MessageItem.fromJson,
+      );
+      return paged.items;
+    }
+
+    if (raw is Map) {
+      final paged = MessagePagedResult<MessageItem>.fromJson(
+        Map<String, dynamic>.from(raw),
+        MessageItem.fromJson,
+      );
+      return paged.items;
+    }
+
+    throw const FormatException('Invalid thread messages response format.');
+  }
 
   Future<MessageItem> sendThreadMessage({
     required int threadId,
@@ -63,68 +98,81 @@ Future<List<MessageItem>> getThreadMessages(int threadId) async {
     int? replyToMessageId,
   }) async {
     final response = await dio.post(
-      '/api/messages/threads/$threadId/messages',
+      ApiEndpoints.threadMessages(threadId),
       data: {
         'content': content.trim(),
-        if (replyToMessageId != null) 'replyToMessageId': replyToMessageId,
+        'replyToMessageId': ?replyToMessageId,
       },
     );
 
-    return MessageItem.fromJson(
-      Map<String, dynamic>.from(response.data as Map),
-    );
+    return _parseMessage(response.data);
   }
 
-Future<void> leaveThread(int threadId) async {
-  await dio.delete('/api/messages/threads/$threadId');
-}
+  Future<void> leaveThread(int threadId) async {
+    await dio.delete(ApiEndpoints.leaveThread(threadId));
+  }
 
   Future<MessageItem> editMessage({
     required int messageId,
     required String content,
   }) async {
     final response = await dio.patch(
-      '/api/messages/messages/$messageId',
+      ApiEndpoints.messageById(messageId),
       data: {'content': content.trim()},
     );
 
-    return MessageItem.fromJson(
-      Map<String, dynamic>.from(response.data as Map),
-    );
+    return _parseMessage(response.data);
   }
 
   Future<void> deleteMessage(int messageId) async {
-    await dio.delete('/api/messages/messages/$messageId');
+    await dio.delete(ApiEndpoints.messageById(messageId));
   }
 
   Future<MessageItem> likeMessage(int messageId) async {
-    final response = await dio.post('/api/messages/messages/$messageId/like');
-    return MessageItem.fromJson(
-      Map<String, dynamic>.from(response.data as Map),
-    );
+    final response = await dio.post(ApiEndpoints.likeMessage(messageId));
+    return _parseMessage(response.data);
   }
 
   Future<MessageItem> unlikeMessage(int messageId) async {
-    final response = await dio.delete('/api/messages/messages/$messageId/like');
-    return MessageItem.fromJson(
-      Map<String, dynamic>.from(response.data as Map),
-    );
+    final response = await dio.delete(ApiEndpoints.likeMessage(messageId));
+    return _parseMessage(response.data);
   }
 
   Future<void> markThreadRead(int threadId) async {
-    await dio.patch('/api/messages/threads/$threadId/read');
+    await dio.patch(ApiEndpoints.markThreadRead(threadId));
   }
 
   Future<List<ChatParticipant>> getThreadParticipants(int threadId) async {
-    final response = await dio.get('/api/messages/threads/$threadId/participants');
-    final data = response.data;
+    final response = await dio.get(ApiEndpoints.threadParticipants(threadId));
+    final raw = response.data;
 
-    if (data is! List) {
+    if (raw is! List) {
       throw const FormatException('Invalid participants response format.');
     }
 
-    return data
-        .map((e) => ChatParticipant.fromJson(Map<String, dynamic>.from(e as Map)))
+    return raw
+        .whereType<Map>()
+        .map((e) => ChatParticipant.fromJson(Map<String, dynamic>.from(e)))
         .toList(growable: false);
+  }
+
+  ChatThreadDetails _parseThreadDetails(dynamic raw) {
+    if (raw is Map<String, dynamic>) {
+      return ChatThreadDetails.fromJson(raw);
+    }
+    if (raw is Map) {
+      return ChatThreadDetails.fromJson(Map<String, dynamic>.from(raw));
+    }
+    throw const FormatException('Invalid thread details response format.');
+  }
+
+  MessageItem _parseMessage(dynamic raw) {
+    if (raw is Map<String, dynamic>) {
+      return MessageItem.fromJson(raw);
+    }
+    if (raw is Map) {
+      return MessageItem.fromJson(Map<String, dynamic>.from(raw));
+    }
+    throw const FormatException('Invalid message response format.');
   }
 }

@@ -22,13 +22,13 @@ class AttendeesSheet extends StatelessWidget {
         shrinkWrap: true,
         padding: const EdgeInsets.all(16),
         itemCount: participants.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 10),
+        separatorBuilder: (_, _) => const SizedBox(height: 10),
         itemBuilder: (context, index) {
           final item = participants[index];
-          final username = item.username.trim();
+          final username = _cleanUsername(item.username);
 
           final subtitleParts = <String>[
-            if (username.isNotEmpty) '@$username',
+            ?username,
             if (item.joinedAt != null) 'Joined ${_format(item.joinedAt!)}',
           ];
 
@@ -45,7 +45,9 @@ class AttendeesSheet extends StatelessWidget {
               showPresence: true,
               isOnline: item.isOnline,
             ),
-            title: Text(item.displayName),
+            title: Text(item.displayName.trim().isNotEmpty
+                ? item.displayName.trim()
+                : (username ?? 'User ${item.userId}')),
             subtitle: Text(subtitle),
             trailing: Icon(
               Icons.circle,
@@ -58,6 +60,12 @@ class AttendeesSheet extends StatelessWidget {
         },
       ),
     );
+  }
+
+  static String? _cleanUsername(String? value) {
+    final cleaned = (value ?? '').trim().replaceFirst(RegExp(r'^@+'), '');
+    if (cleaned.isEmpty) return null;
+    return '@$cleaned';
   }
 
   static String _format(DateTime value) {

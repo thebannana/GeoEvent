@@ -6,4 +6,7 @@ enum PaymentMethod {
   final String apiValue;
 
   const PaymentMethod(this.label, this.apiValue);
+
+  bool get isPayPal => this == PaymentMethod.paypal;
+  bool get isCash => this == PaymentMethod.cash;
 }

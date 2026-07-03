@@ -66,6 +66,44 @@ int preferenceScore({
   return score;
 }
 
+int mapRecommendationScore({
+  required EventItem item,
+  required double userLatitude,
+  required double userLongitude,
+  required Set<int> preferredSegmentIds,
+  required Set<int> preferredGenreIds,
+  required Set<int> preferredSubGenreIds,
+}) {
+  var total = preferenceScore(
+    item: item,
+    preferredSegmentIds: preferredSegmentIds,
+    preferredGenreIds: preferredGenreIds,
+    preferredSubGenreIds: preferredSubGenreIds,
+  );
+
+  final distance = distanceKm(
+    lat1: userLatitude,
+    lon1: userLongitude,
+    lat2: item.latitude,
+    lon2: item.longitude,
+  );
+
+  if (distance <= 2) {
+    total += 18;
+  } else if (distance <= 5) {
+    total += 12;
+  } else if (distance <= 10) {
+    total += 7;
+  } else if (distance <= 25) {
+    total += 2;
+  }
+
+  total += (item.likesCount / 20).round();
+  total += (item.viewCount / 200).round();
+
+  return total;
+}
+
 List<EventItem> rankByPreferences({
   required List<EventItem> items,
   required Set<int> preferredSegmentIds,
@@ -73,6 +111,7 @@ List<EventItem> rankByPreferences({
   required Set<int> preferredSubGenreIds,
 }) {
   final ranked = [...items];
+
   ranked.sort(
     (a, b) => preferenceScore(
       item: b,
@@ -88,6 +127,7 @@ List<EventItem> rankByPreferences({
       ),
     ),
   );
+
   return ranked;
 }
 
@@ -102,7 +142,9 @@ List<EventItem> rankSearchResults({
   required Set<int> preferredGenreIds,
   required Set<int> preferredSubGenreIds,
 }) {
-  final q = query.toLowerCase();
+  final q = query.trim().toLowerCase();
+  if (q.isEmpty) return items;
+
   final ranked = [...items];
 
   int score(EventItem item) {

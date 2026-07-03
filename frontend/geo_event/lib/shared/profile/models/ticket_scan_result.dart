@@ -12,6 +12,9 @@ class TicketScanResultDto {
   final DateTime? issuedAt;
   final DateTime? usedAt;
   final DateTime? scannedAt;
+  final String? paymentMethod;
+  final String? paymentStatus;
+  final String? paymentMessage;
 
   const TicketScanResultDto({
     required this.isValid,
@@ -27,11 +30,14 @@ class TicketScanResultDto {
     required this.issuedAt,
     required this.usedAt,
     required this.scannedAt,
+    required this.paymentMethod,
+    required this.paymentStatus,
+    required this.paymentMessage,
   });
 
   factory TicketScanResultDto.fromJson(Map<String, dynamic> json) {
     DateTime? parseDate(dynamic value) {
-      final raw = value?.toString();
+      final raw = value?.toString().trim();
       if (raw == null || raw.isEmpty) return null;
       return DateTime.tryParse(raw);
     }
@@ -50,6 +56,9 @@ class TicketScanResultDto {
       issuedAt: parseDate(json['issuedAt']),
       usedAt: parseDate(json['usedAt']),
       scannedAt: parseDate(json['scannedAt']),
+      paymentMethod: json['paymentMethod']?.toString(),
+      paymentStatus: json['paymentStatus']?.toString(),
+      paymentMessage: json['paymentMessage']?.toString(),
     );
   }
 }

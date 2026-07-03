@@ -24,8 +24,7 @@ class _EventGalleryState extends State<EventGallery> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
+    final scheme = Theme.of(context).colorScheme;
 
     if (widget.imageUrls.isEmpty) {
       return Container(
@@ -58,7 +57,7 @@ class _EventGalleryState extends State<EventGallery> {
                 return Image.network(
                   widget.imageUrls[index],
                   fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => Container(
+                  errorBuilder: (_, _, _) => Container(
                     color: scheme.surfaceContainerHighest,
                     child: Center(
                       child: Icon(

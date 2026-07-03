@@ -9,12 +9,14 @@ class MessagesInboxState {
   final String searchQuery;
   final bool unreadOnly;
   final int unreadCount;
+  final bool initialized;
 
   const MessagesInboxState({
     this.conversations = const AsyncValue.loading(),
     this.searchQuery = '',
     this.unreadOnly = false,
     this.unreadCount = 0,
+    this.initialized = false,
   });
 
   List<ConversationSummary> get filteredConversations {
@@ -36,15 +38,22 @@ class MessagesInboxState {
     String? searchQuery,
     bool? unreadOnly,
     int? unreadCount,
+    bool? initialized,
   }) {
     return MessagesInboxState(
       conversations: conversations ?? this.conversations,
       searchQuery: searchQuery ?? this.searchQuery,
       unreadOnly: unreadOnly ?? this.unreadOnly,
       unreadCount: unreadCount ?? this.unreadCount,
+      initialized: initialized ?? this.initialized,
     );
   }
 }
+
+final messagesInboxControllerProvider =
+    NotifierProvider<MessagesInboxController, MessagesInboxState>(
+  MessagesInboxController.new,
+);
 
 class MessagesInboxController extends Notifier<MessagesInboxState> {
   ChatRepository get _repo => ref.read(messagesRepositoryProvider);
@@ -62,6 +71,7 @@ class MessagesInboxController extends Notifier<MessagesInboxState> {
       conversations: previous == null
           ? const AsyncValue.loading()
           : AsyncData<List<ConversationSummary>>(previous),
+      initialized: true,
     );
 
     final conversationsResult =
@@ -88,21 +98,21 @@ class MessagesInboxController extends Notifier<MessagesInboxState> {
     state = state.copyWith(unreadOnly: value);
   }
 
-void removeThreadLocally(int threadId) {
-  final current = state.conversations.valueOrNull ?? const <ConversationSummary>[];
+  void removeThreadLocally(int threadId) {
+    final current = state.conversations.valueOrNull ?? const <ConversationSummary>[];
 
-  int removedUnread = 0;
-  final updated = current.where((c) {
-    final keep = c.threadId != threadId;
-    if (!keep) removedUnread = c.unreadCount;
-    return keep;
-  }).toList(growable: false);
+    int removedUnread = 0;
+    final updated = current.where((c) {
+      final keep = c.threadId != threadId;
+      if (!keep) removedUnread = c.unreadCount;
+      return keep;
+    }).toList(growable: false);
 
-  state = state.copyWith(
-    conversations: AsyncData(updated),
-    unreadCount: (state.unreadCount - removedUnread).clamp(0, 1 << 30),
-  );
-}
+    state = state.copyWith(
+      conversations: AsyncData(updated),
+      unreadCount: (state.unreadCount - removedUnread).clamp(0, 1 << 30),
+    );
+  }
 
   void markThreadLocallyRead(int threadId) {
     final current = state.conversations.valueOrNull ?? const <ConversationSummary>[];
@@ -142,8 +152,3 @@ void removeThreadLocally(int threadId) {
     state = state.copyWith(conversations: AsyncData(updated));
   }
 }
-
-final messagesInboxControllerProvider =
-    NotifierProvider<MessagesInboxController, MessagesInboxState>(
-  MessagesInboxController.new,
-);

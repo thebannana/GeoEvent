@@ -1,4 +1,5 @@
 ﻿namespace NotificationService.Domain.Enums;
+
 public enum NotificationType
 {
     Welcome,
@@ -24,4 +25,9 @@ public enum NotificationType
     EventBookmarked,
     EventReservationCreated,
     EventReservationPaid,
+    EventReservationCashPending,
+    EventRefundRequested,
+    ReservationRefundApproved,
+    ReservationRefundRejected,
+    ReservationRemovedByOrganizer,
 }

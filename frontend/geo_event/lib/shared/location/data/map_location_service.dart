@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart' as geo;
 
+import '../../../core/constants/app_strings.dart';
+
 enum MapLocationFailure {
   servicesDisabled,
   permissionDenied,
@@ -27,11 +29,26 @@ class MapLocationResult {
       : this._(failure: failure);
 
   bool get isSuccess => position != null;
+  bool get isFailure => failure != null;
 }
 
 class MapLocationService {
   StreamSubscription<geo.Position>? _headingSub;
   StreamSubscription<geo.Position>? _navigationSub;
+
+  static const _highAccuracySettings = geo.LocationSettings(
+    accuracy: geo.LocationAccuracy.high,
+  );
+
+  static const _navigationSettings = geo.LocationSettings(
+    accuracy: geo.LocationAccuracy.bestForNavigation,
+    distanceFilter: 10,
+  );
+
+  static const _headingSettings = geo.LocationSettings(
+    accuracy: geo.LocationAccuracy.bestForNavigation,
+    distanceFilter: 0,
+  );
 
   Future<MapLocationResult> getCurrentLocation({
     Duration timeLimit = const Duration(seconds: 12),
@@ -66,7 +83,7 @@ class MapLocationService {
       try {
         final position = await geo.Geolocator.getCurrentPosition(
           locationSettings: geo.LocationSettings(
-            accuracy: geo.LocationAccuracy.high,
+            accuracy: _highAccuracySettings.accuracy,
             timeLimit: timeLimit,
           ),
         );
@@ -75,9 +92,7 @@ class MapLocationService {
         if (lastKnown != null) {
           return MapLocationResult.success(lastKnown);
         }
-        return const MapLocationResult.failure(
-          MapLocationFailure.unavailable,
-        );
+        return const MapLocationResult.failure(MapLocationFailure.unavailable);
       }
     } catch (error, stackTrace) {
       debugPrint('MapLocationService.getCurrentLocation error: $error');
@@ -88,36 +103,44 @@ class MapLocationService {
 
   void startHeadingTracking({
     required ValueChanged<double> onHeading,
+    void Function(Object error, StackTrace stackTrace)? onError,
   }) {
     _headingSub?.cancel();
 
-    const settings = geo.LocationSettings(
-      accuracy: geo.LocationAccuracy.bestForNavigation,
-      distanceFilter: 0,
-    );
-
     _headingSub = geo.Geolocator.getPositionStream(
-      locationSettings: settings,
-    ).listen((position) {
-      final heading = position.heading;
-      if (heading.isNaN) return;
-      onHeading(heading);
-    });
+      locationSettings: _headingSettings,
+    ).listen(
+      (position) {
+        final heading = position.heading;
+        if (!heading.isNaN) {
+          onHeading(heading);
+        }
+      },
+      onError: (error, stackTrace) {
+        if (onError != null) onError(error, stackTrace);
+      },
+    );
   }
 
   void startNavigationTracking({
     required void Function(geo.Position position) onPosition,
+    void Function(Object error, StackTrace stackTrace)? onError,
   }) {
     _navigationSub?.cancel();
 
-    const settings = geo.LocationSettings(
-      accuracy: geo.LocationAccuracy.bestForNavigation,
-      distanceFilter: 10,
-    );
-
     _navigationSub = geo.Geolocator.getPositionStream(
-      locationSettings: settings,
-    ).listen(onPosition);
+      locationSettings: _navigationSettings,
+    ).listen(
+      onPosition,
+      onError: (error, stackTrace) {
+        if (onError != null) onError(error, stackTrace);
+      },
+    );
+  }
+
+  Future<void> stopHeadingTracking() async {
+    await _headingSub?.cancel();
+    _headingSub = null;
   }
 
   Future<void> stopNavigationTracking() async {
@@ -133,17 +156,16 @@ class MapLocationService {
   }
 
   String messageForFailure(MapLocationFailure failure) {
-    switch (failure) {
-      case MapLocationFailure.servicesDisabled:
-        return 'Location services are disabled. Please enable GPS.';
-      case MapLocationFailure.permissionDenied:
-        return 'Location permission was denied.';
-      case MapLocationFailure.permissionDeniedForever:
-        return 'Location permission is permanently denied. Enable it in Settings.';
-      case MapLocationFailure.unavailable:
-        return 'Unable to determine your position. Try moving outdoors or enabling device location.';
-      case MapLocationFailure.unknown:
-        return 'Location error. Please try again.';
-    }
+    return switch (failure) {
+      MapLocationFailure.servicesDisabled =>
+        'Location services are disabled. Please enable GPS.',
+      MapLocationFailure.permissionDenied =>
+        'Location permission was denied.',
+      MapLocationFailure.permissionDeniedForever =>
+        'Location permission is permanently denied. Enable it in Settings.',
+      MapLocationFailure.unavailable =>
+        'Unable to determine your position. Try moving outdoors or enabling device location.',
+      MapLocationFailure.unknown => AppStrings.genericError,
+    };
   }
 }

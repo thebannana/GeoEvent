@@ -30,13 +30,8 @@ namespace EventService.Infrastructure.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("BookmarkId"));
 
-                    b.Property<int?>("EventId")
+                    b.Property<int>("EventId")
                         .HasColumnType("int");
-
-                    b.Property<string>("ImageUrl")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
 
                     b.Property<string>("Memo")
                         .HasMaxLength(500)
@@ -45,7 +40,7 @@ namespace EventService.Infrastructure.Migrations
                     b.Property<DateTime>("SavedAt")
                         .HasColumnType("datetime2");
 
-                    b.Property<int?>("UserId")
+                    b.Property<int>("UserId")
                         .HasColumnType("int");
 
                     b.HasKey("BookmarkId");
@@ -57,10 +52,9 @@ namespace EventService.Infrastructure.Migrations
                     b.HasIndex("UserId");
 
                     b.HasIndex("UserId", "EventId")
-                        .IsUnique()
-                        .HasFilter("[UserId] IS NOT NULL AND [EventId] IS NOT NULL");
+                        .IsUnique();
 
-                    b.ToTable("Bookmarks");
+                    b.ToTable("Bookmarks", (string)null);
                 });
 
             modelBuilder.Entity("EventService.Domain.Entities.Comment", b =>
@@ -73,17 +67,19 @@ namespace EventService.Infrastructure.Migrations
 
                     b.Property<string>("Content")
                         .IsRequired()
-                        .HasMaxLength(2000)
-                        .HasColumnType("nvarchar(2000)");
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
-                    b.Property<int?>("EventId")
+                    b.Property<int>("EventId")
                         .HasColumnType("int");
 
                     b.Property<bool>("IsDeleted")
-                        .HasColumnType("bit");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
 
                     b.Property<int>("LikesCount")
                         .ValueGeneratedOnAdd()
@@ -96,7 +92,7 @@ namespace EventService.Infrastructure.Migrations
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2");
 
-                    b.Property<int?>("UserId")
+                    b.Property<int>("UserId")
                         .HasColumnType("int");
 
                     b.HasKey("CommentId");
@@ -109,7 +105,9 @@ namespace EventService.Infrastructure.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("Comments");
+                    b.HasIndex("EventId", "CreatedAt");
+
+                    b.ToTable("Comments", (string)null);
                 });
 
             modelBuilder.Entity("EventService.Domain.Entities.CommentLike", b =>
@@ -133,11 +131,12 @@ namespace EventService.Infrastructure.Migrations
 
                     b.HasIndex("CommentId");
 
+                    b.HasIndex("LikedAt");
+
                     b.HasIndex("UserId");
 
                     b.HasIndex("UserId", "CommentId")
-                        .IsUnique()
-                        .HasFilter("UserId IS NOT NULL AND CommentId IS NOT NULL");
+                        .IsUnique();
 
                     b.ToTable("CommentLikes", (string)null);
                 });
@@ -157,16 +156,13 @@ namespace EventService.Infrastructure.Migrations
                     b.Property<int>("Capacity")
                         .HasColumnType("int");
 
-                    b.Property<int?>("CityId")
-                        .HasColumnType("int");
-
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
                     b.Property<string>("Description")
                         .IsRequired()
-                        .HasMaxLength(5000)
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(4000)
+                        .HasColumnType("nvarchar(4000)");
 
                     b.Property<DateTime>("EndDateTime")
                         .HasColumnType("datetime2");
@@ -183,21 +179,27 @@ namespace EventService.Infrastructure.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("nvarchar(1000)");
 
-                    b.Property<int?>("GenreId")
+                    b.Property<int>("GenreId")
                         .HasColumnType("int");
 
                     b.Property<bool>("IsFeatured")
-                        .HasColumnType("bit");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
 
                     b.Property<bool>("IsOnline")
-                        .HasColumnType("bit");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
 
                     b.Property<decimal>("Latitude")
                         .HasPrecision(9, 6)
                         .HasColumnType("decimal(9,6)");
 
                     b.Property<int>("LikesCount")
-                        .HasColumnType("int");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
 
                     b.Property<string>("Locale")
                         .IsRequired()
@@ -210,7 +212,7 @@ namespace EventService.Infrastructure.Migrations
                         .HasPrecision(9, 6)
                         .HasColumnType("decimal(9,6)");
 
-                    b.Property<int?>("OrganizerId")
+                    b.Property<int>("OrganizerId")
                         .HasColumnType("int");
 
                     b.Property<decimal>("Price")
@@ -221,7 +223,7 @@ namespace EventService.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
-                    b.Property<int?>("SegmentId")
+                    b.Property<int>("SegmentId")
                         .HasColumnType("int");
 
                     b.Property<DateTime>("StartDateTime")
@@ -247,15 +249,12 @@ namespace EventService.Infrastructure.Migrations
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2");
 
-                    b.Property<int?>("VenueId")
-                        .HasColumnType("int");
-
                     b.Property<int>("ViewCount")
-                        .HasColumnType("int");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
 
                     b.HasKey("EventId");
-
-                    b.HasIndex("CityId");
 
                     b.HasIndex("GenreId");
 
@@ -270,12 +269,6 @@ namespace EventService.Infrastructure.Migrations
                     b.HasIndex("Status");
 
                     b.HasIndex("SubGenreId");
-
-                    b.HasIndex("VenueId");
-
-                    b.HasIndex("CityId", "StartDateTime");
-
-                    b.HasIndex("CityId", "Status");
 
                     b.HasIndex("ExternalSource", "ExternalId")
                         .IsUnique()
@@ -300,13 +293,13 @@ namespace EventService.Infrastructure.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("ImageId"));
 
-                    b.Property<int?>("EventId")
+                    b.Property<int>("EventId")
                         .HasColumnType("int");
 
                     b.Property<string>("ImageUrl")
                         .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
 
                     b.Property<bool>("IsCover")
                         .ValueGeneratedOnAdd()
@@ -333,13 +326,13 @@ namespace EventService.Infrastructure.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("LikeId"));
 
-                    b.Property<int?>("EventId")
+                    b.Property<int>("EventId")
                         .HasColumnType("int");
 
                     b.Property<DateTime>("LikedAt")
                         .HasColumnType("datetime2");
 
-                    b.Property<int?>("UserId")
+                    b.Property<int>("UserId")
                         .HasColumnType("int");
 
                     b.HasKey("LikeId");
@@ -351,8 +344,7 @@ namespace EventService.Infrastructure.Migrations
                     b.HasIndex("UserId");
 
                     b.HasIndex("UserId", "EventId")
-                        .IsUnique()
-                        .HasFilter("[UserId] IS NOT NULL AND [EventId] IS NOT NULL");
+                        .IsUnique();
 
                     b.ToTable("EventLikes", (string)null);
                 });
@@ -375,7 +367,7 @@ namespace EventService.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
-                    b.Property<int?>("SegmentId")
+                    b.Property<int>("SegmentId")
                         .HasColumnType("int");
 
                     b.HasKey("GenreId");
@@ -388,43 +380,10 @@ namespace EventService.Infrastructure.Migrations
 
                     b.HasIndex("SegmentId", "IsActive");
 
-                    b.ToTable("Genres");
-                });
+                    b.HasIndex("SegmentId", "Name")
+                        .IsUnique();
 
-            modelBuilder.Entity("EventService.Domain.Entities.PriceZone", b =>
-                {
-                    b.Property<int>("PriceZoneId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("PriceZoneId"));
-
-                    b.Property<string>("Description")
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
-
-                    b.Property<bool>("IsActive")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bit")
-                        .HasDefaultValue(true);
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("nvarchar(200)");
-
-                    b.Property<int>("VenueId")
-                        .HasColumnType("int");
-
-                    b.HasKey("PriceZoneId");
-
-                    b.HasIndex("IsActive");
-
-                    b.HasIndex("VenueId");
-
-                    b.HasIndex("VenueId", "IsActive");
-
-                    b.ToTable("PriceZones");
+                    b.ToTable("Genres", (string)null);
                 });
 
             modelBuilder.Entity("EventService.Domain.Entities.Segment", b =>
@@ -436,12 +395,12 @@ namespace EventService.Infrastructure.Migrations
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("SegmentId"));
 
                     b.Property<string>("Color")
-                        .HasMaxLength(7)
-                        .HasColumnType("nvarchar(7)");
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
 
                     b.Property<string>("IconUrl")
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
 
                     b.Property<bool>("IsActive")
                         .ValueGeneratedOnAdd()
@@ -460,7 +419,7 @@ namespace EventService.Infrastructure.Migrations
                     b.HasIndex("Name")
                         .IsUnique();
 
-                    b.ToTable("Segments");
+                    b.ToTable("Segments", (string)null);
                 });
 
             modelBuilder.Entity("EventService.Domain.Entities.SubGenre", b =>
@@ -471,7 +430,7 @@ namespace EventService.Infrastructure.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("SubGenreId"));
 
-                    b.Property<int?>("GenreId")
+                    b.Property<int>("GenreId")
                         .HasColumnType("int");
 
                     b.Property<bool>("IsActive")
@@ -494,84 +453,10 @@ namespace EventService.Infrastructure.Migrations
 
                     b.HasIndex("GenreId", "IsActive");
 
-                    b.ToTable("SubGenres");
-                });
+                    b.HasIndex("GenreId", "Name")
+                        .IsUnique();
 
-            modelBuilder.Entity("EventService.Domain.Entities.Venue", b =>
-                {
-                    b.Property<int>("VenueId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("VenueId"));
-
-                    b.Property<string>("Address")
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
-
-                    b.Property<int?>("CityId")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("Description")
-                        .HasMaxLength(2000)
-                        .HasColumnType("nvarchar(2000)");
-
-                    b.Property<bool>("IsVerified")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bit")
-                        .HasDefaultValue(false);
-
-                    b.Property<decimal>("Latitude")
-                        .HasPrecision(9, 6)
-                        .HasColumnType("decimal(9,6)");
-
-                    b.Property<string>("Locale")
-                        .HasMaxLength(10)
-                        .HasColumnType("nvarchar(10)");
-
-                    b.Property<decimal>("Longitude")
-                        .HasPrecision(9, 6)
-                        .HasColumnType("decimal(9,6)");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("nvarchar(200)");
-
-                    b.Property<string>("PhoneNumber")
-                        .HasMaxLength(30)
-                        .HasColumnType("nvarchar(30)");
-
-                    b.Property<string>("TimeZone")
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
-
-                    b.Property<string>("VenueType")
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<string>("WebsiteUrl")
-                        .HasMaxLength(1000)
-                        .HasColumnType("nvarchar(1000)");
-
-                    b.HasKey("VenueId");
-
-                    b.HasIndex("CityId");
-
-                    b.HasIndex("IsVerified");
-
-                    b.HasIndex("Name");
-
-                    b.HasIndex("VenueType");
-
-                    b.HasIndex("CityId", "VenueType");
-
-                    b.HasIndex("Longitude", "Latitude");
-
-                    b.ToTable("Venues", (string)null);
+                    b.ToTable("SubGenres", (string)null);
                 });
 
             modelBuilder.Entity("EventService.Domain.Entities.Bookmark", b =>
@@ -579,7 +464,8 @@ namespace EventService.Infrastructure.Migrations
                     b.HasOne("EventService.Domain.Entities.Event", "Event")
                         .WithMany("Bookmarks")
                         .HasForeignKey("EventId")
-                        .OnDelete(DeleteBehavior.Cascade);
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
                     b.Navigation("Event");
                 });
@@ -589,7 +475,8 @@ namespace EventService.Infrastructure.Migrations
                     b.HasOne("EventService.Domain.Entities.Event", "Event")
                         .WithMany("Comments")
                         .HasForeignKey("EventId")
-                        .OnDelete(DeleteBehavior.Cascade);
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
                     b.HasOne("EventService.Domain.Entities.Comment", "ParentComment")
                         .WithMany("Replies")
@@ -617,30 +504,25 @@ namespace EventService.Infrastructure.Migrations
                     b.HasOne("EventService.Domain.Entities.Genre", "Genre")
                         .WithMany("Events")
                         .HasForeignKey("GenreId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
 
                     b.HasOne("EventService.Domain.Entities.Segment", "Segment")
                         .WithMany("Events")
                         .HasForeignKey("SegmentId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
 
                     b.HasOne("EventService.Domain.Entities.SubGenre", "SubGenre")
                         .WithMany("Events")
                         .HasForeignKey("SubGenreId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("EventService.Domain.Entities.Venue", "Venue")
-                        .WithMany("Events")
-                        .HasForeignKey("VenueId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("Genre");
 
                     b.Navigation("Segment");
 
                     b.Navigation("SubGenre");
-
-                    b.Navigation("Venue");
                 });
 
             modelBuilder.Entity("EventService.Domain.Entities.EventImage", b =>
@@ -648,7 +530,8 @@ namespace EventService.Infrastructure.Migrations
                     b.HasOne("EventService.Domain.Entities.Event", "Event")
                         .WithMany("Images")
                         .HasForeignKey("EventId")
-                        .OnDelete(DeleteBehavior.Cascade);
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
                     b.Navigation("Event");
                 });
@@ -658,7 +541,8 @@ namespace EventService.Infrastructure.Migrations
                     b.HasOne("EventService.Domain.Entities.Event", "Event")
                         .WithMany("Likes")
                         .HasForeignKey("EventId")
-                        .OnDelete(DeleteBehavior.Cascade);
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
                     b.Navigation("Event");
                 });
@@ -668,20 +552,10 @@ namespace EventService.Infrastructure.Migrations
                     b.HasOne("EventService.Domain.Entities.Segment", "Segment")
                         .WithMany("Genres")
                         .HasForeignKey("SegmentId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.Navigation("Segment");
-                });
-
-            modelBuilder.Entity("EventService.Domain.Entities.PriceZone", b =>
-                {
-                    b.HasOne("EventService.Domain.Entities.Venue", "Venue")
-                        .WithMany("PriceZones")
-                        .HasForeignKey("VenueId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.Navigation("Venue");
+                    b.Navigation("Segment");
                 });
 
             modelBuilder.Entity("EventService.Domain.Entities.SubGenre", b =>
@@ -689,7 +563,8 @@ namespace EventService.Infrastructure.Migrations
                     b.HasOne("EventService.Domain.Entities.Genre", "Genre")
                         .WithMany("SubGenres")
                         .HasForeignKey("GenreId")
-                        .OnDelete(DeleteBehavior.Restrict);
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
 
                     b.Navigation("Genre");
                 });
@@ -727,13 +602,6 @@ namespace EventService.Infrastructure.Migrations
             modelBuilder.Entity("EventService.Domain.Entities.SubGenre", b =>
                 {
                     b.Navigation("Events");
-                });
-
-            modelBuilder.Entity("EventService.Domain.Entities.Venue", b =>
-                {
-                    b.Navigation("Events");
-
-                    b.Navigation("PriceZones");
                 });
 #pragma warning restore 612, 618
         }

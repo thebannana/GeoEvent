@@ -1,7 +1,8 @@
-﻿namespace TicketService.Domain.Enums;
-
-public enum PaymentMethod
+﻿namespace TicketService.Domain.Enums
 {
-    Card,
-    PayPal
+    public enum PaymentMethod
+    {
+        Cash = 1,
+        PayPal = 2
+    }
 }

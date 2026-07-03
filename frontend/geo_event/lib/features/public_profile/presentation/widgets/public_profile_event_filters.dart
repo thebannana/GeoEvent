@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/widgets/app_chip.dart';
+import '../../../../core/widgets/inputs/app_chip.dart';
 import '../screens/public_profile_screen.dart';
 
 class PublicProfileEventFilters extends StatelessWidget {

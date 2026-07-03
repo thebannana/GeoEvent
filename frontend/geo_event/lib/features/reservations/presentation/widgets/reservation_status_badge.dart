@@ -45,32 +45,38 @@ _ReservationStatusScheme _reservationStatusScheme(
   String status,
 ) {
   final colorScheme = Theme.of(context).colorScheme;
-  final normalized = status.toLowerCase();
+  final normalized = status.trim().toLowerCase();
 
-  return switch (normalized) {
-    'confirmed' => _ReservationStatusScheme(
+  switch (normalized) {
+    case 'confirmed':
+      return _ReservationStatusScheme(
         foreground: colorScheme.primary,
         background: colorScheme.primary.withValues(alpha: 0.12),
-      ),
-    'pending' => _ReservationStatusScheme(
-        foreground: const Color(0xFFD19900),
-        background: const Color(0xFFE9E0C6),
-      ),
-    'cancelled' => _ReservationStatusScheme(
+      );
+    case 'pending':
+      return _ReservationStatusScheme(
+        foreground: colorScheme.tertiary,
+        background: colorScheme.tertiary.withValues(alpha: 0.12),
+      );
+    case 'cancelled':
+      return _ReservationStatusScheme(
         foreground: colorScheme.onErrorContainer,
         background: colorScheme.errorContainer,
-      ),
-    'expired' => _ReservationStatusScheme(
+      );
+    case 'expired':
+      return _ReservationStatusScheme(
         foreground: colorScheme.onSurfaceVariant,
         background: colorScheme.surfaceContainerHighest,
-      ),
-    'refunded' => _ReservationStatusScheme(
-        foreground: const Color(0xFF006494),
-        background: const Color(0xFFC6D8E4),
-      ),
-    _ => _ReservationStatusScheme(
+      );
+    case 'refunded':
+      return _ReservationStatusScheme(
+        foreground: colorScheme.onErrorContainer,
+        background: colorScheme.errorContainer,
+      );
+    default:
+      return _ReservationStatusScheme(
         foreground: colorScheme.onSurfaceVariant,
         background: colorScheme.surfaceContainerHighest,
-      ),
-  };
+      );
+  }
 }

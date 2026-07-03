@@ -21,7 +21,7 @@ class PagedResult<T> {
     Map<String, dynamic> json,
     T Function(Map<String, dynamic>) fromItem,
   ) {
-    final rawItems = json['items'] ?? json['Items'] ?? const <dynamic>[];
+    final rawItems = json['items'] ?? json['Items'] ?? const [];
 
     return PagedResult<T>(
       items: rawItems is List
@@ -29,7 +29,7 @@ class PagedResult<T> {
               .whereType<Map>()
               .map((e) => fromItem(Map<String, dynamic>.from(e)))
               .toList()
-          : <T>[],
+          : const [],
       totalCount: _asInt(json['totalCount'] ?? json['TotalCount']),
       page: _asInt(json['page'] ?? json['Page'], fallback: 1),
       pageSize: _asInt(json['pageSize'] ?? json['PageSize'], fallback: 20),
@@ -50,10 +50,11 @@ class PagedResult<T> {
   static bool _asBool(dynamic value, {bool fallback = false}) {
     if (value == null) return fallback;
     if (value is bool) return value;
+    if (value is num) return value != 0;
     if (value is String) {
-      final lower = value.toLowerCase();
-      if (lower == 'true') return true;
-      if (lower == 'false') return false;
+      final lower = value.trim().toLowerCase();
+      if (lower == 'true' || lower == '1') return true;
+      if (lower == 'false' || lower == '0') return false;
     }
     return fallback;
   }

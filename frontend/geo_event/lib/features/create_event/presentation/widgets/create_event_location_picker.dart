@@ -2,33 +2,35 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:geo_event/core/config/app_environment.dart';
 
-import '../../../../core/config/app_env.dart';
-import '../../../../core/widgets/app_bottom_sheet_container.dart';
-import '../../../../core/widgets/app_empty_state.dart';
-import '../../../../core/widgets/app_error_view.dart';
-import '../../../../core/widgets/app_spinner.dart';
-import '../../../../core/widgets/app_surface_card.dart';
+import '../../../../core/widgets/layout/app_bottom_sheet_container.dart';
+import '../../../../core/widgets/feedback/app_empty_state.dart';
+import '../../../../core/widgets/feedback/app_error_state.dart';
+import '../../../../core/widgets/feedback/app_spinner.dart';
+import '../../../../core/widgets/surfaces/app_surface_card.dart';
 import '../../../../shared/events/models/create_event_models.dart';
 import '../../../../shared/events/models/create_event_state.dart';
 import '../../../../shared/location/providers/location_providers.dart';
 import 'create_event_form.dart';
+import 'create_event_location_search_tile.dart';
 
 class CreateEventLocationPicker extends StatelessWidget {
   final CreateEventState state;
-  final VoidCallback onTapPickLocation;
-  final VoidCallback onClearLocation;
+  final VoidCallback? onTapPickLocation;
+  final VoidCallback? onClearLocation;
 
   const CreateEventLocationPicker({
     super.key,
     required this.state,
-    required this.onTapPickLocation,
-    required this.onClearLocation,
+    this.onTapPickLocation,
+    this.onClearLocation,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final disabled = state.submitting;
 
     return AppSurfaceCard(
       padding: const EdgeInsets.all(18),
@@ -39,20 +41,20 @@ class CreateEventLocationPicker extends StatelessWidget {
           const SizedBox(height: 12),
           InkWell(
             borderRadius: BorderRadius.circular(16),
-            onTap: onTapPickLocation,
+            onTap: disabled ? null : onTapPickLocation,
             child: InputDecorator(
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'Location',
-                suffixIcon: Icon(Icons.location_on_outlined),
-                enabled: true,
+                suffixIcon: const Icon(Icons.location_on_outlined),
+                enabled: !disabled,
               ),
               child: Text(
                 state.selectedLocation?.title ?? 'Search for a place',
                 style: TextStyle(
                   fontSize: 14,
                   color: state.selectedLocation != null
-                      ? theme.textTheme.bodySmall?.color
-                      : null,
+                      ? theme.textTheme.bodyMedium?.color
+                      : theme.textTheme.bodySmall?.color,
                 ),
               ),
             ),
@@ -85,7 +87,7 @@ class CreateEventLocationPicker extends StatelessWidget {
                   Align(
                     alignment: Alignment.centerRight,
                     child: TextButton(
-                      onPressed: onClearLocation,
+                      onPressed: state.submitting ? null : onClearLocation,
                       child: const Text('Clear'),
                     ),
                   ),
@@ -118,7 +120,7 @@ class _LocationSearchSheetState extends ConsumerState<LocationSearchSheet> {
   @override
   void initState() {
     super.initState();
-    if (AppEnv.mapboxToken.isEmpty) {
+    if (AppEnvironment.mapboxAccessToken.isEmpty) {
       error =
           'MAPBOX_ACCESS_TOKEN is missing. Run the app with --dart-define=MAPBOX_ACCESS_TOKEN=yourtoken';
     }
@@ -132,7 +134,7 @@ class _LocationSearchSheetState extends ConsumerState<LocationSearchSheet> {
   }
 
   Future<void> performSearch(String query) async {
-    if (AppEnv.mapboxToken.isEmpty) {
+    if (AppEnvironment.mapboxAccessToken.isEmpty) {
       setState(() {
         results = const [];
         loading = false;
@@ -242,34 +244,13 @@ class _LocationSearchSheetState extends ConsumerState<LocationSearchSheet> {
                           )
                         : ListView.separated(
                             itemCount: results.length,
-                            separatorBuilder: (_, __) =>
+                            separatorBuilder: (context, index) =>
                                 const SizedBox(height: 10),
                             itemBuilder: (context, index) {
                               final item = results[index];
-                              return AppSurfaceCard(
+                              return CreateEventLocationSearchResultTile(
+                                item: item,
                                 onTap: () => Navigator.of(context).pop(item),
-                                padding: const EdgeInsets.all(14),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      item.title,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w700,
-                                        fontSize: 14,
-                                      ),
-                                    ),
-                                    if ((item.subtitle ?? '').isNotEmpty) ...[
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        item.subtitle!,
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .bodySmall,
-                                      ),
-                                    ],
-                                  ],
-                                ),
                               );
                             },
                           ),

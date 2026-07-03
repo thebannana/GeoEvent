@@ -8,5 +8,4 @@ public class UpdateProfileDto
     public string? LastName { get; set; }
     public string? PhoneNumber { get; set; }
     public string? ImageUrl { get; set; }
-    public int? CityId { get; set; }
 }

@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 final sharedPreferencesProvider = Provider<SharedPreferences>((ref) {
-  throw UnimplementedError('sharedPreferencesProvider must be overridden.');
+  throw UnimplementedError(
+    'sharedPreferencesProvider must be overridden before use.',
+  );
 });
 
 final themeModeControllerProvider =
@@ -19,32 +21,44 @@ class ThemeModeController extends Notifier<ThemeMode> {
     final prefs = ref.read(sharedPreferencesProvider);
     final raw = prefs.getString(_storageKey);
 
-    return switch (raw) {
-      'light' => ThemeMode.light,
-      'dark' => ThemeMode.dark,
-      _ => ThemeMode.system,
-    };
+    switch (raw) {
+      case 'light':
+        return ThemeMode.light;
+      case 'dark':
+        return ThemeMode.dark;
+      case 'system':
+      default:
+        return ThemeMode.system;
+    }
   }
 
   Future<void> setThemeMode(ThemeMode mode) async {
     state = mode;
+
     final prefs = ref.read(sharedPreferencesProvider);
     await prefs.setString(_storageKey, _encode(mode));
   }
 
-  Future<void> setDarkMode(bool isDark) {
-    return setThemeMode(isDark ? ThemeMode.dark : ThemeMode.light);
+  Future<void> setDarkMode(bool isDark) async {
+    await setThemeMode(isDark ? ThemeMode.dark : ThemeMode.light);
   }
 
-  Future<void> useSystem() {
-    return setThemeMode(ThemeMode.system);
+  Future<void> useSystem() async {
+    await setThemeMode(ThemeMode.system);
   }
+
+  bool get isSystemMode => state == ThemeMode.system;
+  bool get isLightMode => state == ThemeMode.light;
+  bool get isDarkMode => state == ThemeMode.dark;
 
   String _encode(ThemeMode mode) {
-    return switch (mode) {
-      ThemeMode.light => 'light',
-      ThemeMode.dark => 'dark',
-      ThemeMode.system => 'system',
-    };
+    switch (mode) {
+      case ThemeMode.light:
+        return 'light';
+      case ThemeMode.dark:
+        return 'dark';
+      case ThemeMode.system:
+        return 'system';
+    }
   }
 }

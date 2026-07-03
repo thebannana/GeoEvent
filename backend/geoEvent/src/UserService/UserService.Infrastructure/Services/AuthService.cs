@@ -1,6 +1,7 @@
-using Microsoft.Extensions.Logging;
 using MassTransit;
+using MassTransit.Transports;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Shared.Contracts.Users;
 using System.Security.Cryptography;
 using System.Text;
@@ -10,6 +11,7 @@ using UserService.Application.Interfaces.Repositories;
 using UserService.Application.Interfaces.Services;
 using UserService.Domain.Entities;
 using UserService.Infrastructure.Persistence;
+using UserService.Infrastructure.Repositories;
 
 namespace UserService.Infrastructure.Services;
 
@@ -41,7 +43,7 @@ public class AuthService : IAuthService
     public async Task<ServiceResult<AuthResponseDto>> RegisterAsync(RegisterRequestDto request, string ipAddress)
     {
         if (!request.ConsentGiven)
-            return ServiceResult<AuthResponseDto>.Fail("You must accept the terms.");
+            return ServiceResult<AuthResponseDto>.Fail("You must accept the terms.", 400);
 
         var normalizedEmail = request.Email.Trim().ToLowerInvariant();
         var normalizedUsername = request.Username.Trim().ToLowerInvariant();
@@ -77,12 +79,21 @@ public class AuthService : IAuthService
 
         await _userRepository.CreateAsync(user, person);
 
-        await _publishEndpoint.Publish(new UserRegisteredMessage(
-            user.PersonId,
-            user.Email,
-            user.Username,
-            person.FirstName,
-            DateTime.UtcNow));
+        try
+        {
+            await _publishEndpoint.Publish(new UserRegisteredMessage(
+                user.PersonId,
+                user.Email,
+                user.Username,
+                person.FirstName,
+                DateTime.UtcNow));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "User {UserId} was created, but UserRegisteredMessage publish failed.",
+                user.PersonId);
+        }
 
         return await BuildAuthResponseAsync(user, ipAddress);
     }
@@ -276,7 +287,6 @@ public class AuthService : IAuthService
                 ImageUrl = user.Person?.ImageUrl,
                 Role = user.Role.ToString(),
                 CreatedAt = user.CreatedAt,
-                CityId = user.Person?.CityId
             }
         });
     }

@@ -3,22 +3,23 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart' hide Layer;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart' as geo;
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 
-import '../../../../core/config/app_env.dart';
-import '../../../../core/widgets/app_loading_indicator.dart';
+import '../../../../core/config/app_environment.dart';
+import '../../../../core/widgets/feedback/app_loading_indicator.dart';
 import '../../../../shared/events/models/create_event_models.dart';
 import '../../../../shared/events/models/event_map_pin_data.dart';
 import '../../../../shared/events/providers/event_providers.dart';
+import '../../../../shared/events/providers/event_refresh_providers.dart';
 import '../../../../shared/location/data/map_location_service.dart';
 import '../../../../shared/location/data/map_pin_annotations_service.dart';
-import '../../../../shared/location/data/map_route_service.dart';
+import '../../../../shared/location/data/mapbox_directions_api.dart';
 import '../../../../shared/location/models/event_directions_request.dart';
 import '../../../../shared/location/models/map_filter_selection.dart';
 import '../../../../shared/location/providers/directions_providers.dart';
+import '../../../../shared/location/providers/location_providers.dart';
 import '../../../../shared/profile/providers/profile_providers.dart';
 import '../../../event/presentation/screens/event_detail_screen.dart';
 import '../../application/map_settings_controller.dart';
@@ -79,18 +80,18 @@ class MapHomeScreenState extends ConsumerState<MapHomeScreen>
   static const double defaultLng = 18.4131;
   static const double defaultLat = 43.8563;
 
-  final locationService = MapLocationService();
-  final routeService = MapRouteService();
-  final pinService = MapPinAnnotationService();
+  final MapLocationService locationService = MapLocationService();
+  final MapPinAnnotationService pinService = MapPinAnnotationService();
 
   ProviderSubscription<MapSettingsState>? settingsSubscription;
   ProviderSubscription<EventDirectionsRequest?>? pendingDirectionsSubscription;
+  ProviderSubscription<int>? eventRefreshSubscription;
 
   Timer? pinsRefreshTimer;
   MapboxMap? mapboxMap;
 
-  late List<EventMapPinData> events;
-  final Map<String, GlobalKey> pinKeys = {};
+  List<EventMapPinData> events = [];
+  final Map<int, GlobalKey> pinKeys = {};
 
   bool styleLoaded = false;
   bool captureReady = false;
@@ -106,28 +107,41 @@ class MapHomeScreenState extends ConsumerState<MapHomeScreen>
   bool isRerouting = false;
 
   EventDirectionsRequest? activeDirectionsRequest;
-  EventDirectionsRequest? activeNavigationRequest;
 
   double? currentLatitude;
   double? currentLongitude;
   double _currentZoom = baseZoom;
+
+  MapboxDirectionsApi get _directionsApi =>
+      ref.read(mapboxDirectionsApiProvider);
+
+  EventDirectionsRequest? get activeNavigationRequest =>
+      ref.read(activeNavigationProvider);
+
+  set activeNavigationRequest(EventDirectionsRequest? value) {
+    ref.read(activeNavigationProvider.notifier).state = value;
+  }
+
+  bool get _hasMap => mapboxMap != null;
+  bool get _canSyncPins => _hasMap && styleLoaded && captureReady;
+  bool get _isReadyForPendingDirections => mounted && _canSyncPins;
+  bool get _showMapLoadingOverlay => !styleLoaded || isLoadingMapPins;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
 
-    AppEnv.validate();
-    MapboxOptions.setAccessToken(AppEnv.mapboxToken);
+    AppEnvironment.validateAll();
+    MapboxOptions.setAccessToken(AppEnvironment.mapboxAccessToken);
 
-    events = [];
     rebuildPinKeys();
-
-    startHeadingTracking();
-    listenToMapSettings();
-    listenToPendingDirections();
-    scheduleInitialLoad();
-    startPinsAutoRefresh();
+    _startHeadingTracking();
+    _listenToMapSettings();
+    _listenToPendingDirections();
+    _listenToEventRefresh();
+    _scheduleInitialLoad();
+    _startPinsAutoRefresh();
   }
 
   @override
@@ -145,7 +159,19 @@ class MapHomeScreenState extends ConsumerState<MapHomeScreen>
     }
   }
 
-  void startPinsAutoRefresh() {
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    pinsRefreshTimer?.cancel();
+    settingsSubscription?.close();
+    pendingDirectionsSubscription?.close();
+    eventRefreshSubscription?.close();
+    unawaited(pinService.dispose());
+    unawaited(locationService.dispose());
+    super.dispose();
+  }
+
+  void _startPinsAutoRefresh() {
     pinsRefreshTimer?.cancel();
     pinsRefreshTimer = Timer.periodic(
       const Duration(minutes: 1),
@@ -153,13 +179,13 @@ class MapHomeScreenState extends ConsumerState<MapHomeScreen>
     );
   }
 
-  void startHeadingTracking() {
+  void _startHeadingTracking() {
     locationService.startHeadingTracking(
       onHeading: (heading) => widget.onBearingChanged?.call(heading),
     );
   }
 
-  void listenToMapSettings() {
+  void _listenToMapSettings() {
     settingsSubscription?.close();
     settingsSubscription = ref.listenManual<MapSettingsState>(
       mapSettingsControllerProvider,
@@ -170,13 +196,16 @@ class MapHomeScreenState extends ConsumerState<MapHomeScreen>
           await applyStandardMapConfiguration(next);
           await animateCameraFor3D(next.map3D);
         }
+
         if (previous.terrain != next.terrain) {
           await applyTerrain(next.terrain);
         }
+
         if (previous.dayNightCycle != next.dayNightCycle ||
             previous.mapPins != next.mapPins) {
           await applyStandardMapConfiguration(next);
         }
+
         if (previous.eventPins != next.eventPins) {
           await applyEventPinsVisibility(next.eventPins);
         }
@@ -184,7 +213,7 @@ class MapHomeScreenState extends ConsumerState<MapHomeScreen>
     );
   }
 
-  void listenToPendingDirections() {
+  void _listenToPendingDirections() {
     pendingDirectionsSubscription?.close();
     pendingDirectionsSubscription = ref.listenManual<EventDirectionsRequest?>(
       pendingDirectionsProvider,
@@ -195,10 +224,37 @@ class MapHomeScreenState extends ConsumerState<MapHomeScreen>
     );
   }
 
-  bool get isReadyForPendingDirections =>
-      mounted && mapboxMap != null && styleLoaded && captureReady;
+  void _listenToEventRefresh() {
+    eventRefreshSubscription?.close();
+    eventRefreshSubscription = ref.listenManual<int>(
+      eventMapRefreshProvider,
+      (previous, next) async {
+        if (previous == next) return;
+        await reloadMapPins(forceResync: true);
+      },
+    );
+  }
 
-  void showMessage(String message) {
+  void _scheduleInitialLoad() {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      setState(() => captureReady = true);
+      await reloadMapPins();
+      await consumeInitialPendingDirectionsIfNeeded();
+    });
+  }
+
+  void _setLoadingPins(bool value) {
+    if (!mounted) return;
+    setState(() => isLoadingMapPins = value);
+  }
+
+  void _setNavigationUiOpen(bool value) {
+    if (!mounted) return;
+    setState(() => isNavigationUiOpen = value);
+  }
+
+  void _showMessage(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message)),
@@ -209,15 +265,6 @@ class MapHomeScreenState extends ConsumerState<MapHomeScreen>
     pinKeys
       ..clear()
       ..addEntries(events.map((event) => MapEntry(event.id, GlobalKey())));
-  }
-
-  void scheduleInitialLoad() {
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (!mounted) return;
-      setState(() => captureReady = true);
-      await reloadMapPins();
-      await consumeInitialPendingDirectionsIfNeeded();
-    });
   }
 
   Future<void> onMapCreated(MapboxMap createdMap) async {
@@ -234,68 +281,14 @@ class MapHomeScreenState extends ConsumerState<MapHomeScreen>
     await consumeInitialPendingDirectionsIfNeeded();
   }
 
-  Future<void> hideBuiltInCompass() async {
-    if (mapboxMap == null) return;
-
-    await mapboxMap!.compass.updateSettings(
-      CompassSettings(
-        enabled: false,
-        opacity: 0.0,
-        position: OrnamentPosition.BOTTOM_LEFT,
-        marginLeft: -1000,
-        marginBottom: -1000,
-        marginRight: 0,
-        marginTop: 0,
-        fadeWhenFacingNorth: false,
-      ),
-    );
-  }
-
-  Future<void> enableUserLocation() async {
-    if (mapboxMap == null) return;
-
-    await mapboxMap!.location.updateSettings(
-      LocationComponentSettings(
-        enabled: true,
-        pulsingEnabled: true,
-        puckBearingEnabled: true,
-        puckBearing: PuckBearing.HEADING,
-      ),
-    );
-  }
-
-  Future<geo.Position?> getCurrentDeviceLocation() async {
-    final result = await locationService.getCurrentLocation();
-
-    if (result.position != null) {
-      currentLatitude = result.position!.latitude;
-      currentLongitude = result.position!.longitude;
-      return result.position!;
-    }
-
-    if (result.failure != null) {
-      showMessage(locationService.messageForFailure(result.failure!));
-    }
-
-    return null;
-  }
-
-  Future<Position?> getUserPosition() async {
-    if (mapboxMap == null) return null;
-
-    final position = await mapboxMap!.style.getPuckPositionSafe();
-    if (position != null) {
-      currentLatitude = position.lat.toDouble();
-      currentLongitude = position.lng.toDouble();
-    }
-    return position;
-  }
-
   Future<void> onStyleLoaded(StyleLoadedEventData data) async {
+    final map = mapboxMap;
+    if (map == null) return;
+
     await hideBuiltInCompass();
 
     await pinService.prepare(
-      mapboxMap: mapboxMap!,
+      mapboxMap: map,
       onEventTap: handleEventTap,
     );
 
@@ -322,10 +315,71 @@ class MapHomeScreenState extends ConsumerState<MapHomeScreen>
     return 'night';
   }
 
-  Future<void> applyStandardMapConfiguration(MapSettingsState settings) async {
-    if (mapboxMap == null || !styleLoaded) return;
+  Future<void> hideBuiltInCompass() async {
+    final map = mapboxMap;
+    if (map == null) return;
 
-    final style = mapboxMap!.style;
+    await map.compass.updateSettings(
+      CompassSettings(
+        enabled: false,
+        opacity: 0.0,
+        position: OrnamentPosition.BOTTOM_LEFT,
+        marginLeft: -1000,
+        marginBottom: -1000,
+        marginRight: 0,
+        marginTop: 0,
+        fadeWhenFacingNorth: false,
+      ),
+    );
+  }
+
+  Future<void> enableUserLocation() async {
+    final map = mapboxMap;
+    if (map == null) return;
+
+    await map.location.updateSettings(
+      LocationComponentSettings(
+        enabled: true,
+        pulsingEnabled: true,
+        puckBearingEnabled: true,
+        puckBearing: PuckBearing.HEADING,
+      ),
+    );
+  }
+
+  Future<geo.Position?> getCurrentDeviceLocation() async {
+    final result = await locationService.getCurrentLocation();
+
+    if (result.position != null) {
+      currentLatitude = result.position!.latitude;
+      currentLongitude = result.position!.longitude;
+      return result.position!;
+    }
+
+    if (result.failure != null) {
+      _showMessage(locationService.messageForFailure(result.failure!));
+    }
+
+    return null;
+  }
+
+  Future<Position?> getUserPosition() async {
+    final map = mapboxMap;
+    if (map == null) return null;
+
+    final position = await map.style.getPuckPositionSafe();
+    if (position != null) {
+      currentLatitude = position.lat.toDouble();
+      currentLongitude = position.lng.toDouble();
+    }
+    return position;
+  }
+
+  Future<void> applyStandardMapConfiguration(MapSettingsState settings) async {
+    final map = mapboxMap;
+    if (map == null || !styleLoaded) return;
+
+    final style = map.style;
 
     try {
       await style.setStyleImportConfigProperty(
@@ -377,10 +431,11 @@ class MapHomeScreenState extends ConsumerState<MapHomeScreen>
   }
 
   Future<void> ensureTerrainSource() async {
-    if (mapboxMap == null || !styleLoaded || terrainSourceAdded) return;
+    final map = mapboxMap;
+    if (map == null || !styleLoaded || terrainSourceAdded) return;
 
     try {
-      await mapboxMap!.style.addSource(
+      await map.style.addSource(
         RasterDemSource(
           id: terrainSourceId,
           url: 'mapbox://mapbox.mapbox-terrain-dem-v1',
@@ -394,12 +449,13 @@ class MapHomeScreenState extends ConsumerState<MapHomeScreen>
   }
 
   Future<void> applyTerrain(bool enabled) async {
-    if (mapboxMap == null || !styleLoaded) return;
+    final map = mapboxMap;
+    if (map == null || !styleLoaded) return;
 
     await ensureTerrainSource();
 
     try {
-      await mapboxMap!.style.setStyleTerrainProperty(
+      await map.style.setStyleTerrainProperty(
         'exaggeration',
         enabled ? terrainExaggeration : 0.0,
       );
@@ -407,9 +463,10 @@ class MapHomeScreenState extends ConsumerState<MapHomeScreen>
   }
 
   Future<void> animateCameraFor3D(bool enabled) async {
-    if (mapboxMap == null) return;
+    final map = mapboxMap;
+    if (map == null) return;
 
-    await mapboxMap!.easeTo(
+    await map.easeTo(
       CameraOptions(
         zoom: enabled ? cityZoom : baseZoom,
         pitch: enabled ? cityPitch : 0.0,
@@ -418,16 +475,73 @@ class MapHomeScreenState extends ConsumerState<MapHomeScreen>
     );
   }
 
-ui.Size pinSizeForPriority(EventPinPriority priority) {
-  switch (priority) {
-    case EventPinPriority.high:
-      return const ui.Size(220, 150);
-    case EventPinPriority.medium:
-      return const ui.Size(190, 132);
-    case EventPinPriority.low:
-      return const ui.Size(160, 116);
+  Future<void> focusOnEventLocation({
+    required double latitude,
+    required double longitude,
+  }) async {
+    final map = mapboxMap;
+    if (map == null) return;
+
+    final settings = ref.read(mapSettingsControllerProvider);
+
+    await map.easeTo(
+      CameraOptions(
+        center: Point(coordinates: Position(longitude, latitude)),
+        zoom: settings.map3D ? cityZoom : 15.8,
+        pitch: settings.map3D ? cityPitch : 0.0,
+        bearing: 0.0,
+        padding: MbxEdgeInsets(top: 120, left: 40, right: 40, bottom: 260),
+      ),
+      MapAnimationOptions(duration: 900, startDelay: 0),
+    );
   }
-}
+
+  Future<void> centerOnUserPuck() async {
+    final map = mapboxMap;
+    if (map == null) return;
+
+    final puck = await getUserPosition();
+    if (puck != null) {
+      await map.easeTo(
+        CameraOptions(
+          center: Point(
+            coordinates: Position(puck.lng.toDouble(), puck.lat.toDouble()),
+          ),
+          zoom: 16.0,
+          pitch: 0.0,
+          bearing: 0.0,
+        ),
+        MapAnimationOptions(duration: 700, startDelay: 0),
+      );
+      return;
+    }
+
+    final gps = await getCurrentDeviceLocation();
+    if (gps == null) return;
+
+    await map.easeTo(
+      CameraOptions(
+        center: Point(
+          coordinates: Position(gps.longitude, gps.latitude),
+        ),
+        zoom: 16.0,
+        pitch: 0.0,
+        bearing: 0.0,
+      ),
+      MapAnimationOptions(duration: 700, startDelay: 0),
+    );
+  }
+
+  ui.Size pinSizeForPriority(EventPinPriority priority) {
+    switch (priority) {
+      case EventPinPriority.high:
+        return const ui.Size(220, 150);
+      case EventPinPriority.medium:
+        return const ui.Size(196, 136);
+      case EventPinPriority.low:
+        return const ui.Size(176, 124);
+    }
+  }
 
   List<EventMapPinData> visiblePinsForZoom({
     required List<EventMapPinData> pins,
@@ -525,22 +639,29 @@ ui.Size pinSizeForPriority(EventPinPriority priority) {
     if (!mounted || isSyncingPins) return;
 
     if (!silent) {
-      setState(() => isLoadingMapPins = true);
+      _setLoadingPins(true);
     }
 
     final pins = await fetchMapPins();
     if (!mounted) return;
 
     final oldSignature = events
-        .map((e) => '${e.id}-${e.lat}-${e.lng}-${e.imageUrl}-${e.priority.name}')
+        .map(
+          (e) =>
+              '${e.id}-${e.lat}-${e.lng}-${e.imageUrl}-${e.priority.name}-${e.categoryColor.value}',
+        )
         .join('|');
+
     final newSignature = pins
-        .map((e) => '${e.id}-${e.lat}-${e.lng}-${e.imageUrl}-${e.priority.name}')
+        .map(
+          (e) =>
+              '${e.id}-${e.lat}-${e.lng}-${e.imageUrl}-${e.priority.name}-${e.categoryColor.value}',
+        )
         .join('|');
 
     if (oldSignature == newSignature && !forceResync) {
       if (!silent) {
-        setState(() => isLoadingMapPins = false);
+        _setLoadingPins(false);
       }
       return;
     }
@@ -563,9 +684,7 @@ ui.Size pinSizeForPriority(EventPinPriority priority) {
 
   Future<void> syncEventPins() async {
     final settings = ref.read(mapSettingsControllerProvider);
-    if (!settings.eventPins || !styleLoaded || !captureReady || events.isEmpty) {
-      return;
-    }
+    if (!settings.eventPins || !_canSyncPins) return;
 
     isSyncingPins = true;
 
@@ -594,42 +713,34 @@ ui.Size pinSizeForPriority(EventPinPriority priority) {
     await syncEventPins();
   }
 
-  Future<void> focusOnEventLocation({
-    required double latitude,
-    required double longitude,
-  }) async {
-    if (mapboxMap == null) return;
-
-    final settings = ref.read(mapSettingsControllerProvider);
-
-    await mapboxMap!.easeTo(
-      CameraOptions(
-        center: Point(coordinates: Position(longitude, latitude)),
-        zoom: settings.map3D ? cityZoom : 15.8,
-        pitch: settings.map3D ? cityPitch : 0.0,
-        bearing: 0.0,
-        padding: MbxEdgeInsets(top: 120, left: 40, right: 40, bottom: 260),
-      ),
-      MapAnimationOptions(duration: 900, startDelay: 0),
-    );
+  Future<void> applyEventPinsVisibility(bool visible) async {
+    await pinService.clear();
+    if (visible) {
+      await tryAddEventPins();
+    }
+    if (!mounted) return;
+    setState(() {});
   }
 
   Future<void> tryHandlePendingDirections(EventDirectionsRequest request) async {
     if (activeNavigationRequest?.eventId == request.eventId) {
       ref.read(pendingDirectionsProvider.notifier).state = null;
+
       if (mounted) {
         setState(() {
           isNavigationUiOpen = true;
           activeDirectionsRequest = null;
         });
       }
+
+      notifyNavigationIconVisibility();
       return;
     }
 
-    if (!isReadyForPendingDirections) {
+    if (!_isReadyForPendingDirections) {
       await Future<void>.delayed(const Duration(milliseconds: 250));
     }
-    if (!isReadyForPendingDirections || !mounted) return;
+    if (!_isReadyForPendingDirections || !mounted) return;
 
     handlingPendingDirections = true;
     try {
@@ -646,6 +757,7 @@ ui.Size pinSizeForPriority(EventPinPriority priority) {
 
       ref.read(pendingDirectionsProvider.notifier).state = null;
       hasHandledInitialPendingDirections = true;
+      notifyNavigationIconVisibility();
     } finally {
       handlingPendingDirections = false;
     }
@@ -663,13 +775,208 @@ ui.Size pinSizeForPriority(EventPinPriority priority) {
     await tryHandlePendingDirections(request);
   }
 
-  Future<void> applyEventPinsVisibility(bool visible) async {
-    await pinService.clear();
-    if (visible) {
-      await tryAddEventPins();
+  Future<Map<String, dynamic>> _fetchRouteFeature({
+    required double originLng,
+    required double originLat,
+    required double destinationLng,
+    required double destinationLat,
+  }) {
+    return _directionsApi.getDrivingRoute(
+      originLng: originLng,
+      originLat: originLat,
+      destinationLng: destinationLng,
+      destinationLat: destinationLat,
+    );
+  }
+
+  void startNavigationTracking(EventDirectionsRequest request) {
+    lastReroutePosition = null;
+    isRerouting = false;
+
+    locationService.startNavigationTracking(
+      onPosition: (position) async {
+        currentLatitude = position.latitude;
+        currentLongitude = position.longitude;
+
+        if (isRerouting) return;
+
+        final last = lastReroutePosition;
+        final movedEnough = last == null ||
+            geo.Geolocator.distanceBetween(
+                  last.latitude,
+                  last.longitude,
+                  position.latitude,
+                  position.longitude,
+                ) >=
+                25;
+
+        if (!movedEnough || mapboxMap == null) return;
+
+        isRerouting = true;
+        lastReroutePosition = position;
+
+        try {
+          final routeFeature = await _fetchRouteFeature(
+            originLng: position.longitude,
+            originLat: position.latitude,
+            destinationLng: request.longitude,
+            destinationLat: request.latitude,
+          );
+
+          await MapRouteDrawer.draw(
+            mapboxMap: mapboxMap!,
+            styleLoaded: styleLoaded,
+            routeFeature: routeFeature,
+          );
+        } catch (_) {
+        } finally {
+          isRerouting = false;
+        }
+      },
+    );
+  }
+
+  Future<void> startDirections(EventDirectionsRequest request) async {
+    final origin = await getCurrentDeviceLocation();
+    final map = mapboxMap;
+    if (origin == null || map == null) return;
+
+    await locationService.stopNavigationTracking();
+
+    lastReroutePosition = origin;
+    isRerouting = false;
+
+    if (mounted) {
+      setState(() {
+        isFetchingRoute = true;
+        activeNavigationRequest = request;
+        activeDirectionsRequest = null;
+        isNavigationUiOpen = true;
+      });
     }
+    notifyNavigationIconVisibility();
+
+    try {
+      final routeFeature = await _fetchRouteFeature(
+        originLng: origin.longitude,
+        originLat: origin.latitude,
+        destinationLng: request.longitude,
+        destinationLat: request.latitude,
+      );
+
+      await MapRouteDrawer.draw(
+        mapboxMap: map,
+        styleLoaded: styleLoaded,
+        routeFeature: routeFeature,
+      );
+
+      await map.easeTo(
+        CameraOptions(
+          center: Point(
+            coordinates: Position(request.longitude, request.latitude),
+          ),
+          zoom: 14.5,
+          pitch: 45.0,
+          bearing: 0.0,
+          padding: MbxEdgeInsets(top: 140, left: 60, right: 60, bottom: 260),
+        ),
+        MapAnimationOptions(duration: 900, startDelay: 0),
+      );
+
+      startNavigationTracking(request);
+
+      if (!mounted) return;
+      _setNavigationUiOpen(false);
+      notifyNavigationIconVisibility();
+    } catch (_) {
+      await locationService.stopNavigationTracking();
+      activeNavigationRequest = null;
+
+      if (!mounted) return;
+      _setNavigationUiOpen(false);
+
+      notifyNavigationIconVisibility();
+      _showMessage('Unable to load route right now.');
+    } finally {
+      if (mounted) {
+        setState(() => isFetchingRoute = false);
+      }
+    }
+  }
+
+  Future<void> stopNavigation() async {
+    await locationService.stopNavigationTracking();
+    lastReroutePosition = null;
+    isRerouting = false;
+
+    final map = mapboxMap;
+    if (map != null) {
+      await MapRouteDrawer.clear(map);
+    }
+
+    activeNavigationRequest = null;
+
     if (!mounted) return;
-    setState(() {});
+    setState(() {
+      isNavigationUiOpen = false;
+      activeDirectionsRequest = null;
+    });
+
+    notifyNavigationIconVisibility();
+    await centerOnUserPuck();
+  }
+
+  Future<void> openActiveNavigationUi() async {
+    final request = activeNavigationRequest;
+    final map = mapboxMap;
+    if (request == null || map == null) return;
+
+    if (isNavigationUiOpen) {
+      _setNavigationUiOpen(false);
+      return;
+    }
+
+    await map.easeTo(
+      CameraOptions(
+        center: Point(
+          coordinates: Position(request.longitude, request.latitude),
+        ),
+        zoom: 14.5,
+        pitch: 45.0,
+        bearing: 0.0,
+        padding: MbxEdgeInsets(top: 140, left: 60, right: 60, bottom: 260),
+      ),
+      MapAnimationOptions(duration: 700, startDelay: 0),
+    );
+
+    _setNavigationUiOpen(true);
+  }
+
+  void returnToEventDetails(EventDirectionsRequest request) {
+    if (!mounted) return;
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => EventDetailsScreen(
+          eventId: request.eventId,
+          onCloseParentSearchSheet: widget.onCloseSearchOverlay,
+        ),
+      ),
+    );
+  }
+
+  void clearDirectionsCard() {
+    if (!mounted) return;
+    setState(() => activeDirectionsRequest = null);
+  }
+
+  void handleEventTap(int eventId) {
+    widget.onEventSelected?.call(eventId);
+  }
+
+  void notifyNavigationIconVisibility() {
+    widget.onNavigationUiVisibilityChanged
+        ?.call(activeNavigationRequest != null);
   }
 
   Widget buildHiddenMarkerLayer() {
@@ -703,325 +1010,104 @@ ui.Size pinSizeForPriority(EventPinPriority priority) {
     );
   }
 
-  Future<void> centerOnUserPuck() async {
-    if (mapboxMap == null) return;
-
-    final puck = await getUserPosition();
-    if (puck != null) {
-      await mapboxMap!.easeTo(
-        CameraOptions(
-          center: Point(
-            coordinates: Position(puck.lng.toDouble(), puck.lat.toDouble()),
-          ),
-          zoom: 16.0,
-          pitch: 0.0,
+  Widget _buildMap(BuildContext context, MapSettingsState settings) {
+    return Positioned.fill(
+      child: MapWidget(
+        key: const ValueKey('geo-event-map'),
+        textureView: true,
+        styleUri: baseStyleUri,
+        cameraOptions: CameraOptions(
+          center: Point(coordinates: Position(defaultLng, defaultLat)),
+          zoom: settings.map3D ? cityZoom : baseZoom,
           bearing: 0.0,
+          pitch: settings.map3D ? cityPitch : 0.0,
         ),
-        MapAnimationOptions(duration: 700, startDelay: 0),
-      );
-      return;
-    }
+        onMapCreated: onMapCreated,
+        onStyleLoadedListener: onStyleLoaded,
+        onCameraChangeListener: (event) async {
+          final zoom = event.cameraState.zoom;
+          final shouldResync = (zoom - _currentZoom).abs() >= 0.6;
+          _currentZoom = zoom;
 
-    final gps = await getCurrentDeviceLocation();
-    if (gps == null) return;
-
-    await mapboxMap!.easeTo(
-      CameraOptions(
-        center: Point(
-          coordinates: Position(gps.longitude, gps.latitude),
-        ),
-        zoom: 16.0,
-        pitch: 0.0,
-        bearing: 0.0,
+          if (shouldResync && mounted && !isSyncingPins) {
+            await syncEventPins();
+          }
+        },
       ),
-      MapAnimationOptions(duration: 700, startDelay: 0),
     );
   }
 
-  void notifyNavigationIconVisibility() {
-    widget.onNavigationUiVisibilityChanged?.call(activeNavigationRequest != null);
-  }
-
-  void startNavigationTracking(EventDirectionsRequest request) {
-    lastReroutePosition = null;
-    isRerouting = false;
-
-    locationService.startNavigationTracking(
-      onPosition: (position) async {
-        currentLatitude = position.latitude;
-        currentLongitude = position.longitude;
-
-        if (isRerouting) return;
-
-        final last = lastReroutePosition;
-        final movedEnough = last == null ||
-            geo.Geolocator.distanceBetween(
-                  last.latitude,
-                  last.longitude,
-                  position.latitude,
-                  position.longitude,
-                ) >=
-                25;
-
-        if (!movedEnough || mapboxMap == null) return;
-
-        isRerouting = true;
-        lastReroutePosition = position;
-
-        try {
-          final routeGeoJson = await routeService.fetchRouteGeoJson(
-            originLng: position.longitude,
-            originLat: position.latitude,
-            destinationLng: request.longitude,
-            destinationLat: request.latitude,
-          );
-
-          await routeService.drawRouteLine(
-            mapboxMap: mapboxMap!,
-            styleLoaded: styleLoaded,
-            routeFeature: routeGeoJson,
-          );
-        } catch (_) {
-        } finally {
-          isRerouting = false;
-        }
-      },
-    );
-  }
-
-  Future<void> startDirections(EventDirectionsRequest request) async {
-    final origin = await getCurrentDeviceLocation();
-    if (origin == null || mapboxMap == null) return;
-
-    await locationService.stopNavigationTracking();
-
-    lastReroutePosition = origin;
-    isRerouting = false;
-
-    if (mounted) {
-      setState(() {
-        isFetchingRoute = true;
-        activeNavigationRequest = request;
-        activeDirectionsRequest = null;
-        isNavigationUiOpen = true;
-      });
-    }
-    notifyNavigationIconVisibility();
-
-    try {
-      final routeGeoJson = await routeService.fetchRouteGeoJson(
-        originLng: origin.longitude,
-        originLat: origin.latitude,
-        destinationLng: request.longitude,
-        destinationLat: request.latitude,
-      );
-
-      await routeService.drawRouteLine(
-        mapboxMap: mapboxMap!,
-        styleLoaded: styleLoaded,
-        routeFeature: routeGeoJson,
-      );
-
-      await mapboxMap!.easeTo(
-        CameraOptions(
-          center: Point(
-            coordinates: Position(request.longitude, request.latitude),
+  Widget _buildLoadingOverlay(BuildContext context) {
+    return Positioned.fill(
+      child: IgnorePointer(
+        child: Container(
+          color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.18),
+          child: const Center(
+            child: AppLoadingIndicator(
+              title: 'Loading map',
+              message: 'Preparing pins and location data...',
+              padding: EdgeInsets.all(24),
+            ),
           ),
-          zoom: 14.5,
-          pitch: 45.0,
-          bearing: 0.0,
-          padding: MbxEdgeInsets(top: 140, left: 60, right: 60, bottom: 260),
-        ),
-        MapAnimationOptions(duration: 900, startDelay: 0),
-      );
-
-      startNavigationTracking(request);
-      ref.read(activeNavigationProvider.notifier).state = request;
-      isNavigationUiOpen = false;
-      notifyNavigationIconVisibility();
-    } catch (_) {
-      await locationService.stopNavigationTracking();
-      ref.read(activeNavigationProvider.notifier).state = null;
-
-      if (!mounted) return;
-      setState(() => activeNavigationRequest = null);
-
-      isNavigationUiOpen = false;
-      notifyNavigationIconVisibility();
-      showMessage('Unable to load route right now.');
-    } finally {
-      if (mounted) {
-        setState(() => isFetchingRoute = false);
-      }
-    }
-  }
-
-  Future<void> stopNavigation() async {
-    await locationService.stopNavigationTracking();
-    lastReroutePosition = null;
-    isRerouting = false;
-
-    if (mapboxMap != null) {
-      await routeService.clearRouteLine(mapboxMap!);
-    }
-
-    if (!mounted) return;
-    setState(() {
-      activeNavigationRequest = null;
-      isNavigationUiOpen = false;
-      activeDirectionsRequest = null;
-    });
-
-    ref.read(activeNavigationProvider.notifier).state = null;
-    notifyNavigationIconVisibility();
-    await centerOnUserPuck();
-  }
-
-  Future<void> openActiveNavigationUi() async {
-    final request = activeNavigationRequest;
-    if (request == null || mapboxMap == null) return;
-
-    if (isNavigationUiOpen) {
-      if (!mounted) return;
-      setState(() => isNavigationUiOpen = false);
-      return;
-    }
-
-    await mapboxMap!.easeTo(
-      CameraOptions(
-        center: Point(
-          coordinates: Position(request.longitude, request.latitude),
-        ),
-        zoom: 14.5,
-        pitch: 45.0,
-        bearing: 0.0,
-        padding: MbxEdgeInsets(top: 140, left: 60, right: 60, bottom: 260),
-      ),
-      MapAnimationOptions(duration: 700, startDelay: 0),
-    );
-
-    if (!mounted) return;
-    setState(() => isNavigationUiOpen = true);
-  }
-
-  void returnToEventDetails(EventDirectionsRequest request) {
-    if (!mounted) return;
-
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => EventDetailsScreen(
-          eventId: request.eventId,
-          onCloseParentSearchSheet: widget.onCloseSearchOverlay,
         ),
       ),
     );
   }
 
-  void clearDirectionsCard() {
-    if (!mounted) return;
-    setState(() => activeDirectionsRequest = null);
+  Widget _buildDirectionsCard() {
+    final request = activeDirectionsRequest;
+    if (request == null) return const SizedBox.shrink();
+
+    return Positioned(
+      left: 16,
+      right: 16,
+      bottom: 20,
+      child: SafeArea(
+        top: false,
+        child: DirectionsActionCard(
+          title: request.title,
+          isLoading: isFetchingRoute,
+          onStartDirections: () => startDirections(request),
+          onReturnToEventDetails: () => returnToEventDetails(request),
+          onClose: clearDirectionsCard,
+        ),
+      ),
+    );
   }
 
-  void handleEventTap(int eventId) {
-    widget.onEventSelected?.call(eventId);
-  }
-
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    pinsRefreshTimer?.cancel();
-    settingsSubscription?.close();
-    pendingDirectionsSubscription?.close();
-    pinService.dispose();
-    locationService.dispose();
-    super.dispose();
+  Widget _buildActiveNavigationCard(EventDirectionsRequest activeNavigation) {
+    return Positioned(
+      left: 16,
+      right: 16,
+      bottom: 20,
+      child: SafeArea(
+        top: false,
+        child: ActiveNavigationCard(
+          title: activeNavigation.title,
+          onStopNavigation: stopNavigation,
+          onViewEventDetails: () => returnToEventDetails(activeNavigation),
+          onClose: () {
+            if (!mounted) return;
+            setState(() => isNavigationUiOpen = false);
+          },
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final settings = ref.watch(mapSettingsControllerProvider);
+    final activeNavigation = ref.watch(activeNavigationProvider);
 
     return Stack(
       children: [
-        Positioned.fill(
-          child: MapWidget(
-            key: const ValueKey('geo-event-map'),
-            textureView: true,
-            styleUri: baseStyleUri,
-            cameraOptions: CameraOptions(
-              center: Point(coordinates: Position(defaultLng, defaultLat)),
-              zoom: settings.map3D ? cityZoom : baseZoom,
-              bearing: 0.0,
-              pitch: settings.map3D ? cityPitch : 0.0,
-            ),
-            onMapCreated: onMapCreated,
-            onStyleLoadedListener: onStyleLoaded,
-            onCameraChangeListener: (event) async {
-              final zoom = event.cameraState.zoom;
-              final shouldResync = (zoom - _currentZoom).abs() >= 0.6;
-              _currentZoom = zoom;
-
-              if (shouldResync && mounted && !isSyncingPins) {
-                await syncEventPins();
-              }
-            },
-          ),
-        ),
+        _buildMap(context, settings),
         buildHiddenMarkerLayer(),
-        if (!styleLoaded || isLoadingMapPins)
-          Positioned.fill(
-            child: IgnorePointer(
-              child: Container(
-                color: Theme.of(context)
-                    .colorScheme
-                    .surface
-                    .withValues(alpha: 0.18),
-                child: const Center(
-                  child: AppLoadingIndicator(
-                    title: 'Loading map',
-                    message: 'Preparing pins and location data...',
-                    padding: EdgeInsets.all(24),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        if (activeDirectionsRequest != null)
-          Positioned(
-            left: 16,
-            right: 16,
-            bottom: 20,
-            child: SafeArea(
-              top: false,
-              child: DirectionsActionCard(
-                title: activeDirectionsRequest!.title,
-                isLoading: isFetchingRoute,
-                onStartDirections: () => startDirections(activeDirectionsRequest!),
-                onReturnToEventDetails: () =>
-                    returnToEventDetails(activeDirectionsRequest!),
-                onClose: clearDirectionsCard,
-              ),
-            ),
-          ),
-        if (activeNavigationRequest != null && isNavigationUiOpen)
-          Positioned(
-            left: 16,
-            right: 16,
-            bottom: 20,
-            child: SafeArea(
-              top: false,
-              child: ActiveNavigationCard(
-                title: activeNavigationRequest!.title,
-                onStopNavigation: stopNavigation,
-                onViewEventDetails: () =>
-                    returnToEventDetails(activeNavigationRequest!),
-                onClose: () {
-                  if (!mounted) return;
-                  setState(() => isNavigationUiOpen = false);
-                },
-              ),
-            ),
-          ),
+        if (_showMapLoadingOverlay) _buildLoadingOverlay(context),
+        if (activeDirectionsRequest != null) _buildDirectionsCard(),
+        if (activeNavigation != null && isNavigationUiOpen)
+          _buildActiveNavigationCard(activeNavigation),
       ],
     );
   }

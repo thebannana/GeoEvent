@@ -5,23 +5,31 @@ import '../../../../shared/payment/models/payment_method.dart';
 class PaymentMethodSelector extends StatelessWidget {
   final PaymentMethod selected;
   final ValueChanged<PaymentMethod> onSelected;
+  final bool isFree;
 
   const PaymentMethodSelector({
     super.key,
     required this.selected,
     required this.onSelected,
+    this.isFree = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    final methods = [PaymentMethod.paypal, PaymentMethod.cash];
+    final methods = isFree
+        ? const <PaymentMethod>[]
+        : const [PaymentMethod.paypal, PaymentMethod.cash];
+
+    if (methods.isEmpty) {
+      return const SizedBox.shrink();
+    }
 
     return Column(
       children: methods
           .map(
             (method) => Padding(
               padding: const EdgeInsets.only(bottom: 10),
-              child: _PaymentMethodTile(
+              child: PaymentMethodTile(
                 method: method,
                 isSelected: selected == method,
                 onTap: () => onSelected(method),
@@ -33,12 +41,13 @@ class PaymentMethodSelector extends StatelessWidget {
   }
 }
 
-class _PaymentMethodTile extends StatelessWidget {
+class PaymentMethodTile extends StatelessWidget {
   final PaymentMethod method;
   final bool isSelected;
   final VoidCallback onTap;
 
-  const _PaymentMethodTile({
+  const PaymentMethodTile({
+    super.key,
     required this.method,
     required this.isSelected,
     required this.onTap,
@@ -71,7 +80,7 @@ class _PaymentMethodTile extends StatelessWidget {
           child: Row(
             children: [
               Icon(
-                _iconFor(method),
+                iconFor(method),
                 color: isSelected ? primary : theme.iconTheme.color,
               ),
               const SizedBox(width: 12),
@@ -80,7 +89,8 @@ class _PaymentMethodTile extends StatelessWidget {
                   method.label,
                   style: TextStyle(
                     fontSize: 14,
-                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                    fontWeight:
+                        isSelected ? FontWeight.w700 : FontWeight.w500,
                   ),
                 ),
               ),
@@ -101,12 +111,12 @@ class _PaymentMethodTile extends StatelessWidget {
     );
   }
 
-  IconData _iconFor(PaymentMethod method) {
+  IconData iconFor(PaymentMethod method) {
     switch (method) {
       case PaymentMethod.paypal:
         return Icons.account_balance_wallet_outlined;
       case PaymentMethod.cash:
-        return Icons.attach_money_rounded;
+        return Icons.payments_outlined;
     }
   }
 }

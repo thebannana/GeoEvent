@@ -1,11 +1,11 @@
-class LikedEventDto {
+class LikedEvent {
   final int eventId;
   final String title;
   final String? imageUrl;
   final DateTime likedAt;
   final bool isLiked;
 
-  const LikedEventDto({
+  const LikedEvent({
     required this.eventId,
     required this.title,
     required this.imageUrl,
@@ -13,12 +13,16 @@ class LikedEventDto {
     required this.isLiked,
   });
 
-  factory LikedEventDto.fromJson(Map<String, dynamic> json) {
-    return LikedEventDto(
-      eventId: (json['eventId'] as num).toInt(),
-      title: json['title']?.toString() ?? '',
+  factory LikedEvent.fromJson(Map<String, dynamic> json) {
+    final parsedLikedAt = DateTime.tryParse(json['likedAt']?.toString() ?? '');
+
+    return LikedEvent(
+      eventId: (json['eventId'] as num?)?.toInt() ?? 0,
+      title: json['title']?.toString().trim().isNotEmpty == true
+          ? json['title'].toString().trim()
+          : 'Liked event',
       imageUrl: json['imageUrl']?.toString(),
-      likedAt: DateTime.parse(json['likedAt'].toString()),
+      likedAt: parsedLikedAt ?? DateTime.now(),
       isLiked: json['isLiked'] == true,
     );
   }

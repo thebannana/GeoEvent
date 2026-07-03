@@ -1,29 +1,35 @@
-import 'dart:io';
+import 'dart:io' show File;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
-import '../../../../core/widgets/app_bottom_sheet_container.dart';
-import '../../../../core/widgets/app_spinner.dart';
-import '../../../../core/widgets/app_surface_card.dart';
-import '../../../../core/widgets/glass_scaffold.dart';
+import '../../../../core/constants/app_strings.dart';
+import '../../../../core/errors/error_mapper.dart';
+import '../../../../core/utils/validators.dart';
+import '../../../../core/widgets/feedback/app_spinner.dart';
+import '../../../../core/widgets/layout/app_bottom_sheet_container.dart';
+import '../../../../core/widgets/layout/app_scaffold.dart';
+import '../../../../core/widgets/surfaces/app_surface_card.dart';
 import '../../../../shared/profile/models/user_profile.dart';
 import '../../application/profile_controller.dart';
 
 class EditProfileScreen extends ConsumerStatefulWidget {
-  final UserProfile profile;
-
   const EditProfileScreen({
     super.key,
     required this.profile,
   });
+
+  final UserProfile profile;
 
   @override
   ConsumerState<EditProfileScreen> createState() => _EditProfileScreenState();
 }
 
 class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
+  final _formKey = GlobalKey<FormState>();
+
   late final TextEditingController _firstNameController;
   late final TextEditingController _lastNameController;
   late final TextEditingController _phoneController;
@@ -31,10 +37,9 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   late final TextEditingController _emailController;
   late final ImagePicker _imagePicker;
 
-  final _formKey = GlobalKey<FormState>();
-
   bool _isSubmitting = false;
   XFile? _pickedImage;
+  Uint8List? _pickedImageBytes;
   bool _removeCurrentPhoto = false;
 
   @override
@@ -42,8 +47,9 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     super.initState();
     _firstNameController = TextEditingController(text: widget.profile.firstName);
     _lastNameController = TextEditingController(text: widget.profile.lastName);
-    _phoneController =
-        TextEditingController(text: widget.profile.phoneNumber ?? '');
+    _phoneController = TextEditingController(
+      text: widget.profile.phoneNumber ?? '',
+    );
     _usernameController = TextEditingController(text: widget.profile.username);
     _emailController = TextEditingController(text: widget.profile.email);
     _imagePicker = ImagePicker();
@@ -59,41 +65,6 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     super.dispose();
   }
 
-  String? _validateName(String? value, String label) {
-    final text = (value ?? '').trim();
-
-    if (text.isEmpty) return '$label is required';
-    if (text.length < 2) return '$label must be at least 2 characters';
-    if (text.length > 50) return '$label must be at most 50 characters';
-
-    final regex = RegExp(r"^[A-Za-zÀ-ÿČĆĐŠŽčćđšž'\- ]+$");
-    if (!regex.hasMatch(text)) {
-      return '$label contains invalid characters';
-    }
-
-    return null;
-  }
-
-  String? _validatePhone(String? value) {
-    final text = (value ?? '').trim();
-    if (text.isEmpty) return null;
-
-    final normalized = text.replaceAll(RegExp(r'[\s\-()]'), '');
-    final regex = RegExp(r'^\+?[0-9]{7,15}$');
-
-    if (!regex.hasMatch(normalized)) {
-      return 'Enter a valid phone number';
-    }
-
-    return null;
-  }
-
-  String? _normalizePhone(String? value) {
-    final text = (value ?? '').trim();
-    if (text.isEmpty) return null;
-    return text.replaceAll(RegExp(r'[\s\-()]'), '');
-  }
-
   Future<void> _pickProfileImage(ImageSource source) async {
     try {
       final image = await _imagePicker.pickImage(
@@ -105,14 +76,21 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
 
       if (image == null || !mounted) return;
 
+      final bytes = kIsWeb ? await image.readAsBytes() : null;
+
       setState(() {
         _pickedImage = image;
+        _pickedImageBytes = bytes;
         _removeCurrentPhoto = false;
       });
-    } catch (_) {
+    } catch (error, stackTrace) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not pick image.')),
+      _showMessage(
+        ErrorMapper.toMessage(
+          error,
+          stackTrace: stackTrace,
+          fallbackMessage: 'Could not pick image.',
+        ),
       );
     }
   }
@@ -121,10 +99,11 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     await showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (context) {
-        final hasAnyPhoto =
-            _pickedImage != null ||
+      builder: (bottomSheetContext) {
+        final hasCurrentPhoto =
+            !_removeCurrentPhoto &&
             (widget.profile.imageUrl?.trim().isNotEmpty ?? false);
+        final hasAnyPhoto = _pickedImage != null || hasCurrentPhoto;
 
         return AppBottomSheetContainer(
           header: Padding(
@@ -134,9 +113,10 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                 Expanded(
                   child: Text(
                     'Profile photo',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
+                    style: Theme.of(bottomSheetContext)
+                        .textTheme
+                        .titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w700),
                   ),
                 ),
               ],
@@ -146,31 +126,31 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
+                enabled: !_isSubmitting,
                 leading: const Icon(Icons.photo_library_outlined),
                 title: const Text('Choose from gallery'),
                 onTap: () {
-                  Navigator.pop(context);
+                  Navigator.of(bottomSheetContext).pop();
                   _pickProfileImage(ImageSource.gallery);
                 },
               ),
               ListTile(
+                enabled: !_isSubmitting,
                 leading: const Icon(Icons.photo_camera_outlined),
                 title: const Text('Take photo'),
                 onTap: () {
-                  Navigator.pop(context);
+                  Navigator.of(bottomSheetContext).pop();
                   _pickProfileImage(ImageSource.camera);
                 },
               ),
               if (hasAnyPhoto)
                 ListTile(
+                  enabled: !_isSubmitting,
                   leading: const Icon(Icons.delete_outline_rounded),
                   title: const Text('Remove photo'),
-                  onTap: () {
-                    Navigator.pop(context);
-                    setState(() {
-                      _pickedImage = null;
-                      _removeCurrentPhoto = true;
-                    });
+                  onTap: () async {
+                    Navigator.of(bottomSheetContext).pop();
+                    await _confirmRemovePhoto();
                   },
                 ),
             ],
@@ -180,53 +160,137 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     );
   }
 
+  Future<void> _confirmRemovePhoto() async {
+    final shouldRemove = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Remove photo'),
+            content: const Text(
+              'Are you sure you want to remove your profile photo?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('Remove'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+
+    if (!shouldRemove || !mounted) return;
+
+    setState(() {
+      _pickedImage = null;
+      _pickedImageBytes = null;
+      _removeCurrentPhoto = true;
+    });
+  }
+
   Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) return;
+    final form = _formKey.currentState;
+    if (form == null || !form.validate() || _isSubmitting) return;
 
     FocusScope.of(context).unfocus();
     setState(() => _isSubmitting = true);
 
-    String? finalImageUrl =
-        _removeCurrentPhoto ? null : widget.profile.imageUrl;
+    try {
+      String? finalImageUrl =
+          _removeCurrentPhoto ? null : widget.profile.imageUrl?.trim();
 
-    if (_pickedImage != null) {
-      try {
+      if (_pickedImage != null) {
         finalImageUrl = await ref
             .read(profileControllerProvider.notifier)
             .uploadProfileImage(_pickedImage!);
-      } catch (_) {
-        if (!mounted) return;
-        setState(() => _isSubmitting = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to upload profile image.')),
-        );
+      }
+
+      final success = await ref
+          .read(profileControllerProvider.notifier)
+          .updateProfile(
+            username: _usernameController.text.trim(),
+            email: _emailController.text.trim(),
+            firstName: _firstNameController.text.trim(),
+            lastName: _lastNameController.text.trim(),
+            phoneNumber: _normalizeOptionalPhone(_phoneController.text),
+            imageUrl: finalImageUrl,
+          );
+
+      if (!mounted) return;
+
+      if (!success) {
+        _showMessage('Failed to update profile.');
         return;
       }
-    }
 
-    final success = await ref
-        .read(profileControllerProvider.notifier)
-        .updateProfile(
-          firstName: _firstNameController.text.trim(),
-          lastName: _lastNameController.text.trim(),
-          phoneNumber: _normalizePhone(_phoneController.text),
-          imageUrl: finalImageUrl,
-        );
-
-    if (!mounted) return;
-
-    setState(() => _isSubmitting = false);
-
-    if (success) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Profile updated successfully.')),
-      );
+      _showMessage('Profile updated successfully.');
       Navigator.of(context).pop(true);
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to update profile.')),
+    } catch (error, stackTrace) {
+      if (!mounted) return;
+      _showMessage(
+        ErrorMapper.toMessage(
+          error,
+          stackTrace: stackTrace,
+          fallbackMessage: AppStrings.genericError,
+        ),
       );
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
     }
+  }
+
+  String? _validateOptionalPhone(String? value) {
+    final text = (value ?? '').trim();
+    if (text.isEmpty) return null;
+    return Validators.phoneNumber(text);
+  }
+
+  String? _validateUsername(String? value) {
+    final text = (value ?? '').trim();
+
+    if (text.isEmpty) {
+      return 'Username is required.';
+    }
+
+    if (text.length < 3 || text.length > 30) {
+      return 'Username must be between 3 and 30 characters.';
+    }
+
+    final valid = RegExp(r'^[a-zA-Z0-9._]+$').hasMatch(text);
+    if (!valid) {
+      return 'Username can contain only letters, numbers, dots, and underscores.';
+    }
+
+    return null;
+  }
+
+  String? _validateEmail(String? value) {
+    final text = (value ?? '').trim();
+
+    if (text.isEmpty) {
+      return 'Email is required.';
+    }
+
+    return Validators.email(text);
+  }
+
+  String? _normalizeOptionalPhone(String? value) {
+    final text = (value ?? '').trim();
+    if (text.isEmpty) return null;
+    return text.replaceAll(RegExp(r'[\s\-\(\)]'), '');
+  }
+
+  void _showMessage(String message) {
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    messenger?.hideCurrentSnackBar();
+    messenger?.showSnackBar(
+      SnackBar(content: Text(message)),
+    );
   }
 
   @override
@@ -238,12 +302,22 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
         (widget.profile.imageUrl?.trim().isNotEmpty ?? false);
 
     final ImageProvider? avatarImage = _pickedImage != null
-        ? FileImage(File(_pickedImage!.path))
+        ? (kIsWeb
+            ? MemoryImage(_pickedImageBytes!)
+            : FileImage(File(_pickedImage!.path)) as ImageProvider)
         : (hasNetworkImage
             ? NetworkImage(widget.profile.imageUrl!.trim())
             : null);
 
-    return GlassScaffold(
+    final displayName = [
+      _firstNameController.text.trim(),
+      _lastNameController.text.trim(),
+    ].where((value) => value.isNotEmpty).join(' ');
+
+    final avatarLetter =
+        displayName.isNotEmpty ? displayName.characters.first.toUpperCase() : '?';
+
+    return AppScaffold(
       appBar: AppBar(
         title: const Text('Edit profile'),
         backgroundColor: Colors.transparent,
@@ -253,6 +327,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
           key: _formKey,
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
             children: [
               AppSurfaceCard(
                 padding: const EdgeInsets.all(18),
@@ -261,13 +336,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                     CircleAvatar(
                       radius: 32,
                       backgroundImage: avatarImage,
-                      child: avatarImage == null
-                          ? Text(
-                              widget.profile.fullName.isNotEmpty
-                                  ? widget.profile.fullName[0].toUpperCase()
-                                  : '?',
-                            )
-                          : null,
+                      child: avatarImage == null ? Text(avatarLetter) : null,
                     ),
                     const SizedBox(width: 14),
                     Expanded(
@@ -275,19 +344,15 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            widget.profile.fullName,
-                            style: const TextStyle(
+                            displayName.isEmpty ? 'Unnamed user' : displayName,
+                            style: theme.textTheme.titleMedium?.copyWith(
                               fontWeight: FontWeight.w700,
-                              fontSize: 16,
                             ),
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            _emailController.text,
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: theme.textTheme.bodySmall?.color,
-                            ),
+                            _emailController.text.trim(),
+                            style: theme.textTheme.bodySmall,
                           ),
                           const SizedBox(height: 10),
                           OutlinedButton.icon(
@@ -312,9 +377,11 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                 textCapitalization: TextCapitalization.words,
                 decoration: const InputDecoration(
                   labelText: 'First name',
-                  border: OutlineInputBorder(),
                 ),
-                validator: (value) => _validateName(value, 'First name'),
+                validator: Validators.firstName,
+                textInputAction: TextInputAction.next,
+                enabled: !_isSubmitting,
+                onChanged: (_) => setState(() {}),
               ),
               const SizedBox(height: 16),
               TextFormField(
@@ -322,27 +389,34 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                 textCapitalization: TextCapitalization.words,
                 decoration: const InputDecoration(
                   labelText: 'Last name',
-                  border: OutlineInputBorder(),
                 ),
-                validator: (value) => _validateName(value, 'Last name'),
+                validator: Validators.lastName,
+                textInputAction: TextInputAction.next,
+                enabled: !_isSubmitting,
+                onChanged: (_) => setState(() {}),
               ),
               const SizedBox(height: 16),
               TextFormField(
                 controller: _usernameController,
-                enabled: false,
                 decoration: const InputDecoration(
                   labelText: 'Username',
-                  border: OutlineInputBorder(),
                 ),
+                validator: _validateUsername,
+                textInputAction: TextInputAction.next,
+                enabled: !_isSubmitting,
               ),
               const SizedBox(height: 16),
               TextFormField(
                 controller: _emailController,
-                enabled: false,
+                keyboardType: TextInputType.emailAddress,
+                autofillHints: const [AutofillHints.email],
                 decoration: const InputDecoration(
                   labelText: 'Email',
-                  border: OutlineInputBorder(),
                 ),
+                validator: _validateEmail,
+                textInputAction: TextInputAction.next,
+                enabled: !_isSubmitting,
+                onChanged: (_) => setState(() {}),
               ),
               const SizedBox(height: 16),
               TextFormField(
@@ -350,9 +424,11 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                 keyboardType: TextInputType.phone,
                 decoration: const InputDecoration(
                   labelText: 'Phone number',
-                  border: OutlineInputBorder(),
                 ),
-                validator: _validatePhone,
+                validator: _validateOptionalPhone,
+                textInputAction: TextInputAction.done,
+                enabled: !_isSubmitting,
+                onFieldSubmitted: (_) => _submit(),
               ),
               const SizedBox(height: 24),
               FilledButton(

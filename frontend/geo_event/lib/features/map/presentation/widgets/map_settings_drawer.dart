@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/widgets/app_icon_circle_button.dart';
-import '../../../../core/widgets/app_surface_card.dart';
+import '../../../../core/widgets/inputs/app_icon_circle_button.dart';
 import '../../application/map_settings_controller.dart';
+import 'map_settings_section.dart';
 
 class MapSettingsDrawer extends ConsumerStatefulWidget {
   final VoidCallback onClose;
@@ -19,6 +19,10 @@ class MapSettingsDrawer extends ConsumerStatefulWidget {
 
 class _MapSettingsDrawerState extends ConsumerState<MapSettingsDrawer>
     with SingleTickerProviderStateMixin {
+  static const animationDuration = Duration(milliseconds: 260);
+  static const minWidth = 280.0;
+  static const maxWidth = 360.0;
+
   late final AnimationController _controller;
   late final Animation<Offset> _slide;
   bool _closing = false;
@@ -29,7 +33,7 @@ class _MapSettingsDrawerState extends ConsumerState<MapSettingsDrawer>
 
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 260),
+      duration: animationDuration,
     );
 
     _slide = Tween<Offset>(
@@ -57,8 +61,9 @@ class _MapSettingsDrawerState extends ConsumerState<MapSettingsDrawer>
 
     await _controller.reverse();
 
-    if (!mounted) return;
-    widget.onClose();
+    if (mounted) {
+      widget.onClose();
+    }
   }
 
   @override
@@ -82,7 +87,7 @@ class _MapSettingsDrawerState extends ConsumerState<MapSettingsDrawer>
               child: SlideTransition(
                 position: _slide,
                 child: Container(
-                  width: width.clamp(280.0, 360.0),
+                  width: width.clamp(minWidth, maxWidth),
                   constraints: const BoxConstraints(
                     minHeight: 420,
                     maxHeight: 620,
@@ -121,7 +126,7 @@ class _MapSettingsDrawerState extends ConsumerState<MapSettingsDrawer>
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    'Map settings',
+                                    'Map presentation settings',
                                     style: theme.textTheme.bodySmall?.copyWith(
                                       color: theme.colorScheme.onSurfaceVariant,
                                     ),
@@ -147,53 +152,53 @@ class _MapSettingsDrawerState extends ConsumerState<MapSettingsDrawer>
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              _DrawerSection(
+                              MapSettingsSection(
                                 title: 'Scene',
-                                children: [
-                                  _ToggleCard(
+                                items: [
+                                  MapSettingsSectionItem(
                                     label: '3D buildings & scene',
                                     subtitle:
-                                        'Uses the map scene itself, not only camera tilt.',
+                                        'Uses the rendered scene depth instead of only camera tilt.',
                                     value: settings.map3D,
                                     onChanged: controller.setMap3D,
                                   ),
-                                  _ToggleCard(
+                                  MapSettingsSectionItem(
                                     label: 'Terrain elevation',
                                     subtitle:
-                                        'Shows hills and elevation relief when supported.',
+                                        'Shows relief and elevation where supported by the map style.',
                                     value: settings.terrain,
                                     onChanged: controller.setTerrain,
                                   ),
                                 ],
                               ),
                               const SizedBox(height: 18),
-                              _DrawerSection(
+                              MapSettingsSection(
                                 title: 'Lighting',
-                                children: [
-                                  _ToggleCard(
+                                items: [
+                                  MapSettingsSectionItem(
                                     label: 'Auto day/night cycle',
                                     subtitle:
-                                        'Keeps the same map style and updates lighting by time.',
+                                        'Adapts lighting by time for a more realistic seminar demo.',
                                     value: settings.dayNightCycle,
                                     onChanged: controller.setDayNightCycle,
                                   ),
                                 ],
                               ),
                               const SizedBox(height: 18),
-                              _DrawerSection(
+                              MapSettingsSection(
                                 title: 'Labels & pins',
-                                children: [
-                                  _ToggleCard(
+                                items: [
+                                  MapSettingsSectionItem(
                                     label: 'Map POIs',
                                     subtitle:
-                                        'Show or hide built-in Mapbox places like parks and shops.',
+                                        'Show or hide built-in places such as shops, parks, and landmarks.',
                                     value: settings.mapPins,
                                     onChanged: controller.setMapPins,
                                   ),
-                                  _ToggleCard(
+                                  MapSettingsSectionItem(
                                     label: 'Event pins',
                                     subtitle:
-                                        'Show or hide your custom geoEvent markers.',
+                                        'Show or hide custom geoEvent markers on the map.',
                                     value: settings.eventPins,
                                     onChanged: controller.setEventPins,
                                   ),
@@ -233,97 +238,6 @@ class _MapSettingsDrawerState extends ConsumerState<MapSettingsDrawer>
             ),
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _DrawerSection extends StatelessWidget {
-  final String title;
-  final List<Widget> children;
-
-  const _DrawerSection({
-    required this.title,
-    required this.children,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          title,
-          style: theme.textTheme.labelLarge?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        const SizedBox(height: 10),
-        ...children,
-      ],
-    );
-  }
-}
-
-class _ToggleCard extends StatelessWidget {
-  final String label;
-  final String subtitle;
-  final bool value;
-  final ValueChanged<bool> onChanged;
-
-  const _ToggleCard({
-    required this.label,
-    required this.subtitle,
-    required this.value,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return AppSurfaceCard(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.fromLTRB(14, 14, 10, 14),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.only(right: 12, top: 2),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    label,
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 5),
-                  Text(
-                    subtitle,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      height: 1.35,
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          Transform.scale(
-            scale: 0.9,
-            child: Switch(
-              value: value,
-              onChanged: onChanged,
-              activeThumbColor: theme.colorScheme.primary,
-            ),
-          ),
-        ],
       ),
     );
   }

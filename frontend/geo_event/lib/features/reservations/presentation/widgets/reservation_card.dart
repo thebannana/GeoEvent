@@ -1,26 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/widgets/app_surface_card.dart';
-import '../../../../shared/events/models/create_event_models.dart';
-import '../../../../shared/events/providers/event_providers.dart';
+import '../../../../core/widgets/surfaces/app_surface_card.dart';
 import '../../../../shared/reservations/models/reservation.dart';
+import '../../../../shared/reservations/models/reservation_status.dart';
+import '../../../../shared/reservations/providers/reservation_providers.dart';
 import 'reservation_status_badge.dart';
 import 'ticket_bottom_sheet.dart';
 
-final reservationEventProvider =
-    FutureProvider.family<EventItem, int>((ref, eventId) async {
-  return ref.read(eventsRepositoryProvider).getEventById(eventId);
-});
-
 class ReservationCard extends ConsumerWidget {
   final Reservation reservation;
-  final VoidCallback onCancel;
+  final VoidCallback? onCancel;
+  final VoidCallback? onRefund;
 
   const ReservationCard({
     super.key,
     required this.reservation,
-    required this.onCancel,
+    this.onCancel,
+    this.onRefund,
   });
 
   @override
@@ -28,8 +25,8 @@ class ReservationCard extends ConsumerWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final status = reservation.displayStatus;
-    final normalized = status.toLowerCase();
-    final canCancel = reservation.canBeCancelled;
+    final canCancel = reservation.canBeCancelled && onCancel != null;
+    final canRefund = reservation.canRequestRefund && onRefund != null;
 
     final eventAsync = ref.watch(reservationEventProvider(reservation.eventId));
 
@@ -83,7 +80,7 @@ class ReservationCard extends ConsumerWidget {
                             color: colorScheme.onSurfaceVariant,
                           ),
                         ),
-                        error: (_, __) => Text(
+                        error: (_, _) => Text(
                           'Event #${reservation.eventId}',
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: colorScheme.onSurfaceVariant,
@@ -126,7 +123,7 @@ class ReservationCard extends ConsumerWidget {
               ],
             ),
           ),
-          if (normalized == 'pending') ...[
+          if (reservation.typedStatus == ReservationStatus.pending) ...[
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
               child: Row(
@@ -149,7 +146,54 @@ class ReservationCard extends ConsumerWidget {
               ),
             ),
           ],
-          if (reservation.tickets.isNotEmpty || canCancel)
+          if (reservation.hasPendingRefundRequest) ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
+              child: Text(
+                'Refund request submitted and waiting for admin review.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ] else if (reservation.isRefundRejected) ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
+              child: Text(
+                reservation.refundDecisionReason?.trim().isNotEmpty == true
+                    ? 'Refund request rejected: ${reservation.refundDecisionReason!.trim()}'
+                    : 'Refund request was rejected.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: colorScheme.error,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ] else if (reservation.typedStatus == ReservationStatus.confirmed &&
+              canRefund) ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
+              child: Text(
+                'Need to cancel? Submit a refund request.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ],
+          if (reservation.typedStatus == ReservationStatus.refunded) ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
+              child: Text(
+                'Tickets from this reservation are no longer valid for entry.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: colorScheme.error,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+          if (reservation.tickets.isNotEmpty || canCancel || canRefund)
             Padding(
               padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
               child: Wrap(
@@ -177,6 +221,19 @@ class ReservationCard extends ConsumerWidget {
                         style: TextStyle(color: colorScheme.error),
                       ),
                       onPressed: onCancel,
+                    ),
+                  if (canRefund)
+                    TextButton.icon(
+                      icon: Icon(
+                        Icons.undo_rounded,
+                        size: 18,
+                        color: colorScheme.error,
+                      ),
+                      label: Text(
+                        'Request refund',
+                        style: TextStyle(color: colorScheme.error),
+                      ),
+                      onPressed: onRefund,
                     ),
                 ],
               ),

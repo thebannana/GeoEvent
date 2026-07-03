@@ -2,17 +2,20 @@ class SortOption {
   final String sortBy;
   final bool sortDescending;
   final String label;
+  final bool isClientSideRanked;
 
   const SortOption({
     required this.sortBy,
     required this.sortDescending,
     required this.label,
+    this.isClientSideRanked = false,
   });
 
   static const recommended = SortOption(
-    sortBy: 'Recommended',
-    sortDescending: true,
+    sortBy: 'StartDateTime',
+    sortDescending: false,
     label: 'Recommended',
+    isClientSideRanked: true,
   );
 
   static const soonest = SortOption(

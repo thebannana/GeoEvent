@@ -11,9 +11,10 @@ class LoginRequest {
 
   Map<String, dynamic> toJson() {
     return {
-      'emailOrUsername': emailOrUsername,
+      'emailOrUsername': emailOrUsername.trim(),
       'password': password,
-      'deviceInfo': deviceInfo,
+      if (deviceInfo != null && deviceInfo!.trim().isNotEmpty)
+        'deviceInfo': deviceInfo!.trim(),
     };
   }
 }

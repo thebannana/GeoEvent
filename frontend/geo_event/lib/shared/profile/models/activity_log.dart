@@ -25,7 +25,7 @@ class ActivityLog {
 
   factory ActivityLog.fromJson(Map<String, dynamic> json) {
     return ActivityLog(
-      logId: (json['logId'] as num).toInt(),
+      logId: (json['logId'] as num?)?.toInt() ?? 0,
       targetId: (json['targetId'] as num?)?.toInt() ?? 0,
       sessionId: (json['sessionId'] ?? '').toString(),
       actionType: (json['actionType'] ?? '').toString(),
@@ -34,7 +34,8 @@ class ActivityLog {
       userId: (json['userId'] as num?)?.toInt(),
       segmentId: (json['segmentId'] as num?)?.toInt(),
       genreId: (json['genreId'] as num?)?.toInt(),
-      createdAt: DateTime.parse((json['createdAt'] ?? '').toString()),
+      createdAt: DateTime.tryParse((json['createdAt'] ?? '').toString()) ??
+          DateTime.fromMillisecondsSinceEpoch(0),
     );
   }
 }

@@ -1,6 +1,9 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+import '../../../core/constants/event_status.dart';
+import '../../../core/utils/json_helpers.dart';
+
 class MapboxPlace {
   final String id;
   final String title;
@@ -27,9 +30,6 @@ class EventItem {
   final String? genreName;
   final int? subGenreId;
   final String? subGenreName;
-  final int? venueId;
-  final String? venueName;
-  final int? cityId;
   final String title;
   final String description;
   final double latitude;
@@ -39,14 +39,12 @@ class EventItem {
   final int capacity;
   final double price;
   final String status;
-  final bool isOnline;
   final bool isFeatured;
   final int viewCount;
   final int likesCount;
   final bool isLiked;
   final bool isBookmarked;
   final String? tags;
-  final String? externalUrl;
   final String? accessibilityInfo;
   final String? promoterName;
   final String locale;
@@ -65,9 +63,6 @@ class EventItem {
     required this.genreName,
     required this.subGenreId,
     required this.subGenreName,
-    required this.venueId,
-    required this.venueName,
-    required this.cityId,
     required this.title,
     required this.description,
     required this.latitude,
@@ -77,14 +72,12 @@ class EventItem {
     required this.capacity,
     required this.price,
     required this.status,
-    required this.isOnline,
     required this.isFeatured,
     required this.viewCount,
     required this.likesCount,
     this.isLiked = false,
     this.isBookmarked = false,
     required this.tags,
-    required this.externalUrl,
     required this.accessibilityInfo,
     required this.promoterName,
     required this.locale,
@@ -104,9 +97,7 @@ class EventItem {
     return localEnd.isBefore(now) || localEnd.isAtSameMomentAs(now);
   }
 
-  bool get isUpcoming {
-    return startDateTime.toLocal().isAfter(DateTime.now());
-  }
+  bool get isUpcoming => startDateTime.toLocal().isAfter(DateTime.now());
 
   bool get isOngoing {
     final now = DateTime.now();
@@ -124,72 +115,43 @@ class EventItem {
   }
 
   factory EventItem.fromJson(Map<String, dynamic> json) {
-    DateTime parseDate(dynamic value, {DateTime? fallback}) {
-      if (value == null) {
-        return (fallback ?? DateTime.fromMillisecondsSinceEpoch(0)).toLocal();
-      }
-      final parsed = DateTime.tryParse(value.toString());
-      return (parsed ?? fallback ?? DateTime.fromMillisecondsSinceEpoch(0))
-          .toLocal();
-    }
-
-    bool readBool(dynamic value, {bool fallback = false}) {
-      if (value is bool) return value;
-      if (value is num) return value != 0;
-      if (value is String) {
-        final v = value.trim().toLowerCase();
-        if (v == 'true' || v == '1') return true;
-        if (v == 'false' || v == '0') return false;
-      }
-      return fallback;
-    }
 
     return EventItem(
-      eventId: (json['eventId'] as num?)?.toInt() ?? 0,
-      organizerId: (json['organizerId'] as num?)?.toInt(),
-      segmentId: (json['segmentId'] as num?)?.toInt(),
+      eventId: JsonHelpers.asInt(json['eventId']) ?? 0,
+      organizerId: JsonHelpers.asInt(json['organizerId']),
+      segmentId: JsonHelpers.asInt(json['segmentId']),
       segmentName: json['segmentName']?.toString(),
       segmentColor: json['segmentColor']?.toString(),
-      genreId: (json['genreId'] as num?)?.toInt(),
+      genreId: JsonHelpers.asInt(json['genreId']),
       genreName: json['genreName']?.toString(),
-      subGenreId: (json['subGenreId'] as num?)?.toInt(),
+      subGenreId: JsonHelpers.asInt(json['subGenreId']),
       subGenreName: json['subGenreName']?.toString(),
-      venueId: (json['venueId'] as num?)?.toInt(),
-      venueName: json['venueName']?.toString(),
-      cityId: (json['cityId'] as num?)?.toInt(),
       title: json['title']?.toString() ?? '',
       description: json['description']?.toString() ?? '',
-      latitude: (json['latitude'] as num?)?.toDouble() ?? 0,
-      longitude: (json['longitude'] as num?)?.toDouble() ?? 0,
-      startDateTime: parseDate(json['startDateTime']),
-      endDateTime: parseDate(
+      latitude: JsonHelpers.asDouble(json['latitude']),
+      longitude: JsonHelpers.asDouble(json['longitude']),
+      startDateTime: JsonHelpers.parseDateTimeRequired(
+          json['startDateTime'], DateTime.fromMillisecondsSinceEpoch(0).toLocal()),
+      endDateTime: JsonHelpers.parseDateTimeRequired(
         json['endDateTime'],
-        fallback: parseDate(json['startDateTime']),
+        JsonHelpers.parseDateTimeRequired(
+            json['startDateTime'], DateTime.fromMillisecondsSinceEpoch(0).toLocal()),
       ),
-      capacity: (json['capacity'] as num?)?.toInt() ?? 0,
-      price: (json['price'] as num?)?.toDouble() ?? 0,
-      status: json['status']?.toString() ?? 'Draft',
-      isOnline: readBool(json['isOnline']),
-      isFeatured: readBool(json['isFeatured']),
-      viewCount: (json['viewCount'] as num?)?.toInt() ?? 0,
-      likesCount: (json['likesCount'] as num?)?.toInt() ?? 0,
-      isLiked: readBool(json['isLiked']),
-      isBookmarked: readBool(json['isBookmarked']),
+      capacity: JsonHelpers.asInt(json['capacity']) ?? 0,
+      price: JsonHelpers.asDouble(json['price']),
+      status: json['status']?.toString() ?? EventStatus.pending,
+      isFeatured: JsonHelpers.asBool(json['isFeatured']),
+      viewCount: JsonHelpers.asInt(json['viewCount']) ?? 0,
+      likesCount: JsonHelpers.asInt(json['likesCount']) ?? 0,
+      isLiked: JsonHelpers.asBool(json['isLiked']),
+      isBookmarked: JsonHelpers.asBool(json['isBookmarked']),
       tags: json['tags']?.toString(),
-      externalUrl: json['externalUrl']?.toString(),
       accessibilityInfo: json['accessibilityInfo']?.toString(),
       promoterName: json['promoterName']?.toString(),
       locale: json['locale']?.toString() ?? 'bs-BA',
-      createdAt: json['createdAt'] != null
-          ? DateTime.tryParse(json['createdAt'].toString())?.toLocal()
-          : null,
-      updatedAt: json['updatedAt'] != null
-          ? DateTime.tryParse(json['updatedAt'].toString())?.toLocal()
-          : null,
-      imageUrls: (json['imageUrls'] as List<dynamic>? ?? const [])
-          .map((e) => e.toString())
-          .where((e) => e.trim().isNotEmpty)
-          .toList(),
+      createdAt: JsonHelpers.parseDateTime(json['createdAt']),
+      updatedAt: JsonHelpers.parseDateTime(json['updatedAt']),
+      imageUrls: JsonHelpers.asStringList(json['imageUrls']),
       coverImageUrl: json['coverImageUrl']?.toString(),
     );
   }
@@ -204,9 +166,6 @@ class EventItem {
     String? genreName,
     int? subGenreId,
     String? subGenreName,
-    int? venueId,
-    String? venueName,
-    int? cityId,
     String? title,
     String? description,
     double? latitude,
@@ -216,14 +175,12 @@ class EventItem {
     int? capacity,
     double? price,
     String? status,
-    bool? isOnline,
     bool? isFeatured,
     int? viewCount,
     int? likesCount,
     bool? isLiked,
     bool? isBookmarked,
     String? tags,
-    String? externalUrl,
     String? accessibilityInfo,
     String? promoterName,
     String? locale,
@@ -242,9 +199,6 @@ class EventItem {
       genreName: genreName ?? this.genreName,
       subGenreId: subGenreId ?? this.subGenreId,
       subGenreName: subGenreName ?? this.subGenreName,
-      venueId: venueId ?? this.venueId,
-      venueName: venueName ?? this.venueName,
-      cityId: cityId ?? this.cityId,
       title: title ?? this.title,
       description: description ?? this.description,
       latitude: latitude ?? this.latitude,
@@ -254,14 +208,12 @@ class EventItem {
       capacity: capacity ?? this.capacity,
       price: price ?? this.price,
       status: status ?? this.status,
-      isOnline: isOnline ?? this.isOnline,
       isFeatured: isFeatured ?? this.isFeatured,
       viewCount: viewCount ?? this.viewCount,
       likesCount: likesCount ?? this.likesCount,
       isLiked: isLiked ?? this.isLiked,
       isBookmarked: isBookmarked ?? this.isBookmarked,
       tags: tags ?? this.tags,
-      externalUrl: externalUrl ?? this.externalUrl,
       accessibilityInfo: accessibilityInfo ?? this.accessibilityInfo,
       promoterName: promoterName ?? this.promoterName,
       locale: locale ?? this.locale,
@@ -273,6 +225,138 @@ class EventItem {
   }
 }
 
+class CreateEventResponse {
+  final int eventId;
+  final List<String> imageUrls;
+  final String? coverImageUrl;
+
+  const CreateEventResponse({
+    required this.eventId,
+    required this.imageUrls,
+    required this.coverImageUrl,
+  });
+
+  factory CreateEventResponse.fromJson(Map<String, dynamic> json) {
+    return CreateEventResponse(
+      eventId: JsonHelpers.asInt(json['eventId']) ?? 0,
+      imageUrls: JsonHelpers.asStringList(json['imageUrls']),
+      coverImageUrl: json['coverImageUrl']?.toString(),
+    );
+  }
+}
+
+class EventImageRequest {
+  final String imageUrl;
+  final bool isCover;
+
+  const EventImageRequest({
+    required this.imageUrl,
+    this.isCover = false,
+  });
+
+  Map<String, dynamic> toJson() {
+    return {
+      'imageUrl': imageUrl,
+      'isCover': isCover,
+    };
+  }
+}
+
+class EventImageUploadItem {
+  final String localPath;
+  final bool isCover;
+  final Uint8List? previewBytes;
+
+  const EventImageUploadItem({
+    required this.localPath,
+    this.isCover = false,
+    this.previewBytes,
+  });
+
+  String get fileName {
+    final normalized = localPath.replaceAll('\\', '/');
+    final parts = normalized.split('/');
+    return parts.isNotEmpty && parts.last.isNotEmpty ? parts.last : 'image.jpg';
+  }
+
+  EventImageUploadItem copyWith({
+    String? localPath,
+    bool? isCover,
+    Uint8List? previewBytes,
+    bool clearPreviewBytes = false,
+  }) {
+    return EventImageUploadItem(
+      localPath: localPath ?? this.localPath,
+      isCover: isCover ?? this.isCover,
+      previewBytes: clearPreviewBytes ? null : (previewBytes ?? this.previewBytes),
+    );
+  }
+}
+
+class CreateEventRequest {
+  final String title;
+  final String description;
+  final int? segmentId;
+  final int? genreId;
+  final int? subGenreId;
+  final double latitude;
+  final double longitude;
+  final DateTime startDateTime;
+  final DateTime endDateTime;
+  final int capacity;
+  final double price;
+  final String? tags;
+  final String? accessibilityInfo;
+  final String? promoterName;
+  final String locale;
+
+  const CreateEventRequest({
+    required this.title,
+    required this.description,
+    required this.segmentId,
+    required this.genreId,
+    required this.subGenreId,
+    required this.latitude,
+    required this.longitude,
+    required this.startDateTime,
+    required this.endDateTime,
+    required this.capacity,
+    required this.price,
+    this.tags,
+    this.accessibilityInfo,
+    this.promoterName,
+    required this.locale,
+  });
+
+  Map<String, dynamic> toJson() {
+    return {
+      'title': title.trim(),
+      'description': description.trim(),
+      'segmentId': segmentId,
+      'genreId': genreId,
+      'subGenreId': subGenreId,
+      'latitude': latitude,
+      'longitude': longitude,
+      'startDateTime': startDateTime.toUtc().toIso8601String(),
+      'endDateTime': endDateTime.toUtc().toIso8601String(),
+      'capacity': capacity,
+      'price': price,
+      'tags': _cleanNullable(tags),
+      'accessibilityInfo': _cleanNullable(accessibilityInfo),
+      'promoterName': _cleanNullable(promoterName),
+      'locale': locale.trim().isEmpty ? 'bs-BA' : locale.trim(),
+    };
+  }
+
+  String? _cleanNullable(String? value) {
+    final trimmed = value?.trim();
+    if (trimmed == null || trimmed.isEmpty) {
+      return null;
+    }
+    return trimmed;
+  }
+}
+
 double distanceKm({
   required double lat1,
   required double lon1,
@@ -280,12 +364,12 @@ double distanceKm({
   required double lon2,
 }) {
   const earthRadiusKm = 6371.0;
-  final dLat = degToRad(lat2 - lat1);
-  final dLon = degToRad(lon2 - lon1);
+  final dLat = _degToRad(lat2 - lat1);
+  final dLon = _degToRad(lon2 - lon1);
 
   final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
-      math.cos(degToRad(lat1)) *
-          math.cos(degToRad(lat2)) *
+      math.cos(_degToRad(lat1)) *
+          math.cos(_degToRad(lat2)) *
           math.sin(dLon / 2) *
           math.sin(dLon / 2);
 
@@ -293,7 +377,7 @@ double distanceKm({
   return earthRadiusKm * c;
 }
 
-double degToRad(double deg) => deg * math.pi / 180;
+double _degToRad(double deg) => deg * math.pi / 180;
 
 bool isWithinRadius({
   required EventItem item,
@@ -325,8 +409,7 @@ int preferenceScore({
   if (item.genreId != null && preferredGenreIds.contains(item.genreId)) {
     score += 22;
   }
-  if (item.subGenreId != null &&
-      preferredSubGenreIds.contains(item.subGenreId)) {
+  if (item.subGenreId != null && preferredSubGenreIds.contains(item.subGenreId)) {
     score += 16;
   }
   if (item.isFeatured) {
@@ -416,7 +499,7 @@ List<EventItem> rankSearchResults({
   required Set<int> preferredGenreIds,
   required Set<int> preferredSubGenreIds,
 }) {
-  final q = query.toLowerCase();
+  final q = query.trim().toLowerCase();
   final ranked = [...items];
 
   int score(EventItem item) {
@@ -428,11 +511,13 @@ List<EventItem> rankSearchResults({
     final subGenre = (item.subGenreName ?? '').toLowerCase();
     final tags = (item.tags ?? '').toLowerCase();
 
-    if (title.contains(q)) total += 80;
-    if (segment.contains(q)) total += 30;
-    if (genre.contains(q)) total += 25;
-    if (subGenre.contains(q)) total += 20;
-    if (tags.contains(q)) total += 15;
+    if (q.isNotEmpty) {
+      if (title.contains(q)) total += 80;
+      if (segment.contains(q)) total += 30;
+      if (genre.contains(q)) total += 25;
+      if (subGenre.contains(q)) total += 20;
+      if (tags.contains(q)) total += 15;
+    }
 
     total += preferenceScore(
       item: item,
@@ -451,6 +536,7 @@ List<EventItem> rankSearchResults({
         lat2: item.latitude,
         lon2: item.longitude,
       );
+
       total += distance <= selectedRadiusKm ? 20 : -20;
     }
 
@@ -459,147 +545,4 @@ List<EventItem> rankSearchResults({
 
   ranked.sort((a, b) => score(b).compareTo(score(a)));
   return ranked;
-}
-
-class CreateEventResponse {
-  final int eventId;
-  final List<String> imageUrls;
-  final String? coverImageUrl;
-
-  const CreateEventResponse({
-    required this.eventId,
-    required this.imageUrls,
-    required this.coverImageUrl,
-  });
-
-  factory CreateEventResponse.fromJson(Map<String, dynamic> json) {
-    return CreateEventResponse(
-      eventId: (json['eventId'] as num?)?.toInt() ?? 0,
-      imageUrls: (json['imageUrls'] as List<dynamic>? ?? const [])
-          .map((e) => e.toString())
-          .where((e) => e.trim().isNotEmpty)
-          .toList(),
-      coverImageUrl: json['coverImageUrl']?.toString(),
-    );
-  }
-}
-
-class EventImageRequest {
-  final String imageUrl;
-  final bool isCover;
-
-  const EventImageRequest({
-    required this.imageUrl,
-    this.isCover = false,
-  });
-
-  Map<String, dynamic> toJson() => {
-        'imageUrl': imageUrl,
-        'isCover': isCover,
-      };
-}
-
-class EventImageUploadItem {
-  final String localPath;
-  final bool isCover;
-  final Uint8List? previewBytes;
-
-  const EventImageUploadItem({
-    required this.localPath,
-    this.isCover = false,
-    this.previewBytes,
-  });
-
-  String get fileName {
-    final normalized = localPath.replaceAll('\\', '/');
-    final parts = normalized.split('/');
-    return parts.isNotEmpty && parts.last.isNotEmpty
-        ? parts.last
-        : 'image.jpg';
-  }
-
-  EventImageUploadItem copyWith({
-    String? localPath,
-    bool? isCover,
-    Uint8List? previewBytes,
-    bool clearPreviewBytes = false,
-  }) {
-    return EventImageUploadItem(
-      localPath: localPath ?? this.localPath,
-      isCover: isCover ?? this.isCover,
-      previewBytes: clearPreviewBytes ? null : (previewBytes ?? this.previewBytes),
-    );
-  }
-}
-
-class CreateEventRequest {
-  final String title;
-  final String description;
-  final int? segmentId;
-  final int? genreId;
-  final int? subGenreId;
-  final int? venueId;
-  final int? cityId;
-  final double latitude;
-  final double longitude;
-  final DateTime startDateTime;
-  final DateTime endDateTime;
-  final int capacity;
-  final double price;
-  final bool isOnline;
-  final String? tags;
-  final String? externalUrl;
-  final String? accessibilityInfo;
-  final String? promoterName;
-  final String locale;
-
-  const CreateEventRequest({
-    required this.title,
-    required this.description,
-    required this.segmentId,
-    required this.genreId,
-    required this.subGenreId,
-    required this.venueId,
-    required this.cityId,
-    required this.latitude,
-    required this.longitude,
-    required this.startDateTime,
-    required this.endDateTime,
-    required this.capacity,
-    required this.price,
-    required this.isOnline,
-    this.tags,
-    this.externalUrl,
-    this.accessibilityInfo,
-    this.promoterName,
-    required this.locale,
-  });
-
-  Map<String, dynamic> toJson() => {
-        'title': title.trim(),
-        'description': description.trim(),
-        'segmentId': segmentId,
-        'genreId': genreId,
-        'subGenreId': subGenreId,
-        'venueId': venueId,
-        'cityId': cityId,
-        'latitude': latitude,
-        'longitude': longitude,
-        'startDateTime': startDateTime.toIso8601String(),
-        'endDateTime': endDateTime.toIso8601String(),
-        'capacity': capacity,
-        'price': price,
-        'isOnline': isOnline,
-        'tags': _cleanNullable(tags),
-        'externalUrl': _cleanNullable(externalUrl),
-        'accessibilityInfo': _cleanNullable(accessibilityInfo),
-        'promoterName': _cleanNullable(promoterName),
-        'locale': locale.trim().isEmpty ? 'bs-BA' : locale.trim(),
-      };
-
-  String? _cleanNullable(String? value) {
-    if (value == null) return null;
-    final trimmed = value.trim();
-    return trimmed.isEmpty ? null : trimmed;
-  }
 }

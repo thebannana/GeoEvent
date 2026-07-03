@@ -1,23 +1,26 @@
-import 'dart:math';
-
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../shared/payment/models/complete_checkout_request.dart';
-import '../../../shared/payment/models/payment_method.dart';
-import '../../../shared/payment/models/payment_state.dart';
-import '../../../shared/tickets/data/tickets_repository.dart';
+import '../../../../core/errors/error_mapper.dart';
+import '../../../../shared/payment/models/payment_method.dart';
+import '../../../../shared/payment/models/payment_state.dart';
+import '../../../../shared/profile/models/paypal_approval_result.dart';
+import '../../../../shared/tickets/data/tickets_repository.dart';
+import '../../../../shared/tickets/models/ticket_models.dart';
 
 class PaymentController extends StateNotifier<PaymentState> {
-  final Ref ref;
-  final TicketsRepository ticketsRepository;
-
   PaymentController({
     required this.ref,
     required this.ticketsRepository,
     required PaymentState initialState,
   }) : super(initialState);
 
+  final Ref ref;
+  final TicketsRepository ticketsRepository;
+
   void selectMethod(PaymentMethod method) {
+    if (state.isSubmitting || state.summary.isFree) return;
+
     state = state.copyWith(
       selectedMethod: method,
       clearError: true,
@@ -25,7 +28,7 @@ class PaymentController extends StateNotifier<PaymentState> {
   }
 
   void setQuantity(int quantity) {
-    if (quantity < 1) return;
+    if (state.isSubmitting || quantity < 1) return;
 
     state = state.copyWith(
       summary: state.summary.copyWith(quantity: quantity),
@@ -33,68 +36,159 @@ class PaymentController extends StateNotifier<PaymentState> {
     );
   }
 
-Future<bool> submit({
-  required Future<bool> Function(double amount, String currency) onPayPalCheckout,
-}) async {
-  state = state.copyWith(
-    isSubmitting: true,
-    clearError: true,
-  );
+  Future<bool> submit({
+    required Future<PayPalApprovalResult> Function({
+      required String approveUrl,
+      required String orderId,
+      required int reservationId,
+    }) onPayPalApproval,
+  }) async {
+    if (state.isSubmitting) return false;
 
-  try {
-    if (state.selectedMethod == PaymentMethod.paypal) {
-      final paypalSuccess = await onPayPalCheckout(
-        state.summary.total,
-        state.summary.currency,
+    state = state.copyWith(
+      isSubmitting: true,
+      clearError: true,
+      clearReservationId: true,
+    );
+
+    int? reservationId;
+    var shouldCancelReservationOnError = false;
+
+    try {
+      final reservation = await ticketsRepository.createReservation(
+        CreateReservationRequest(
+          eventId: state.summary.eventId,
+          eventTicketId: state.summary.eventTicketId,
+          quantity: state.summary.quantity,
+          currency: state.summary.currency,
+        ),
       );
 
-      if (!paypalSuccess) {
+      reservationId = reservation.reservationId;
+      shouldCancelReservationOnError = true;
+
+      state = state.copyWith(reservationId: reservationId);
+
+      if (state.summary.isFree) {
+        await ticketsRepository.confirmReservation(
+          reservationId,
+          ConfirmReservationRequest(
+            paymentMethod: 'Cash',
+            currency: state.summary.currency,
+          ),
+        );
+
+        shouldCancelReservationOnError = false;
         state = state.copyWith(
           isSubmitting: false,
-          errorMessage: 'PayPal payment was cancelled.',
+          clearError: true,
         );
-        return false;
+        return true;
       }
+
+      if (state.selectedMethod.isCash) {
+        await ticketsRepository.cashConfirmReservation(reservationId);
+
+        shouldCancelReservationOnError = false;
+        state = state.copyWith(
+          isSubmitting: false,
+          clearError: true,
+        );
+        return true;
+      }
+
+      if (state.selectedMethod.isPayPal) {
+        final payPalOrder =
+            await ticketsRepository.createPayPalOrder(reservationId);
+
+        if (!payPalOrder.isValid) {
+          throw const FormatException('PayPal approval response is invalid.');
+        }
+
+        debugPrint(
+          'PayPal order created: reservationId=$reservationId, orderId=${payPalOrder.orderId}',
+        );
+
+        final approval = await onPayPalApproval(
+          approveUrl: payPalOrder.approveUrl,
+          orderId: payPalOrder.orderId,
+          reservationId: reservationId,
+        );
+
+        debugPrint(
+          'PayPal approval returned: approved=${approval.approved}, orderId=${approval.orderId}',
+        );
+
+        if (!approval.approved) {
+          await _cancelReservationSilently(reservationId);
+
+          state = state.copyWith(
+            isSubmitting: false,
+            clearReservationId: true,
+            errorMessage: approval.error ?? 'PayPal payment was cancelled.',
+          );
+          return false;
+        }
+
+        final approvedOrderId = approval.orderId?.trim() ?? '';
+        if (approvedOrderId.isEmpty) {
+          await _cancelReservationSilently(reservationId);
+          throw const FormatException('Returned PayPal order id is missing.');
+        }
+
+        if (approvedOrderId != payPalOrder.orderId.trim()) {
+          await _cancelReservationSilently(reservationId);
+          throw const FormatException(
+            'Returned PayPal order does not match the created order.',
+          );
+        }
+
+        debugPrint(
+          'Capturing PayPal order: reservationId=$reservationId, orderId=$approvedOrderId',
+        );
+
+        await ticketsRepository.capturePayPalOrder(
+          reservationId,
+          approvedOrderId,
+        );
+
+        debugPrint(
+          'PayPal capture completed: reservationId=$reservationId, orderId=$approvedOrderId',
+        );
+
+        shouldCancelReservationOnError = false;
+        state = state.copyWith(
+          isSubmitting: false,
+          clearError: true,
+        );
+        return true;
+      }
+
+      state = state.copyWith(
+        isSubmitting: false,
+        errorMessage: 'Unsupported payment method.',
+      );
+      return false;
+    } catch (error, stackTrace) {
+      if (reservationId != null && shouldCancelReservationOnError) {
+        await _cancelReservationSilently(reservationId);
+      }
+
+      state = state.copyWith(
+        isSubmitting: false,
+        errorMessage: ErrorMapper.toMessage(
+          error,
+          stackTrace: stackTrace,
+          fallbackMessage: 'Could not complete payment. Please try again.',
+        ),
+      );
+      return false;
     }
-
-    await ticketsRepository.completeCheckout(
-      CompleteCheckoutRequest(
-        eventId: state.summary.eventId,
-        eventTicketId: state.summary.eventTicketId,
-        quantity: state.summary.quantity,
-        currency: state.summary.currency,
-        paymentReference: _generatePaymentReference(),
-        paymentMethod: state.selectedMethod,
-        amount: state.summary.total,
-      ),
-    );
-
-    state = state.copyWith(
-      isSubmitting: false,
-      clearError: true,
-    );
-
-    return true;
-  } catch (e) {
-    state = state.copyWith(
-      isSubmitting: false,
-      errorMessage: _readMessage(e),
-    );
-    return false;
-  }
-}
-
-  String _generatePaymentReference() {
-    final now = DateTime.now().millisecondsSinceEpoch;
-    final rand = Random().nextInt(999999).toString().padLeft(6, '0');
-    return 'PAY-$now-$rand';
   }
 
-  String _readMessage(Object error) {
-    final text = error.toString().trim();
-    if (text.isEmpty) {
-      return 'Could not complete payment. Please try again.';
-    }
-    return text;
+  Future<void> _cancelReservationSilently(int reservationId) async {
+    try {
+      await ticketsRepository.cancelReservation(reservationId);
+    } catch (_) {}
   }
 }

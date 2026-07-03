@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-
-import '../../../../core/widgets/app_spinner.dart';
+import '../../../../core/widgets/feedback/app_spinner.dart';
 import '../../../../shared/payment/models/payment_method.dart';
 
 class PaymentSubmitSection extends StatelessWidget {
@@ -9,7 +8,8 @@ class PaymentSubmitSection extends StatelessWidget {
   final PaymentMethod method;
   final bool loading;
   final bool enabled;
-  final VoidCallback onSubmit;
+  final bool isFree;
+  final Future<void> Function() onSubmit;
 
   const PaymentSubmitSection({
     super.key,
@@ -18,22 +18,22 @@ class PaymentSubmitSection extends StatelessWidget {
     required this.method,
     required this.loading,
     required this.enabled,
+    required this.isFree,
     required this.onSubmit,
   });
 
   @override
   Widget build(BuildContext context) {
-    final label = switch (method) {
-      PaymentMethod.paypal => 'Pay ${formatPrice(total)} $currency with PayPal',
-      PaymentMethod.cash => total <= 0
-          ? 'Confirm cash reservation'
-          : 'Reserve and pay cash',
-    };
+    final label = isFree
+        ? 'Confirm reservation'
+        : method == PaymentMethod.paypal
+            ? 'Proceed to PayPal'
+            : 'Confirm cash reservation';
 
     return SizedBox(
       width: double.infinity,
       child: FilledButton(
-        onPressed: enabled && !loading ? onSubmit : null,
+        onPressed: enabled && !loading ? () async => onSubmit() : null,
         style: FilledButton.styleFrom(
           minimumSize: const Size.fromHeight(54),
           shape: RoundedRectangleBorder(
@@ -50,6 +50,4 @@ class PaymentSubmitSection extends StatelessWidget {
       ),
     );
   }
-
-  String formatPrice(double value) => value.toStringAsFixed(2);
 }

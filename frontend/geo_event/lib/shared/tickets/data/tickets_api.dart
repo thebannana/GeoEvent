@@ -1,42 +1,82 @@
 import 'package:dio/dio.dart';
 
-import '../../payment/models/complete_checkout_request.dart';
+import '../../../core/network/api_endpoints.dart';
 import '../models/ticket_models.dart';
 
 class TicketsApi {
-  final Dio dio;
-
   const TicketsApi(this.dio);
 
+  final Dio dio;
+
   Future<List<EventTicketItem>> getEventTickets(int eventId) async {
-    final response = await dio.get('/api/events/$eventId/tickets');
+    final response = await dio.get(ApiEndpoints.eventTickets(eventId));
     final raw = response.data;
 
-    if (raw is! List) return const [];
+    if (raw is List) {
+      return raw
+          .whereType<Map>()
+          .map((e) => EventTicketItem.fromJson(Map<String, dynamic>.from(e)))
+          .toList();
+    }
 
-    return raw
-        .whereType<Map>()
-        .map((e) => EventTicketItem.fromJson(Map<String, dynamic>.from(e)))
-        .toList();
+    if (raw is Map) {
+      final map = raw is Map<String, dynamic>
+          ? raw
+          : Map<String, dynamic>.from(raw);
+      final items = map['items'] ?? map['Items'] ?? map['data'] ?? map['Data'];
+
+      if (items is List) {
+        return items
+            .whereType<Map>()
+            .map((e) => EventTicketItem.fromJson(Map<String, dynamic>.from(e)))
+            .toList();
+      }
+    }
+
+    return const [];
   }
 
   Future<ReservationItem> createReservation(
     CreateReservationRequest payload,
   ) async {
     final response = await dio.post(
-      '/api/reservations',
+      ApiEndpoints.reservations,
       data: payload.toJson(),
+    );
+    return _parseReservation(
+      response.data,
+      'Invalid reservation response format.',
+    );
+  }
+
+  Future<PayPalOrderResponse> createPayPalOrder(int reservationId) async {
+    final response = await dio.post(
+      ApiEndpoints.createPayPalOrder(reservationId),
     );
 
     final raw = response.data;
     if (raw is Map<String, dynamic>) {
-      return ReservationItem.fromJson(raw);
+      return PayPalOrderResponse.fromJson(raw);
     }
     if (raw is Map) {
-      return ReservationItem.fromJson(Map<String, dynamic>.from(raw));
+      return PayPalOrderResponse.fromJson(Map<String, dynamic>.from(raw));
     }
 
-    throw Exception('Invalid reservation response format.');
+    throw const FormatException('Invalid PayPal order response format.');
+  }
+
+  Future<ReservationItem> capturePayPalOrder(
+    int reservationId,
+    String orderId,
+  ) async {
+    final response = await dio.post(
+      ApiEndpoints.capturePayPalOrder(reservationId),
+      data: CapturePayPalOrderRequest(orderId: orderId).toJson(),
+    );
+    return _parseReservation(
+      response.data,
+      'Invalid PayPal capture response format.',
+    );
   }
 
   Future<ReservationItem> confirmReservation(
@@ -44,27 +84,54 @@ class TicketsApi {
     ConfirmReservationRequest payload,
   ) async {
     final response = await dio.post(
-      '/api/reservations/$reservationId/confirm',
+      ApiEndpoints.confirmReservation(reservationId),
       data: payload.toJson(),
     );
+    return _parseReservation(
+      response.data,
+      'Invalid reservation confirmation response format.',
+    );
+  }
 
-    final raw = response.data;
-    if (raw is Map<String, dynamic>) {
-      return ReservationItem.fromJson(raw);
-    }
-    if (raw is Map) {
-      return ReservationItem.fromJson(Map<String, dynamic>.from(raw));
-    }
+  Future<ReservationItem> cashConfirmReservation(int reservationId) async {
+    final response = await dio.post(
+      ApiEndpoints.cashConfirmReservation(reservationId),
+    );
+    return _parseReservation(
+      response.data,
+      'Invalid cash confirmation response format.',
+    );
+  }
 
-    throw Exception('Invalid reservation confirmation response format.');
+  Future<void> cancelReservation(int reservationId) async {
+    await dio.patch(ApiEndpoints.cancelReservation(reservationId));
+  }
+
+  Future<ReservationItem> requestRefund(
+    int reservationId, {
+    String? reason,
+  }) async {
+    final response = await dio.post(
+      ApiEndpoints.requestRefund(reservationId),
+      data: {
+        if (reason != null && reason.trim().isNotEmpty) 'reason': reason.trim(),
+      },
+    );
+
+    return _parseReservation(
+      response.data,
+      'Invalid refund request response format.',
+    );
   }
 
   Future<EventReservationSummaryItem?> getEventReservationSummary(
     int eventId,
   ) async {
-    final response = await dio.get('/api/reservations/events/$eventId/summary');
-    final raw = response.data;
+    final response = await dio.get(
+      ApiEndpoints.eventReservationSummary(eventId),
+    );
 
+    final raw = response.data;
     if (raw is Map<String, dynamic>) {
       return EventReservationSummaryItem.fromJson(raw);
     }
@@ -77,58 +144,61 @@ class TicketsApi {
     return null;
   }
 
-  Future<ReservationItem> completeCheckout(CompleteCheckoutRequest request) async {
-  final response = await dio.post(
-    '/api/reservations/checkout',
-    data: request.toJson(),
-  );
-
-  return ReservationItem.fromJson(
-    Map<String, dynamic>.from(response.data as Map),
-  );
-}
-
   Future<PagedResponse<EventAttendeeItem>> getEventAttendees(
-  int eventId, {
-  int page = 1,
-  int pageSize = 100,
-}) async {
-  final response = await dio.get(
-    '/api/reservations/public/events/$eventId/attendees',
-  );
+    int eventId, {
+    int page = 1,
+    int pageSize = 100,
+  }) async {
+    final response = await dio.get(
+      ApiEndpoints.publicEventAttendees(eventId),
+      queryParameters: {'page': page, 'pageSize': pageSize},
+    );
 
-  final raw = response.data;
+    final raw = response.data;
 
-  if (raw is List) {
-    final items = raw
-        .whereType<Map>()
-        .map((e) => EventAttendeeItem.fromJson(Map<String, dynamic>.from(e)))
-        .toList();
+    if (raw is List) {
+      final items = raw
+          .whereType<Map>()
+          .map((e) => EventAttendeeItem.fromJson(Map<String, dynamic>.from(e)))
+          .toList();
 
-    return PagedResponse(
-      items: items,
-      totalCount: items.length,
-      page: 1,
-      pageSize: items.length,
+      return PagedResponse<EventAttendeeItem>(
+        items: items,
+        totalCount: items.length,
+        page: page,
+        pageSize: pageSize,
+      );
+    }
+
+    if (raw is Map<String, dynamic>) {
+      return PagedResponse<EventAttendeeItem>.fromJson(
+        raw,
+        EventAttendeeItem.fromJson,
+      );
+    }
+
+    if (raw is Map) {
+      return PagedResponse<EventAttendeeItem>.fromJson(
+        Map<String, dynamic>.from(raw),
+        EventAttendeeItem.fromJson,
+      );
+    }
+
+    return PagedResponse<EventAttendeeItem>(
+      items: const [],
+      totalCount: 0,
+      page: page,
+      pageSize: pageSize,
     );
   }
 
-  if (raw is Map<String, dynamic>) {
-    return PagedResponse.fromJson(raw, EventAttendeeItem.fromJson);
+  ReservationItem _parseReservation(dynamic raw, String message) {
+    if (raw is Map<String, dynamic>) {
+      return ReservationItem.fromJson(raw);
+    }
+    if (raw is Map) {
+      return ReservationItem.fromJson(Map<String, dynamic>.from(raw));
+    }
+    throw FormatException(message);
   }
-
-  if (raw is Map) {
-    return PagedResponse.fromJson(
-      Map<String, dynamic>.from(raw),
-      EventAttendeeItem.fromJson,
-    );
-  }
-
-  return const PagedResponse(
-    items: [],
-    totalCount: 0,
-    page: 1,
-    pageSize: 100,
-  );
-}
 }

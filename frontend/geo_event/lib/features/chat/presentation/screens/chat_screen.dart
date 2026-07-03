@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/widgets/app_chip.dart';
-import '../../../../core/widgets/app_empty_state.dart';
-import '../../../../core/widgets/app_error_view.dart';
-import '../../../../core/widgets/app_surface_card.dart';
+import '../../../../core/widgets/inputs/app_chip.dart';
+import '../../../../core/widgets/feedback/app_empty_state.dart';
+import '../../../../core/widgets/feedback/app_error_state.dart';
+import '../../../../core/widgets/surfaces/app_surface_card.dart';
 import '../../../../shared/chat/models/chat_thread_args.dart';
 import '../../../../shared/chat/models/chat_thread_type.dart';
 import '../../../../shared/chat/models/conversation_summary.dart';
@@ -70,7 +70,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                                   _searchController.clear();
                                   controller.setSearchQuery('');
                                 },
-                                icon: const Icon(Icons.close_rounded, size: 18),
+                                icon: const Icon(
+                                  Icons.close_rounded,
+                                  size: 18,
+                                ),
                               )
                             : null,
                         contentPadding:
@@ -140,7 +143,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     ),
                     sliver: SliverList.separated(
                       itemCount: filtered.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 10),
+                      separatorBuilder: (_, _) => const SizedBox(height: 10),
                       itemBuilder: (context, index) {
                         final item = filtered[index];
                         return _ConversationCard(
@@ -289,26 +292,45 @@ class _ConversationCard extends StatelessWidget {
     );
   }
 
-  static String _displayTitle(ConversationSummary item) {
-    final value = item.title.trim();
-    if (value.isNotEmpty) return value;
-
-    if (item.type == ChatThreadType.direct && item.otherUserId != null) {
-      return 'User ${item.otherUserId}';
-    }
-
-    return 'Chat';
+static String _displayTitle(ConversationSummary item) {
+  final title = item.title.trim();
+  if (title.isNotEmpty && title.toLowerCase() != 'direct chat') {
+    return title;
   }
 
+  final displayName = item.otherUserDisplayName?.trim();
+  if (displayName != null && displayName.isNotEmpty) {
+    return displayName;
+  }
+
+  final username = cleanUsername(item.otherUserUsername);
+  if (username != null) {
+    return username;
+  }
+
+  if (item.type == ChatThreadType.direct && item.otherUserId != null) {
+    return 'User ${item.otherUserId}';
+  }
+
+  return 'Chat';
+}
+
+static String? cleanUsername(String? value) {
+  final cleaned = value?.trim().replaceFirst(RegExp(r'^@+'), '');
+  if (cleaned == null || cleaned.isEmpty) return null;
+  return '@$cleaned';
+}
+
   static String _formatTime(DateTime value) {
+    final local = value.toLocal();
     final now = DateTime.now();
-    final diff = now.difference(value);
+    final diff = now.difference(local);
 
     if (diff.inDays >= 1) {
-      return '${value.day.toString().padLeft(2, '0')}.${value.month.toString().padLeft(2, '0')}';
+      return '${local.day.toString().padLeft(2, '0')}.${local.month.toString().padLeft(2, '0')}';
     }
 
-    return '${value.hour.toString().padLeft(2, '0')}:${value.minute.toString().padLeft(2, '0')}';
+    return '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
   }
 }
 

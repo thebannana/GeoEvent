@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/widgets/app_surface_card.dart';
+import '../../../../core/widgets/surfaces/app_surface_card.dart';
 import '../../../../shared/reports/models/report_target_type.dart';
 
 class ReportTargetPreview extends StatelessWidget {
+  static const String _defaultTitle = 'Selected item';
+
   final ReportTargetType targetType;
   final String? title;
   final String? subtitle;
@@ -20,40 +22,31 @@ class ReportTargetPreview extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-
-    IconData icon;
-    switch (targetType) {
-      case ReportTargetType.comment:
-        icon = Icons.mode_comment_outlined;
-        break;
-      case ReportTargetType.event:
-        icon = Icons.event_outlined;
-        break;
-      case ReportTargetType.user:
-        icon = Icons.person_outline_rounded;
-        break;
-      case ReportTargetType.review:
-        icon = Icons.reviews_outlined;
-        break;
-    }
+    final resolvedIcon = _iconForTargetType(targetType);
+    final resolvedTitle =
+        title?.trim().isNotEmpty == true ? title!.trim() : _defaultTitle;
+    final resolvedSubtitle =
+        subtitle?.trim().isNotEmpty == true ? subtitle!.trim() : null;
+    final resolvedImageUrl =
+        imageUrl?.trim().isNotEmpty == true ? imageUrl!.trim() : null;
 
     return AppSurfaceCard(
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          if (imageUrl != null && imageUrl!.trim().isNotEmpty)
+          if (resolvedImageUrl != null)
             ClipRRect(
               borderRadius: BorderRadius.circular(14),
               child: Image.network(
-                imageUrl!,
+                resolvedImageUrl,
                 width: 52,
                 height: 52,
                 fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => _FallbackIcon(icon: icon),
+                errorBuilder: (_, _, _) => _FallbackIcon(icon: resolvedIcon),
               ),
             )
           else
-            _FallbackIcon(icon: icon),
+            _FallbackIcon(icon: resolvedIcon),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
@@ -68,7 +61,7 @@ class ReportTargetPreview extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  title?.trim().isNotEmpty == true ? title! : 'Selected item',
+                  resolvedTitle,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
@@ -76,10 +69,10 @@ class ReportTargetPreview extends StatelessWidget {
                     fontWeight: FontWeight.w700,
                   ),
                 ),
-                if (subtitle?.trim().isNotEmpty == true) ...[
+                if (resolvedSubtitle != null) ...[
                   const SizedBox(height: 3),
                   Text(
-                    subtitle!,
+                    resolvedSubtitle,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
@@ -95,12 +88,27 @@ class ReportTargetPreview extends StatelessWidget {
       ),
     );
   }
+
+  IconData _iconForTargetType(ReportTargetType type) {
+    switch (type) {
+      case ReportTargetType.comment:
+        return Icons.mode_comment_outlined;
+      case ReportTargetType.event:
+        return Icons.event_outlined;
+      case ReportTargetType.user:
+        return Icons.person_outline_rounded;
+      case ReportTargetType.review:
+        return Icons.reviews_outlined;
+    }
+  }
 }
 
 class _FallbackIcon extends StatelessWidget {
   final IconData icon;
 
-  const _FallbackIcon({required this.icon});
+  const _FallbackIcon({
+    required this.icon,
+  });
 
   @override
   Widget build(BuildContext context) {

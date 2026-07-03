@@ -1,112 +1,184 @@
 import 'package:dio/dio.dart';
 
-import '../models/activity_log.dart';
+import '../../../../core/network/api_endpoints.dart';
+import '../../../../core/network/auth_interceptor.dart';
+import '../models/public_user_profile.dart';
 import '../models/user_profile.dart';
 
 class ProfileApi {
+  const ProfileApi(this.dio);
+
   final Dio dio;
 
-  ProfileApi(this.dio);
-
   Future<UserProfile> getMe() async {
-    final response = await dio.get('/api/users/me');
-    final raw = response.data;
-    if (raw is! Map) {
-      throw Exception('Invalid profile response.');
-    }
-    return UserProfile.fromJson(Map<String, dynamic>.from(raw));
+    final response = await dio.get(
+      ApiEndpoints.currentUser,
+      options: Options(
+        extra: const {
+          AuthInterceptor.allowRefreshKey: true,
+        },
+      ),
+    );
+
+    return UserProfile.fromJson(
+      asMap(response.data, fallbackMessage: 'Invalid profile response.'),
+    );
   }
 
-    Future<UserProfile> updateMe({
-  String? username,
-  String? email,
-  String? firstName,
-  String? lastName,
-  String? phoneNumber,
-  String? imageUrl,
-}) async {
-  final data = <String, dynamic>{
-    'username': username,
-    'email': email,
-    'firstName': firstName,
-    'lastName': lastName,
-    'phoneNumber': phoneNumber,
-    'imageUrl': imageUrl,
-  }..removeWhere((key, value) => value == null);
+  Future<UserProfile> updateMe({
+    String? username,
+    String? email,
+    String? firstName,
+    String? lastName,
+    String? phoneNumber,
+    String? imageUrl,
+  }) async {
+    final response = await dio.put(
+      ApiEndpoints.currentUser,
+      data: buildUpdatePayload(
+        username: username,
+        email: email,
+        firstName: firstName,
+        lastName: lastName,
+        phoneNumber: phoneNumber,
+        imageUrl: imageUrl,
+      ),
+      options: Options(
+        contentType: Headers.jsonContentType,
+        headers: const {'Accept': 'application/json'},
+        extra: const {
+          AuthInterceptor.allowRefreshKey: true,
+        },
+      ),
+    );
 
-  final response = await dio.put('/api/users/me', data: data);
-
-  final raw = response.data;
-  if (raw is! Map) {
-    throw Exception('Invalid profile update response.');
+    return UserProfile.fromJson(
+      asMap(
+        response.data,
+        fallbackMessage: 'Invalid profile update response.',
+      ),
+    );
   }
-
-  return UserProfile.fromJson(Map<String, dynamic>.from(raw));
-}
 
   Future<String> uploadProfileImage(String filePath) async {
-  final fileName = filePath.split('/').last;
+    final fileName = filePath.split('/').last;
+    final formData = FormData.fromMap({
+      'file': await MultipartFile.fromFile(filePath, filename: fileName),
+    });
 
-  final formData = FormData.fromMap({
-    'file': await MultipartFile.fromFile(filePath, filename: fileName),
-  });
+    final response = await dio.post(
+      ApiEndpoints.uploadImage,
+      data: formData,
+      options: Options(
+        contentType: 'multipart/form-data',
+        headers: const {'Accept': 'application/json'},
+        extra: const {
+          AuthInterceptor.allowRefreshKey: true,
+        },
+      ),
+    );
 
-  final response = await dio.post(
-    '/api/uploads/images',
-    data: formData,
-  );
+    final map = asMap(
+      response.data,
+      fallbackMessage: 'Profile image upload returned an invalid response.',
+    );
 
-  final raw = response.data;
+    final imageUrl =
+        normalizeNullableString(map['imageUrl'] ?? map['url'] ?? map['location']);
 
-  if (raw is Map) {
-    final map = Map<String, dynamic>.from(raw);
-    final imageUrl = map['imageUrl']?.toString();
-    if (imageUrl != null && imageUrl.trim().isNotEmpty) {
-      return imageUrl.trim();
+    if (imageUrl == null) {
+      throw const FormatException(
+        'Profile image upload returned an invalid response.',
+      );
     }
-  }
 
-  throw Exception('Profile image upload returned an invalid response.');
-}
+    return imageUrl;
+  }
 
   Future<void> changePassword({
     required String currentPassword,
     required String newPassword,
   }) async {
     await dio.put(
-      '/api/users/me/password',
+      ApiEndpoints.changePassword,
       data: {
         'currentPassword': currentPassword,
         'newPassword': newPassword,
       },
+      options: Options(
+        contentType: Headers.jsonContentType,
+        headers: const {'Accept': 'application/json'},
+        extra: const {
+          AuthInterceptor.allowRefreshKey: false,
+        },
+      ),
     );
   }
 
   Future<void> revokeAllSessions() async {
-    await dio.post('/api/auth/revoke-all');
+    await dio.post(
+      ApiEndpoints.revokeAllSessions,
+      options: Options(
+        contentType: Headers.jsonContentType,
+        headers: const {'Accept': 'application/json'},
+        extra: const {
+          AuthInterceptor.allowRefreshKey: true,
+        },
+      ),
+    );
   }
 
-  Future<List<ActivityLog>> getMyActivityLogs({
-    int page = 1,
-    int pageSize = 20,
-  }) async {
+  Future<PublicUserProfileDto> getPublicProfile(int userId) async {
     final response = await dio.get(
-      '/api/users/me/activity-logs',
-      queryParameters: {
-        'page': page,
-        'pageSize': pageSize,
-      },
+      ApiEndpoints.publicUser(userId),
+      options: Options(
+        extra: const {
+          AuthInterceptor.allowRefreshKey: true,
+        },
+      ),
     );
 
-    final raw = response.data;
-    final items = switch (raw) {
-      List _ => raw,
-      Map _ when raw['items'] is List => raw['items'] as List,
-      _ => throw Exception('Invalid activity logs response.'),
+    return PublicUserProfileDto.fromJson(
+      asMap(
+        response.data,
+        fallbackMessage: 'Public profile response was empty.',
+      ),
+    );
+  }
+
+  Map<String, dynamic> buildUpdatePayload({
+    String? username,
+    String? email,
+    String? firstName,
+    String? lastName,
+    String? phoneNumber,
+    String? imageUrl,
+  }) {
+    final data = <String, dynamic>{
+      'username': normalizeNullableString(username),
+      'email': normalizeNullableString(email),
+      'firstName': normalizeNullableString(firstName),
+      'lastName': normalizeNullableString(lastName),
+      'phoneNumber': normalizeNullableString(phoneNumber),
+      'imageUrl': normalizeNullableString(imageUrl),
     };
 
-    return items
-        .map((e) => ActivityLog.fromJson(Map<String, dynamic>.from(e as Map)))
-        .toList();
+    data.removeWhere((key, value) => value == null);
+    return data;
+  }
+
+  Map<String, dynamic> asMap(
+    dynamic raw, {
+    required String fallbackMessage,
+  }) {
+    if (raw is Map<String, dynamic>) return raw;
+    if (raw is Map) return Map<String, dynamic>.from(raw);
+    throw FormatException(fallbackMessage);
+  }
+
+  String? normalizeNullableString(dynamic value) {
+    final text = value?.toString().trim();
+    if (text == null || text.isEmpty) return null;
+    return text;
   }
 }

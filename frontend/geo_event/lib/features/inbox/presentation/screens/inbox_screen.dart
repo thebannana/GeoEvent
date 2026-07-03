@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/widgets/app_chip.dart';
-import '../../../../core/widgets/app_empty_state.dart';
-import '../../../../core/widgets/app_error_view.dart';
-import '../../../../core/widgets/app_loading_indicator.dart';
-import '../../../../core/widgets/glass_scaffold.dart';
+import '../../../../core/widgets/inputs/app_chip.dart';
+import '../../../../core/widgets/feedback/app_empty_state.dart';
+import '../../../../core/widgets/feedback/app_error_state.dart';
+import '../../../../core/widgets/feedback/app_loading_indicator.dart';
+import '../../../../core/widgets/layout/app_scaffold.dart';
+import '../../../../shared/notifications/models/inbox_state.dart';
 import '../../application/inbox_controller.dart';
 import '../widgets/inbox_notification_tile.dart';
 
@@ -20,6 +21,14 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
   final _searchController = TextEditingController();
 
   @override
+  void initState() {
+    super.initState();
+    Future.microtask(() {
+      ref.read(inboxControllerProvider.notifier).loadNotifications();
+    });
+  }
+
+  @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
@@ -29,16 +38,26 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(inboxControllerProvider);
     final ctrl = ref.read(inboxControllerProvider.notifier);
-    final items = state.displayed;
-    final hasUnread =
-        (state.notifications.valueOrNull ?? []).any((n) => !n.isRead);
 
-    return GlassScaffold(
+    final allItems = state.notifications;
+    final items = state.displayed;
+    final hasUnread = allItems.any((n) => n.isUnread);
+
+    return AppScaffold(
       child: RefreshIndicator(
-        onRefresh: ctrl.load,
+        onRefresh: ctrl.refresh,
         child: CustomScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(18, 14, 18, 0),
+                child: Text(
+                  'Inbox',
+                  style: Theme.of(context).textTheme.headlineSmall,
+                ),
+              ),
+            ),
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(18, 14, 18, 0),
@@ -77,15 +96,15 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
                     ),
                     const SizedBox(width: 8),
                     AppChip(
+                      label: 'Unread',
+                      selected: state.filter == NotificationFilter.unread,
+                      onTap: () => ctrl.setFilter(NotificationFilter.unread),
+                    ),
+                    const SizedBox(width: 8),
+                    AppChip(
                       label: 'Oldest',
                       selected: state.sort == NotificationSort.oldest,
-                      onTap: () {
-                        ctrl.setSort(
-                          state.sort == NotificationSort.oldest
-                              ? NotificationSort.newest
-                              : NotificationSort.oldest,
-                        );
-                      },
+                      onTap: () => ctrl.setSort(NotificationSort.oldest),
                     ),
                     const SizedBox(width: 8),
                     AppChip(
@@ -93,28 +112,33 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
                       selected: state.sort == NotificationSort.newest,
                       onTap: () => ctrl.setSort(NotificationSort.newest),
                     ),
-                    const Spacer(),
+                  ],
+                ),
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(18, 0, 18, 6),
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  alignment: WrapAlignment.end,
+                  children: [
                     if (hasUnread)
                       TextButton(
                         onPressed: ctrl.markAllAsRead,
-                        style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 6,
-                          ),
-                          minimumSize: Size.zero,
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        ),
-                        child: const Text(
-                          'Mark all read',
-                          style: TextStyle(fontSize: 12),
-                        ),
+                        child: const Text('Mark all read'),
+                      ),
+                    if (allItems.isNotEmpty)
+                      TextButton(
+                        onPressed: ctrl.deleteAll,
+                        child: const Text('Delete all'),
                       ),
                   ],
                 ),
               ),
             ),
-            if (state.notifications.isLoading)
+            if (state.isLoading)
               const SliverPadding(
                 padding: EdgeInsets.fromLTRB(18, 16, 18, 24),
                 sliver: SliverToBoxAdapter(
@@ -125,25 +149,28 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
                   ),
                 ),
               )
-            else if (state.notifications.hasError)
+            else if (state.hasError && allItems.isEmpty)
               SliverPadding(
                 padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
                 sliver: SliverToBoxAdapter(
                   child: AppErrorState(
                     title: 'Failed to load notifications',
-                    message: 'Pull to refresh or try again.',
-                    onRetry: ctrl.load,
+                    message:
+                        state.errorMessage ?? 'Pull to refresh or try again.',
+                    onRetry: ctrl.loadNotifications,
                   ),
                 ),
               )
             else if (items.isEmpty)
-              const SliverPadding(
-                padding: EdgeInsets.fromLTRB(18, 8, 18, 24),
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
                 sliver: SliverToBoxAdapter(
                   child: AppEmptyState(
                     icon: Icons.notifications_none_rounded,
-                    title: 'All caught up',
-                    message: 'No notifications to show.',
+                    title: allItems.isEmpty ? 'All caught up' : 'No matches found',
+                    message: allItems.isEmpty
+                        ? 'No notifications to show.'
+                        : 'Try a different search or filter.',
                   ),
                 ),
               )
@@ -151,21 +178,39 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
               SliverPadding(
                 padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
                 sliver: SliverList.separated(
-                  itemCount: items.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 10),
+                  itemCount: items.length + (state.isLoadingMore ? 1 : 0),
+                  separatorBuilder: (_, _) => const SizedBox(height: 10),
                   itemBuilder: (context, index) {
+                    if (index >= items.length) {
+                      return const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 12),
+                        child: Center(
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      );
+                    }
+
                     final item = items[index];
+
+                    if (state.searchQuery.isEmpty &&
+                        state.filter == NotificationFilter.all &&
+                        state.sort == NotificationSort.newest &&
+                        state.hasMore &&
+                        !state.isLoadingMore &&
+                        index >= items.length - 3) {
+                      Future.microtask(ctrl.loadMore);
+                    }
+
                     return InboxNotificationTile(
                       item: item,
                       onTap: () {
                         if (!item.isRead) {
-                          ctrl.markAsRead(item.notificationId);
+                          ctrl.markAsRead(item.id);
                         }
                       },
-                      onDelete: () => ctrl.delete(item.notificationId),
-                      onMarkAsRead: item.isRead
-                          ? null
-                          : () => ctrl.markAsRead(item.notificationId),
+                      onDelete: () => ctrl.deleteNotification(item.id),
+                      onMarkAsRead:
+                          item.isRead ? null : () => ctrl.markAsRead(item.id),
                     );
                   },
                 ),

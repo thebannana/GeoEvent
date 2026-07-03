@@ -6,6 +6,7 @@ class RegisterRequest {
   final bool consentGiven;
   final String consentVersion;
   final String password;
+  final String confirmPassword;
   final String firstName;
   final String lastName;
 
@@ -17,21 +18,23 @@ class RegisterRequest {
     required this.consentGiven,
     required this.consentVersion,
     required this.password,
+    required this.confirmPassword,
     required this.firstName,
     required this.lastName,
   });
 
   Map<String, dynamic> toJson() {
     return {
-      'username': username,
-      'email': email,
+      'username': username.trim(),
+      'email': email.trim(),
       'birthDate': birthDate.toUtc().toIso8601String(),
-      'phoneNumber': phoneNumber,
+      'phoneNumber': phoneNumber.trim(),
       'consentGiven': consentGiven,
-      'consentVersion': consentVersion,
+      'consentVersion': consentVersion.trim(),
       'password': password,
-      'firstName': firstName,
-      'lastName': lastName,
+      'confirmPassword': confirmPassword,
+      'firstName': firstName.trim(),
+      'lastName': lastName.trim(),
     };
   }
 }

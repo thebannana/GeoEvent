@@ -189,7 +189,7 @@ public class EventServiceImpl : IEventService
         var events = await _eventRepository.GetNearbyAsync(dto);
 
         var publicEvents = events
-            .Where(e => e.Status == EventStatus.Confirmed)
+            .Where(e => e.Status == EventStatus.Confirmed && !e.IsPast())
             .Select(e => MapToDto(e, false))
             .ToList();
 
@@ -1187,8 +1187,21 @@ public class EventServiceImpl : IEventService
         Locale = ev.Locale,
         CreatedAt = ev.CreatedAt,
         UpdatedAt = ev.UpdatedAt,
-        ImageUrls = ev.Images.Select(i => i.ImageUrl).ToList(),
-        CoverImageUrl = ev.Images.FirstOrDefault(i => i.IsCover)?.ImageUrl
+        ImageUrls = ev.Images
+            .Select(i => i.ImageUrl)
+            .Where(url => !string.IsNullOrWhiteSpace(url))
+            .ToList(),
+        CoverImageUrl = ev.Images
+            .FirstOrDefault(i => i.IsCover)?.ImageUrl,
+        Images = ev.Images
+            .Select(i => new EventImageResponseDto
+            {
+                ImageId = i.ImageId,
+                ImageUrl = i.ImageUrl,
+                IsCover = i.IsCover,
+                UploadedAt = i.UploadedAt
+            })
+            .ToList()
     };
 
     private static SegmentResponseDto MapSegment(Segment s) => new()

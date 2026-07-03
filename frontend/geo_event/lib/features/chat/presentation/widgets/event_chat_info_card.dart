@@ -21,8 +21,6 @@ class EventChatInfoCard extends StatelessWidget {
 
     final subtitleParts = <String>[
       if (info.startsAt != null) _formatDate(info.startsAt!),
-      if (info.venueName?.trim().isNotEmpty ?? false) info.venueName!.trim(),
-      if (info.cityName?.trim().isNotEmpty ?? false) info.cityName!.trim(),
     ];
 
     return Container(
@@ -112,6 +110,10 @@ class _ImageThumb extends StatelessWidget {
             ? Image.network(
                 imageUrl!.trim(),
                 fit: BoxFit.cover,
+                errorBuilder: (_, _, _) => Icon(
+                  Icons.event_rounded,
+                  color: colorScheme.primary,
+                ),
               )
             : Icon(
                 Icons.event_rounded,

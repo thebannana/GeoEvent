@@ -12,4 +12,5 @@ public interface INotificationService
     Task<ServiceResult<bool>> MarkAsReadAsync(int notificationId, int userId);
     Task<ServiceResult<bool>> MarkAllAsReadAsync(int userId);
     Task<ServiceResult<bool>> DeleteNotificationAsync(int notificationId, int userId);
+    Task<ServiceResult<bool>> DeleteAllNotificationsAsync(int userId);
 }

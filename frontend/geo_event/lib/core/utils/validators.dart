@@ -1,20 +1,27 @@
 class Validators {
   const Validators._();
 
-  static String? requiredField(
+  static String? required(
     String? value, {
     String fieldName = 'This field',
   }) {
     if (value == null || value.trim().isEmpty) {
-      return '$fieldName is required';
+      return '$fieldName is required.';
     }
 
     return null;
   }
 
+  static String? requiredField(
+    String? value, {
+    String fieldName = 'This field',
+  }) {
+    return required(value, fieldName: fieldName);
+  }
+
   static String? email(String? value) {
     if (value == null || value.trim().isEmpty) {
-      return 'Email is required';
+      return 'Email is required.';
     }
 
     final emailRegex = RegExp(
@@ -22,7 +29,7 @@ class Validators {
     );
 
     if (!emailRegex.hasMatch(value.trim())) {
-      return 'Enter a valid email address';
+      return 'Enter a valid email address.';
     }
 
     return null;
@@ -30,22 +37,22 @@ class Validators {
 
   static String? username(String? value) {
     if (value == null || value.trim().isEmpty) {
-      return 'Username is required';
+      return 'Username is required.';
     }
 
     final trimmed = value.trim();
 
     if (trimmed.length < 3) {
-      return 'Username must be at least 3 characters';
+      return 'Username must be at least 3 characters.';
     }
 
     if (trimmed.length > 24) {
-      return 'Username must be at most 24 characters';
+      return 'Username must be at most 24 characters.';
     }
 
     final usernameRegex = RegExp(r'^[a-zA-Z0-9._]+$');
     if (!usernameRegex.hasMatch(trimmed)) {
-      return 'Only letters, numbers, dots, and underscores are allowed';
+      return 'Only letters, numbers, dots, and underscores are allowed.';
     }
 
     return null;
@@ -53,19 +60,34 @@ class Validators {
 
   static String? password(String? value) {
     if (value == null || value.isEmpty) {
-      return 'Password is required';
+      return 'Password is required.';
     }
 
     if (value.length < 8) {
-      return 'Password must be at least 8 characters';
+      return 'Password must be at least 8 characters.';
     }
 
     final hasUppercase = RegExp(r'[A-Z]').hasMatch(value);
     final hasLowercase = RegExp(r'[a-z]').hasMatch(value);
     final hasDigit = RegExp(r'[0-9]').hasMatch(value);
+    final hasSpecial = RegExp(
+      r'''[!@#\$%\^&\*\(\)_\+\-\=\[\]\{\};:'",\.<>\?\/\\|`~]''',
+    ).hasMatch(value);
 
-    if (!hasUppercase || !hasLowercase || !hasDigit) {
-      return 'Password must include uppercase, lowercase, and a number';
+    if (!hasUppercase) {
+      return 'Password must contain at least one uppercase letter.';
+    }
+
+    if (!hasLowercase) {
+      return 'Password must contain at least one lowercase letter.';
+    }
+
+    if (!hasDigit) {
+      return 'Password must contain at least one number.';
+    }
+
+    if (!hasSpecial) {
+      return 'Password must contain at least one special character.';
     }
 
     return null;
@@ -76,11 +98,11 @@ class Validators {
     String originalPassword,
   ) {
     if (value == null || value.isEmpty) {
-      return 'Please confirm your password';
+      return 'Please confirm your password.';
     }
 
     if (value != originalPassword) {
-      return 'Passwords do not match';
+      return 'Passwords do not match.';
     }
 
     return null;
@@ -103,18 +125,18 @@ class Validators {
     required String fieldName,
   }) {
     if (value == null || value.trim().isEmpty) {
-      return '$fieldName is required';
+      return '$fieldName is required.';
     }
 
     final trimmed = value.trim();
 
     if (trimmed.length < 2) {
-      return '$fieldName must be at least 2 characters';
+      return '$fieldName must be at least 2 characters.';
     }
 
     final nameRegex = RegExp(r"^[A-Za-zÀ-ž\s'-]+$");
     if (!nameRegex.hasMatch(trimmed)) {
-      return '$fieldName contains invalid characters';
+      return '$fieldName contains invalid characters.';
     }
 
     return null;
@@ -122,14 +144,14 @@ class Validators {
 
   static String? phoneNumber(String? value) {
     if (value == null || value.trim().isEmpty) {
-      return 'Phone number is required';
+      return 'Phone number is required.';
     }
 
     final normalized = value.replaceAll(RegExp(r'[\s()-]'), '');
     final phoneRegex = RegExp(r'^\+?[0-9]{8,15}$');
 
     if (!phoneRegex.hasMatch(normalized)) {
-      return 'Enter a valid phone number';
+      return 'Enter a valid phone number.';
     }
 
     return null;
@@ -140,18 +162,14 @@ class Validators {
     int minimumAge = 13,
   }) {
     if (value == null) {
-      return 'Birth date is required';
+      return 'Birth date is required.';
     }
 
     final now = DateTime.now();
-    final cutoff = DateTime(
-      now.year - minimumAge,
-      now.month,
-      now.day,
-    );
+    final cutoff = DateTime(now.year - minimumAge, now.month, now.day);
 
     if (value.isAfter(cutoff)) {
-      return 'You must be at least $minimumAge years old';
+      return 'You must be at least $minimumAge years old.';
     }
 
     return null;
@@ -165,11 +183,11 @@ class Validators {
     final trimmed = value?.trim() ?? '';
 
     if (trimmed.isEmpty) {
-      return '$fieldName is required';
+      return '$fieldName is required.';
     }
 
     if (trimmed.length < length) {
-      return '$fieldName must be at least $length characters';
+      return '$fieldName must be at least $length characters.';
     }
 
     return null;
@@ -183,7 +201,7 @@ class Validators {
     final trimmed = value?.trim() ?? '';
 
     if (trimmed.length > length) {
-      return '$fieldName must be at most $length characters';
+      return '$fieldName must be at most $length characters.';
     }
 
     return null;
@@ -194,19 +212,17 @@ class Validators {
     String fieldName = 'Value',
   }) {
     if (value == null || value.trim().isEmpty) {
-      return '$fieldName is required';
+      return '$fieldName is required.';
     }
 
-    final parsed = double.tryParse(
-      value.replaceAll(',', '.').trim(),
-    );
+    final parsed = double.tryParse(value.replaceAll(',', '.').trim());
 
     if (parsed == null) {
-      return '$fieldName must be a valid number';
+      return '$fieldName must be a valid number.';
     }
 
     if (parsed < 0) {
-      return '$fieldName must be zero or greater';
+      return '$fieldName must be zero or greater.';
     }
 
     return null;
@@ -216,7 +232,7 @@ class Validators {
     final trimmed = value?.trim() ?? '';
 
     if (trimmed.isEmpty) {
-      return required ? 'URL is required' : null;
+      return required ? 'URL is required.' : null;
     }
 
     final uri = Uri.tryParse(trimmed);
@@ -225,7 +241,47 @@ class Validators {
         uri.host.isNotEmpty;
 
     if (!isValid) {
-      return 'Enter a valid URL';
+      return 'Enter a valid URL.';
+    }
+
+    return null;
+  }
+
+  static String? selectionRequired<T>(
+    T? value, {
+    String fieldName = 'Selection',
+  }) {
+    if (value == null) {
+      return '$fieldName is required.';
+    }
+    return null;
+  }
+
+  static String? dateRequired(
+    DateTime? value, {
+    String fieldName = 'Date',
+  }) {
+    if (value == null) {
+      return '$fieldName is required.';
+    }
+    return null;
+  }
+
+  static String? nonNegativeInt(
+    String? value, {
+    String fieldName = 'Value',
+  }) {
+    if (value == null || value.trim().isEmpty) {
+      return '$fieldName is required.';
+    }
+
+    final parsed = int.tryParse(value.trim());
+    if (parsed == null) {
+      return '$fieldName must be a whole number.';
+    }
+
+    if (parsed < 0) {
+      return '$fieldName must be zero or greater.';
     }
 
     return null;

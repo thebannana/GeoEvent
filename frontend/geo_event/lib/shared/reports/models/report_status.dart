@@ -5,11 +5,12 @@ enum ReportStatus {
   dismissed('Dismissed');
 
   final String apiValue;
+
   const ReportStatus(this.apiValue);
 
   static ReportStatus fromJson(String value) {
     return ReportStatus.values.firstWhere(
-      (e) => e.apiValue.toLowerCase() == value.toLowerCase(),
+      (status) => status.apiValue.toLowerCase() == value.toLowerCase(),
       orElse: () => ReportStatus.pending,
     );
   }

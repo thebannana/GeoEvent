@@ -5,13 +5,14 @@ enum ReportTargetType {
   review('Review');
 
   final String apiValue;
+
   const ReportTargetType(this.apiValue);
 
   String get displayName => apiValue;
 
   static ReportTargetType fromJson(String value) {
     return ReportTargetType.values.firstWhere(
-      (e) => e.apiValue.toLowerCase() == value.toLowerCase(),
+      (type) => type.apiValue.toLowerCase() == value.toLowerCase(),
       orElse: () => ReportTargetType.event,
     );
   }

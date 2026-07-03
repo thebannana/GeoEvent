@@ -10,7 +10,6 @@ public class PublicUserProfileDto
 
     public string? ImageUrl { get; set; }
     public string? Bio { get; set; }
-    public string? CityName { get; set; }
 
 
     public int EventsCount { get; set; }

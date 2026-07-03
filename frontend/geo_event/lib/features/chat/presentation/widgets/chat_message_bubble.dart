@@ -11,6 +11,7 @@ class ChatMessageBubble extends StatefulWidget {
   final VoidCallback? onLike;
   final VoidCallback? onEdit;
   final VoidCallback onReply;
+  final ChatThreadType threadType;
 
   const ChatMessageBubble({
     super.key,
@@ -20,6 +21,7 @@ class ChatMessageBubble extends StatefulWidget {
     this.onLike,
     this.onEdit,
     required this.onReply,
+    this.threadType = ChatThreadType.direct,
   });
 
   @override
@@ -75,7 +77,7 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble>
                 title: senderName,
                 imageUrl: avatarUrl,
                 size: 32,
-                type: ChatThreadType.direct,
+                type: widget.threadType,
                 showPresence: false,
               ),
               const SizedBox(width: 8),

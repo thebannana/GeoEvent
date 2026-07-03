@@ -27,16 +27,22 @@ class UserReview {
     return UserReview(
       ratingId: (json['ratingId'] as num).toInt(),
       reviewerId: (json['reviewerId'] as num).toInt(),
-      reviewerUsername: json['reviewerUsername'] as String? ?? '',
-      reviewerDisplayName: json['reviewerDisplayName'] as String? ?? '',
-      reviewerImageUrl: json['reviewerImageUrl'] as String?,
+      reviewerUsername: (json['reviewerUsername'] as String? ?? '').trim(),
+      reviewerDisplayName:
+          (json['reviewerDisplayName'] as String? ?? '').trim(),
+      reviewerImageUrl: _normalizeNullable(json['reviewerImageUrl']),
       ratedUserId: (json['ratedUserId'] as num).toInt(),
       value: (json['value'] as num).toInt(),
-      comment: json['comment'] as String?,
-      createdAt: DateTime.parse(json['createdAt'] as String),
+      comment: _normalizeNullable(json['comment']),
+      createdAt: DateTime.parse(json['createdAt'] as String).toLocal(),
       updatedAt: json['updatedAt'] != null
-          ? DateTime.parse(json['updatedAt'] as String)
+          ? DateTime.parse(json['updatedAt'] as String).toLocal()
           : null,
     );
+  }
+
+  static String? _normalizeNullable(dynamic value) {
+    final text = value?.toString().trim();
+    return (text == null || text.isEmpty) ? null : text;
   }
 }

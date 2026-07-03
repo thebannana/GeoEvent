@@ -69,66 +69,40 @@ namespace UserService.Infrastructure.Migrations
                     b.ToTable("UserPreferences");
                 });
 
-            modelBuilder.Entity("UserService.Domain.Entities.ActivityLog", b =>
+            modelBuilder.Entity("UserService.Domain.Entities.PasswordResetToken", b =>
                 {
-                    b.Property<int>("LogId")
+                    b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
+                        .HasColumnType("bigint");
 
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("LogId"));
-
-                    b.Property<string>("ActionType")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
-                    b.Property<int?>("GenreId")
-                        .HasColumnType("int");
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("datetime2");
 
-                    b.Property<string>("Metadata")
+                    b.Property<string>("TokenHash")
                         .IsRequired()
-                        .HasMaxLength(1000)
-                        .HasColumnType("nvarchar(1000)");
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
 
-                    b.Property<int?>("SegmentId")
+                    b.Property<DateTime?>("UsedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("UserId")
                         .HasColumnType("int");
 
-                    b.Property<Guid>("SessionId")
-                        .HasColumnType("uniqueidentifier");
+                    b.HasKey("Id");
 
-                    b.Property<int>("TargetId")
-                        .HasColumnType("int");
+                    b.HasIndex("ExpiresAt");
 
-                    b.Property<string>("TargetType")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
-
-                    b.Property<int?>("UserId")
-                        .HasColumnType("int");
-
-                    b.HasKey("LogId");
-
-                    b.HasIndex("CreatedAt");
-
-                    b.HasIndex("GenreId");
-
-                    b.HasIndex("SegmentId");
-
-                    b.HasIndex("SessionId");
+                    b.HasIndex("TokenHash");
 
                     b.HasIndex("UserId");
 
-                    b.HasIndex("ActionType", "CreatedAt");
-
-                    b.HasIndex("SegmentId", "CreatedAt");
-
-                    b.HasIndex("UserId", "CreatedAt");
-
-                    b.ToTable("ActivityLogs");
+                    b.ToTable("PasswordResetTokens", (string)null);
                 });
 
             modelBuilder.Entity("UserService.Domain.Entities.Person", b =>
@@ -141,9 +115,6 @@ namespace UserService.Infrastructure.Migrations
 
                     b.Property<DateTime>("BirthDate")
                         .HasColumnType("datetime2");
-
-                    b.Property<int?>("CityId")
-                        .HasColumnType("int");
 
                     b.Property<DateTime?>("DeletedAt")
                         .HasColumnType("datetime2");
@@ -314,25 +285,17 @@ namespace UserService.Infrastructure.Migrations
                         .HasMaxLength(255)
                         .HasColumnType("nvarchar(255)");
 
-                    b.Property<string>("EmailVerificationToken")
-                        .HasMaxLength(512)
-                        .HasColumnType("nvarchar(512)");
-
-                    b.Property<DateTime?>("EmailVerificationTokenExpiresAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<DateTime?>("EmailVerifiedAt")
-                        .HasColumnType("datetime2");
-
                     b.Property<int>("FailedLoginAttempts")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("int")
                         .HasDefaultValue(0);
 
-                    b.Property<bool>("IsBanned")
-                        .HasColumnType("bit");
+                    b.Property<bool>("HasPayPalConnected")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
 
-                    b.Property<bool>("IsVerified")
+                    b.Property<bool>("IsBanned")
                         .HasColumnType("bit");
 
                     b.Property<DateTime?>("LastLoginAt")
@@ -349,16 +312,28 @@ namespace UserService.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("varbinary(max)");
 
-                    b.Property<string>("PasswordResetToken")
-                        .HasMaxLength(512)
-                        .HasColumnType("nvarchar(512)");
-
-                    b.Property<DateTime?>("PasswordResetTokenExpiresAt")
-                        .HasColumnType("datetime2");
-
                     b.Property<byte[]>("PasswordSalt")
                         .IsRequired()
                         .HasColumnType("varbinary(max)");
+
+                    b.Property<DateTime?>("PayPalConnectedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("PayPalConnectionStatus")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("PayPalEmail")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<string>("PayPalMerchantId")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<string>("PayPalTrackingId")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
 
                     b.Property<string>("Role")
                         .IsRequired()
@@ -375,13 +350,11 @@ namespace UserService.Infrastructure.Migrations
                     b.HasIndex("Email")
                         .IsUnique();
 
-                    b.HasIndex("EmailVerificationToken")
-                        .HasFilter("[EmailVerificationToken] IS NOT NULL");
-
                     b.HasIndex("LockoutUntil");
 
-                    b.HasIndex("PasswordResetToken")
-                        .HasFilter("[PasswordResetToken] IS NOT NULL");
+                    b.HasIndex("PayPalMerchantId");
+
+                    b.HasIndex("PayPalTrackingId");
 
                     b.HasIndex("Username")
                         .IsUnique();
@@ -439,12 +412,13 @@ namespace UserService.Infrastructure.Migrations
                     b.Navigation("User");
                 });
 
-            modelBuilder.Entity("UserService.Domain.Entities.ActivityLog", b =>
+            modelBuilder.Entity("UserService.Domain.Entities.PasswordResetToken", b =>
                 {
                     b.HasOne("UserService.Domain.Entities.User", "User")
-                        .WithMany("ActivityLogs")
+                        .WithMany("PasswordResetTokens")
                         .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
                     b.Navigation("User");
                 });
@@ -513,9 +487,9 @@ namespace UserService.Infrastructure.Migrations
 
             modelBuilder.Entity("UserService.Domain.Entities.User", b =>
                 {
-                    b.Navigation("ActivityLogs");
-
                     b.Navigation("FiledReports");
+
+                    b.Navigation("PasswordResetTokens");
 
                     b.Navigation("Preferences");
 

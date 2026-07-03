@@ -2,15 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/widgets/app_chip.dart';
-import '../../../../core/widgets/app_empty_state.dart';
-import '../../../../core/widgets/app_error_view.dart';
-import '../../../../core/widgets/app_spinner.dart';
-import '../../../../core/widgets/app_surface_card.dart';
-import '../../../../core/widgets/glass_scaffold.dart';
+import '../../../../core/constants/event_status.dart';
+import '../../../../core/widgets/feedback/app_confirm_dialog.dart';
+import '../../../../core/widgets/feedback/app_empty_state.dart';
+import '../../../../core/widgets/feedback/app_error_state.dart';
+import '../../../../core/widgets/feedback/app_loading_indicator.dart';
+import '../../../../core/widgets/feedback/app_spinner.dart';
+import '../../../../core/widgets/inputs/app_chip.dart';
+import '../../../../core/widgets/layout/app_scaffold.dart';
+import '../../../../core/widgets/surfaces/app_surface_card.dart';
 import '../../../../shared/events/models/my_event_response_dto.dart';
-import '../../application/my_events_controller.dart';
+import '../../../../shared/events/providers/event_refresh_providers.dart';
 import '../../../my_events/presentation/screens/event_reservations_screen.dart';
+import '../../application/my_events_controller.dart';
 import 'edit_event_screen.dart';
 
 class MyEventsScreen extends ConsumerStatefulWidget {
@@ -21,22 +25,33 @@ class MyEventsScreen extends ConsumerStatefulWidget {
 }
 
 class _MyEventsScreenState extends ConsumerState<MyEventsScreen> {
-  final _searchController = TextEditingController();
+  final TextEditingController _searchController = TextEditingController();
 
   static const List<String> _statuses = [
     'All',
-    'Published',
-    'Draft',
-    'Completed',
+    EventStatus.pending,
+    EventStatus.confirmed,
+    EventStatus.completed,
+    EventStatus.cancelled,
   ];
 
   String _query = '';
   String _selectedStatus = 'All';
+  bool _busyDeleting = false;
 
   @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  Future<void> _refresh() async {
+    await ref.read(myEventsProvider.notifier).refresh();
+  }
+
+  bool _matchesStatus(MyEventResponseDto event) {
+    if (_selectedStatus == 'All') return true;
+    return event.displayStatus.toLowerCase() == _selectedStatus.toLowerCase();
   }
 
   @override
@@ -55,7 +70,7 @@ class _MyEventsScreenState extends ConsumerState<MyEventsScreen> {
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: overlayStyle,
-      child: GlassScaffold(
+      child: AppScaffold(
         appBar: AppBar(
           title: const Text('My events'),
           centerTitle: false,
@@ -69,52 +84,46 @@ class _MyEventsScreenState extends ConsumerState<MyEventsScreen> {
           systemOverlayStyle: overlayStyle,
         ),
         child: RefreshIndicator(
-          onRefresh: () => ref.read(myEventsProvider.notifier).refresh(),
+          onRefresh: _refresh,
           child: eventsAsync.when(
             loading: () => CustomScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
               slivers: const [
-                SliverToBoxAdapter(child: SizedBox(height: 20)),
                 SliverFillRemaining(
                   hasScrollBody: false,
-                  child: Center(
-                    child: AppSpinner(size: 28, strokeWidth: 2.6),
+                  child: AppLoadingIndicator(
+                    title: 'Loading your events',
+                    message: 'Please wait while we load your events.',
                   ),
                 ),
               ],
             ),
-            error: (_, __) => CustomScrollView(
+            error: (_, _) => CustomScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
               slivers: [
-                const SliverToBoxAdapter(child: SizedBox(height: 8)),
                 SliverPadding(
                   padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
                   sliver: SliverToBoxAdapter(
                     child: AppErrorState(
                       title: 'Failed to load your events',
                       message: 'Pull to refresh or try again.',
-                      onRetry: () {
-                        ref.read(myEventsProvider.notifier).refresh();
-                      },
+                      onRetry: _refresh,
                     ),
                   ),
                 ),
               ],
             ),
             data: (events) {
-              final filtered = events.where((event) {
-                final query = _query.trim().toLowerCase();
+              final query = _query.trim().toLowerCase();
 
+              final filtered = events.where((event) {
                 final matchesQuery =
                     query.isEmpty ||
                     event.title.toLowerCase().contains(query) ||
                     event.description.toLowerCase().contains(query) ||
-                    (event.venueName?.toLowerCase().contains(query) ?? false) ||
                     (event.genreName?.toLowerCase().contains(query) ?? false);
 
-                final uiStatus = event.displayStatus;
-                final matchesStatus =
-                    _selectedStatus == 'All' || uiStatus == _selectedStatus;
+                final matchesStatus = _matchesStatus(event);
 
                 return matchesQuery && matchesStatus;
               }).toList();
@@ -194,24 +203,22 @@ class _MyEventsScreenState extends ConsumerState<MyEventsScreen> {
                       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
                       sliver: SliverList.separated(
                         itemCount: filtered.length,
-                        separatorBuilder: (_, __) =>
+                        separatorBuilder: (_, _) =>
                             const SizedBox(height: 12),
                         itemBuilder: (context, index) {
                           final event = filtered[index];
                           return _EventCard(
                             event: event,
-                            onTap: () {
-                              _editEvent(event);
-                            },
-                            onEdit: () {
-                              _editEvent(event);
-                            },
-                            onDelete: () {
-                              _confirmDelete(event);
-                            },
-                            onViewReservations: () {
-                              _openReservations(event);
-                            },
+                            actionsDisabled: _busyDeleting,
+                            onTap: _busyDeleting ? null : () => _editEvent(event),
+                            onEdit:
+                                _busyDeleting ? null : () => _editEvent(event),
+                            onDelete: _busyDeleting
+                                ? null
+                                : () => _confirmDelete(event),
+                            onViewReservations: _busyDeleting
+                                ? null
+                                : () => _openReservations(event),
                           );
                         },
                       ),
@@ -233,63 +240,60 @@ class _MyEventsScreenState extends ConsumerState<MyEventsScreen> {
     );
 
     if (updated == true && mounted) {
-      await ref.read(myEventsProvider.notifier).refresh();
+      await _refresh();
     }
   }
 
   Future<void> _confirmDelete(MyEventResponseDto event) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete event?'),
-        content: Text(
-          '"${event.title}" will be permanently deleted.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Keep'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.error,
-            ),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
+    final confirmed = await AppConfirmDialog.show(
+      context,
+      title: 'Delete event?',
+      message: '"${event.title}" will be permanently deleted.',
+      cancelLabel: 'Keep',
+      confirmLabel: 'Delete',
+      destructive: true,
     );
 
-    if (confirmed != true || !mounted) return;
+    if (!confirmed || !mounted) return;
 
-    final success = await ref.read(myEventsProvider.notifier).deleteEvent(
-          event.eventId,
-        );
+    setState(() => _busyDeleting = true);
 
-    if (!mounted) return;
+    try {
+      final success = await ref.read(myEventsProvider.notifier).deleteEvent(
+            event.eventId,
+          );
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          success ? 'Event deleted.' : 'Could not delete event.',
+      if (!mounted) return;
+
+      if (success) {
+        triggerEventMapRefresh(ref);
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            success ? 'Event deleted.' : 'Could not delete event.',
+          ),
         ),
-      ),
-    );
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _busyDeleting = false);
+      }
+    }
   }
 
   void _openReservations(MyEventResponseDto event) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => EventReservationsScreen(event: event),
-        ),
-      );
-    });
+    if (!mounted) return;
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => EventReservationsScreen(event: event),
+      ),
+    );
   }
 
-  static String _formatEventDate(DateTime dt) {
+  static String formatEventDate(DateTime dt) {
     final d = dt.toLocal();
     final day = d.day.toString().padLeft(2, '0');
     final month = d.month.toString().padLeft(2, '0');
@@ -300,25 +304,27 @@ class _MyEventsScreenState extends ConsumerState<MyEventsScreen> {
 }
 
 class _EventCard extends StatelessWidget {
-  final MyEventResponseDto event;
-  final VoidCallback onTap;
-  final VoidCallback onEdit;
-  final VoidCallback onDelete;
-  final VoidCallback onViewReservations;
-
   const _EventCard({
     required this.event,
+    required this.actionsDisabled,
     required this.onTap,
     required this.onEdit,
     required this.onDelete,
     required this.onViewReservations,
   });
 
+  final MyEventResponseDto event;
+  final bool actionsDisabled;
+  final VoidCallback? onTap;
+  final VoidCallback? onEdit;
+  final VoidCallback? onDelete;
+  final VoidCallback? onViewReservations;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final status = event.displayStatus;
-    final statusColor = _statusColor(status);
+    final statusColor = EventStatus.displayColor(status);
 
     return AppSurfaceCard(
       onTap: onTap,
@@ -353,20 +359,31 @@ class _EventCard extends StatelessWidget {
                       onSelected: (value) {
                         switch (value) {
                           case _EventMenuAction.edit:
-                            onEdit();
+                            onEdit?.call();
                             break;
                           case _EventMenuAction.reservations:
-                            onViewReservations();
+                            if (!event.canViewReservations) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Reservations are not available for this event yet.',
+                                  ),
+                                ),
+                              );
+                              return;
+                            }
+                            onViewReservations?.call();
                             break;
                           case _EventMenuAction.delete:
-                            onDelete();
+                            onDelete?.call();
                             break;
                         }
                       },
-                                            itemBuilder: (context) => [
-                        const PopupMenuItem(
+                      itemBuilder: (context) => [
+                        PopupMenuItem(
                           value: _EventMenuAction.edit,
-                          child: ListTile(
+                          enabled: !actionsDisabled,
+                          child: const ListTile(
                             contentPadding: EdgeInsets.zero,
                             leading: Icon(Icons.edit_rounded),
                             title: Text('Edit'),
@@ -374,12 +391,13 @@ class _EventCard extends StatelessWidget {
                         ),
                         PopupMenuItem(
                           value: _EventMenuAction.reservations,
-                          enabled: event.canViewReservations,
+                          enabled: !actionsDisabled && event.canViewReservations,
                           child: ListTile(
                             contentPadding: EdgeInsets.zero,
                             leading: Icon(
                               Icons.groups_rounded,
-                              color: event.canViewReservations
+                              color: (!actionsDisabled &&
+                                      event.canViewReservations)
                                   ? null
                                   : Theme.of(context)
                                       .colorScheme
@@ -387,8 +405,11 @@ class _EventCard extends StatelessWidget {
                                       .withValues(alpha: 0.5),
                             ),
                             title: Text(
-                              'View reservations',
-                              style: event.canViewReservations
+                              event.canViewReservations
+                                  ? 'View reservations'
+                                  : 'View reservations unavailable',
+                              style: (!actionsDisabled &&
+                                      event.canViewReservations)
                                   ? null
                                   : TextStyle(
                                       color: Theme.of(context)
@@ -400,9 +421,10 @@ class _EventCard extends StatelessWidget {
                           ),
                         ),
                         const PopupMenuDivider(),
-                        const PopupMenuItem(
+                        PopupMenuItem(
                           value: _EventMenuAction.delete,
-                          child: ListTile(
+                          enabled: !actionsDisabled,
+                          child: const ListTile(
                             contentPadding: EdgeInsets.zero,
                             leading: Icon(Icons.delete_outline_rounded),
                             title: Text('Delete'),
@@ -417,13 +439,9 @@ class _EventCard extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 6),
-                if ((event.venueName?.isNotEmpty ?? false) ||
-                    (event.genreName?.isNotEmpty ?? false))
+                if (event.genreName?.isNotEmpty ?? false)
                   Text(
-                    [
-                      if (event.genreName?.isNotEmpty ?? false) event.genreName!,
-                      if (event.venueName?.isNotEmpty ?? false) event.venueName!,
-                    ].join(' • '),
+                    event.genreName!,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
@@ -455,9 +473,7 @@ class _EventCard extends StatelessWidget {
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
-                        _MyEventsScreenState._formatEventDate(
-                          event.startDateTime,
-                        ),
+                        _MyEventsScreenState.formatEventDate(event.startDateTime),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
@@ -475,23 +491,6 @@ class _EventCard extends StatelessWidget {
       ),
     );
   }
-
-  static Color _statusColor(String status) {
-    switch (status.toLowerCase()) {
-      case 'published':
-        return const Color(0xFF43A047);
-      case 'draft':
-        return const Color(0xFFF0A500);
-      case 'cancelled':
-        return const Color(0xFFE05C5C);
-      case 'completed':
-        return const Color(0xFF5B9ED6);
-      case 'postponed':
-        return const Color(0xFF8E6AD8);
-      default:
-        return const Color(0xFF5B9ED6);
-    }
-  }
 }
 
 enum _EventMenuAction {
@@ -501,11 +500,11 @@ enum _EventMenuAction {
 }
 
 class _EventImage extends StatelessWidget {
-  final String? imageUrl;
-
   const _EventImage({
     required this.imageUrl,
   });
+
+  final String? imageUrl;
 
   @override
   Widget build(BuildContext context) {
@@ -523,7 +522,7 @@ class _EventImage extends StatelessWidget {
             if (wasSynchronouslyLoaded || frame != null) return child;
             return _fallback(context, loading: true);
           },
-          errorBuilder: (_, __, ___) => _fallback(context),
+          errorBuilder: (_, _, _) => _fallback(context),
         ),
       );
     }

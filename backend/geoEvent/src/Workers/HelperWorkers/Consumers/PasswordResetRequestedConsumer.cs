@@ -1,5 +1,6 @@
 ﻿using GeoEvent.HelperWorkers.Interfaces;
 using MassTransit;
+using Microsoft.Extensions.Logging;
 using Shared.Contracts.Users;
 
 namespace GeoEvent.HelperWorkers.Consumers;
@@ -27,7 +28,7 @@ public class PasswordResetRequestedConsumer : IConsumer<PasswordResetRequestedMe
             message.Email);
 
         var resetLink =
-            $"geoevent://reset-password?email={Uri.EscapeDataString(message.Email)}&token={Uri.EscapeDataString(message.Token)}";
+            $"geoevent://open/reset-password?email={Uri.EscapeDataString(message.Email)}&token={Uri.EscapeDataString(message.Token)}";
 
         var body = $"""
             <h2>Reset your password</h2>

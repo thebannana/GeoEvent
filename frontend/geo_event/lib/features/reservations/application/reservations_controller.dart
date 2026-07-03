@@ -1,107 +1,198 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/network/api_client.dart';
-import '../../../shared/events/models/paged_result.dart';
-import '../../../shared/reservations/data/reservations_api.dart';
+import '../../../features/auth/application/auth_controller.dart';
 import '../../../shared/reservations/data/reservations_repository.dart';
 import '../../../shared/reservations/models/reservation.dart';
-
-final reservationsApiProvider = Provider<ReservationsApi>((ref) {
-  return ReservationsApi(ref.watch(authorizedDioProvider));
-});
-
-final reservationsRepositoryProvider = Provider<ReservationsRepository>((ref) {
-  return ReservationsRepository(ref.watch(reservationsApiProvider));
-});
+import '../../../shared/reservations/models/reservation_status.dart';
+import '../../../shared/reservations/providers/reservation_providers.dart';
 
 class ReservationsState {
-  final AsyncValue<PagedResult<Reservation>> paged;
-  final String? activeStatus;
-  final String searchQuery;
+  final List<Reservation> items;
+  final int page;
+  final int pageSize;
+  final bool hasMore;
+  final bool isFetchingMore;
+  final ReservationStatus? statusFilter;
 
   const ReservationsState({
-    this.paged = const AsyncValue.loading(),
-    this.activeStatus,
-    this.searchQuery = '',
+    required this.items,
+    required this.page,
+    required this.pageSize,
+    required this.hasMore,
+    required this.isFetchingMore,
+    this.statusFilter,
   });
 
+  const ReservationsState.initial({this.statusFilter})
+      : items = const [],
+        page = 1,
+        pageSize = 20,
+        hasMore = true,
+        isFetchingMore = false;
+
   ReservationsState copyWith({
-    AsyncValue<PagedResult<Reservation>>? paged,
-    String? Function()? activeStatus,
-    String? searchQuery,
+    List<Reservation>? items,
+    int? page,
+    int? pageSize,
+    bool? hasMore,
+    bool? isFetchingMore,
+    Object? statusFilter = _sentinel,
   }) {
     return ReservationsState(
-      paged: paged ?? this.paged,
-      activeStatus:
-          activeStatus != null ? activeStatus() : this.activeStatus,
-      searchQuery: searchQuery ?? this.searchQuery,
+      items: items ?? this.items,
+      page: page ?? this.page,
+      pageSize: pageSize ?? this.pageSize,
+      hasMore: hasMore ?? this.hasMore,
+      isFetchingMore: isFetchingMore ?? this.isFetchingMore,
+      statusFilter: identical(statusFilter, _sentinel)
+          ? this.statusFilter
+          : statusFilter as ReservationStatus?,
+    );
+  }
+}
+
+const _sentinel = Object();
+
+final reservationsControllerProvider =
+    AsyncNotifierProvider<ReservationsController, ReservationsState>(
+  ReservationsController.new,
+);
+
+class ReservationsController extends AsyncNotifier<ReservationsState> {
+  late final ReservationsRepository _repository;
+
+  @override
+  Future<ReservationsState> build() async {
+    ref.watch(sessionUserIdProvider);
+    _repository = ref.read(reservationsRepositoryProvider);
+    return _loadFirstPage();
+  }
+
+  Future<ReservationsState> _loadFirstPage({
+    ReservationStatus? status,
+  }) async {
+    final result = await _repository.getMyReservations(
+      page: 1,
+      pageSize: 20,
+      status: status,
+    );
+
+    return ReservationsState(
+      items: result.items,
+      page: result.page,
+      pageSize: result.pageSize,
+      hasMore: result.page < result.totalPages,
+      isFetchingMore: false,
+      statusFilter: status,
     );
   }
 
-List<Reservation> get filteredItems {
-  final all = paged.valueOrNull?.items ?? const <Reservation>[];
-  final q = searchQuery.trim().toLowerCase();
-
-  final byStatus = activeStatus == null
-      ? all
-      : all.where((reservation) {
-          return reservation.displayStatus.toLowerCase() ==
-              activeStatus!.toLowerCase();
-        }).toList();
-
-  if (q.isEmpty) return byStatus;
-
-  return byStatus.where((reservation) {
-    return reservation.reservationId.toString().contains(q) ||
-        reservation.eventId.toString().contains(q) ||
-        reservation.displayStatus.toLowerCase().contains(q) ||
-        reservation.currency.toLowerCase().contains(q) ||
-        (reservation.paymentReference?.toLowerCase().contains(q) ?? false) ||
-        (reservation.notes?.toLowerCase().contains(q) ?? false);
-  }).toList();
-}
-}
-
-class ReservationsController extends Notifier<ReservationsState> {
-  ReservationsRepository get _repo => ref.read(reservationsRepositoryProvider);
-
-  @override
-  ReservationsState build() {
-    Future.microtask(load);
-    return const ReservationsState();
+  Future<void> refresh() async {
+    final currentFilter = state.valueOrNull?.statusFilter;
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(
+      () => _loadFirstPage(status: currentFilter),
+    );
   }
 
-Future<void> load() async {
-  state = state.copyWith(paged: const AsyncValue.loading());
-
-  final result = await AsyncValue.guard<PagedResult<Reservation>>(
-    () => _repo.getMyReservations(),
-  );
-
-  state = state.copyWith(paged: result);
-}
-
-  Future<void> setFilter(String? status) async {
-    state = state.copyWith(activeStatus: () => status);
-    await load();
+  Future<void> setStatusFilter(ReservationStatus? status) async {
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(
+      () => _loadFirstPage(status: status),
+    );
   }
 
-  void setSearch(String value) {
-    state = state.copyWith(searchQuery: value);
-  }
+  Future<void> loadMore() async {
+    final current = state.valueOrNull;
+    if (current == null || current.isFetchingMore || !current.hasMore) return;
 
-  Future<bool> cancel(int reservationId) async {
+    state = AsyncData(current.copyWith(isFetchingMore: true));
+
     try {
-      await _repo.cancelReservation(reservationId);
-      await load();
-      return true;
+      final nextPage = current.page + 1;
+      final result = await _repository.getMyReservations(
+        page: nextPage,
+        pageSize: current.pageSize,
+        status: current.statusFilter,
+      );
+
+      state = AsyncData(
+        current.copyWith(
+          items: [...current.items, ...result.items],
+          page: result.page,
+          hasMore: result.page < result.totalPages,
+          isFetchingMore: false,
+        ),
+      );
     } catch (_) {
-      return false;
+      state = AsyncData(current.copyWith(isFetchingMore: false));
+      rethrow;
+    }
+  }
+
+  Future<void> requestRefund(
+    int reservationId, {
+    String? reason,
+  }) async {
+    final current = state.valueOrNull;
+    if (current == null) return;
+
+    final index =
+        current.items.indexWhere((r) => r.reservationId == reservationId);
+    if (index == -1) return;
+
+    final original = current.items[index];
+    if (!original.canRequestRefund) return;
+
+    final optimisticItems = [...current.items];
+    optimisticItems[index] = original.copyWith(
+      refundRequestStatus: 'Pending',
+      refundReason: reason?.trim().isEmpty == true ? null : reason?.trim(),
+      refundRequestedAt: DateTime.now(),
+    );
+
+    state = AsyncData(current.copyWith(items: optimisticItems));
+
+    try {
+      final updated = await _repository.requestRefund(
+        reservationId,
+        reason: reason,
+      );
+
+      final refreshedItems = [...optimisticItems];
+      refreshedItems[index] = updated;
+
+      state = AsyncData(current.copyWith(items: refreshedItems));
+    } catch (_) {
+      state = AsyncData(current);
+      rethrow;
+    }
+  }
+
+  Future<void> cancelReservation(int reservationId) async {
+    final current = state.valueOrNull;
+    if (current == null) return;
+
+    final index =
+        current.items.indexWhere((r) => r.reservationId == reservationId);
+    if (index == -1) return;
+
+    final original = current.items[index];
+    if (!original.canBeCancelled) return;
+
+    final updatedItems = [...current.items];
+    updatedItems[index] = original.copyWith(
+      status: ReservationStatus.cancelled.apiValue,
+      cancelledAt: DateTime.now(),
+    );
+
+    state = AsyncData(current.copyWith(items: updatedItems));
+
+    try {
+      await _repository.cancelReservation(reservationId);
+    } catch (_) {
+      state = AsyncData(current);
+      rethrow;
     }
   }
 }
-
-final reservationsControllerProvider =
-    NotifierProvider<ReservationsController, ReservationsState>(
-  ReservationsController.new,
-);

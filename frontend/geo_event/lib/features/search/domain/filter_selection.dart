@@ -1,3 +1,4 @@
+// No changes — already correct.
 class FilterSelection {
   final int? segmentId;
   final int? genreId;

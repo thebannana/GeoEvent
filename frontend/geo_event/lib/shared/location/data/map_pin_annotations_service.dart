@@ -7,57 +7,58 @@ import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 
 import '../../../../shared/events/models/event_map_pin_data.dart';
 
-class MapPinClickListener extends OnPointAnnotationClickListener {
+class _PinClickListener extends OnPointAnnotationClickListener {
   final void Function(PointAnnotation annotation) onTap;
 
-  MapPinClickListener({required this.onTap});
+  _PinClickListener({required this.onTap});
 
   @override
-  void onPointAnnotationClick(PointAnnotation annotation) {
-    onTap(annotation);
-  }
+  void onPointAnnotationClick(PointAnnotation annotation) => onTap(annotation);
 }
 
 class MapPinAnnotationService {
-  PointAnnotationManager? manager;
-  final Map<String, int> annotationEventIds = {};
+  PointAnnotationManager? _manager;
+  _PinClickListener? _clickListener;
+  final Map<String, int> _annotationEventIds = {};
 
   Future<void> prepare({
     required MapboxMap mapboxMap,
     required void Function(int eventId) onEventTap,
   }) async {
-    if (manager != null) return;
+    if (_manager != null) return;
 
-    manager = await mapboxMap.annotations.createPointAnnotationManager();
-    await manager!.setIconAllowOverlap(true);
-    await manager!.setTextAllowOverlap(true);
-    await manager!.setIconIgnorePlacement(true);
-    await manager!.setTextIgnorePlacement(true);
+    _manager = await mapboxMap.annotations.createPointAnnotationManager();
+    await _manager!.setIconAllowOverlap(true);
+    await _manager!.setTextAllowOverlap(true);
+    await _manager!.setIconIgnorePlacement(true);
+    await _manager!.setTextIgnorePlacement(true);
 
-    manager!.addOnPointAnnotationClickListener(
-      MapPinClickListener(
-        onTap: (annotation) {
-          final eventId = annotationEventIds[annotation.id];
-          if (eventId != null) {
-            onEventTap(eventId);
-          }
-        },
-      ),
+    _clickListener = _PinClickListener(
+      onTap: (annotation) {
+        final eventId = _annotationEventIds[annotation.id];
+        if (eventId != null) {
+          onEventTap(eventId);
+        }
+      },
     );
+
+    _manager!.addOnPointAnnotationClickListener(_clickListener!);
   }
 
   Future<void> clear() async {
-    await manager?.deleteAll();
-    annotationEventIds.clear();
+    await _manager?.deleteAll();
+    _annotationEventIds.clear();
   }
 
   Future<void> syncPins({
     required List<EventMapPinData> events,
-    required Future<Uint8List?> Function(String eventId) capturePinBytes,
+    required Future<Uint8List?> Function(int eventId) capturePinBytes,
   }) async {
-    if (manager == null || events.isEmpty) return;
+    if (_manager == null) return;
 
     await clear();
+
+    if (events.isEmpty) return;
 
     final eventIdsForOptions = <int>[];
     final options = <PointAnnotationOptions>[];
@@ -65,9 +66,6 @@ class MapPinAnnotationService {
     for (final event in events) {
       final bytes = await capturePinBytes(event.id);
       if (bytes == null) continue;
-
-      final parsedEventId = int.tryParse(event.id);
-      if (parsedEventId == null) continue;
 
       options.add(
         PointAnnotationOptions(
@@ -77,23 +75,17 @@ class MapPinAnnotationService {
           iconOffset: [0.0, -6.0],
         ),
       );
-
-      eventIdsForOptions.add(parsedEventId);
+      eventIdsForOptions.add(event.id);
     }
 
     if (options.isEmpty) return;
 
-    final annotations = await manager!.createMulti(options);
+    final annotations = await _manager!.createMulti(options);
     for (var i = 0; i < annotations.length; i++) {
       final annotationId = annotations[i]?.id;
       if (annotationId == null) continue;
-      annotationEventIds[annotationId] = eventIdsForOptions[i];
+      _annotationEventIds[annotationId] = eventIdsForOptions[i];
     }
-  }
-
-  Future<void> dispose() async {
-    await clear();
-    manager = null;
   }
 
   Future<void> precacheMarkerImages(
@@ -108,7 +100,7 @@ class MapPinAnnotationService {
         await precacheImage(
           NetworkImage(url),
           context,
-          onError: (_, __) {},
+          onError: (_, _) {},
         );
       } catch (_) {}
     }
@@ -121,10 +113,10 @@ class MapPinAnnotationService {
     for (var i = 0; i < 30; i++) {
       await Future<void>.delayed(const Duration(milliseconds: 32));
 
-      final markerContext = key.currentContext;
-      if (markerContext == null) continue;
+      final ctx = key.currentContext;
+      if (ctx == null) continue;
 
-      final boundary = markerContext.findRenderObject() as RenderRepaintBoundary?;
+      final boundary = ctx.findRenderObject() as RenderRepaintBoundary?;
       if (boundary == null || boundary.debugNeedsPaint) continue;
 
       try {
@@ -140,5 +132,11 @@ class MapPinAnnotationService {
     }
 
     return null;
+  }
+
+  Future<void> dispose() async {
+    await clear();
+    _clickListener = null;
+    _manager = null;
   }
 }

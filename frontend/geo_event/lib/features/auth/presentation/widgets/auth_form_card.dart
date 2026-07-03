@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/theme/app_theme_metrics.dart';
+
 class AuthFormCard extends StatelessWidget {
   final Widget child;
   final EdgeInsetsGeometry padding;
@@ -9,8 +11,8 @@ class AuthFormCard extends StatelessWidget {
   const AuthFormCard({
     super.key,
     required this.child,
-    this.padding = const EdgeInsets.all(20),
-    this.borderRadius = 28,
+    this.padding = const EdgeInsets.all(AppThemeMetrics.spaceLg),
+    this.borderRadius = AppThemeMetrics.radiusXl + 2,
     this.constraints = const BoxConstraints(maxWidth: 560),
   });
 

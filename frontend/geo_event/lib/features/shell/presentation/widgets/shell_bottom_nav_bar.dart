@@ -5,6 +5,11 @@ import 'shell_create_nav_item.dart';
 import 'shell_nav_item.dart';
 
 class ShellBottomNavBar extends StatelessWidget {
+  static const String _chatLabel = 'Chat';
+  static const String _reservationsLabel = 'Bookings';
+  static const String _inboxLabel = 'Inbox';
+  static const String _profileLabel = 'Profile';
+
   final ShellTab? selectedTab;
   final ValueChanged<ShellTab> onTap;
 
@@ -44,13 +49,13 @@ class ShellBottomNavBar extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               ShellNavItem(
-                label: 'Chat',
+                label: _chatLabel,
                 icon: Icons.chat_bubble_outline_rounded,
                 selected: selectedTab == ShellTab.chat,
                 onTap: () => onTap(ShellTab.chat),
               ),
               ShellNavItem(
-                label: 'Bookings',
+                label: _reservationsLabel,
                 icon: Icons.confirmation_num_outlined,
                 selected: selectedTab == ShellTab.reservations,
                 onTap: () => onTap(ShellTab.reservations),
@@ -60,13 +65,13 @@ class ShellBottomNavBar extends StatelessWidget {
                 onTap: () => onTap(ShellTab.createEvent),
               ),
               ShellNavItem(
-                label: 'Inbox',
+                label: _inboxLabel,
                 icon: Icons.inbox_outlined,
                 selected: selectedTab == ShellTab.inbox,
                 onTap: () => onTap(ShellTab.inbox),
               ),
               ShellNavItem(
-                label: 'Profile',
+                label: _profileLabel,
                 icon: Icons.person_outline_rounded,
                 selected: selectedTab == ShellTab.profile,
                 onTap: () => onTap(ShellTab.profile),

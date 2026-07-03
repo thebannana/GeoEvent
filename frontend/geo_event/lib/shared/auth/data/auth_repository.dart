@@ -1,31 +1,33 @@
 import '../models/auth_response.dart';
+import '../models/auth_state.dart';
 import '../models/login_request.dart';
 import '../models/register_request.dart';
+import '../models/reset_password_request.dart';
 import 'auth_api.dart';
 import 'auth_local_storage.dart';
 
 class AuthRepository {
-  final AuthApi api;
-  final AuthLocalStorage localStorage;
-
   AuthRepository({
     required this.api,
     required this.localStorage,
   });
 
+  final AuthApi api;
+  final AuthLocalStorage localStorage;
+
+  Future<AuthState> restoreSession() {
+    return localStorage.readSession();
+  }
+
   Future<AuthResponse> login(LoginRequest request) async {
     final response = await api.login(request);
-    if (response.hasTokens) {
-      await localStorage.saveSession(response);
-    }
+    await _persistIfAuthenticated(response);
     return response;
   }
 
-  Future<AuthResponse?> register(RegisterRequest request) async {
+  Future<AuthResponse> register(RegisterRequest request) async {
     final response = await api.register(request);
-    if (response != null && response.hasTokens) {
-      await localStorage.saveSession(response);
-    }
+    await _persistIfAuthenticated(response);
     return response;
   }
 
@@ -33,11 +35,13 @@ class AuthRepository {
     return api.forgotPassword(email);
   }
 
+  Future<void> resetPassword(ResetPasswordRequest request) {
+    return api.resetPassword(request);
+  }
+
   Future<AuthResponse> refresh(String refreshToken) async {
     final response = await api.refresh(refreshToken);
-    if (response.hasTokens) {
-      await localStorage.saveSession(response);
-    }
+    await _persistIfAuthenticated(response);
     return response;
   }
 
@@ -51,5 +55,11 @@ class AuthRepository {
 
   Future<void> clearSession() {
     return localStorage.clearSession();
+  }
+
+  Future<void> _persistIfAuthenticated(AuthResponse response) async {
+    if (response.hasTokens) {
+      await localStorage.saveSession(response);
+    }
   }
 }

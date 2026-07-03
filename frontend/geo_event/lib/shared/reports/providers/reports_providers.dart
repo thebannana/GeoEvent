@@ -5,11 +5,9 @@ import '../data/reports_api.dart';
 import '../data/reports_repository.dart';
 
 final reportsApiProvider = Provider<ReportsApi>((ref) {
-  final dio = ref.watch(authorizedDioProvider);
-  return ReportsApi(dio);
+  return ReportsApi(ref.watch(authorizedDioProvider));
 });
 
 final reportsRepositoryProvider = Provider<ReportsRepository>((ref) {
-  final api = ref.watch(reportsApiProvider);
-  return ReportsRepository(api);
+  return ReportsRepository(ref.watch(reportsApiProvider));
 });

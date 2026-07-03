@@ -271,6 +271,7 @@ public class EventRepository : IEventRepository
             cosLatitude = 0.000001;
 
         var lonDelta = (decimal)(radiusKm / 111.0 / Math.Abs(cosLatitude));
+        var nowUtc = DateTime.UtcNow;
 
         IQueryable<Event> query = _context.Events
             .AsNoTracking()
@@ -278,7 +279,9 @@ public class EventRepository : IEventRepository
             .Include(e => e.Segment)
             .Include(e => e.Genre)
             .Include(e => e.SubGenre)
-            .Where(e => e.Status == EventStatus.Confirmed &&
+            .Where(e =>
+                e.Status == EventStatus.Confirmed &&
+                e.EndDateTime > nowUtc &&
                 e.Latitude >= latitude - latDelta &&
                 e.Latitude <= latitude + latDelta &&
                 e.Longitude >= longitude - lonDelta &&
@@ -301,7 +304,7 @@ public class EventRepository : IEventRepository
 
         if (dto.TodayOnly)
         {
-            var today = DateTime.UtcNow.Date;
+            var today = nowUtc.Date;
             var tomorrow = today.AddDays(1);
 
             query = query.Where(e =>

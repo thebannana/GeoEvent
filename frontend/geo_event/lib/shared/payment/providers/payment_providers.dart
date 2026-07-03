@@ -8,11 +8,9 @@ import '../models/payment_summary.dart';
 
 final paymentControllerProvider = StateNotifierProvider.autoDispose
     .family<PaymentController, PaymentState, PaymentSummary>((ref, summary) {
-  final ticketsRepository = ref.watch(ticketsRepositoryProvider);
-
   return PaymentController(
     ref: ref,
-    ticketsRepository: ticketsRepository,
+    ticketsRepository: ref.watch(ticketsRepositoryProvider),
     initialState: PaymentState(
       summary: summary,
       selectedMethod: PaymentMethod.paypal,

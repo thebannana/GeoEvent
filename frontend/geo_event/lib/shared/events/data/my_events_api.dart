@@ -1,15 +1,16 @@
 import 'package:dio/dio.dart';
 
+import '../../../core/network/api_endpoints.dart';
 import '../models/my_event_response_dto.dart';
 
 class MyEventsApi {
-  final Dio _dio;
+  const MyEventsApi(this.dio);
 
-  const MyEventsApi(this._dio);
+  final Dio dio;
 
   Future<List<MyEventResponseDto>> getMyEvents(int organizerId) async {
-    final response = await _dio.get<Map<String, dynamic>>(
-      '/api/events/mine',
+    final response = await dio.get(
+      ApiEndpoints.myEvents,
       queryParameters: {
         'organizerId': organizerId,
         'page': 1,
@@ -19,24 +20,25 @@ class MyEventsApi {
       },
     );
 
-    final data = response.data ?? const <String, dynamic>{};
-    final rawItems = data['items'] ?? data['Items'] ?? const <dynamic>[];
+    final data = response.data;
+    if (data is! Map) {
+      return const [];
+    }
+
+    final map = Map<String, dynamic>.from(data);
+    final rawItems = map['items'] ?? map['Items'] ?? const [];
 
     if (rawItems is! List) {
-      return const <MyEventResponseDto>[];
+      return const [];
     }
 
     return rawItems
         .whereType<Map>()
-        .map(
-          (e) => MyEventResponseDto.fromJson(
-            Map<String, dynamic>.from(e),
-          ),
-        )
+        .map((e) => MyEventResponseDto.fromJson(Map<String, dynamic>.from(e)))
         .toList();
   }
 
   Future<void> deleteEvent(int eventId) async {
-  await _dio.delete('/api/events/$eventId');
-}
+    await dio.delete(ApiEndpoints.eventById(eventId));
+  }
 }

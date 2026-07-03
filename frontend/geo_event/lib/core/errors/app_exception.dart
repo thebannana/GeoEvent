@@ -1,5 +1,7 @@
 import 'package:dio/dio.dart';
 
+import '../constants/app_strings.dart';
+
 enum AppExceptionType {
   network,
   timeout,
@@ -30,205 +32,63 @@ class AppException implements Exception {
     this.stackTrace,
   });
 
-  factory AppException.network({
-    String message = 'No internet connection.',
-    Object? error,
-    StackTrace? stackTrace,
-  }) {
-    return AppException(
-      type: AppExceptionType.network,
-      message: message,
-      error: error,
-      stackTrace: stackTrace,
-    );
-  }
+  factory AppException.from(Object error, {StackTrace? stackTrace}) {
+    if (error is AppException) {
+      return error;
+    }
 
-  factory AppException.timeout({
-    String message = 'The request timed out.',
-    Object? error,
-    StackTrace? stackTrace,
-  }) {
-    return AppException(
-      type: AppExceptionType.timeout,
-      message: message,
-      error: error,
-      stackTrace: stackTrace,
-    );
-  }
+    if (error is DioException) {
+      return _fromDioException(error, stackTrace: stackTrace);
+    }
 
-  factory AppException.unauthorized({
-    String message = 'You need to sign in again.',
-    int? statusCode,
-    Object? error,
-    StackTrace? stackTrace,
-  }) {
-    return AppException(
-      type: AppExceptionType.unauthorized,
-      message: message,
-      statusCode: statusCode,
-      error: error,
-      stackTrace: stackTrace,
-    );
-  }
+    if (error is FormatException) {
+      return AppException(
+        type: AppExceptionType.parsing,
+        message: error.message,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
 
-  factory AppException.forbidden({
-    String message = 'You do not have permission to perform this action.',
-    int? statusCode,
-    Object? error,
-    StackTrace? stackTrace,
-  }) {
-    return AppException(
-      type: AppExceptionType.forbidden,
-      message: message,
-      statusCode: statusCode,
-      error: error,
-      stackTrace: stackTrace,
-    );
-  }
-
-  factory AppException.notFound({
-    String message = 'The requested resource was not found.',
-    int? statusCode,
-    Object? error,
-    StackTrace? stackTrace,
-  }) {
-    return AppException(
-      type: AppExceptionType.notFound,
-      message: message,
-      statusCode: statusCode,
-      error: error,
-      stackTrace: stackTrace,
-    );
-  }
-
-  factory AppException.validation({
-    String message = 'Some fields are invalid.',
-    int? statusCode,
-    Object? error,
-    StackTrace? stackTrace,
-  }) {
-    return AppException(
-      type: AppExceptionType.validation,
-      message: message,
-      statusCode: statusCode,
-      error: error,
-      stackTrace: stackTrace,
-    );
-  }
-
-  factory AppException.conflict({
-    String message = 'This action conflicts with existing data.',
-    int? statusCode,
-    Object? error,
-    StackTrace? stackTrace,
-  }) {
-    return AppException(
-      type: AppExceptionType.conflict,
-      message: message,
-      statusCode: statusCode,
-      error: error,
-      stackTrace: stackTrace,
-    );
-  }
-
-  factory AppException.server({
-    String message = 'The server encountered an error.',
-    int? statusCode,
-    Object? error,
-    StackTrace? stackTrace,
-  }) {
-    return AppException(
-      type: AppExceptionType.server,
-      message: message,
-      statusCode: statusCode,
-      error: error,
-      stackTrace: stackTrace,
-    );
-  }
-
-  factory AppException.cancelled({
-    String message = 'The request was cancelled.',
-    Object? error,
-    StackTrace? stackTrace,
-  }) {
-    return AppException(
-      type: AppExceptionType.cancelled,
-      message: message,
-      error: error,
-      stackTrace: stackTrace,
-    );
-  }
-
-  factory AppException.parsing({
-    String message = 'Failed to process server response.',
-    Object? error,
-    StackTrace? stackTrace,
-  }) {
-    return AppException(
-      type: AppExceptionType.parsing,
-      message: message,
-      error: error,
-      stackTrace: stackTrace,
-    );
-  }
-
-  factory AppException.cache({
-    String message = 'Failed to read local data.',
-    Object? error,
-    StackTrace? stackTrace,
-  }) {
-    return AppException(
-      type: AppExceptionType.cache,
-      message: message,
-      error: error,
-      stackTrace: stackTrace,
-    );
-  }
-
-  factory AppException.unknown({
-    String message = 'Something went wrong.',
-    int? statusCode,
-    Object? error,
-    StackTrace? stackTrace,
-  }) {
     return AppException(
       type: AppExceptionType.unknown,
-      message: message,
-      statusCode: statusCode,
+      message: _normalizeMessage(error.toString(), AppStrings.genericError),
       error: error,
       stackTrace: stackTrace,
     );
   }
 
-  factory AppException.fromDioException(
+  static AppException _fromDioException(
     DioException exception, {
     StackTrace? stackTrace,
   }) {
     final statusCode = exception.response?.statusCode;
-    final responseData = exception.response?.data;
-    final extractedMessage = _extractMessageFromResponse(responseData);
+    final extractedMessage = _extractMessageFromResponse(exception.response?.data);
 
     switch (exception.type) {
       case DioExceptionType.connectionTimeout:
       case DioExceptionType.sendTimeout:
       case DioExceptionType.receiveTimeout:
-        return AppException.timeout(
-          message: extractedMessage ?? 'The request timed out.',
+        return AppException(
+          type: AppExceptionType.timeout,
+          message: extractedMessage ?? AppStrings.timeoutError,
           error: exception,
           stackTrace: stackTrace,
         );
 
       case DioExceptionType.badCertificate:
       case DioExceptionType.connectionError:
-        return AppException.network(
-          message: extractedMessage ?? 'Unable to connect to the server.',
+        return AppException(
+          type: AppExceptionType.network,
+          message: extractedMessage ?? AppStrings.networkError,
           error: exception,
           stackTrace: stackTrace,
         );
 
       case DioExceptionType.cancel:
-        return AppException.cancelled(
-          message: extractedMessage ?? 'The request was cancelled.',
+        return AppException(
+          type: AppExceptionType.cancelled,
+          message: extractedMessage ?? AppStrings.cancelledError,
           error: exception,
           stackTrace: stackTrace,
         );
@@ -242,42 +102,13 @@ class AppException implements Exception {
         );
 
       case DioExceptionType.unknown:
-        return AppException.unknown(
-          message: extractedMessage ?? 'An unexpected network error occurred.',
+        return AppException(
+          type: AppExceptionType.unknown,
+          message: extractedMessage ?? AppStrings.genericError,
           error: exception,
           stackTrace: stackTrace,
         );
     }
-  }
-
-  static AppException from(
-    Object error, {
-    StackTrace? stackTrace,
-  }) {
-    if (error is AppException) {
-      return error;
-    }
-
-    if (error is DioException) {
-      return AppException.fromDioException(
-        error,
-        stackTrace: stackTrace,
-      );
-    }
-
-    if (error is FormatException) {
-      return AppException.parsing(
-        message: error.message,
-        error: error,
-        stackTrace: stackTrace,
-      );
-    }
-
-    return AppException.unknown(
-      message: error.toString(),
-      error: error,
-      stackTrace: stackTrace,
-    );
   }
 
   static AppException _fromStatusCode(
@@ -288,43 +119,42 @@ class AppException implements Exception {
   }) {
     switch (statusCode) {
       case 400:
-        return AppException.validation(
-          message: message ?? 'Invalid request.',
+      case 422:
+        return AppException(
+          type: AppExceptionType.validation,
+          message: message ?? AppStrings.validationError,
           statusCode: statusCode,
           error: error,
           stackTrace: stackTrace,
         );
       case 401:
-        return AppException.unauthorized(
-          message: message ?? 'You need to sign in again.',
+        return AppException(
+          type: AppExceptionType.unauthorized,
+          message: message ?? AppStrings.unauthorized,
           statusCode: statusCode,
           error: error,
           stackTrace: stackTrace,
         );
       case 403:
-        return AppException.forbidden(
-          message: message ?? 'You do not have permission to perform this action.',
+        return AppException(
+          type: AppExceptionType.forbidden,
+          message: message ?? AppStrings.forbidden,
           statusCode: statusCode,
           error: error,
           stackTrace: stackTrace,
         );
       case 404:
-        return AppException.notFound(
-          message: message ?? 'The requested resource was not found.',
+        return AppException(
+          type: AppExceptionType.notFound,
+          message: message ?? AppStrings.notFoundError,
           statusCode: statusCode,
           error: error,
           stackTrace: stackTrace,
         );
       case 409:
-        return AppException.conflict(
-          message: message ?? 'This action conflicts with existing data.',
-          statusCode: statusCode,
-          error: error,
-          stackTrace: stackTrace,
-        );
-      case 422:
-        return AppException.validation(
-          message: message ?? 'Some fields are invalid.',
+        return AppException(
+          type: AppExceptionType.conflict,
+          message: message ?? AppStrings.conflictError,
           statusCode: statusCode,
           error: error,
           stackTrace: stackTrace,
@@ -333,15 +163,17 @@ class AppException implements Exception {
       case 502:
       case 503:
       case 504:
-        return AppException.server(
-          message: message ?? 'The server encountered an error.',
+        return AppException(
+          type: AppExceptionType.server,
+          message: message ?? AppStrings.serverError,
           statusCode: statusCode,
           error: error,
           stackTrace: stackTrace,
         );
       default:
-        return AppException.unknown(
-          message: message ?? 'Something went wrong.',
+        return AppException(
+          type: AppExceptionType.unknown,
+          message: message ?? AppStrings.genericError,
           statusCode: statusCode,
           error: error,
           stackTrace: stackTrace,
@@ -371,16 +203,14 @@ class AppException implements Exception {
       }
 
       final errors = data['errors'];
-      if (errors is Map<String, dynamic>) {
+      if (errors is Map) {
         for (final value in errors.values) {
           if (value is List && value.isNotEmpty) {
             final first = value.first;
             if (first is String && first.trim().isNotEmpty) {
               return first.trim();
             }
-          }
-
-          if (value is String && value.trim().isNotEmpty) {
+          } else if (value is String && value.trim().isNotEmpty) {
             return value.trim();
           }
         }
@@ -388,6 +218,20 @@ class AppException implements Exception {
     }
 
     return null;
+  }
+
+  static String _normalizeMessage(String raw, String fallback) {
+    final text = raw.trim();
+
+    if (text.isEmpty || text == 'Exception') {
+      return fallback;
+    }
+
+    if (text.startsWith('Exception: ')) {
+      return text.replaceFirst('Exception: ', '').trim();
+    }
+
+    return text;
   }
 
   @override

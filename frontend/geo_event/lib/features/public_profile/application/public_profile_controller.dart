@@ -16,16 +16,14 @@ class PublicProfileController
 
   @override
   Future<PublicProfileBundle> build(int userId) {
-    final repository = ref.read(publicProfileRepositoryProvider);
-    return repository.getProfile(userId);
+    return ref.read(publicProfileRepositoryProvider).getProfile(userId);
   }
 
   Future<void> reload() async {
     state = const AsyncLoading();
-    state = await AsyncValue.guard(() async {
-      final repository = ref.read(publicProfileRepositoryProvider);
-      return repository.getProfile(arg);
-    });
+    state = await AsyncValue.guard(
+      () => ref.read(publicProfileRepositoryProvider).getProfile(arg),
+    );
   }
 
   Future<void> submitReview({
@@ -34,40 +32,58 @@ class PublicProfileController
   }) async {
     if (_isSubmittingRating) return;
 
+    final current = state.valueOrNull;
+    if (current == null) return;
+
     _isSubmittingRating = true;
-    ref.notifyListeners();
+    state = AsyncData(current);
 
     try {
-      final repository = ref.read(publicProfileRepositoryProvider);
-      await repository.rateUser(
+      final repo = ref.read(publicProfileRepositoryProvider);
+      await repo.rateUser(
         userId: arg,
         rating: rating,
         comment: comment,
       );
 
-      final refreshed = await repository.getProfile(arg);
+      final refreshed = await repo.getProfile(arg);
       state = AsyncData(refreshed);
+    } catch (e, st) {
+      state = AsyncData(current);
+      Error.throwWithStackTrace(e, st);
     } finally {
       _isSubmittingRating = false;
-      ref.notifyListeners();
+      final latest = state.valueOrNull;
+      if (latest != null) {
+        state = AsyncData(latest);
+      }
     }
   }
 
   Future<void> deleteMyReview() async {
     if (_isSubmittingRating) return;
 
+    final current = state.valueOrNull;
+    if (current == null) return;
+
     _isSubmittingRating = true;
-    ref.notifyListeners();
+    state = AsyncData(current);
 
     try {
-      final repository = ref.read(publicProfileRepositoryProvider);
-      await repository.deleteMyReview(userId: arg);
+      final repo = ref.read(publicProfileRepositoryProvider);
+      await repo.deleteMyReview(userId: arg);
 
-      final refreshed = await repository.getProfile(arg);
+      final refreshed = await repo.getProfile(arg);
       state = AsyncData(refreshed);
+    } catch (e, st) {
+      state = AsyncData(current);
+      Error.throwWithStackTrace(e, st);
     } finally {
       _isSubmittingRating = false;
-      ref.notifyListeners();
+      final latest = state.valueOrNull;
+      if (latest != null) {
+        state = AsyncData(latest);
+      }
     }
   }
 }

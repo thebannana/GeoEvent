@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/widgets/app_spinner.dart';
-import '../../../../core/widgets/app_surface_card.dart';
+import '../../../../core/widgets/feedback/app_spinner.dart';
+import '../../../../core/widgets/surfaces/app_surface_card.dart';
 
 class PublicProfileRatingCard extends StatelessWidget {
   final double averageRating;
@@ -25,7 +25,9 @@ class PublicProfileRatingCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final muted = Theme.of(context).textTheme.bodySmall?.color;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final muted = theme.textTheme.bodySmall?.color;
     final hasReview = myReviewComment?.trim().isNotEmpty == true;
 
     return Padding(
@@ -34,10 +36,9 @@ class PublicProfileRatingCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'Profile rating',
-              style: TextStyle(
-                fontSize: 16,
+              style: theme.textTheme.titleMedium?.copyWith(
                 fontWeight: FontWeight.w800,
               ),
             ),
@@ -69,12 +70,15 @@ class PublicProfileRatingCard extends StatelessWidget {
                 final active = myRating != null && starValue <= myRating!;
 
                 return IconButton(
-                  onPressed: isSubmitting ? null : () => onRatingSelected(starValue),
+                  onPressed:
+                      isSubmitting ? null : () => onRatingSelected(starValue),
                   visualDensity: VisualDensity.compact,
                   tooltip: 'Rate $starValue out of 5',
                   icon: Icon(
                     active ? Icons.star_rounded : Icons.star_border_rounded,
-                    color: active ? const Color(0xFFFFC857) : Colors.grey,
+                    color: active
+                        ? colorScheme.tertiary
+                        : colorScheme.onSurfaceVariant,
                     size: 30,
                   ),
                 );
@@ -85,8 +89,7 @@ class PublicProfileRatingCard extends StatelessWidget {
               children: [
                 Text(
                   ratingsCount == 0 ? '—' : averageRating.toStringAsFixed(1),
-                  style: const TextStyle(
-                    fontSize: 22,
+                  style: theme.textTheme.headlineSmall?.copyWith(
                     fontWeight: FontWeight.w800,
                   ),
                 ),

@@ -17,46 +17,41 @@ class AuthLocalStorage {
   static const _userKey = 'auth.user';
 
   Future<void> saveSession(AuthResponse response) async {
-    await _storage.write(key: _accessTokenKey, value: response.accessToken);
-    await _storage.write(key: _refreshTokenKey, value: response.refreshToken);
-    await _storage.write(
-      key: _expiresAtKey,
-      value: response.expiresAt?.toUtc().toIso8601String(),
-    );
-
-    if (response.user != null) {
-      await _storage.write(
-        key: _userKey,
-        value: jsonEncode(response.user!.toJson()),
-      );
-    } else {
-      await _storage.delete(key: _userKey);
-    }
+    await Future.wait([
+      _storage.write(key: _accessTokenKey, value: response.accessToken),
+      _storage.write(key: _refreshTokenKey, value: response.refreshToken),
+      _storage.write(
+        key: _expiresAtKey,
+        value: response.expiresAt?.toUtc().toIso8601String(),
+      ),
+      if (response.user != null)
+        _storage.write(
+          key: _userKey,
+          value: jsonEncode(response.user!.toJson()),
+        )
+      else
+        _storage.delete(key: _userKey),
+    ]);
   }
 
   Future<AuthState> readSession() async {
-    final accessToken = await _storage.read(key: _accessTokenKey);
-    final refreshToken = await _storage.read(key: _refreshTokenKey);
-    final expiresAtRaw = await _storage.read(key: _expiresAtKey);
-    final userRaw = await _storage.read(key: _userKey);
+    final values = await Future.wait([
+      _storage.read(key: _accessTokenKey),
+      _storage.read(key: _refreshTokenKey),
+      _storage.read(key: _expiresAtKey),
+      _storage.read(key: _userKey),
+    ]);
 
-    AuthUser? user;
-    if (userRaw != null && userRaw.isNotEmpty) {
-      final decoded = jsonDecode(userRaw);
-      if (decoded is Map<String, dynamic>) {
-        user = AuthUser.fromJson(decoded);
-      } else if (decoded is Map) {
-        user = AuthUser.fromJson(Map<String, dynamic>.from(decoded));
-      }
-    }
+    final accessToken = values[0];
+    final refreshToken = values[1];
+    final expiresAtRaw = values[2];
+    final userRaw = values[3];
 
     return AuthState(
-      accessToken: accessToken,
-      refreshToken: refreshToken,
-      expiresAt: expiresAtRaw != null && expiresAtRaw.isNotEmpty
-          ? DateTime.tryParse(expiresAtRaw)
-          : null,
-      user: user,
+      accessToken: _normalize(accessToken),
+      refreshToken: _normalize(refreshToken),
+      expiresAt: _parseDate(expiresAtRaw),
+      user: _parseUser(userRaw),
       isLoading: false,
       isInitialized: true,
     );
@@ -69,5 +64,41 @@ class AuthLocalStorage {
       _storage.delete(key: _expiresAtKey),
       _storage.delete(key: _userKey),
     ]);
+  }
+
+  String? _normalize(String? value) {
+    final trimmed = value?.trim();
+    return (trimmed == null || trimmed.isEmpty) ? null : trimmed;
+  }
+
+  DateTime? _parseDate(String? raw) {
+    final normalized = _normalize(raw);
+    if (normalized == null) {
+      return null;
+    }
+    return DateTime.tryParse(normalized);
+  }
+
+  AuthUser? _parseUser(String? raw) {
+    final normalized = _normalize(raw);
+    if (normalized == null) {
+      return null;
+    }
+
+    try {
+      final decoded = jsonDecode(normalized);
+
+      if (decoded is Map<String, dynamic>) {
+        return AuthUser.fromJson(decoded);
+      }
+
+      if (decoded is Map) {
+        return AuthUser.fromJson(Map<String, dynamic>.from(decoded));
+      }
+
+      return null;
+    } catch (_) {
+      return null;
+    }
   }
 }

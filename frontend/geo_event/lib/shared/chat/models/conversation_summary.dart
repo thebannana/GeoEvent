@@ -6,6 +6,8 @@ class ConversationSummary {
   final String title;
   final String? imageUrl;
   final int? otherUserId;
+  final String? otherUserDisplayName;
+  final String? otherUserUsername;
   final int? eventId;
   final String lastMessageContent;
   final DateTime lastMessageSentAt;
@@ -20,6 +22,8 @@ class ConversationSummary {
     required this.title,
     required this.imageUrl,
     required this.otherUserId,
+    required this.otherUserDisplayName,
+    required this.otherUserUsername,
     required this.eventId,
     required this.lastMessageContent,
     required this.lastMessageSentAt,
@@ -30,49 +34,61 @@ class ConversationSummary {
   });
 
   factory ConversationSummary.fromJson(Map<String, dynamic> json) {
-  DateTime parseDate(dynamic value) {
-    if (value == null) return DateTime.fromMillisecondsSinceEpoch(0);
-    final parsed = DateTime.tryParse(value.toString()) ??
-        DateTime.fromMillisecondsSinceEpoch(0);
-    return parsed.toLocal();
+    DateTime parseDate(dynamic value) {
+      if (value == null) return DateTime.fromMillisecondsSinceEpoch(0);
+      final parsed =
+          DateTime.tryParse(value.toString()) ??
+          DateTime.fromMillisecondsSinceEpoch(0);
+      return parsed.toLocal();
+    }
+
+    DateTime? parseNullableDate(dynamic value) {
+      if (value == null) return null;
+      return DateTime.tryParse(value.toString())?.toLocal();
+    }
+
+    String? parseNullableString(dynamic value) {
+      final text = value?.toString().trim();
+      if (text == null || text.isEmpty) return null;
+      return text;
+    }
+
+    final otherUserDisplayName = parseNullableString(
+      json['otherUserDisplayName'],
+    );
+    final otherUserUsername = parseNullableString(
+      json['otherUserUsername'],
+    );
+
+    final title = parseNullableString(json['title']) ??
+        otherUserDisplayName ??
+        otherUserUsername ??
+        '';
+
+    return ConversationSummary(
+      threadId: (json['threadId'] as num?)?.toInt() ?? 0,
+      type: ChatThreadTypeX.fromJson(
+        json['threadType']?.toString() ?? json['type']?.toString(),
+      ),
+      title: title,
+      imageUrl: parseNullableString(
+        json['imageUrl'] ?? json['otherUserAvatarUrl'],
+      ),
+      otherUserId: (json['otherUserId'] as num?)?.toInt(),
+      otherUserDisplayName: otherUserDisplayName,
+      otherUserUsername: otherUserUsername,
+      eventId: (json['eventId'] as num?)?.toInt(),
+      lastMessageContent: json['lastMessageContent']?.toString() ?? '',
+      lastMessageSentAt: parseDate(json['lastMessageSentAt']),
+      unreadCount: (json['unreadCount'] as num?)?.toInt() ?? 0,
+      isLastMessageFromMe: json['isLastMessageFromMe'] as bool? ?? false,
+      isOnline:
+          (json['isOnline'] ?? json['otherUserIsOnline']) as bool? ?? false,
+      lastActiveAt: parseNullableDate(
+        json['lastActiveAt'] ?? json['otherUserLastActiveAt'],
+      ),
+    );
   }
-
-  DateTime? parseNullableDate(dynamic value) {
-    if (value == null) return null;
-    return DateTime.tryParse(value.toString())?.toLocal();
-  }
-
-  final resolvedTitle =
-      (json['title'] ??
-              json['otherUserDisplayName'] ??
-              json['otherUserUsername'] ??
-              '') as String;
-
-  final resolvedImageUrl =
-      (json['imageUrl'] ?? json['otherUserAvatarUrl']) as String?;
-
-  final resolvedIsOnline =
-      (json['isOnline'] ?? json['otherUserIsOnline']) as bool? ?? false;
-
-  final resolvedLastActiveAt = parseNullableDate(
-    json['lastActiveAt'] ?? json['otherUserLastActiveAt'],
-  );
-
-  return ConversationSummary(
-    threadId: (json['threadId'] as num).toInt(),
-    type: ChatThreadTypeX.fromJson(json['type'] as String?),
-    title: resolvedTitle,
-    imageUrl: resolvedImageUrl,
-    otherUserId: (json['otherUserId'] as num?)?.toInt(),
-    eventId: (json['eventId'] as num?)?.toInt(),
-    lastMessageContent: json['lastMessageContent'] as String? ?? '',
-    lastMessageSentAt: parseDate(json['lastMessageSentAt']),
-    unreadCount: (json['unreadCount'] as num?)?.toInt() ?? 0,
-    isLastMessageFromMe: json['isLastMessageFromMe'] as bool? ?? false,
-    isOnline: resolvedIsOnline,
-    lastActiveAt: resolvedLastActiveAt,
-  );
-}
 
   ConversationSummary copyWith({
     int? threadId,
@@ -82,6 +98,10 @@ class ConversationSummary {
     bool clearImageUrl = false,
     int? otherUserId,
     bool clearOtherUserId = false,
+    String? otherUserDisplayName,
+    bool clearOtherUserDisplayName = false,
+    String? otherUserUsername,
+    bool clearOtherUserUsername = false,
     int? eventId,
     bool clearEventId = false,
     String? lastMessageContent,
@@ -98,6 +118,12 @@ class ConversationSummary {
       title: title ?? this.title,
       imageUrl: clearImageUrl ? null : imageUrl ?? this.imageUrl,
       otherUserId: clearOtherUserId ? null : otherUserId ?? this.otherUserId,
+      otherUserDisplayName: clearOtherUserDisplayName
+          ? null
+          : otherUserDisplayName ?? this.otherUserDisplayName,
+      otherUserUsername: clearOtherUserUsername
+          ? null
+          : otherUserUsername ?? this.otherUserUsername,
       eventId: clearEventId ? null : eventId ?? this.eventId,
       lastMessageContent: lastMessageContent ?? this.lastMessageContent,
       lastMessageSentAt: lastMessageSentAt ?? this.lastMessageSentAt,

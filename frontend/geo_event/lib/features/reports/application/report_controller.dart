@@ -1,24 +1,28 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/errors/error_mapper.dart';
 import '../../../shared/reports/data/reports_repository.dart';
 import '../../../shared/reports/models/create_report_request.dart';
 import '../../../shared/reports/models/report_reason.dart';
 import '../../../shared/reports/models/report_state.dart';
 import '../../../shared/reports/providers/reports_providers.dart';
 
-final reportControllerProvider =
-    StateNotifierProvider.autoDispose
-        .family<ReportController, ReportState, ReportState>(
+final reportControllerProvider = StateNotifierProvider.autoDispose
+    .family<ReportController, ReportState, ReportState>(
   (ref, initialState) {
-    final repository = ref.watch(reportsRepositoryProvider);
     return ReportController(
-      repository: repository,
+      repository: ref.watch(reportsRepositoryProvider),
       initialState: initialState,
     );
   },
 );
 
 class ReportController extends StateNotifier<ReportState> {
+  static const String _reasonRequiredMessage =
+      'Please select a reason before submitting.';
+  static const String _fallbackSubmitErrorMessage =
+      'Could not submit report. Please try again.';
+
   final ReportsRepository repository;
 
   ReportController({
@@ -41,10 +45,9 @@ class ReportController extends StateNotifier<ReportState> {
   }
 
   Future<bool> submit() async {
-    if (state.selectedReason == null) {
-      state = state.copyWith(
-        errorMessage: 'Please select a reason before submitting.',
-      );
+    final selectedReason = state.selectedReason;
+    if (selectedReason == null) {
+      state = state.copyWith(errorMessage: _reasonRequiredMessage);
       return false;
     }
 
@@ -57,7 +60,7 @@ class ReportController extends StateNotifier<ReportState> {
       final request = CreateReportRequest(
         targetType: state.targetType,
         targetId: state.targetId,
-        reason: state.selectedReason!.label,
+        reason: selectedReason.label,
         description: state.description.trim(),
       );
 
@@ -67,12 +70,17 @@ class ReportController extends StateNotifier<ReportState> {
         isSubmitting: false,
         clearError: true,
       );
-
       return true;
-    } catch (_) {
+    } catch (error, stackTrace) {
+      final mappedMessage = ErrorMapper.toMessage(
+        error,
+        stackTrace: stackTrace,
+        fallbackMessage: _fallbackSubmitErrorMessage,
+      );
+
       state = state.copyWith(
         isSubmitting: false,
-        errorMessage: 'Could not submit report. Please try again.',
+        errorMessage: mappedMessage,
       );
       return false;
     }

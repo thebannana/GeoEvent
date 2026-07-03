@@ -2,12 +2,12 @@ import '../models/public_profile_bundle.dart';
 import 'public_profile_api.dart';
 
 class PublicProfileRepository {
-  final PublicProfileApi _api;
+  final PublicProfileApi api;
 
-  const PublicProfileRepository(this._api);
+  const PublicProfileRepository(this.api);
 
   Future<PublicProfileBundle> getProfile(int userId) {
-    return _api.getProfileBundle(userId);
+    return api.getProfileBundle(userId);
   }
 
   Future<void> rateUser({
@@ -15,7 +15,7 @@ class PublicProfileRepository {
     required int rating,
     String? comment,
   }) {
-    return _api.rateUser(
+    return api.rateUser(
       userId: userId,
       rating: rating,
       comment: comment,
@@ -25,6 +25,6 @@ class PublicProfileRepository {
   Future<void> deleteMyReview({
     required int userId,
   }) {
-    return _api.deleteMyReview(userId: userId);
+    return api.deleteMyReview(userId: userId);
   }
 }

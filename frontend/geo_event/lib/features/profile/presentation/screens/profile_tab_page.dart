@@ -1,18 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/widgets/app_async_view.dart';
-import '../../../../core/widgets/app_error_view.dart';
-import '../../../../core/widgets/app_loading_indicator.dart';
+import '../../../../core/widgets/async/app_async_view.dart';
+import '../../../../core/widgets/feedback/app_confirm_dialog.dart';
+import '../../../../core/widgets/feedback/app_error_state.dart';
+import '../../../../core/widgets/feedback/app_loading_indicator.dart';
 import '../../../../shared/bookmarks/providers/bookmark_providers.dart';
 import '../../../../shared/likes/providers/liked_events_providers.dart';
-import '../../../../shared/notifications/providers/notification_providers.dart';
 import '../../../../shared/profile/providers/profile_providers.dart';
 import '../../../auth/application/auth_controller.dart';
 import '../../../inbox/application/inbox_controller.dart';
 import '../../../reservations/application/reservations_controller.dart';
 import '../../application/profile_controller.dart';
-import 'activity_logs_screen.dart';
 import 'bookmarks_screen.dart';
 import 'change_password_screen.dart';
 import 'edit_profile_screen.dart';
@@ -21,11 +20,66 @@ import 'preferences_screen.dart';
 import 'profile_screen.dart';
 import 'ticket_scanner_entry_screen.dart';
 
-class ProfileTabPage extends ConsumerWidget {
+class ProfileTabPage extends ConsumerStatefulWidget {
   const ProfileTabPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ProfileTabPage> createState() => _ProfileTabPageState();
+
+  static Future<T?> push<T>(
+    BuildContext context,
+    Widget screen, {
+    bool useRootNavigator = false,
+  }) {
+    return Navigator.of(
+      context,
+      rootNavigator: useRootNavigator,
+    ).push<T>(
+      MaterialPageRoute(builder: (_) => screen),
+    );
+  }
+
+  static Future<bool> confirmAction(
+    BuildContext context, {
+    required String title,
+    required String message,
+    required String confirmLabel,
+    bool isDestructive = false,
+  }) {
+    return AppConfirmDialog.show(
+      context,
+      title: title,
+      message: message,
+      confirmLabel: confirmLabel,
+      destructive: isDestructive,
+    );
+  }
+
+  static void clearSessionScopedProviders(WidgetRef ref) {
+    ref.invalidate(profileControllerProvider);
+    ref.invalidate(myPreferencesProvider);
+    ref.invalidate(bookmarksProvider);
+    ref.invalidate(likedEventsProvider);
+    ref.invalidate(reservationsControllerProvider);
+    ref.invalidate(inboxControllerProvider);
+  }
+
+  static void showSnackBar(
+    BuildContext context, {
+    required String message,
+  }) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(content: Text(message)),
+      );
+  }
+}
+
+class _ProfileTabPageState extends ConsumerState<ProfileTabPage> {
+  @override
+  Widget build(BuildContext context) {
     final profileAsync = ref.watch(profileControllerProvider);
 
     return AppAsyncView(
@@ -47,10 +101,8 @@ class ProfileTabPage extends ConsumerWidget {
             padding: const EdgeInsets.all(16),
             child: AppErrorState(
               title: 'Failed to load profile',
-              message: error.toString(),
-              onRetry: () {
-                ref.invalidate(profileControllerProvider);
-              },
+              message: 'Please try again.',
+              onRetry: () => ref.invalidate(profileControllerProvider),
             ),
           ),
         );
@@ -59,110 +111,84 @@ class ProfileTabPage extends ConsumerWidget {
         return ProfileScreen(
           profile: profile,
           onEditProfile: () async {
-            final result = await Navigator.of(context).push<bool>(
-              MaterialPageRoute(
-                builder: (_) => EditProfileScreen(profile: profile),
-              ),
+            final didUpdate = await ProfileTabPage.push<bool>(
+              context,
+              EditProfileScreen(profile: profile),
             );
-
-            if (result == true) {
-              await ref
-                  .read(profileControllerProvider.notifier)
-                  .refreshProfile();
+            if (didUpdate == true) {
+              await ref.read(profileControllerProvider.notifier).refreshProfile();
             }
           },
-          onChangePassword: () async {
-            await Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => const ChangePasswordScreen(),
-              ),
+          onChangePassword: () {
+            ProfileTabPage.push<void>(context, const ChangePasswordScreen());
+          },
+          onOpenBookmarks: () {
+            ProfileTabPage.push<void>(context, const BookmarksScreen());
+          },
+          onOpenMyEvents: () {
+            ProfileTabPage.push<void>(
+              context,
+              const MyEventsScreen(),
+              useRootNavigator: true,
             );
           },
-          onOpenBookmarks: () async {
-            await Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => const BookmarksScreen(),
-              ),
-            );
+          onOpenPreferences: () {
+            ProfileTabPage.push<void>(context, const PreferencesScreen());
           },
-          onOpenMyEvents: () async {
-            await Navigator.of(context, rootNavigator: true).push(
-              MaterialPageRoute(
-                builder: (_) => const MyEventsScreen(),
-              ),
-            );
-          },
-          onOpenPreferences: () async {
-            await Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => const PreferencesScreen(),
-              ),
-            );
-          },
-          onOpenActivityLogs: () async {
-            await Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => const ActivityLogsScreen(),
-              ),
-            );
-          },
-          onOpenTicketScanner: () async {
-            await Navigator.of(context, rootNavigator: true).push(
-              MaterialPageRoute(
-                builder: (_) => const TicketScannerEntryScreen(),
-              ),
+          onOpenTicketScanner: () {
+            ProfileTabPage.push<void>(
+              context,
+              const TicketScannerEntryScreen(),
+              useRootNavigator: true,
             );
           },
           onRevokeAllSessions: () async {
-            try {
-              await ref
-                  .read(profileControllerProvider.notifier)
-                  .revokeAllSessions();
+            final confirmed = await ProfileTabPage.confirmAction(
+              context,
+              title: 'Revoke all sessions?',
+              message:
+                  'All other devices will be signed out. Your current session will remain active.',
+              confirmLabel: 'Revoke',
+            );
 
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('All sessions revoked successfully.'),
-                  ),
-                );
-              }
+            if (!confirmed || !context.mounted) return;
+
+            try {
+              await ref.read(profileControllerProvider.notifier).revokeAllSessions();
+              ProfileTabPage.showSnackBar(
+                context,
+                message: 'All other sessions were revoked successfully.',
+              );
             } catch (_) {
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Failed to revoke sessions.'),
-                  ),
-                );
-              }
+              ProfileTabPage.showSnackBar(
+                context,
+                message: 'Failed to revoke sessions.',
+              );
             }
           },
           onLogout: () async {
+            final confirmed = await ProfileTabPage.confirmAction(
+              context,
+              title: 'Log out?',
+              message: 'Your current session will be ended on this device.',
+              confirmLabel: 'Log out',
+              isDestructive: true,
+            );
+
+            if (!confirmed || !context.mounted) return;
+
             try {
               await ref.read(authStateProvider.notifier).logout();
-
-              ref.invalidate(profileControllerProvider);
-              ref.invalidate(myProfileProvider);
-              ref.invalidate(myPreferencesProvider);
-              ref.invalidate(bookmarksProvider);
-              ref.invalidate(likedEventsProvider);
-              ref.invalidate(unreadNotificationCountProvider);
-              ref.invalidate(notificationsControllerProvider);
-              ref.invalidate(reservationsControllerProvider);
-
-              // If your inbox screen uses the separate InboxController from the other file:
-              ref.invalidate(inboxControllerProvider);
-
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Logged out successfully.')),
-                );
-              }
+              ProfileTabPage.clearSessionScopedProviders(ref);
+              ProfileTabPage.showSnackBar(
+                context,
+                message: 'Logged out successfully.',
+              );
             } catch (_) {
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Failed to log out.')),
-                );
-              }
+              ProfileTabPage.showSnackBar(
+                context,
+                message: 'Failed to log out.',
+              );
             }
           },
         );

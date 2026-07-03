@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/widgets/app_surface_card.dart';
+import '../../../../core/widgets/surfaces/app_surface_card.dart';
 import '../../../../shared/events/models/create_event_state.dart';
 
 class CreateEventForm extends StatelessWidget {
@@ -15,9 +15,9 @@ class CreateEventForm extends StatelessWidget {
   final DateTime? startAt;
   final DateTime? endAt;
   final String Function(DateTime value) formatDateTime;
-  final Future<void> Function() onPickStartDate;
-  final Future<void> Function() onPickEndDate;
-  final ValueChanged<bool> onFreeChanged;
+  final Future<void> Function()? onPickStartDate;
+  final Future<void> Function()? onPickEndDate;
+  final ValueChanged<bool>? onFreeChanged;
 
   const CreateEventForm({
     super.key,
@@ -32,13 +32,14 @@ class CreateEventForm extends StatelessWidget {
     required this.startAt,
     required this.endAt,
     required this.formatDateTime,
-    required this.onPickStartDate,
-    required this.onPickEndDate,
-    required this.onFreeChanged,
+    this.onPickStartDate,
+    this.onPickEndDate,
+    this.onFreeChanged,
   });
 
   @override
   Widget build(BuildContext context) {
+
     return Column(
       children: [
         SectionCard(
@@ -75,7 +76,7 @@ class CreateEventForm extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const SectionLabel('Attendance schedule'),
+              const SectionLabel('Attendance & schedule'),
               const SizedBox(height: 12),
               TextFormField(
                 controller: capacityCtrl,
@@ -83,7 +84,7 @@ class CreateEventForm extends StatelessWidget {
                 keyboardType: TextInputType.number,
                 decoration: const InputDecoration(
                   labelText: 'Capacity',
-                  hintText: 'How many people will attend?',
+                  hintText: 'How many people can attend?',
                 ),
               ),
               const SizedBox(height: 12),
@@ -110,22 +111,25 @@ class CreateEventForm extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const SectionLabel('Pricing details'),
-              const SizedBox(height: 12),
+              const SectionLabel('Pricing & details'),
+              const SizedBox(height: 4),
               SwitchListTile.adaptive(
                 value: state.isFree,
                 onChanged: state.submitting ? null : onFreeChanged,
                 contentPadding: EdgeInsets.zero,
-                title: const Text('Free'),
+                title: const Text('Free event'),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 8),
               TextFormField(
                 controller: priceCtrl,
                 enabled: !state.isFree && !state.submitting,
                 keyboardType:
                     const TextInputType.numberWithOptions(decimal: true),
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Price',
+                  hintText: state.isFree
+                      ? 'Free event selected'
+                      : 'Enter ticket price',
                 ),
               ),
               const SizedBox(height: 12),
@@ -134,6 +138,7 @@ class CreateEventForm extends StatelessWidget {
                 enabled: !state.submitting,
                 decoration: const InputDecoration(
                   labelText: 'Tags',
+                  hintText: 'music, techno, live, outdoor',
                 ),
               ),
               const SizedBox(height: 12),
@@ -152,6 +157,7 @@ class CreateEventForm extends StatelessWidget {
                 maxLines: 4,
                 decoration: const InputDecoration(
                   labelText: 'Accessibility info',
+                  hintText: 'Wheelchair access, elevator, accessible toilet...',
                 ),
               ),
             ],
@@ -210,6 +216,10 @@ class PickerField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isEnabled = onTap != null;
+    final isPlaceholder = value.toLowerCase().startsWith('pick ');
+
     return InkWell(
       borderRadius: BorderRadius.circular(16),
       onTap: onTap,
@@ -217,11 +227,16 @@ class PickerField extends StatelessWidget {
         decoration: InputDecoration(
           labelText: label,
           suffixIcon: const Icon(Icons.calendar_today_outlined, size: 18),
-          enabled: onTap != null,
+          enabled: isEnabled,
         ),
         child: Text(
           value,
-          style: const TextStyle(fontSize: 14),
+          style: TextStyle(
+            fontSize: 14,
+            color: isPlaceholder
+                ? theme.textTheme.bodySmall?.color
+                : theme.textTheme.bodyMedium?.color,
+          ),
         ),
       ),
     );
@@ -247,10 +262,10 @@ class InlineBanner extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.10),
+        color: color.withOpacity(0.10),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: color.withValues(alpha: 0.28),
+          color: color.withOpacity(0.28),
         ),
       ),
       child: Text(

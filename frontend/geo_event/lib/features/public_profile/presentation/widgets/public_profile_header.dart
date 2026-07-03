@@ -17,33 +17,22 @@ class PublicProfileHeader extends StatelessWidget {
 
     final fullName = user.fullName.trim();
     final username = user.username.trim();
-    final cityName = (user.cityName ?? '').trim();
     final bio = (user.bio ?? '').trim();
     final imageUrl = (user.imageUrl ?? '').trim();
 
     final displayName = fullName.isNotEmpty ? fullName : '@$username';
     final initialsSource = fullName.isNotEmpty ? fullName : username;
-    final leadingCharacter =
-        initialsSource.isNotEmpty ? initialsSource.characters.first.toUpperCase() : '?';
+    final leadingCharacter = initialsSource.isNotEmpty
+        ? initialsSource.characters.first.toUpperCase()
+        : '?';
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(18, 8, 18, 8),
       child: Column(
         children: [
-          CircleAvatar(
-            radius: 38,
-            backgroundColor: colorScheme.primaryContainer,
-            backgroundImage: imageUrl.isNotEmpty ? NetworkImage(imageUrl) : null,
-            child: imageUrl.isEmpty
-                ? Text(
-                    leadingCharacter,
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.w800,
-                      color: colorScheme.onPrimaryContainer,
-                    ),
-                  )
-                : null,
+          _ProfileAvatar(
+            imageUrl: imageUrl,
+            fallbackText: leadingCharacter,
           ),
           const SizedBox(height: 14),
           Text(
@@ -65,30 +54,6 @@ class PublicProfileHeader extends StatelessWidget {
               ),
             ),
           ],
-          if (cityName.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.location_on_outlined,
-                  size: 16,
-                  color: colorScheme.onSurfaceVariant,
-                ),
-                const SizedBox(width: 4),
-                Flexible(
-                  child: Text(
-                    cityName,
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
           if (bio.isNotEmpty) ...[
             const SizedBox(height: 12),
             ConstrainedBox(
@@ -104,6 +69,62 @@ class PublicProfileHeader extends StatelessWidget {
             ),
           ],
         ],
+      ),
+    );
+  }
+}
+
+class _ProfileAvatar extends StatelessWidget {
+  final String imageUrl;
+  final String fallbackText;
+
+  const _ProfileAvatar({
+    required this.imageUrl,
+    required this.fallbackText,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    if (imageUrl.isEmpty) {
+      return CircleAvatar(
+        radius: 38,
+        backgroundColor: colorScheme.primaryContainer,
+        child: Text(
+          fallbackText,
+          style: TextStyle(
+            fontSize: 24,
+            fontWeight: FontWeight.w800,
+            color: colorScheme.onPrimaryContainer,
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      width: 76,
+      height: 76,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: colorScheme.primaryContainer,
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Image.network(
+        imageUrl,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) {
+          return Center(
+            child: Text(
+              fallbackText,
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.w800,
+                color: colorScheme.onPrimaryContainer,
+              ),
+            ),
+          );
+        },
       ),
     );
   }

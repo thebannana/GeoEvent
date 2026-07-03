@@ -42,7 +42,9 @@ namespace MessageService.Infrastructure.Migrations
                         .HasColumnType("datetime2");
 
                     b.Property<int>("LikesCount")
-                        .HasColumnType("int");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
 
                     b.Property<long?>("ReplyToMessageId")
                         .HasColumnType("bigint");
@@ -59,6 +61,10 @@ namespace MessageService.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("ReplyToMessageId");
+
+                    b.HasIndex("SenderId");
+
+                    b.HasIndex("ThreadId");
 
                     b.HasIndex("ThreadId", "SentAt");
 
@@ -77,6 +83,8 @@ namespace MessageService.Infrastructure.Migrations
                         .HasColumnType("datetime2");
 
                     b.HasKey("MessageId", "UserId");
+
+                    b.HasIndex("UserId", "LikedAt");
 
                     b.ToTable("ChatMessageLikes", (string)null);
                 });
@@ -106,8 +114,10 @@ namespace MessageService.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
-                    b.Property<int>("Type")
-                        .HasColumnType("int");
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
 
                     b.HasKey("Id");
 
@@ -135,77 +145,11 @@ namespace MessageService.Infrastructure.Migrations
 
                     b.HasKey("ThreadId", "UserId");
 
+                    b.HasIndex("ThreadId", "UserId");
+
+                    b.HasIndex("UserId", "LeftAt");
+
                     b.ToTable("ChatThreadParticipants", (string)null);
-                });
-
-            modelBuilder.Entity("MessageService.Domain.Entities.Message", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("Content")
-                        .IsRequired()
-                        .HasMaxLength(4000)
-                        .HasColumnType("nvarchar(4000)");
-
-                    b.Property<DateTime?>("EditedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int?>("EventId")
-                        .HasColumnType("int");
-
-                    b.Property<bool>("IsDeletedByRecipient")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bit")
-                        .HasDefaultValue(false);
-
-                    b.Property<bool>("IsDeletedBySender")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bit")
-                        .HasDefaultValue(false);
-
-                    b.Property<bool>("IsRead")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bit")
-                        .HasDefaultValue(false);
-
-                    b.Property<int>("LikesCount")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
-                        .HasDefaultValue(0);
-
-                    b.Property<DateTime?>("ReadAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int>("RecipientId")
-                        .HasColumnType("int");
-
-                    b.Property<int>("SenderId")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime>("SentAt")
-                        .HasColumnType("datetime2");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("EventId");
-
-                    b.HasIndex("IsRead");
-
-                    b.HasIndex("RecipientId");
-
-                    b.HasIndex("SenderId");
-
-                    b.HasIndex("SentAt");
-
-                    b.HasIndex("SenderId", "RecipientId");
-
-                    b.HasIndex("SenderId", "RecipientId", "SentAt");
-
-                    b.ToTable("Messages");
                 });
 
             modelBuilder.Entity("MessageService.Domain.Entities.ChatMessage", b =>

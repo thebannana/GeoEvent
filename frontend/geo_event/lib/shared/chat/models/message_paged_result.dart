@@ -21,12 +21,13 @@ class MessagePagedResult<T> {
     Map<String, dynamic> json,
     T Function(Map<String, dynamic>) fromJson,
   ) {
-    final rawItems = (json['items'] as List<dynamic>? ?? const []);
+    final rawItems = json['items'] as List<dynamic>? ?? const [];
 
     return MessagePagedResult<T>(
       items: rawItems
-          .map((e) => fromJson(Map<String, dynamic>.from(e as Map)))
-          .toList(),
+          .whereType<Map>()
+          .map((e) => fromJson(Map<String, dynamic>.from(e)))
+          .toList(growable: false),
       totalCount: (json['totalCount'] as num?)?.toInt() ?? 0,
       page: (json['page'] as num?)?.toInt() ?? 1,
       pageSize: (json['pageSize'] as num?)?.toInt() ?? rawItems.length,

@@ -12,31 +12,34 @@ class PublicProfileEventList extends StatelessWidget {
     required this.onEventTap,
   });
 
-  Color _segmentColor(PublicProfileEvent item) {
+  Color _segmentColor(BuildContext context, PublicProfileEvent item) {
+    final scheme = Theme.of(context).colorScheme;
     final name = (item.segmentName ?? '').toLowerCase();
 
     if (name.contains('concert') || name.contains('music')) {
-      return const Color(0xFF5E7BFF);
+      return scheme.primary;
     }
     if (name.contains('sport')) {
-      return const Color(0xFFFF5A76);
+      return scheme.error;
     }
     if (name.contains('education') || name.contains('seminar')) {
-      return const Color(0xFF68C95A);
+      return scheme.tertiary;
     }
-    return const Color(0xFF6B8FBF);
+    return scheme.secondary;
   }
 
   String _formatPrice(double price) {
     if (price <= 0) return 'Free';
-    if (price % 1 == 0) return '${price.toInt()}\$';
-    return '${price.toStringAsFixed(2)}\$';
+    if (price % 1 == 0) return price.toInt().toString();
+    return price.toStringAsFixed(2);
   }
 
   String _formatDate(DateTime? value) {
     if (value == null) return '';
     final local = value.toLocal();
-    return '${local.day}.${local.month}.${local.year}.';
+    return '${local.day.toString().padLeft(2, '0')}.'
+        '${local.month.toString().padLeft(2, '0')}.'
+        '${local.year}.';
   }
 
   @override
@@ -47,23 +50,24 @@ class PublicProfileEventList extends StatelessWidget {
 
     return SliverList.separated(
       itemCount: events.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 10),
+      separatorBuilder: (_, _) => const SizedBox(height: 10),
       itemBuilder: (context, index) {
         final item = events[index];
 
-        final subtitleParts = [
+        final subtitleParts = <String>[
           if ((item.segmentName ?? '').trim().isNotEmpty) item.segmentName!.trim(),
           if ((item.genreName ?? '').trim().isNotEmpty) item.genreName!.trim(),
-          if ((item.subGenreName ?? '').trim().isNotEmpty) item.subGenreName!.trim(),
+          if ((item.subGenreName ?? '').trim().isNotEmpty)
+            item.subGenreName!.trim(),
         ];
         final subtitle = subtitleParts.join(' · ');
 
-        final accent = _segmentColor(item);
+        final accent = _segmentColor(context, item);
         final imageUrl = (item.primaryImage ?? '').trim();
 
-        final infoParts = [
-          if ((item.locationLabel ?? '').trim().isNotEmpty)
-            item.locationLabel!.trim(),
+        final infoParts = <String>[
+          if ((item.resolvedLocationName ?? '').trim().isNotEmpty)
+            item.resolvedLocationName!.trim(),
           if (item.startDateTime != null) _formatDate(item.startDateTime),
         ];
         final infoText = infoParts.join(' · ');
@@ -106,7 +110,7 @@ class PublicProfileEventList extends StatelessWidget {
                             ? Image.network(
                                 imageUrl,
                                 fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) {
+                                errorBuilder: (_, _, _) {
                                   return _FallbackImage(accent: accent);
                                 },
                               )
@@ -242,12 +246,12 @@ class _FallbackImage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: accent.withValues(alpha: 0.90),
+      color: accent.withValues(alpha: 0.16),
       alignment: Alignment.center,
-      child: const Icon(
+      child: Icon(
         Icons.event_rounded,
         size: 30,
-        color: Colors.white,
+        color: accent,
       ),
     );
   }

@@ -4,7 +4,6 @@ services:
   rabbitmq:
     image: rabbitmq:3.13-management
     container_name: geoevent-rabbitmq
-    user: rabbitmq
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS}
@@ -23,130 +22,24 @@ services:
     networks:
       - geoevent-network
 
-  sqlserver-user:
+  sqlserver:
     image: mcr.microsoft.com/mssql/server:2022-CU14-ubuntu-22.04
-    container_name: geoevent-sqlserver-user
+    container_name: geoevent-sqlserver
     environment:
       MSSQL_SA_PASSWORD: ${DB_PASSWORD}
       ACCEPT_EULA: "Y"
       MSSQL_PID: "Developer"
-      MSSQL_MEMORY_LIMIT_MB: "1024"
+      MSSQL_MEMORY_LIMIT_MB: "2048"
     ports:
       - "1433:1433"
     volumes:
-      - sqlserver_user_data:/var/opt/mssql
+      - sqlserver_data:/var/opt/mssql
     healthcheck:
-      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P \"$${MSSQL_SA_PASSWORD}\" -Q \"SELECT 1\" -b -o /dev/null || exit 1"]
-      interval: 15s
-      timeout: 10s
-      retries: 20
-      start_period: 120s
-    restart: unless-stopped
-    networks:
-      - geoevent-network
-
-  sqlserver-event:
-    image: mcr.microsoft.com/mssql/server:2022-CU14-ubuntu-22.04
-    container_name: geoevent-sqlserver-event
-    environment:
-      MSSQL_SA_PASSWORD: ${DB_PASSWORD}
-      ACCEPT_EULA: "Y"
-      MSSQL_PID: "Developer"
-      MSSQL_MEMORY_LIMIT_MB: "1024"
-    ports:
-      - "1434:1433"
-    volumes:
-      - sqlserver_event_data:/var/opt/mssql
-    healthcheck:
-      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P \"$${MSSQL_SA_PASSWORD}\" -Q \"SELECT 1\" -b -o /dev/null || exit 1"]
-      interval: 15s
-      timeout: 10s
-      retries: 20
-      start_period: 120s
-    restart: unless-stopped
-    networks:
-      - geoevent-network
-
-  sqlserver-ticket:
-    image: mcr.microsoft.com/mssql/server:2022-CU14-ubuntu-22.04
-    container_name: geoevent-sqlserver-ticket
-    environment:
-      MSSQL_SA_PASSWORD: ${DB_PASSWORD}
-      ACCEPT_EULA: "Y"
-      MSSQL_PID: "Developer"
-      MSSQL_MEMORY_LIMIT_MB: "768"
-    ports:
-      - "1435:1433"
-    volumes:
-      - sqlserver_ticket_data:/var/opt/mssql
-    healthcheck:
-      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P \"$${MSSQL_SA_PASSWORD}\" -Q \"SELECT 1\" -b -o /dev/null || exit 1"]
-      interval: 15s
-      timeout: 10s
-      retries: 20
-      start_period: 120s
-    restart: unless-stopped
-    networks:
-      - geoevent-network
-
-  sqlserver-notification:
-    image: mcr.microsoft.com/mssql/server:2022-CU14-ubuntu-22.04
-    container_name: geoevent-sqlserver-notification
-    environment:
-      MSSQL_SA_PASSWORD: ${DB_PASSWORD}
-      ACCEPT_EULA: "Y"
-      MSSQL_PID: "Developer"
-      MSSQL_MEMORY_LIMIT_MB: "768"
-    ports:
-      - "1436:1433"
-    volumes:
-      - sqlserver_notification_data:/var/opt/mssql
-    healthcheck:
-      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P \"$${MSSQL_SA_PASSWORD}\" -Q \"SELECT 1\" -b -o /dev/null || exit 1"]
-      interval: 15s
-      timeout: 10s
-      retries: 20
-      start_period: 120s
-    restart: unless-stopped
-    networks:
-      - geoevent-network
-
-  sqlserver-message:
-    image: mcr.microsoft.com/mssql/server:2022-CU14-ubuntu-22.04
-    container_name: geoevent-sqlserver-message
-    environment:
-      MSSQL_SA_PASSWORD: ${DB_PASSWORD}
-      ACCEPT_EULA: "Y"
-      MSSQL_PID: "Developer"
-      MSSQL_MEMORY_LIMIT_MB: "768"
-    ports:
-      - "1437:1433"
-    volumes:
-      - sqlserver_message_data:/var/opt/mssql
-    healthcheck:
-      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P \"$${MSSQL_SA_PASSWORD}\" -Q \"SELECT 1\" -b -o /dev/null || exit 1"]
-      interval: 15s
-      timeout: 10s
-      retries: 20
-      start_period: 120s
-    restart: unless-stopped
-    networks:
-      - geoevent-network
-
-  sqlserver-location:
-    image: mcr.microsoft.com/mssql/server:2022-CU14-ubuntu-22.04
-    container_name: geoevent-sqlserver-location
-    environment:
-      MSSQL_SA_PASSWORD: ${DB_PASSWORD}
-      ACCEPT_EULA: "Y"
-      MSSQL_PID: "Developer"
-      MSSQL_MEMORY_LIMIT_MB: "768"
-    ports:
-      - "1438:1433"
-    volumes:
-      - sqlserver_location_data:/var/opt/mssql
-    healthcheck:
-      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P \"$${MSSQL_SA_PASSWORD}\" -Q \"SELECT 1\" -b -o /dev/null || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P \"$${MSSQL_SA_PASSWORD}\" -Q \"SELECT 1\" -b -o /dev/null || exit 1"
+        ]
       interval: 15s
       timeout: 10s
       retries: 20
@@ -196,7 +89,7 @@ services:
       Smtp__Username: ${SMTP_USERNAME}
       Smtp__Password: ${SMTP_PASSWORD}
     depends_on:
-      sqlserver-user:
+      sqlserver:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
@@ -236,7 +129,7 @@ services:
       SupabaseStorage__Bucket: ${SUPABASE_BUCKET}
       SupabaseStorage__Folder: ${SUPABASE_FOLDER}
     depends_on:
-      sqlserver-event:
+      sqlserver:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
@@ -268,8 +161,14 @@ services:
       Cors__AllowedOrigins__0: ${CORS_ORIGIN_0}
       Cors__AllowedOrigins__1: ${CORS_ORIGIN_1}
       Cors__AllowedOrigins__2: ${CORS_ORIGIN_2}
+      PayPal__Mode: "${PayPal__Mode}"
+      PayPal__ClientId: "${PayPal__ClientId}"
+      PayPal__ClientSecret: "${PayPal__ClientSecret}"
+      PayPal__AppBaseUrl: "${PayPal__AppBaseUrl}"
+      PayPal__ReturnUrl: "${PayPal__ReturnUrl}"
+      PayPal__CancelUrl: "${PayPal__CancelUrl}"
     depends_on:
-      sqlserver-ticket:
+      sqlserver:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
@@ -312,7 +211,7 @@ services:
       Smtp__Password: ${SMTP_PASSWORD}
       InternalApi__Key: ${INTERNAL_API_KEY}
     depends_on:
-      sqlserver-notification:
+      sqlserver:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
@@ -348,7 +247,7 @@ services:
       Services__EventServiceBaseUrl: ${EVENT_SERVICE_BASE_URL}
       InternalApi__Key: ${INTERNAL_API_KEY}
     depends_on:
-      sqlserver-message:
+      sqlserver:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
@@ -360,35 +259,10 @@ services:
     networks:
       - geoevent-network
 
-  location-service:
-    build:
-      context: .
-      dockerfile: src/LocationService/LocationService.API/Dockerfile
-    image: geoevent-location-service:1.0.0
-    container_name: geoevent-location-service
-    ports:
-      - "5006:8080"
-    environment:
-      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT}
-      ASPNETCORE_URLS: http://+:8080
-      ConnectionStrings__LocationDb: ${LOCATION_DB_CONNECTION}
-      Jwt__Secret: ${JWT_SECRET_KEY}
-      Jwt__Issuer: ${JWT_ISSUER}
-      Jwt__Audience: ${JWT_AUDIENCE}
-      Cors__AllowedOrigins__0: ${CORS_ORIGIN_0}
-      Cors__AllowedOrigins__1: ${CORS_ORIGIN_1}
-      Cors__AllowedOrigins__2: ${CORS_ORIGIN_2}
-    depends_on:
-      sqlserver-location:
-        condition: service_healthy
-    restart: unless-stopped
-    networks:
-      - geoevent-network
-
   helper-workers:
     build:
       context: .
-      dockerfile: src/HelperWorkers/GeoEvent.HelperWorkers/Dockerfile
+      dockerfile: src/Workers/HelperWorkers/Dockerfile
     image: geoevent-helper-workers:1.0.0
     container_name: geoevent-helper-workers
     environment:
@@ -419,11 +293,7 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
-      sqlserver-user:
-        condition: service_healthy
-      sqlserver-ticket:
-        condition: service_healthy
-      sqlserver-notification:
+      sqlserver:
         condition: service_healthy
       user-service:
         condition: service_started
@@ -480,12 +350,7 @@ services:
 
 volumes:
   rabbitmq_data:
-  sqlserver_user_data:
-  sqlserver_event_data:
-  sqlserver_ticket_data:
-  sqlserver_notification_data:
-  sqlserver_message_data:
-  sqlserver_location_data:
+  sqlserver_data:
 
 networks:
   geoevent-network:

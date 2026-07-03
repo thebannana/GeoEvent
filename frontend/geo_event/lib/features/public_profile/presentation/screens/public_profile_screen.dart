@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/widgets/app_async_view.dart';
-import '../../../../core/widgets/app_empty_state.dart';
-import '../../../../core/widgets/app_error_view.dart';
-import '../../../../core/widgets/app_loading_indicator.dart';
-import '../../../../core/widgets/glass_scaffold.dart';
+import '../../../../core/widgets/async/app_async_view.dart';
+import '../../../../core/widgets/feedback/app_empty_state.dart';
+import '../../../../core/widgets/feedback/app_error_state.dart';
+import '../../../../core/widgets/feedback/app_loading_indicator.dart';
+import '../../../../core/widgets/layout/app_scaffold.dart';
 import '../../../../shared/chat/models/chat_thread_args.dart';
 import '../../../../shared/chat/models/chat_thread_type.dart';
 import '../../../../shared/chat/providers/chat_providers.dart';
@@ -18,6 +18,7 @@ import '../../../event/presentation/screens/event_detail_screen.dart';
 import '../../../reports/presentation/screens/report_screen.dart';
 import '../../application/public_profile_controller.dart';
 import '../widgets/public_profile_action_buttons.dart';
+import '../widgets/public_profile_event_filters.dart';
 import '../widgets/public_profile_event_list.dart';
 import '../widgets/public_profile_header.dart';
 import '../widgets/public_profile_rating_card.dart';
@@ -85,7 +86,9 @@ class _PublicProfileScreenState extends ConsumerState<PublicProfileScreen> {
           args: ChatThreadArgs(
             threadId: (result['threadId'] as num).toInt(),
             type: ChatThreadType.direct,
-            title: result['title'] as String? ?? 'Chat',
+            title: (result['title'] as String?)?.trim().isNotEmpty == true
+                ? (result['title'] as String).trim()
+                : 'Chat',
             otherUserId: (result['otherUserId'] as num?)?.toInt(),
           ),
         ),
@@ -185,12 +188,13 @@ class _PublicProfileScreenState extends ConsumerState<PublicProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-final state = ref.watch(publicProfileControllerProvider(widget.userId));
-final controller = ref.read(publicProfileControllerProvider(widget.userId).notifier);
-final authState = ref.watch(authStateProvider);
-final currentUserId = authState.user?.userId;
+    final state = ref.watch(publicProfileControllerProvider(widget.userId));
+    final controller =
+        ref.read(publicProfileControllerProvider(widget.userId).notifier);
+    final authState = ref.watch(authStateProvider);
+    final currentUserId = authState.user?.userId;
 
-    return GlassScaffold(
+    return AppScaffold(
       appBar: AppBar(
         title: const Text('Profile'),
         centerTitle: true,
@@ -203,14 +207,15 @@ final currentUserId = authState.user?.userId;
           title: 'Loading profile',
           message: 'Fetching public profile details...',
         ),
-        errorBuilder: (_, __) => AppErrorState(
+        errorBuilder: (_, _) => AppErrorState(
           title: 'Could not load profile',
           message: 'Please try again.',
           onRetry: controller.reload,
         ),
-          data: (data) {
-            final isOwnProfile = currentUserId != null && currentUserId == data.user.userId;
-            final filteredEvents = _applyFilter(data.events);
+        data: (data) {
+          final isOwnProfile =
+              currentUserId != null && currentUserId == data.user.userId;
+          final filteredEvents = _applyFilter(data.events);
 
           return RefreshIndicator(
             onRefresh: controller.reload,
@@ -227,7 +232,6 @@ final currentUserId = authState.user?.userId;
                         eventsCount: data.events.length,
                       ),
                       const SizedBox(height: 18),
-
                       if (!isOwnProfile) ...[
                         PublicProfileRatingCard(
                           averageRating: data.user.averageRating,
@@ -250,6 +254,13 @@ final currentUserId = authState.user?.userId;
                         ),
                         const SizedBox(height: 18),
                       ],
+                      PublicProfileEventFilters(
+                        selected: _selectedFilter,
+                        onChanged: (value) {
+                          setState(() => _selectedFilter = value);
+                        },
+                      ),
+                      const SizedBox(height: 14),
                     ],
                   ),
                 ),
@@ -258,8 +269,9 @@ final currentUserId = authState.user?.userId;
                     hasScrollBody: false,
                     child: AppEmptyState(
                       icon: Icons.event_busy_outlined,
-                      title: 'No public events yet',
-                      message: 'This user has not published any visible events.',
+                      title: 'No public events found',
+                      message:
+                          'There are no visible events for the selected filter.',
                     ),
                   )
                 else

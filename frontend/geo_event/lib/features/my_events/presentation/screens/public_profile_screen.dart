@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/widgets/app_async_view.dart';
-import '../../../../core/widgets/app_surface_card.dart';
+import '../../../../core/widgets/async/app_async_view.dart';
+import '../../../../core/widgets/surfaces/app_surface_card.dart';
 import '../../../../shared/profile/data/public_users_api.dart';
 import '../../../../shared/profile/models/public_user_profile.dart';
 

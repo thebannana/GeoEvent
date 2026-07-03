@@ -6,11 +6,7 @@ class ShellController extends StateNotifier<ShellTab?> {
   ShellController() : super(null);
 
   void openTab(ShellTab tab) {
-    if (state == tab) {
-      state = null;
-      return;
-    }
-    state = tab;
+    state = state == tab ? null : tab;
   }
 
   void close() {

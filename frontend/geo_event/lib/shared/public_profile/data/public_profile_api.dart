@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 
+import '../../../core/network/api_endpoints.dart';
 import '../models/public_profile_bundle.dart';
 import '../models/public_profile_event.dart';
 import '../models/public_profile_user.dart';
@@ -11,79 +12,100 @@ class PublicProfileApi {
   const PublicProfileApi(this._dio);
 
   Future<PublicProfileUser> getUser(int userId) async {
-    final response = await _dio.get('/api/users/$userId/public');
+    final response = await _dio.get(ApiEndpoints.publicUser(userId));
 
-    return PublicProfileUser.fromJson(
-      Map<String, dynamic>.from(response.data as Map),
-    );
+    final raw = response.data;
+    if (raw is Map<String, dynamic>) {
+      return PublicProfileUser.fromJson(raw);
+    }
+    if (raw is Map) {
+      return PublicProfileUser.fromJson(Map<String, dynamic>.from(raw));
+    }
+
+    throw Exception('Public profile user response was empty.');
   }
 
   Future<List<PublicProfileUser>> getUsers(List<int> ids) async {
     if (ids.isEmpty) return const [];
 
-    final response = await _dio.get(
-      '/api/users/public',
-      queryParameters: {
-        'ids': ids,
-      },
+    final response = await _dio.get<List<dynamic>>(
+      ApiEndpoints.publicUsers,
+      queryParameters: {'ids': ids},
+      options: Options(listFormat: ListFormat.multi),
     );
 
-    final raw = response.data;
-    final data = raw is List<dynamic> ? raw : const <dynamic>[];
+    final data = response.data ?? const <dynamic>[];
 
     return data
-        .map(
-          (e) => PublicProfileUser.fromJson(
-            Map<String, dynamic>.from(e as Map),
-          ),
-        )
+        .whereType<Map>()
+        .map((e) => PublicProfileUser.fromJson(Map<String, dynamic>.from(e)))
         .toList();
   }
 
   Future<List<PublicProfileEvent>> getUserEvents(int userId) async {
-    final response = await _dio.get(
-      '/api/public/events',
-      queryParameters: {
-        'organizerId': userId,
-      },
+    final response = await _dio.get<dynamic>(
+      ApiEndpoints.publicEventsBase,
+      queryParameters: {'organizerId': userId},
     );
 
     final raw = response.data;
-
     List<dynamic> data;
-    if (raw is List<dynamic>) {
+
+    if (raw is List) {
       data = raw;
     } else if (raw is Map<String, dynamic>) {
       final items = raw['items'];
-      data = items is List<dynamic> ? items : const <dynamic>[];
+      data = items is List ? items : const <dynamic>[];
+    } else if (raw is Map) {
+      final map = Map<String, dynamic>.from(raw);
+      final items = map['items'];
+      data = items is List ? items : const <dynamic>[];
     } else {
       data = const <dynamic>[];
     }
 
     return data
-        .map(
-          (e) => PublicProfileEvent.fromJson(
-            Map<String, dynamic>.from(e as Map),
-          ),
-        )
+        .whereType<Map>()
+        .map((e) => PublicProfileEvent.fromJson(Map<String, dynamic>.from(e)))
         .toList();
   }
 
-  Future<List<UserReview>> getUserReviews(int userId) async {
-    final response = await _dio.get('/api/users/$userId/reviews');
+  Future<List<UserReview>> getUserReviews(
+    int userId, {
+    int page = 1,
+    int pageSize = 20,
+  }) async {
+    final response = await _dio.get(
+      ApiEndpoints.userReviews(userId),
+      queryParameters: {
+        'page': page,
+        'pageSize': pageSize,
+      },
+    );
 
     final raw = response.data;
-    final items = raw is Map<String, dynamic>
-        ? (raw['items'] as List<dynamic>? ?? const [])
-        : const <dynamic>[];
+    if (raw is Map<String, dynamic>) {
+      final items = raw['items'];
+      final data = items is List ? items : const <dynamic>[];
 
-    return items
-        .map(
-          (e) => UserReview.fromJson(
-            Map<String, dynamic>.from(e as Map),
-          ),
-        )
-        .toList();
+      return data
+          .whereType<Map>()
+          .map((e) => UserReview.fromJson(Map<String, dynamic>.from(e)))
+          .toList();
+    }
+
+    if (raw is Map) {
+      final map = Map<String, dynamic>.from(raw);
+      final items = map['items'];
+      final data = items is List ? items : const <dynamic>[];
+
+      return data
+          .whereType<Map>()
+          .map((e) => UserReview.fromJson(Map<String, dynamic>.from(e)))
+          .toList();
+    }
+
+    return const [];
   }
 
   Future<void> rateUser({
@@ -91,19 +113,18 @@ class PublicProfileApi {
     required int rating,
     String? comment,
   }) async {
-    await _dio.post(
-      '/api/users/$userId/rating',
+    await _dio.post<void>(
+      ApiEndpoints.rateUser(userId),
       data: {
         'value': rating,
-        'comment': comment?.trim(),
+        if (comment != null && comment.trim().isNotEmpty)
+          'comment': comment.trim(),
       },
     );
   }
 
-  Future<void> deleteMyReview({
-    required int userId,
-  }) async {
-    await _dio.delete('/api/users/$userId/rating');
+  Future<void> deleteMyReview({required int userId}) async {
+    await _dio.delete<void>(ApiEndpoints.rateUser(userId));
   }
 
   Future<PublicProfileBundle> getProfileBundle(int userId) async {

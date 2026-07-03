@@ -1,13 +1,15 @@
-import '../models/activity_log.dart';
+import '../models/public_user_profile.dart';
 import '../models/user_profile.dart';
 import 'profile_api.dart';
 
 class ProfileRepository {
+  const ProfileRepository(this.api);
+
   final ProfileApi api;
 
-  ProfileRepository(this.api);
-
-  Future<UserProfile> getProfile() => api.getMe();
+  Future<UserProfile> getProfile() {
+    return api.getMe();
+  }
 
   Future<UserProfile> updateProfile({
     String? username,
@@ -41,12 +43,11 @@ class ProfileRepository {
     );
   }
 
-  Future<void> revokeAllSessions() => api.revokeAllSessions();
+  Future<void> revokeAllSessions() {
+    return api.revokeAllSessions();
+  }
 
-  Future<List<ActivityLog>> getActivityLogs({
-    int page = 1,
-    int pageSize = 20,
-  }) {
-    return api.getMyActivityLogs(page: page, pageSize: pageSize);
+  Future<PublicUserProfileDto> getPublicProfile(int userId) {
+    return api.getPublicProfile(userId);
   }
 }

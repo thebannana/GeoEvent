@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/widgets/app_chip.dart';
-import '../../../../core/widgets/app_icon_circle_button.dart';
-import '../../../../core/widgets/app_spinner.dart';
-import '../../../../core/widgets/app_surface_card.dart';
+import '../../../../core/widgets/inputs/app_chip.dart';
+import '../../../../core/widgets/inputs/app_icon_circle_button.dart';
+import '../../../../core/widgets/feedback/app_spinner.dart';
+import '../../../../core/widgets/surfaces/app_surface_card.dart';
 
 class MapFilterPanelHeader extends StatelessWidget {
   final VoidCallback onClose;

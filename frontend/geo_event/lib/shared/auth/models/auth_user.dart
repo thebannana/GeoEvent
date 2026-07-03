@@ -7,8 +7,7 @@ class AuthUser {
   final String? imageUrl;
   final String role;
   final bool isVerified;
-  final DateTime createdAt;
-  final int? cityId;
+  final DateTime? createdAt;
 
   const AuthUser({
     required this.userId,
@@ -20,25 +19,29 @@ class AuthUser {
     required this.role,
     required this.isVerified,
     required this.createdAt,
-    required this.cityId,
   });
 
   String get fullName => '$firstName $lastName'.trim();
 
   factory AuthUser.fromJson(Map<String, dynamic> json) {
     final createdAtRaw = json['createdAt'] ?? json['CreatedAt'];
+    final userIdRaw = json['userId'] ?? json['UserId'] ?? 0;
+    final verifiedRaw = json['isVerified'] ?? json['IsVerified'] ?? false;
 
     return AuthUser(
-      userId: (json['userId'] ?? json['UserId'] ?? 0) as int,
-      username: (json['username'] ?? json['Username'] ?? '').toString(),
-      email: (json['email'] ?? json['Email'] ?? '').toString(),
-      firstName: (json['firstName'] ?? json['FirstName'] ?? '').toString(),
-      lastName: (json['lastName'] ?? json['LastName'] ?? '').toString(),
-      imageUrl: (json['imageUrl'] ?? json['ImageUrl']) as String?,
-      role: (json['role'] ?? json['Role'] ?? 'User').toString(),
-      isVerified: (json['isVerified'] ?? json['IsVerified'] ?? false) as bool,
-      createdAt: DateTime.parse(createdAtRaw.toString()),
-      cityId: (json['cityId'] ?? json['CityId']) as int?,
+      userId: (userIdRaw as num?)?.toInt() ?? 0,
+      username: (json['username'] ?? json['Username'] ?? '').toString().trim(),
+      email: (json['email'] ?? json['Email'] ?? '').toString().trim(),
+      firstName: (json['firstName'] ?? json['FirstName'] ?? '').toString().trim(),
+      lastName: (json['lastName'] ?? json['LastName'] ?? '').toString().trim(),
+      imageUrl: _normalizeNullableString(json['imageUrl'] ?? json['ImageUrl']),
+      role: (json['role'] ?? json['Role'] ?? 'User').toString().trim(),
+      isVerified: verifiedRaw is bool
+          ? verifiedRaw
+          : verifiedRaw.toString().toLowerCase() == 'true',
+      createdAt: createdAtRaw == null
+          ? null
+          : DateTime.tryParse(createdAtRaw.toString()),
     );
   }
 
@@ -52,8 +55,12 @@ class AuthUser {
       'imageUrl': imageUrl,
       'role': role,
       'isVerified': isVerified,
-      'createdAt': createdAt.toUtc().toIso8601String(),
-      'cityId': cityId,
+      'createdAt': createdAt?.toUtc().toIso8601String(),
     };
+  }
+
+  static String? _normalizeNullableString(dynamic value) {
+    final text = value?.toString().trim();
+    return (text == null || text.isEmpty) ? null : text;
   }
 }

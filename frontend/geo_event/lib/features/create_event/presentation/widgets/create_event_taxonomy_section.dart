@@ -1,26 +1,32 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/widgets/app_spinner.dart';
-import '../../../../core/widgets/app_surface_card.dart';
+import '../../../../core/widgets/feedback/app_spinner.dart';
+import '../../../../core/widgets/surfaces/app_surface_card.dart';
 import '../../../../shared/events/models/create_event_state.dart';
 import 'create_event_form.dart';
 
 class CreateEventTaxonomySection extends StatelessWidget {
   final CreateEventState state;
-  final ValueChanged<int?> onSegmentChanged;
-  final ValueChanged<int?> onGenreChanged;
-  final ValueChanged<int?> onSubGenreChanged;
+  final ValueChanged<int?>? onSegmentChanged;
+  final ValueChanged<int?>? onGenreChanged;
+  final ValueChanged<int?>? onSubGenreChanged;
 
   const CreateEventTaxonomySection({
     super.key,
     required this.state,
-    required this.onSegmentChanged,
-    required this.onGenreChanged,
-    required this.onSubGenreChanged,
+    this.onSegmentChanged,
+    this.onGenreChanged,
+    this.onSubGenreChanged,
   });
 
   @override
   Widget build(BuildContext context) {
+    final canEdit = !state.submitting;
+    final canPickGenre =
+        canEdit && state.segmentId != null && !state.genresLoading;
+    final canPickSubGenre =
+        canEdit && state.genreId != null && !state.subGenresLoading;
+
     return AppSurfaceCard(
       padding: const EdgeInsets.all(18),
       child: Column(
@@ -29,7 +35,7 @@ class CreateEventTaxonomySection extends StatelessWidget {
           const SectionLabel('Category'),
           const SizedBox(height: 12),
           DropdownButtonFormField<int>(
-            initialValue: state.segmentId,
+            value: state.segmentId,
             isExpanded: true,
             items: state.segments
                 .map(
@@ -39,14 +45,14 @@ class CreateEventTaxonomySection extends StatelessWidget {
                   ),
                 )
                 .toList(),
-            onChanged: state.submitting ? null : onSegmentChanged,
+            onChanged: canEdit ? onSegmentChanged : null,
             decoration: const InputDecoration(
               labelText: 'Segment',
             ),
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<int>(
-            initialValue: state.genreId,
+            value: state.genreId,
             isExpanded: true,
             items: state.genres
                 .map(
@@ -56,13 +62,14 @@ class CreateEventTaxonomySection extends StatelessWidget {
                   ),
                 )
                 .toList(),
-            onChanged: state.segmentId == null ||
-                    state.genresLoading ||
-                    state.submitting
-                ? null
-                : onGenreChanged,
+            onChanged: canPickGenre ? onGenreChanged : null,
             decoration: InputDecoration(
               labelText: 'Genre',
+              hintText: state.segmentId == null
+                  ? 'Select a segment first'
+                  : state.genresLoading
+                      ? 'Loading genres...'
+                      : 'Select a genre',
               suffixIcon: state.genresLoading
                   ? const Padding(
                       padding: EdgeInsets.all(12),
@@ -73,7 +80,7 @@ class CreateEventTaxonomySection extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<int>(
-            initialValue: state.subGenreId,
+            value: state.subGenreId,
             isExpanded: true,
             items: state.subGenres
                 .map(
@@ -83,12 +90,14 @@ class CreateEventTaxonomySection extends StatelessWidget {
                   ),
                 )
                 .toList(),
-            onChanged:
-                state.genreId == null || state.subGenresLoading || state.submitting
-                    ? null
-                    : onSubGenreChanged,
+            onChanged: canPickSubGenre ? onSubGenreChanged : null,
             decoration: InputDecoration(
               labelText: 'Subgenre',
+              hintText: state.genreId == null
+                  ? 'Select a genre first'
+                  : state.subGenresLoading
+                      ? 'Loading subgenres...'
+                      : 'Select a subgenre',
               suffixIcon: state.subGenresLoading
                   ? const Padding(
                       padding: EdgeInsets.all(12),

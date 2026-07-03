@@ -1,3 +1,4 @@
+import 'auth_response.dart';
 import 'auth_user.dart';
 
 class AuthState {
@@ -25,9 +26,30 @@ class AuthState {
         isLoading = false,
         isInitialized = false;
 
-  bool get hasAccessToken => accessToken != null && accessToken!.isNotEmpty;
+  const AuthState.unauthenticated({
+    required this.isInitialized,
+  })  : accessToken = null,
+        refreshToken = null,
+        expiresAt = null,
+        user = null,
+        isLoading = false;
 
-  bool get hasRefreshToken => refreshToken != null && refreshToken!.isNotEmpty;
+  factory AuthState.authenticated(AuthResponse response) {
+    return AuthState(
+      accessToken: response.accessToken,
+      refreshToken: response.refreshToken,
+      expiresAt: response.expiresAt,
+      user: response.user,
+      isLoading: false,
+      isInitialized: true,
+    );
+  }
+
+  bool get hasAccessToken =>
+      accessToken != null && accessToken!.trim().isNotEmpty;
+
+  bool get hasRefreshToken =>
+      refreshToken != null && refreshToken!.trim().isNotEmpty;
 
   bool get isAuthenticated =>
       hasAccessToken && hasRefreshToken && user != null;
@@ -39,17 +61,10 @@ class AuthState {
     AuthUser? user,
     bool? isLoading,
     bool? isInitialized,
-    bool clearTokens = false,
+    bool clearSession = false,
   }) {
-    if (clearTokens) {
-      return AuthState(
-        accessToken: null,
-        refreshToken: null,
-        expiresAt: null,
-        user: null,
-        isLoading: false,
-        isInitialized: true,
-      );
+    if (clearSession) {
+      return const AuthState.unauthenticated(isInitialized: true);
     }
 
     return AuthState(

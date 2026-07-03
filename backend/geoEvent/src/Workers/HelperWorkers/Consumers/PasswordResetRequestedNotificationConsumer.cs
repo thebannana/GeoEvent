@@ -10,7 +10,8 @@ public class PasswordResetRequestedNotificationConsumer : IConsumer<PasswordRese
 {
     private readonly INotificationApiClient _notificationApiClient;
 
-    public PasswordResetRequestedNotificationConsumer(INotificationApiClient notificationApiClient)
+    public PasswordResetRequestedNotificationConsumer(
+        INotificationApiClient notificationApiClient)
     {
         _notificationApiClient = notificationApiClient;
     }
@@ -19,12 +20,14 @@ public class PasswordResetRequestedNotificationConsumer : IConsumer<PasswordRese
     {
         var message = context.Message;
 
-        await _notificationApiClient.CreateNotificationAsync(new CreateNotificationRequest
-        {
-            UserId = message.UserId,
-            Type = NotificationType.PasswordReset,
-            Title = "Password Reset Requested",
-            Description = $"A password reset was requested for {message.Email}."
-        }, context.CancellationToken);
+        await _notificationApiClient.CreateNotificationAsync(
+            new CreateNotificationRequest
+            {
+                UserId = message.UserId,
+                Type = NotificationType.PasswordReset,
+                Title = "Password Reset Requested",
+                Description = $"A password reset was requested for {message.Email}."
+            },
+            context.CancellationToken);
     }
 }

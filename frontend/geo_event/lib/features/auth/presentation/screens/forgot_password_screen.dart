@@ -1,10 +1,15 @@
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/utils/validators.dart';
 import '../../application/auth_controller.dart';
+import '../widgets/auth_feedback.dart';
 import '../widgets/auth_form_card.dart';
 import '../widgets/auth_header.dart';
+import '../widgets/auth_message_card.dart';
+import '../widgets/auth_scaffold.dart';
+import '../widgets/auth_submit_button.dart';
+import '../widgets/auth_text_field.dart';
 
 class ForgotPasswordScreen extends ConsumerStatefulWidget {
   const ForgotPasswordScreen({super.key});
@@ -14,25 +19,17 @@ class ForgotPasswordScreen extends ConsumerStatefulWidget {
       _ForgotPasswordScreenState();
 }
 
-class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
+class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen>
+    with AuthFeedback {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
+
+  bool _emailSent = false;
 
   @override
   void dispose() {
     _emailController.dispose();
     super.dispose();
-  }
-
-  String _friendlyError(Object error) {
-    if (error is DioException) {
-      final data = error.response?.data;
-      if (data is Map && data['error'] != null) {
-        return data['error'].toString();
-      }
-      return error.message ?? 'Request failed.';
-    }
-    return 'Request failed.';
   }
 
   Future<void> _submit() async {
@@ -47,92 +44,79 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('If that email exists, a reset link has been sent.'),
-        ),
+      setState(() {
+        _emailSent = true;
+      });
+
+      showAuthSuccess(
+        context,
+        'If that email exists, a reset link has been sent.',
       );
     } catch (error) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_friendlyError(error))),
+      setState(() {
+        _emailSent = false;
+      });
+
+      showAuthError(
+        context,
+        error,
+        fallbackMessage: 'Failed to send reset link.',
       );
     }
   }
 
   @override
-Widget build(BuildContext context) {
-  final theme = Theme.of(context);
-  final authState = ref.watch(authStateProvider);
+  Widget build(BuildContext context) {
+    final authState = ref.watch(authStateProvider);
 
-  return Scaffold(
-    backgroundColor: theme.scaffoldBackgroundColor,
-    appBar: AppBar(
-      title: const Text('Forgot Password'),
-      centerTitle: true,
-      backgroundColor: theme.scaffoldBackgroundColor,
-      surfaceTintColor: Colors.transparent,
-      elevation: 0,
-      scrolledUnderElevation: 0,
-    ),
-    body: SafeArea(
-      child: ListView(
-        padding: const EdgeInsets.all(24),
-        children: [
-          AuthFormCard(
-            child: Form(
-              key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const AuthHeader(
-                    title: 'Reset your password',
-                    subtitle:
-                        'Enter your email address and we will send you a reset link if an account exists.',
-                    icon: Icons.lock_reset_rounded,
+    return AuthScaffold(
+      title: 'Forgot Password',
+      child: AuthFormCard(
+        child: AbsorbPointer(
+          absorbing: authState.isLoading,
+          child: Form(
+            key: _formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const AuthHeader(
+                  title: 'Reset your password',
+                  subtitle:
+                      'Enter your email address and we will send you a reset link if an account exists.',
+                  icon: Icons.lock_reset_rounded,
+                ),
+                if (_emailSent) ...[
+                  const AuthMessageCard(
+                    message:
+                        'Check your email inbox and spam folder for reset instructions.',
+                    icon: Icons.mark_email_read_rounded,
                   ),
-                  TextFormField(
-                    controller: _emailController,
-                    keyboardType: TextInputType.emailAddress,
-                    textInputAction: TextInputAction.done,
-                    autofillHints: const [AutofillHints.email],
-                    onFieldSubmitted: (_) => _submit(),
-                    decoration: const InputDecoration(
-                      labelText: 'Email',
-                      border: OutlineInputBorder(),
-                    ),
-                    validator: (value) {
-                      final email = (value ?? '').trim();
-                      if (email.isEmpty) return 'Email is required';
-                      if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email)) {
-                        return 'Enter a valid email';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 20),
-                  FilledButton(
-                    onPressed: authState.isLoading ? null : _submit,
-                    child: authState.isLoading
-                        ? SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: theme.colorScheme.onPrimary,
-                            ),
-                          )
-                        : const Text('Send Reset Link'),
-                  ),
+                  const SizedBox(height: 16),
                 ],
-              ),
+                AuthTextField(
+                  controller: _emailController,
+                  labelText: 'Email',
+                  keyboardType: TextInputType.emailAddress,
+                  textInputAction: TextInputAction.done,
+                  autofillHints: const [AutofillHints.email],
+                  onFieldSubmitted: (_) => _submit(),
+                  validator: Validators.email,
+                  enabled: !authState.isLoading,
+                ),
+                const SizedBox(height: 20),
+                AuthSubmitButton(
+                  label: 'Send Reset Link',
+                  isLoading: authState.isLoading,
+                  onPressed: _submit,
+                ),
+              ],
             ),
           ),
-        ],
+        ),
       ),
-    ),
-  );
-}
+    );
+  }
 }

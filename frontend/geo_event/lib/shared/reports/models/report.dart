@@ -2,6 +2,9 @@ import 'report_status.dart';
 import 'report_target_type.dart';
 
 class Report {
+  static const String _defaultTargetType = 'Event';
+  static const String _defaultStatus = 'Pending';
+
   final int reportId;
   final ReportTargetType targetType;
   final int? targetId;
@@ -30,18 +33,20 @@ class Report {
     return Report(
       reportId: (json['reportId'] as num).toInt(),
       targetType: ReportTargetType.fromJson(
-        json['targetType'] as String? ?? 'Event',
+        json['targetType'] as String? ?? _defaultTargetType,
       ),
       targetId: (json['targetId'] as num?)?.toInt(),
-      reason: json['reason'] as String? ?? '',
-      description: json['description'] as String? ?? '',
-      status: ReportStatus.fromJson(json['status'] as String? ?? 'Pending'),
+      reason: (json['reason'] as String? ?? '').trim(),
+      description: (json['description'] as String? ?? '').trim(),
+      status: ReportStatus.fromJson(
+        json['status'] as String? ?? _defaultStatus,
+      ),
       reporterId: (json['reporterId'] as num?)?.toInt(),
       resolvedById: (json['resolvedById'] as num?)?.toInt(),
       createdAt: DateTime.parse(json['createdAt'] as String),
-      resolvedAt: json['resolvedAt'] == null
-          ? null
-          : DateTime.parse(json['resolvedAt'] as String),
+      resolvedAt: json['resolvedAt'] != null
+          ? DateTime.parse(json['resolvedAt'] as String)
+          : null,
     );
   }
 }

@@ -1,5 +1,6 @@
 class Bookmark {
   final int bookmarkId;
+  final String title;
   final String imageUrl;
   final DateTime savedAt;
   final String? memo;
@@ -8,6 +9,7 @@ class Bookmark {
 
   const Bookmark({
     required this.bookmarkId,
+    required this.title,
     required this.imageUrl,
     required this.savedAt,
     this.memo,
@@ -16,11 +18,16 @@ class Bookmark {
   });
 
   factory Bookmark.fromJson(Map<String, dynamic> json) {
+    final savedAtRaw = json['savedAt'];
+
     return Bookmark(
-      bookmarkId: (json['bookmarkId'] as num).toInt(),
-      imageUrl: json['imageUrl'] as String? ?? '',
-      savedAt: DateTime.parse(json['savedAt'] as String),
-      memo: json['memo'] as String?,
+      bookmarkId: (json['bookmarkId'] as num?)?.toInt() ?? 0,
+      title: json['title']?.toString().trim().isNotEmpty == true
+          ? json['title'].toString().trim()
+          : 'Saved event',
+      imageUrl: json['imageUrl']?.toString() ?? '',
+      savedAt: DateTime.tryParse(savedAtRaw?.toString() ?? '') ?? DateTime.now(),
+      memo: _normalizeNullableString(json['memo']),
       eventId: (json['eventId'] as num?)?.toInt(),
       userId: (json['userId'] as num?)?.toInt(),
     );
@@ -29,8 +36,9 @@ class Bookmark {
   Map<String, dynamic> toJson() {
     return {
       'bookmarkId': bookmarkId,
+      'title': title,
       'imageUrl': imageUrl,
-      'savedAt': savedAt.toIso8601String(),
+      'savedAt': savedAt.toUtc().toIso8601String(),
       'memo': memo,
       'eventId': eventId,
       'userId': userId,
@@ -39,6 +47,7 @@ class Bookmark {
 
   Bookmark copyWith({
     int? bookmarkId,
+    String? title,
     String? imageUrl,
     DateTime? savedAt,
     String? memo,
@@ -48,11 +57,18 @@ class Bookmark {
   }) {
     return Bookmark(
       bookmarkId: bookmarkId ?? this.bookmarkId,
+      title: title ?? this.title,
       imageUrl: imageUrl ?? this.imageUrl,
       savedAt: savedAt ?? this.savedAt,
       memo: clearMemo ? null : (memo ?? this.memo),
       eventId: eventId ?? this.eventId,
       userId: userId ?? this.userId,
     );
+  }
+
+  static String? _normalizeNullableString(dynamic value) {
+    final text = value?.toString().trim();
+    if (text == null || text.isEmpty) return null;
+    return text;
   }
 }

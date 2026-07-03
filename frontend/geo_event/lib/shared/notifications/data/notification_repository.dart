@@ -1,36 +1,36 @@
-import '../models/notification_item.dart';
+import '../models/notification_model.dart';
 import 'notification_api.dart';
 
 class NotificationRepository {
-  final NotificationApi _api;
+  const NotificationRepository({
+    required this.api,
+  });
 
-  NotificationRepository(this._api);
+  final NotificationApi api;
 
-  Future<List<NotificationItem>> getNotifications({
+  Future<List<NotificationModel>> getNotifications({
     int page = 1,
-    int pageSize = 30,
-    bool? isRead,
+    int pageSize = NotificationApi.pageSize,
   }) {
-    return _api.getNotifications(
+    return api.getNotifications(
       page: page,
       pageSize: pageSize,
-      isRead: isRead,
     );
   }
 
-  Future<int> getUnreadCount() {
-    return _api.getUnreadCount();
-  }
-
-  Future<void> markAsRead(int id) {
-    return _api.markAsRead(id);
+  Future<void> markAsRead(int notificationId) {
+    return api.markAsRead(notificationId);
   }
 
   Future<void> markAllAsRead() {
-    return _api.markAllAsRead();
+    return api.markAllAsRead();
   }
 
-  Future<void> delete(int id) {
-    return _api.delete(id);
+  Future<void> deleteNotification(int notificationId) {
+    return api.deleteNotification(notificationId);
+  }
+
+  Future<void> deleteAllNotifications() {
+    return api.deleteAllNotifications();
   }
 }

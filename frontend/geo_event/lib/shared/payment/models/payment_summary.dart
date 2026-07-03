@@ -8,7 +8,6 @@ class PaymentSummary {
   final int quantity;
   final double serviceFee;
   final String currency;
-
   final String? ownerName;
   final String? categoryName;
   final String? eventDescription;
@@ -30,6 +29,7 @@ class PaymentSummary {
 
   double get subtotal => unitPrice * quantity;
   double get total => subtotal + serviceFee;
+  bool get isFree => subtotal <= 0;
 
   PaymentSummary copyWith({
     int? quantity,

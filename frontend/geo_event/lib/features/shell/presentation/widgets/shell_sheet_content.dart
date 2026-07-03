@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 class ShellSheetContent extends StatelessWidget {
+  static const String _closeTooltip = 'Close';
+
   final String title;
   final VoidCallback onClose;
   final ValueChanged<DragUpdateDetails> onDragUpdate;
@@ -110,7 +112,7 @@ class ShellSheetContent extends StatelessWidget {
                             IconButton(
                               onPressed: onClose,
                               icon: const Icon(Icons.close_rounded),
-                              tooltip: 'Close',
+                              tooltip: _closeTooltip,
                             ),
                           ],
                         ),

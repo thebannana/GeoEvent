@@ -9,4 +9,7 @@ public interface IChatRealtimeNotifier
     Task MessageDeletedAsync(long threadId, long messageId, IReadOnlyCollection<int> participantUserIds);
     Task MessageLikedAsync(ChatMessageDto message);
     Task ThreadReadAsync(long threadId, int userId, IReadOnlyCollection<int> participantUserIds);
+
+    Task ThreadUpdatedAsync(long threadId, IReadOnlyCollection<int> participantUserIds);
+    Task ParticipantLeftAsync(long threadId, int userId, IReadOnlyCollection<int> participantUserIds);
 }

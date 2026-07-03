@@ -1,9 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../shared/auth/data/auth_repository.dart';
 import '../../../shared/auth/models/auth_response.dart';
 import '../../../shared/auth/models/auth_state.dart';
+import '../../../shared/auth/models/auth_user.dart';
 import '../../../shared/auth/models/login_request.dart';
 import '../../../shared/auth/models/register_request.dart';
+import '../../../shared/auth/models/reset_password_request.dart';
 import '../../../shared/auth/providers/auth_providers.dart';
 
 final authStateProvider =
@@ -11,34 +14,47 @@ final authStateProvider =
   return AuthController(ref);
 });
 
-  final sessionUserIdProvider = Provider<int?>((ref) {
+final sessionUserIdProvider = Provider<int?>((ref) {
   return ref.watch(authStateProvider).user?.userId;
 });
 
 class AuthController extends StateNotifier<AuthState> {
-  final Ref ref;
-
   AuthController(this.ref) : super(const AuthState.initial());
 
+  final Ref ref;
+
+  static const String _defaultDeviceInfo = 'flutter-app';
+  static const String _defaultConsentVersion = '1.0';
+
+  AuthRepository get _repository => ref.read(authRepositoryProvider);
+
   Future<void> restoreSession() async {
-    state = state.copyWith(isLoading: true, isInitialized: false);
+    _setLoading(true, initialized: false);
 
     try {
-      final storedState = await ref.read(authLocalStorageProvider).readSession();
+      final restored = await _repository.restoreSession();
 
-      if (!storedState.hasRefreshToken) {
-        state = const AuthState.initial().copyWith(isInitialized: true);
+      if (!restored.hasRefreshToken) {
+        state = const AuthState.unauthenticated(isInitialized: true);
         return;
       }
 
-      final refreshed =
-          await tryRefreshToken(storedState.refreshToken, setLoading: false);
+      state = restored.copyWith(
+        isLoading: false,
+        isInitialized: true,
+      );
+
+      final refreshed = await refreshSession(
+        overrideRefreshToken: restored.refreshToken,
+        preserveUser: restored.user,
+        setLoading: false,
+      );
 
       if (!refreshed) {
-        state = const AuthState.initial().copyWith(isInitialized: true);
+        state = const AuthState.unauthenticated(isInitialized: true);
       }
     } catch (_) {
-      state = const AuthState.initial().copyWith(isInitialized: true);
+      state = const AuthState.unauthenticated(isInitialized: true);
     }
   }
 
@@ -46,157 +62,181 @@ class AuthController extends StateNotifier<AuthState> {
     required String emailOrUsername,
     required String password,
   }) async {
-    state = state.copyWith(isLoading: true);
+    _setLoading(true);
 
     try {
-      final response = await ref.read(authRepositoryProvider).login(
-            LoginRequest(
-              emailOrUsername: emailOrUsername.trim(),
-              password: password,
-              deviceInfo: 'flutter-android-emulator',
-            ),
-          );
-
-      state = AuthState(
-        accessToken: response.accessToken,
-        refreshToken: response.refreshToken,
-        expiresAt: response.expiresAt,
-        user: response.user,
-        isLoading: false,
-        isInitialized: true,
+      final response = await _repository.login(
+        LoginRequest(
+          emailOrUsername: emailOrUsername.trim(),
+          password: password,
+          deviceInfo: _defaultDeviceInfo,
+        ),
       );
 
+      await setAuthenticated(response, preserveUser: response.user);
       return response;
-    } catch (e) {
-      state = state.copyWith(isLoading: false, isInitialized: true);
+    } catch (_) {
+      _setLoading(false);
       rethrow;
     }
   }
 
-  Future<bool> register({
+  Future<AuthResponse> register({
     required String username,
     required String email,
     required DateTime birthDate,
     required String phoneNumber,
     required String password,
+    required String confirmPassword,
     required String firstName,
     required String lastName,
     required bool consentGiven,
   }) async {
-    state = state.copyWith(isLoading: true);
+    _setLoading(true);
 
     try {
-      final response = await ref.read(authRepositoryProvider).register(
-            RegisterRequest(
-              username: username.trim().toLowerCase(),
-              email: email.trim().toLowerCase(),
-              birthDate: birthDate,
-              phoneNumber: phoneNumber.trim(),
-              consentGiven: consentGiven,
-              consentVersion: '1.0',
-              password: password,
-              firstName: firstName.trim(),
-              lastName: lastName.trim(),
-            ),
-          );
+      final response = await _repository.register(
+        RegisterRequest(
+          username: username.trim().toLowerCase(),
+          email: email.trim().toLowerCase(),
+          birthDate: birthDate,
+          phoneNumber: phoneNumber.trim(),
+          consentGiven: consentGiven,
+          consentVersion: _defaultConsentVersion,
+          password: password,
+          confirmPassword: confirmPassword,
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+        ),
+      );
 
-      if (response != null && response.hasTokens) {
-        state = AuthState(
-          accessToken: response.accessToken,
-          refreshToken: response.refreshToken,
-          expiresAt: response.expiresAt,
-          user: response.user,
-          isLoading: false,
-          isInitialized: true,
-        );
-      } else {
-        state = state.copyWith(
-          isLoading: false,
-          isInitialized: true,
-        );
-      }
-
-      return true;
-    } catch (e) {
-      state = state.copyWith(isLoading: false, isInitialized: true);
+      await setAuthenticated(response, preserveUser: response.user);
+      return response;
+    } catch (_) {
+      _setLoading(false);
       rethrow;
     }
   }
 
   Future<void> forgotPassword(String email) async {
-    state = state.copyWith(isLoading: true);
+    _setLoading(true);
 
     try {
-      await ref
-          .read(authRepositoryProvider)
-          .forgotPassword(email.trim().toLowerCase());
-
-      state = state.copyWith(isLoading: false, isInitialized: true);
-    } catch (e) {
-      state = state.copyWith(isLoading: false, isInitialized: true);
+      await _repository.forgotPassword(email.trim().toLowerCase());
+      _setLoading(false);
+    } catch (_) {
+      _setLoading(false);
       rethrow;
     }
   }
 
-  Future<bool> tryRefreshToken(
-    String? overrideRefreshToken, {
+  Future<void> resetPassword({
+    required String email,
+    required String token,
+    required String newPassword,
+    required String confirmPassword,
+  }) async {
+    _setLoading(true);
+
+    try {
+      await _repository.resetPassword(
+        ResetPasswordRequest(
+          email: email.trim().toLowerCase(),
+          token: token.trim(),
+          newPassword: newPassword,
+          confirmPassword: confirmPassword,
+        ),
+      );
+      _setLoading(false);
+    } catch (_) {
+      _setLoading(false);
+      rethrow;
+    }
+  }
+
+  Future<bool> refreshSession({
+    String? overrideRefreshToken,
+    AuthUser? preserveUser,
     bool setLoading = false,
   }) async {
     final refreshToken = overrideRefreshToken ?? state.refreshToken;
-    if (refreshToken == null || refreshToken.isEmpty) {
-      state = state.copyWith(isLoading: false, isInitialized: true);
+    final fallbackUser = preserveUser ?? state.user;
+
+    if (refreshToken == null || refreshToken.trim().isEmpty) {
+      await _repository.clearSession();
+      state = const AuthState.unauthenticated(isInitialized: true);
       return false;
     }
 
     if (setLoading) {
-      state = state.copyWith(isLoading: true);
+      _setLoading(true);
     }
 
     try {
-      final response =
-          await ref.read(authRepositoryProvider).refresh(refreshToken);
+      final response = await _repository.refresh(refreshToken);
 
       if (!response.hasTokens) {
-        await ref.read(authRepositoryProvider).clearSession();
-        state = const AuthState.initial().copyWith(isInitialized: true);
+        await _repository.clearSession();
+        state = const AuthState.unauthenticated(isInitialized: true);
         return false;
       }
 
-      state = state.copyWith(
-        accessToken: response.accessToken,
-        refreshToken: response.refreshToken,
-        expiresAt: response.expiresAt,
-        user: response.user,
-        isLoading: false,
-        isInitialized: true,
-      );
-
+      await setAuthenticated(response, preserveUser: fallbackUser);
       return true;
     } catch (_) {
-      await ref.read(authRepositoryProvider).clearSession();
-      state = const AuthState.initial().copyWith(isInitialized: true);
+      await _repository.clearSession();
+      state = const AuthState.unauthenticated(isInitialized: true);
       return false;
     }
+  }
+
+  Future<void> setAuthenticated(
+    AuthResponse response, {
+    AuthUser? preserveUser,
+  }) async {
+    final effectiveUser = response.user ?? preserveUser ?? state.user;
+
+    if (effectiveUser == null) {
+      await _repository.clearSession();
+      state = const AuthState.unauthenticated(isInitialized: true);
+      return;
+    }
+
+    state = AuthState(
+      accessToken: response.accessToken.trim(),
+      refreshToken: response.refreshToken.trim(),
+      expiresAt: response.expiresAt,
+      user: effectiveUser,
+      isLoading: false,
+      isInitialized: true,
+    );
   }
 
   Future<void> logout() async {
     final refreshToken = state.refreshToken;
 
     try {
-      if (refreshToken != null && refreshToken.isNotEmpty) {
-        await ref.read(authRepositoryProvider).logout(refreshToken);
+      if (refreshToken != null && refreshToken.trim().isNotEmpty) {
+        await _repository.logout(refreshToken);
       } else {
-        await ref.read(authRepositoryProvider).clearSession();
+        await _repository.clearSession();
       }
     } catch (_) {
-      await ref.read(authRepositoryProvider).clearSession();
+      await _repository.clearSession();
     } finally {
-      state = const AuthState.initial().copyWith(isInitialized: true);
+      state = const AuthState.unauthenticated(isInitialized: true);
     }
   }
 
   Future<void> clearSession() async {
-    await ref.read(authRepositoryProvider).clearSession();
-    state = const AuthState.initial().copyWith(isInitialized: true);
+    await _repository.clearSession();
+    state = const AuthState.unauthenticated(isInitialized: true);
+  }
+
+  void _setLoading(bool value, {bool initialized = true}) {
+    state = state.copyWith(
+      isLoading: value,
+      isInitialized: initialized,
+    );
   }
 }

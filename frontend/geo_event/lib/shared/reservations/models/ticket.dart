@@ -1,3 +1,11 @@
+enum TicketStatus {
+  active,
+  used,
+  cancelled,
+  expired,
+  refunded,
+}
+
 class Ticket {
   final int ticketId;
   final int reservationId;
@@ -31,7 +39,47 @@ class Ticket {
     this.section,
   });
 
-factory Ticket.fromJson(Map<String, dynamic> json) => Ticket(
+  TicketStatus get typedStatus {
+    final normalized = status.trim().toLowerCase();
+
+    if (cancelledAt != null || normalized == 'cancelled') {
+      return TicketStatus.cancelled;
+    }
+
+    if (usedAt != null || normalized == 'used') {
+      return TicketStatus.used;
+    }
+
+    if (normalized == 'refunded') {
+      return TicketStatus.refunded;
+    }
+
+    if (normalized == 'expired') {
+      return TicketStatus.expired;
+    }
+
+    return TicketStatus.active;
+  }
+
+  String get displayStatus {
+    switch (typedStatus) {
+      case TicketStatus.active:
+        return 'Active';
+      case TicketStatus.used:
+        return 'Used';
+      case TicketStatus.cancelled:
+        return 'Cancelled';
+      case TicketStatus.expired:
+        return 'Expired';
+      case TicketStatus.refunded:
+        return 'Refunded';
+    }
+  }
+
+  bool get isUsable => typedStatus == TicketStatus.active;
+
+  factory Ticket.fromJson(Map<String, dynamic> json) {
+    return Ticket(
       ticketId: (json['ticketId'] as num).toInt(),
       reservationId: (json['reservationId'] as num).toInt(),
       userId: (json['userId'] as num).toInt(),
@@ -51,4 +99,5 @@ factory Ticket.fromJson(Map<String, dynamic> json) => Ticket(
       seatNumber: json['seatNumber']?.toString(),
       section: json['section']?.toString(),
     );
+  }
 }

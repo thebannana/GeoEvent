@@ -9,5 +9,6 @@ enum ReportReason {
   other('Other');
 
   final String label;
+
   const ReportReason(this.label);
 }

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/widgets/app_loading_indicator.dart';
+import '../../../../core/widgets/feedback/app_loading_indicator.dart';
 import '../../../../shared/events/models/event_taxonomy_models.dart';
 import '../../../../shared/events/providers/event_providers.dart';
 import '../../domain/filter_selection.dart';

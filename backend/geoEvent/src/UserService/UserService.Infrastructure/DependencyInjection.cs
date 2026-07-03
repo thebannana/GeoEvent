@@ -5,6 +5,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using UserService.Application.Interfaces.Repositories;
 using UserService.Application.Interfaces.Services;
+using UserService.Infrastructure.Options;
 using UserService.Infrastructure.Persistence;
 using UserService.Infrastructure.Repositories;
 using UserService.Infrastructure.Services;
@@ -29,9 +30,12 @@ public static class DependencyInjection
                     maxRetryDelay: TimeSpan.FromSeconds(15),
                     errorNumbersToAdd: null)));
 
+        services.Configure<PayPalOptions>(configuration.GetSection("PayPal"));
+
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IUserService, UserServiceImpl>();
+        services.AddHttpClient<IPayPalService, PayPalService>();
         services.AddScoped<PasswordService>();
         services.AddScoped<TokenService>();
 

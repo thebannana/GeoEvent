@@ -19,16 +19,16 @@ class ChatParticipant {
 
   factory ChatParticipant.fromJson(Map<String, dynamic> json) {
     return ChatParticipant(
-      userId: (json['userId'] as num).toInt(),
-      displayName: json['displayName'] as String? ?? '',
-      username: json['username'] as String? ?? '',
-      avatarUrl: json['avatarUrl'] as String?,
+      userId: (json['userId'] as num?)?.toInt() ?? 0,
+      displayName: json['displayName']?.toString() ?? '',
+      username: json['username']?.toString() ?? '',
+      avatarUrl: json['avatarUrl']?.toString(),
       isOnline: json['isOnline'] as bool? ?? false,
       lastActiveAt: json['lastActiveAt'] != null
-          ? DateTime.tryParse(json['lastActiveAt'] as String)
+          ? DateTime.tryParse(json['lastActiveAt'].toString())?.toLocal()
           : null,
       joinedAt: json['joinedAt'] != null
-          ? DateTime.tryParse(json['joinedAt'] as String)
+          ? DateTime.tryParse(json['joinedAt'].toString())?.toLocal()
           : null,
     );
   }

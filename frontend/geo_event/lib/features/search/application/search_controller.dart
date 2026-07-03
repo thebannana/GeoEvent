@@ -32,10 +32,6 @@ class SearchController extends StateNotifier<SearchState> {
     return map;
   }
 
-  List<EventItem> _removeUnavailableEvents(List<EventItem> items) {
-    return items.where((item) => item.isVisibleInSearch).toList();
-  }
-
   Map<int, double> _genreWeights(List<UserPreference> preferences) {
     final map = <int, double>{};
 
@@ -165,7 +161,7 @@ class SearchController extends StateNotifier<SearchState> {
     );
 
     try {
-      final items = await ref.read(eventsApiProvider).searchEvents(
+      final result = await ref.read(eventsRepositoryProvider).searchEventsPaged(
             searchTerm: trimmed.isEmpty ? null : trimmed,
             page: 1,
             pageSize: 20,
@@ -178,10 +174,8 @@ class SearchController extends StateNotifier<SearchState> {
 
       if (!mounted || requestId != _requestId) return;
 
-      final visibleItems = _removeUnavailableEvents(items);
-
       final ranked = _rankItems(
-        visibleItems,
+        result.items,
         query: trimmed,
         preferences: _preferences(),
       );

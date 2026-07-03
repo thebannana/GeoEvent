@@ -2,15 +2,15 @@ import '../models/my_event_response_dto.dart';
 import 'my_events_api.dart';
 
 class MyEventsRepository {
-  final MyEventsApi _api;
+  const MyEventsRepository(this.api);
 
-  const MyEventsRepository(this._api);
+  final MyEventsApi api;
 
   Future<List<MyEventResponseDto>> getMyEvents(int organizerId) {
-    return _api.getMyEvents(organizerId);
+    return api.getMyEvents(organizerId);
   }
 
   Future<void> deleteEvent(int eventId) {
-  return _api.deleteEvent(eventId);
-}
+    return api.deleteEvent(eventId);
+  }
 }

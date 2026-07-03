@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/widgets/app_surface_card.dart';
+import '../../../../core/widgets/surfaces/app_surface_card.dart';
 
 class PaymentQuantitySelector extends StatelessWidget {
   final int quantity;
@@ -17,6 +17,8 @@ class PaymentQuantitySelector extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final canDecrease = quantity > 1;
+    final canIncrease = quantity < maxQuantity;
 
     return AppSurfaceCard(
       child: Wrap(
@@ -39,7 +41,9 @@ class PaymentQuantitySelector extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Choose how many tickets you want to reserve.',
+                  maxQuantity <= 1
+                      ? 'Only one ticket is currently available.'
+                      : 'Choose how many tickets you want to reserve.',
                   style: TextStyle(
                     fontSize: 13,
                     color: colorScheme.onSurfaceVariant,
@@ -52,9 +56,11 @@ class PaymentQuantitySelector extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               IconButton(
-                onPressed: quantity > 1 ? () => onChanged(quantity - 1) : null,
+                onPressed: canDecrease ? () => onChanged(quantity - 1) : null,
                 icon: const Icon(Icons.remove_circle_outline),
-                tooltip: 'Decrease quantity',
+                tooltip: canDecrease
+                    ? 'Decrease quantity'
+                    : 'Minimum quantity reached',
               ),
               Text(
                 '$quantity',
@@ -64,11 +70,11 @@ class PaymentQuantitySelector extends StatelessWidget {
                 ),
               ),
               IconButton(
-                onPressed: quantity < maxQuantity
-                    ? () => onChanged(quantity + 1)
-                    : null,
+                onPressed: canIncrease ? () => onChanged(quantity + 1) : null,
                 icon: const Icon(Icons.add_circle_outline),
-                tooltip: 'Increase quantity',
+                tooltip: canIncrease
+                    ? 'Increase quantity'
+                    : 'Maximum available quantity reached',
               ),
             ],
           ),

@@ -8,20 +8,23 @@ import '../../../shared/events/models/my_event_response_dto.dart';
 import '../../../shared/events/providers/event_providers.dart';
 
 final createEventControllerProvider =
-    StateNotifierProvider.autoDispose<CreateEventController, CreateEventState>((
-      ref,
-    ) {
-      return CreateEventController(
-        repository: ref.watch(eventsRepositoryProvider),
-      );
-    });
+    StateNotifierProvider.autoDispose<CreateEventController, CreateEventState>(
+  (ref) {
+    return CreateEventController(
+      ref: ref,
+      repository: ref.watch(eventsRepositoryProvider),
+    );
+  },
+);
 
 class CreateEventController extends StateNotifier<CreateEventState> {
-  final EventsRepository repository;
-
   CreateEventController({
+    required this.ref,
     required this.repository,
   }) : super(const CreateEventState());
+
+  final Ref ref;
+  final EventsRepository repository;
 
   Future<void> loadInitial() async {
     state = state.copyWith(
@@ -78,46 +81,6 @@ class CreateEventController extends StateNotifier<CreateEventState> {
     }
   }
 
-  Future<MapboxPlace?> reverseGeocode({
-    required double latitude,
-    required double longitude,
-    required String accessToken,
-  }) async {
-    final dio = Dio();
-
-    final response = await dio.get<Map<String, dynamic>>(
-      'https://api.mapbox.com/search/geocode/v6/reverse',
-      queryParameters: {
-        'longitude': longitude,
-        'latitude': latitude,
-        'access_token': accessToken,
-        'limit': 1,
-        'language': 'en',
-      },
-    );
-
-    final data = response.data ?? const <String, dynamic>{};
-    final features = data['features'];
-
-    if (features is! List || features.isEmpty) return null;
-
-    final item = Map<String, dynamic>.from(features.first as Map);
-
-    return MapboxPlace(
-      id: item['id']?.toString() ?? '$longitude,$latitude',
-      title:
-          item['properties']?['name']?.toString() ??
-          item['name']?.toString() ??
-          'Selected location',
-      subtitle:
-          item['full_address']?.toString() ??
-          item['place_formatted']?.toString() ??
-          '',
-      latitude: latitude,
-      longitude: longitude,
-    );
-  }
-
   Future<void> selectGenre(int? id) async {
     state = state.copyWith(
       genreId: id,
@@ -157,10 +120,7 @@ class CreateEventController extends StateNotifier<CreateEventState> {
   }
 
   void hydrateForEdit(MyEventResponseDto event) {
-    final title = (event.venueName?.trim().isNotEmpty ?? false)
-        ? event.venueName!.trim()
-        : 'Selected location';
-
+    final locationTitle = 'Selected location';
     final subtitle =
         '${event.latitude.toStringAsFixed(6)}, ${event.longitude.toStringAsFixed(6)}';
 
@@ -171,19 +131,14 @@ class CreateEventController extends StateNotifier<CreateEventState> {
       subGenreId: event.subGenreId,
       isFree: event.price <= 0,
       selectedLocation: MapboxPlace(
-        id: event.venueId?.toString() ?? 'event-${event.eventId}',
-        title: title,
+        id:'event-${event.eventId}',
+        title: locationTitle,
         subtitle: subtitle,
         latitude: event.latitude,
         longitude: event.longitude,
       ),
-      clearErrorMessage: true,
-      clearSuccessMessage: true,
-    );
-  }
-
-  void setOnline(bool value) {
-    state = state.copyWith(
+      existingImages: event.images,
+      removedImageIds: const [],
       clearErrorMessage: true,
       clearSuccessMessage: true,
     );
@@ -229,19 +184,6 @@ class CreateEventController extends StateNotifier<CreateEventState> {
     );
   }
 
-  void setGalleryImages(List<EventImageUploadItem> images) {
-    final unique = <String, EventImageUploadItem>{};
-    for (final image in images) {
-      unique[image.localPath] = image;
-    }
-
-    state = state.copyWith(
-      galleryImages: unique.values.toList(),
-      clearErrorMessage: true,
-      clearSuccessMessage: true,
-    );
-  }
-
   void addGalleryImages(List<EventImageUploadItem> images) {
     final existingPaths = <String>{
       ...state.galleryImages.map((e) => e.localPath),
@@ -252,7 +194,9 @@ class CreateEventController extends StateNotifier<CreateEventState> {
       return existingPaths.add(image.localPath);
     }).toList();
 
-    if (uniqueNewImages.isEmpty) return;
+    if (uniqueNewImages.isEmpty) {
+      return;
+    }
 
     state = state.copyWith(
       galleryImages: [...state.galleryImages, ...uniqueNewImages],
@@ -262,11 +206,37 @@ class CreateEventController extends StateNotifier<CreateEventState> {
   }
 
   void removeGalleryImageAt(int index) {
-    if (index < 0 || index >= state.galleryImages.length) return;
+    if (index < 0 || index >= state.galleryImages.length) {
+      return;
+    }
 
     final updated = [...state.galleryImages]..removeAt(index);
+
     state = state.copyWith(
       galleryImages: updated,
+      clearErrorMessage: true,
+      clearSuccessMessage: true,
+    );
+  }
+
+  void removeExistingImage(int imageId) {
+    final image = state.existingImages.cast<EventImageDto?>().firstWhere(
+          (e) => e?.imageId == imageId,
+          orElse: () => null,
+        );
+
+    if (image == null) {
+      return;
+    }
+
+    state = state.copyWith(
+      existingImages: state.existingImages
+          .where((e) => e.imageId != imageId)
+          .toList(),
+      removedImageIds: {
+        ...state.removedImageIds,
+        imageId,
+      }.toList(),
       clearErrorMessage: true,
       clearSuccessMessage: true,
     );
@@ -286,123 +256,197 @@ class CreateEventController extends StateNotifier<CreateEventState> {
     );
   }
 
-  Future<void> submit({
-    required String title,
-    required String description,
-    required int? segmentId,
-    required int? genreId,
-    required int? subGenreId,
-    required int? venueId,
-    required int? cityId,
-    required double latitude,
-    required double longitude,
-    required DateTime startDateTime,
-    required DateTime endDateTime,
-    required int capacity,
-    required double price,
-    required bool isOnline,
-    required String? tags,
-    required String? externalUrl,
-    required String? accessibilityInfo,
-    required String? promoterName,
-    required String locale,
-    required bool publish,
-  }) async {
-    state = state.copyWith(
-      submitting: true,
-      clearErrorMessage: true,
-      clearSuccessMessage: true,
-    );
+  Future<EventItem?> submit({
+  required String title,
+  required String description,
+  required int? segmentId,
+  required int? genreId,
+  required int? subGenreId,
+  required double latitude,
+  required double longitude,
+  required DateTime startDateTime,
+  required DateTime endDateTime,
+  required int capacity,
+  required double price,
+  required String? tags,
+  required String? accessibilityInfo,
+  required String? promoterName,
+  required String locale,
+}) async {
+  state = state.copyWith(
+    submitting: true,
+    clearErrorMessage: true,
+    clearSuccessMessage: true,
+  );
 
-    try {
-      final cleanTitle = title.trim();
-      final cleanDescription = description.trim();
-      final cleanLocale = locale.trim().isEmpty ? 'bs-BA' : locale.trim();
-      final cleanTags = _cleanNullable(tags);
-      final cleanAccessibilityInfo = _cleanNullable(accessibilityInfo);
-      final cleanPromoterName = _cleanNullable(promoterName);
-      final normalizedPrice = state.isFree ? 0.0 : price;
+  try {
+    final now = DateTime.now();
+    final cleanTitle = title.trim();
+    final cleanDescription = description.trim();
+    final cleanLocale = locale.trim().isEmpty ? 'bs-BA' : locale.trim();
+    final cleanTags = _cleanNullable(tags);
+    final cleanAccessibilityInfo = _cleanNullable(accessibilityInfo);
+    final cleanPromoterName = _cleanNullable(promoterName);
+    final normalizedPrice = state.isFree ? 0.0 : price;
+    final isEditing = state.eventId != null;
 
-      if (cleanTitle.length < 3 || cleanTitle.length > 200) {
-        throw Exception('Title must be between 3 and 200 characters.');
-      }
+    if (segmentId == null || segmentId <= 0) {
+      throw Exception('Please select a segment.');
+    }
 
-      if (cleanDescription.length < 10 || cleanDescription.length > 5000) {
-        throw Exception('Description must be between 10 and 5000 characters.');
-      }
+    if (genreId == null || genreId <= 0) {
+      throw Exception('Please select a genre.');
+    }
 
-      if (startDateTime.isBefore(DateTime.now())) {
-        throw Exception('Start date must be in the future.');
-      }
+    if (subGenreId != null && subGenreId <= 0) {
+      throw Exception('Invalid subgenre selected.');
+    }
 
-      if (!endDateTime.isAfter(startDateTime)) {
-        throw Exception('End date must be after start date.');
-      }
+    if (cleanTitle.length < 3 || cleanTitle.length > 200) {
+      throw Exception('Title must be between 3 and 200 characters.');
+    }
 
-      if (capacity < 0 || capacity > 1000000) {
-        throw Exception('Capacity must be between 0 and 1,000,000.');
-      }
+    if (cleanDescription.length < 10 || cleanDescription.length > 4000) {
+      throw Exception('Description must be between 10 and 4000 characters.');
+    }
 
-      if (normalizedPrice < 0 || normalizedPrice > 100000) {
-        throw Exception('Price must be between 0 and 100000.');
-      }
+    if (latitude < -90 || latitude > 90) {
+      throw Exception('Latitude must be between -90 and 90.');
+    }
 
-      final payload = CreateEventRequest(
-        title: cleanTitle,
-        description: cleanDescription,
-        segmentId: segmentId,
-        genreId: genreId,
-        subGenreId: subGenreId,
-        venueId: venueId,
-        cityId: cityId,
-        latitude: latitude,
-        longitude: longitude,
-        startDateTime: startDateTime,
-        endDateTime: endDateTime,
-        capacity: capacity,
-        price: normalizedPrice,
-        isOnline: false,
-        tags: cleanTags,
-        externalUrl: null,
-        accessibilityInfo: cleanAccessibilityInfo,
-        promoterName: cleanPromoterName,
-        locale: cleanLocale,
-      );
+    if (longitude < -180 || longitude > 180) {
+      throw Exception('Longitude must be between -180 and 180.');
+    }
 
-      final event = state.eventId == null
-          ? await repository.createEvent(payload)
-          : await repository.updateEvent(state.eventId!, payload);
+    if (!startDateTime.isAfter(now)) {
+      throw Exception('Start date must be in the future.');
+    }
 
-      final eventId = event.eventId;
+    if (!endDateTime.isAfter(startDateTime)) {
+      throw Exception('End date must be after start date.');
+    }
 
-      String? imageWarning;
-      final imageError = await _attachSelectedImagesToEvent(eventId: eventId);
-      if (imageError != null) {
-        imageWarning = 'Event saved, but some images could not be uploaded: $imageError';
-      }
+    if (capacity < 0 || capacity > 1000000) {
+      throw Exception('Capacity must be between 0 and 1,000,000.');
+    }
 
-      if (publish) {
-        await repository.publishEvent(eventId);
-      }
+    if (normalizedPrice < 0 || normalizedPrice > 100000) {
+      throw Exception('Price must be between 0 and 100000.');
+    }
 
-      state = state.copyWith(
-        submitting: false,
-        eventId: eventId,
-        clearFeaturedImage: true,
-        galleryImages: const [],
-        successMessage: imageWarning ??
-            (publish
-                ? 'Event published successfully.'
-                : 'Draft saved successfully.'),
-        errorMessage: imageWarning == null ? null : imageWarning,
-      );
-    } catch (e) {
-      state = state.copyWith(
-        submitting: false,
-        errorMessage: _messageFromError(e),
-        clearSuccessMessage: true,
+    if (cleanTags != null && cleanTags.length > 500) {
+      throw Exception('Tags must be 500 characters or fewer.');
+    }
+
+    if (cleanAccessibilityInfo != null &&
+        cleanAccessibilityInfo.length > 1000) {
+      throw Exception(
+        'Accessibility information must be 1000 characters or fewer.',
       );
     }
+
+    if (cleanPromoterName != null && cleanPromoterName.length > 200) {
+      throw Exception('Promoter name must be 200 characters or fewer.');
+    }
+
+    if (cleanLocale.length > 10) {
+      throw Exception('Locale must be 10 characters or fewer.');
+    }
+
+    final payload = CreateEventRequest(
+      title: cleanTitle,
+      description: cleanDescription,
+      segmentId: segmentId,
+      genreId: genreId,
+      subGenreId: subGenreId,
+      latitude: latitude,
+      longitude: longitude,
+      startDateTime: startDateTime,
+      endDateTime: endDateTime,
+      capacity: capacity,
+      price: normalizedPrice,
+      tags: cleanTags,
+      accessibilityInfo: cleanAccessibilityInfo,
+      promoterName: cleanPromoterName,
+      locale: cleanLocale,
+    );
+
+    final event = isEditing
+        ? await repository.updateEvent(state.eventId!, payload)
+        : await repository.createEvent(payload);
+
+    final eventId = event.eventId;
+    String? warning;
+
+    final deleteError = await _deleteRemovedImages(eventId: eventId);
+    if (deleteError != null) {
+      warning = deleteError;
+    }
+
+    final imageError = await _attachSelectedImagesToEvent(eventId: eventId);
+    if (imageError != null) {
+      warning = warning == null
+          ? 'Event saved, but some image operations failed:\n$imageError'
+          : '$warning\n$imageError';
+    }
+
+    EventItem finalEvent = event;
+    String successMessage;
+
+    if (isEditing) {
+      successMessage = 'Event updated successfully.';
+    } else {
+      await repository.publishEvent(eventId);
+      finalEvent = event.copyWith(status: 'Published');
+      successMessage = 'Event published successfully.';
+    }
+
+    state = state.copyWith(
+      submitting: false,
+      eventId: eventId,
+      clearFeaturedImage: true,
+      galleryImages: const [],
+      removedImageIds: const [],
+      successMessage: successMessage,
+      errorMessage: warning,
+    );
+
+    return finalEvent;
+  } catch (e) {
+    state = state.copyWith(
+      submitting: false,
+      errorMessage: _messageFromError(e),
+      clearSuccessMessage: true,
+    );
+    return null;
+  }
+}
+
+  Future<String?> _deleteRemovedImages({
+    required int eventId,
+  }) async {
+    if (state.removedImageIds.isEmpty) {
+      return null;
+    }
+
+    final failures = <String>[];
+
+    for (final imageId in state.removedImageIds) {
+      try {
+        await repository.deleteEventImage(
+          eventId: eventId,
+          imageId: imageId,
+        );
+      } catch (e) {
+        failures.add('image #$imageId: ${_messageFromError(e)}');
+      }
+    }
+
+    if (failures.isEmpty) {
+      return null;
+    }
+
+    return 'Event saved, but some existing images could not be removed:\n${failures.join('\n')}';
   }
 
   Future<String?> _attachSelectedImagesToEvent({
@@ -442,8 +486,11 @@ class CreateEventController extends StateNotifier<CreateEventState> {
       }
     }
 
-    if (failures.isEmpty) return null;
-    return failures.join(' | ');
+    if (failures.isEmpty) {
+      return null;
+    }
+
+    return failures.join('\n');
   }
 
   Future<void> _uploadAndAttachImage({
@@ -465,9 +512,11 @@ class CreateEventController extends StateNotifier<CreateEventState> {
   }
 
   String? _cleanNullable(String? value) {
-    if (value == null) return null;
-    final trimmed = value.trim();
-    return trimmed.isEmpty ? null : trimmed;
+    final trimmed = value?.trim();
+    if (trimmed == null || trimmed.isEmpty) {
+      return null;
+    }
+    return trimmed;
   }
 
   String _messageFromError(Object error) {
@@ -480,6 +529,10 @@ class CreateEventController extends StateNotifier<CreateEventState> {
 
       if (data is Map && data['message'] != null) {
         return data['message'].toString();
+      }
+
+      if (error.response?.statusCode == 403) {
+        return 'You are not allowed to create, update, or publish this event.';
       }
 
       return error.message ?? 'Something went wrong.';

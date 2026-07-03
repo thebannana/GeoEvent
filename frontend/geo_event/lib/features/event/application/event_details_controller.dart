@@ -1,40 +1,10 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../shared/events/models/create_event_models.dart';
 import '../../../../shared/events/providers/event_providers.dart';
-import '../../../shared/likes/providers/liked_events_providers.dart';
-
-class EventDetailsState {
-  final EventItem? event;
-  final bool isLoading;
-  final bool isRefreshing;
-  final String? error;
-
-  const EventDetailsState({
-    this.event,
-    this.isLoading = true,
-    this.isRefreshing = false,
-    this.error,
-  });
-
-  bool get hasData => event != null;
-  bool get hasError => error != null && error!.trim().isNotEmpty;
-
-  EventDetailsState copyWith({
-    EventItem? event,
-    bool? isLoading,
-    bool? isRefreshing,
-    String? error,
-    bool clearError = false,
-  }) {
-    return EventDetailsState(
-      event: event ?? this.event,
-      isLoading: isLoading ?? this.isLoading,
-      isRefreshing: isRefreshing ?? this.isRefreshing,
-      error: clearError ? null : (error ?? this.error),
-    );
-  }
-}
+import '../../../../shared/likes/providers/liked_events_providers.dart';
+import '../../../shared/events/models/event_details_state.dart';
 
 final eventDetailsControllerProvider = StateNotifierProvider.autoDispose
     .family<EventDetailsController, EventDetailsState, int>((ref, eventId) {
@@ -51,6 +21,8 @@ class EventDetailsController extends StateNotifier<EventDetailsState> {
   }
 
   Future<void> load() async {
+    if (!mounted) return;
+
     state = state.copyWith(
       isLoading: true,
       isRefreshing: false,
@@ -58,26 +30,24 @@ class EventDetailsController extends StateNotifier<EventDetailsState> {
     );
 
     try {
-      final item =
-          await ref.read(eventsRepositoryProvider).getEventById(eventId);
+      final item = await ref.read(eventsRepositoryProvider).getEventById(eventId);
 
-      state = EventDetailsState(
+      if (!mounted) return;
+      state = state.copyWith(
         event: item,
         isLoading: false,
-        isRefreshing: false,
       );
     } catch (e) {
-      state = EventDetailsState(
-        event: null,
+      if (!mounted) return;
+      state = state.copyWith(
         isLoading: false,
-        isRefreshing: false,
-        error: e.toString(),
+        error: _messageFromError(e),
       );
     }
   }
 
   Future<void> refresh() async {
-    if (state.isRefreshing) return;
+    if (!mounted || state.isRefreshing) return;
 
     state = state.copyWith(
       isRefreshing: true,
@@ -85,83 +55,102 @@ class EventDetailsController extends StateNotifier<EventDetailsState> {
     );
 
     try {
-      final item =
-          await ref.read(eventsRepositoryProvider).getEventById(eventId);
+      final item = await ref.read(eventsRepositoryProvider).getEventById(eventId);
 
-      state = EventDetailsState(
+      if (!mounted) return;
+      state = state.copyWith(
         event: item,
         isLoading: false,
         isRefreshing: false,
       );
     } catch (e) {
+      if (!mounted) return;
       state = state.copyWith(
         isRefreshing: false,
-        error: e.toString(),
+        error: _messageFromError(e),
       );
     }
   }
 
   void setEvent(EventItem item) {
+    if (!mounted) return;
     state = state.copyWith(event: item);
   }
 
-Future<void> likeEvent() async {
-  final current = state.event;
-  if (current == null || current.isLiked) return;
-
-  final optimistic = current.copyWith(
-    isLiked: true,
-    likesCount: current.likesCount + 1,
-  );
-
-  state = state.copyWith(event: optimistic, clearError: true);
-
-  try {
-    await ref.read(likedEventsProvider.notifier).likeEvent(current.eventId);
-
-    final refreshed =
-        await ref.read(eventsRepositoryProvider).getEventById(current.eventId);
+  Future<void> likeEvent() async {
+    final current = state.event;
+    if (current == null || current.isLiked || state.isTogglingLike) return;
 
     state = state.copyWith(
-      event: refreshed,
+      isTogglingLike: true,
+      event: current.copyWith(
+        isLiked: true,
+        likesCount: current.likesCount + 1,
+      ),
       clearError: true,
     );
-  } catch (e) {
-    state = state.copyWith(
-      event: current,
-      error: e.toString(),
-    );
-    rethrow;
+
+    try {
+      await ref.read(likedEventsProvider.notifier).likeEvent(current.eventId);
+      await ref.read(likedEventsProvider.notifier).refresh();
+
+      if (!mounted) return;
+      state = state.copyWith(isTogglingLike: false);
+    } catch (e) {
+      if (!mounted) return;
+      state = state.copyWith(
+        isTogglingLike: false,
+        event: current,
+        error: _messageFromError(e),
+      );
+    }
   }
-}
 
-Future<void> unlikeEvent() async {
-  final current = state.event;
-  if (current == null || !current.isLiked) return;
-
-  final optimistic = current.copyWith(
-    isLiked: false,
-    likesCount: current.likesCount > 0 ? current.likesCount - 1 : 0,
-  );
-
-  state = state.copyWith(event: optimistic, clearError: true);
-
-  try {
-    await ref.read(likedEventsProvider.notifier).unlikeEvent(current.eventId);
-
-    final refreshed =
-        await ref.read(eventsRepositoryProvider).getEventById(current.eventId);
+  Future<void> unlikeEvent() async {
+    final current = state.event;
+    if (current == null || !current.isLiked || state.isTogglingLike) return;
 
     state = state.copyWith(
-      event: refreshed,
+      isTogglingLike: true,
+      event: current.copyWith(
+        isLiked: false,
+        likesCount: current.likesCount > 0 ? current.likesCount - 1 : 0,
+      ),
       clearError: true,
     );
-  } catch (e) {
-    state = state.copyWith(
-      event: current,
-      error: e.toString(),
-    );
-    rethrow;
+
+    try {
+      await ref.read(likedEventsProvider.notifier).unlikeEvent(current.eventId);
+      await ref.read(likedEventsProvider.notifier).refresh();
+
+      if (!mounted) return;
+      state = state.copyWith(isTogglingLike: false);
+    } catch (e) {
+      if (!mounted) return;
+      state = state.copyWith(
+        isTogglingLike: false,
+        event: current,
+        error: _messageFromError(e),
+      );
+    }
   }
-}
+
+  String _messageFromError(Object error) {
+    if (error is DioException) {
+      final data = error.response?.data;
+      if (data is Map && data['error'] != null) {
+        return data['error'].toString();
+      }
+      if (data is Map && data['message'] != null) {
+        return data['message'].toString();
+      }
+      return error.message ?? 'Something went wrong.';
+    }
+
+    final text = error.toString();
+    if (text.startsWith('Exception: ')) {
+      return text.replaceFirst('Exception: ', '');
+    }
+    return text;
+  }
 }

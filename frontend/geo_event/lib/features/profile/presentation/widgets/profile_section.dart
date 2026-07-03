@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/widgets/app_surface_card.dart';
+import '../../../../core/widgets/surfaces/app_surface_card.dart';
 
 class ProfileSection extends StatelessWidget {
   final String title;
@@ -37,18 +37,30 @@ class ProfileSection extends StatelessWidget {
                 subtitle!,
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
+                  height: 1.35,
                 ),
               ),
             ],
             const SizedBox(height: 8),
-            ...List.generate(children.length, (index) {
-              return Column(
-                children: [
-                  children[index],
-                  if (index != children.length - 1) const Divider(height: 1),
-                ],
-              );
-            }),
+            if (children.isEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 4, bottom: 8),
+                child: Text(
+                  'No items available.',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              )
+            else
+              ...List.generate(children.length, (index) {
+                return Column(
+                  children: [
+                    children[index],
+                    if (index != children.length - 1) const Divider(height: 1),
+                  ],
+                );
+              }),
           ],
         ),
       ),

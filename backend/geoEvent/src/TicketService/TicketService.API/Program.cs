@@ -7,11 +7,12 @@ using Microsoft.OpenApi.Models;
 using TicketService.API.Middleware;
 using TicketService.Infrastructure;
 using TicketService.Infrastructure.Persistence;
-using Microsoft.EntityFrameworkCore;
 using TicketService.API.Extensions;
 using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Configuration.AddEnvironmentVariables();
 
 builder.Services
     .AddControllers()
@@ -22,22 +23,82 @@ builder.Services
 
 builder.Services.AddInfrastructure(builder.Configuration);
 
+var allowedOrigins = builder.Configuration
+    .GetSection("Cors:AllowedOrigins")
+    .Get<string[]>()?
+    .Where(origin => !string.IsNullOrWhiteSpace(origin))
+    .Distinct(StringComparer.OrdinalIgnoreCase)
+    .ToArray()
+    ?? Array.Empty<string>();
+
+if (allowedOrigins.Length == 0)
+{
+    throw new InvalidOperationException("At least one CORS origin must be configured.");
+}
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
         policy
-            .WithOrigins(
-                builder.Configuration.GetSection("Cors:AllowedOrigins")
-                    .Get<string[]>() ?? ["http://localhost:3000"])
+            .WithOrigins(allowedOrigins)
             .AllowAnyHeader()
             .AllowAnyMethod()
             .AllowCredentials();
     });
 });
 
+var jwtSecret = builder.Configuration["Jwt:Secret"];
+if (string.IsNullOrWhiteSpace(jwtSecret))
+{
+    throw new InvalidOperationException("Jwt:Secret is not configured.");
+}
+
+var jwtIssuer = builder.Configuration["Jwt:Issuer"];
+if (string.IsNullOrWhiteSpace(jwtIssuer))
+{
+    throw new InvalidOperationException("Jwt:Issuer is not configured.");
+}
+
+var jwtAudience = builder.Configuration["Jwt:Audience"];
+if (string.IsNullOrWhiteSpace(jwtAudience))
+{
+    throw new InvalidOperationException("Jwt:Audience is not configured.");
+}
+
+var payPalMode = builder.Configuration["PayPal:Mode"];
+var payPalAppBaseUrl = builder.Configuration["PayPal:AppBaseUrl"];
+var payPalClientId = builder.Configuration["PayPal:ClientId"];
+var payPalClientSecret = builder.Configuration["PayPal:ClientSecret"];
+
+if (string.IsNullOrWhiteSpace(payPalMode))
+{
+    throw new InvalidOperationException("PayPal:Mode is not configured.");
+}
+
+if (string.IsNullOrWhiteSpace(payPalAppBaseUrl))
+{
+    throw new InvalidOperationException("PayPal:AppBaseUrl is not configured.");
+}
+
+if (string.Equals(payPalMode, "sandbox", StringComparison.OrdinalIgnoreCase) ||
+    string.Equals(payPalMode, "live", StringComparison.OrdinalIgnoreCase))
+{
+    if (string.IsNullOrWhiteSpace(payPalClientId))
+    {
+        throw new InvalidOperationException("PayPal:ClientId is not configured.");
+    }
+
+    if (string.IsNullOrWhiteSpace(payPalClientSecret))
+    {
+        throw new InvalidOperationException("PayPal:ClientSecret is not configured.");
+    }
+}
+
 builder.Services.AddRateLimiter(options =>
 {
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
     options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
         RateLimitPartition.GetFixedWindowLimiter(
             partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
@@ -54,7 +115,7 @@ builder.Services.AddRateLimiter(options =>
         context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
         context.HttpContext.Response.ContentType = "application/json";
         await context.HttpContext.Response.WriteAsync(
-            "{\"error\": \"Too many requests. Please slow down.\"}", token);
+            "{\"error\":\"Too many requests. Please slow down.\"}", token);
     };
 
     options.AddFixedWindowLimiter("create-reservation", opt =>
@@ -64,27 +125,30 @@ builder.Services.AddRateLimiter(options =>
         opt.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
         opt.QueueLimit = 0;
     });
-
 });
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
+        options.RequireHttpsMetadata = false;
+        options.SaveToken = false;
+
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuerSigningKey = true,
             IssuerSigningKey = new SymmetricSecurityKey(
-                Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Secret"]!)),
+                Encoding.UTF8.GetBytes(jwtSecret)),
             ValidateIssuer = true,
-            ValidIssuer = builder.Configuration["Jwt:Issuer"],
+            ValidIssuer = jwtIssuer,
             ValidateAudience = true,
-            ValidAudience = builder.Configuration["Jwt:Audience"],
+            ValidAudience = jwtAudience,
             ValidateLifetime = true,
             ClockSkew = TimeSpan.Zero
         };
     });
 
 builder.Services.AddAuthorization();
+builder.Services.AddEndpointsApiExplorer();
 
 builder.Services.AddSwaggerGen(options =>
 {
@@ -99,7 +163,7 @@ builder.Services.AddSwaggerGen(options =>
     {
         Name = "Authorization",
         Type = SecuritySchemeType.Http,
-        Scheme = "Bearer",
+        Scheme = "bearer",
         BearerFormat = "JWT",
         In = ParameterLocation.Header,
         Description = "Enter your JWT token."
@@ -116,13 +180,12 @@ builder.Services.AddSwaggerGen(options =>
                     Id = "Bearer"
                 }
             },
-            []
+            Array.Empty<string>()
         }
     });
 });
 
 var app = builder.Build();
-
 
 app.UseMiddleware<SecurityHeadersMiddleware>();
 app.UseMiddleware<ExceptionMiddleware>();

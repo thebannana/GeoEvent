@@ -110,10 +110,17 @@ public class ChatServiceImpl : IChatService
 
         var participant = await _repository.GetParticipantAsync(threadId, userId);
         if (participant == null || participant.LeftAt != null)
-            return ServiceResult<bool>.Forbidden("You are not a participant of this thread.");
+            return ServiceResult<bool>.NotFound("You are not a participant of this thread.");
 
         participant.LeftAt = DateTime.UtcNow;
         await _repository.UpdateParticipantAsync(participant);
+
+        var activeParticipants = await _repository.GetParticipantsAsync(threadId);
+        var participantUserIds = activeParticipants
+            .Select(x => x.UserId)
+            .ToList();
+
+        await _realtimeNotifier.ParticipantLeftAsync(threadId, userId, participantUserIds);
 
         return ServiceResult<bool>.Ok(true);
     }
@@ -671,17 +678,20 @@ public class ChatServiceImpl : IChatService
 
         if (thread.Type == ChatThreadType.Direct)
         {
-            var otherUserId = thread.Participants
-                .Where(x => x.UserId != currentUserId && x.LeftAt == null)
-                .Select(x => (int?)x.UserId)
+            var otherParticipant = thread.Participants
+                .Where(x => x.UserId != currentUserId)
+                .OrderBy(x => x.LeftAt.HasValue)
+                .ThenBy(x => x.JoinedAt)
                 .FirstOrDefault();
+
+            var otherUserId = otherParticipant?.UserId;
 
             if (!otherUserId.HasValue)
             {
                 return new ChatThreadSummaryDto
                 {
                     ThreadId = thread.Id,
-                    Title = "Unknown user",
+                    Title = "Direct chat",
                     ThreadType = thread.Type.ToString(),
                     EventId = thread.EventId,
                     IsGroup = false,
@@ -694,18 +704,24 @@ public class ChatServiceImpl : IChatService
             var users = await _userDirectoryClient.GetPublicUsersAsync(new[] { otherUserId.Value });
             users.TryGetValue(otherUserId.Value, out var otherUser);
 
+            var resolvedTitle =
+                !string.IsNullOrWhiteSpace(otherUser?.DisplayName)
+                    ? otherUser!.DisplayName
+                    : !string.IsNullOrWhiteSpace(otherUser?.Username)
+                        ? otherUser!.Username
+                        : $"User {otherUserId.Value}";
+
             return new ChatThreadSummaryDto
             {
                 ThreadId = thread.Id,
-                Title = !string.IsNullOrWhiteSpace(otherUser?.Username)
-                    ? otherUser.Username
-                    : otherUser?.DisplayName ?? $"User {otherUserId.Value}",
+                Title = resolvedTitle,
                 ThreadType = thread.Type.ToString(),
                 EventId = thread.EventId,
                 ImageUrl = otherUser?.ImageUrl,
                 IsGroup = false,
                 OtherUserId = otherUserId.Value,
                 OtherUserDisplayName = otherUser?.DisplayName,
+                OtherUserUsername = otherUser?.Username,
                 OtherUserAvatarUrl = otherUser?.ImageUrl,
                 OtherUserIsOnline = await _presenceTracker.IsOnlineAsync(otherUserId.Value),
                 OtherUserLastActiveAt = EnsureUtc(await _presenceTracker.GetLastActiveAtAsync(otherUserId.Value)),

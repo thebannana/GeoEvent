@@ -43,25 +43,21 @@ class MapSettingsController extends Notifier<MapSettingsState> {
   @override
   MapSettingsState build() => const MapSettingsState.initial();
 
-  void setMap3D(bool value) {
-    state = state.copyWith(map3D: value);
-  }
+  void setMap3D(bool value) => state = state.copyWith(map3D: value);
+  void setTerrain(bool value) => state = state.copyWith(terrain: value);
+  void setDayNightCycle(bool value) =>
+      state = state.copyWith(dayNightCycle: value);
+  void setMapPins(bool value) => state = state.copyWith(mapPins: value);
+  void setEventPins(bool value) => state = state.copyWith(eventPins: value);
 
-  void setTerrain(bool value) {
-    state = state.copyWith(terrain: value);
-  }
+  void toggleMap3D() => state = state.copyWith(map3D: !state.map3D);
+  void toggleTerrain() => state = state.copyWith(terrain: !state.terrain);
+  void toggleDayNightCycle() =>
+      state = state.copyWith(dayNightCycle: !state.dayNightCycle);
+  void toggleMapPins() => state = state.copyWith(mapPins: !state.mapPins);
+  void toggleEventPins() => state = state.copyWith(eventPins: !state.eventPins);
 
-  void setDayNightCycle(bool value) {
-    state = state.copyWith(dayNightCycle: value);
-  }
-
-  void setMapPins(bool value) {
-    state = state.copyWith(mapPins: value);
-  }
-
-  void setEventPins(bool value) {
-    state = state.copyWith(eventPins: value);
-  }
+  void reset() => state = const MapSettingsState.initial();
 }
 
 final mapSettingsControllerProvider =

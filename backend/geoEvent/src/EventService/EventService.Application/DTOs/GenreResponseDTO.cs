@@ -7,6 +7,6 @@ public class GenreResponseDto
     public int? SegmentId { get; set; }
     public bool IsActive { get; set; }
     public List<SubGenreResponseDto> SubGenres { get; set; } = [];
-    public string? SegmentName { get; set; }    // new
+    public string? SegmentName { get; set; }
 
 }

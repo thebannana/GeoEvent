@@ -1,5 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../features/auth/application/auth_controller.dart';
+import '../../../shared/profile/data/preferences_repository.dart';
 import '../../../shared/profile/models/user_preference.dart';
 import '../../../shared/profile/providers/profile_providers.dart';
 
@@ -9,24 +11,93 @@ final preferencesControllerProvider =
 );
 
 class PreferencesController extends AsyncNotifier<List<UserPreference>> {
+  PreferencesRepository get _repository =>
+      ref.read(preferencesRepositoryProvider);
+
   @override
   Future<List<UserPreference>> build() async {
-    final items = await ref.read(preferencesRepositoryProvider).getPreferences();
-    return _sort(items);
+    final authState = ref.watch(authStateProvider);
+
+    if (!authState.isAuthenticated) {
+      return const <UserPreference>[];
+    }
+
+    return _load();
   }
 
   Future<void> refresh() async {
-    state = const AsyncLoading();
-    state = await AsyncValue.guard(() async {
-      final items =
-          await ref.read(preferencesRepositoryProvider).getPreferences();
-      return _sort(items);
-    });
+    final authState = ref.read(authStateProvider);
+
+    if (!authState.isAuthenticated) {
+      state = const AsyncData(<UserPreference>[]);
+      return;
+    }
+
+    final previous = state.valueOrNull;
+    if (previous != null) {
+      state =
+          AsyncLoading<List<UserPreference>>().copyWithPrevious(AsyncData(previous));
+    } else {
+      state = const AsyncLoading();
+    }
+
+    state = await AsyncValue.guard(_load);
+  }
+
+  Future<bool> upsertPreference({
+    int? segmentId,
+    int? genreId,
+    int? subGenreId,
+    required double score,
+  }) async {
+    final authState = ref.read(authStateProvider);
+    if (!authState.isAuthenticated) {
+      state = const AsyncData(<UserPreference>[]);
+      return false;
+    }
+
+    try {
+      await _repository.upsertPreference(
+        segmentId: segmentId,
+        genreId: genreId,
+        subGenreId: subGenreId,
+        score: score,
+      );
+
+      state = await AsyncValue.guard(_load);
+      return true;
+    } catch (error, stackTrace) {
+      state = AsyncError(error, stackTrace);
+      return false;
+    }
+  }
+
+  Future<bool> deletePreference(int prefId) async {
+    final authState = ref.read(authStateProvider);
+    if (!authState.isAuthenticated) {
+      state = const AsyncData(<UserPreference>[]);
+      return false;
+    }
+
+    try {
+      await _repository.deletePreference(prefId);
+      state = await AsyncValue.guard(_load);
+      return true;
+    } catch (error, stackTrace) {
+      state = AsyncError(error, stackTrace);
+      return false;
+    }
+  }
+
+  Future<List<UserPreference>> _load() async {
+    final items = await _repository.getPreferences();
+    return _sort(items);
   }
 
   List<UserPreference> _sort(List<UserPreference> items) {
-    final next = [...items];
-    next.sort((a, b) {
+    final sorted = [...items];
+
+    sorted.sort((a, b) {
       final byScore = b.score.compareTo(a.score);
       if (byScore != 0) return byScore;
 
@@ -42,12 +113,13 @@ class PreferencesController extends AsyncNotifier<List<UserPreference>> {
 
       return (a.subGenreId ?? 0).compareTo(b.subGenreId ?? 0);
     });
-    return next;
+
+    return sorted;
   }
 
-  int _depth(UserPreference pref) {
-    if (pref.subGenreId != null) return 2;
-    if (pref.genreId != null) return 1;
+  int _depth(UserPreference preference) {
+    if (preference.subGenreId != null) return 2;
+    if (preference.genreId != null) return 1;
     return 0;
   }
 }

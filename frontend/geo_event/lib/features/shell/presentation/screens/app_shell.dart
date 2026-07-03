@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/widgets/app_icon_circle_button.dart';
-import '../../../../core/widgets/glass_scaffold.dart';
+import '../../../../core/widgets/inputs/app_icon_circle_button.dart';
+import '../../../../core/widgets/layout/app_scaffold.dart';
 import '../../../../shared/location/models/map_filter_selection.dart';
 import '../../../../shared/shell/models/shell_overlay_page.dart';
 import '../../../../shared/shell/models/shell_tab.dart';
-import '../../../../shared/shell/providers/shell_overlay_providers.dart';
+import '../../application/shell_controller.dart';
+import '../../application/shell_ui_controller.dart';
 import '../../../chat/presentation/screens/chat_screen.dart';
 import '../../../create_event/presentation/screens/create_event_screen.dart';
 import '../../../event/presentation/screens/event_detail_screen.dart';
@@ -17,7 +18,6 @@ import '../../../map/presentation/widgets/map_settings_drawer.dart';
 import '../../../profile/presentation/screens/profile_tab_page.dart';
 import '../../../reservations/presentation/screens/reservations_screen.dart';
 import '../../../search/presentation/screens/search_sheet.dart';
-import '../../application/shell_controller.dart';
 import '../widgets/shell_bottom_nav_bar.dart';
 import '../widgets/shell_compass_button.dart';
 import '../widgets/shell_sheet_content.dart';
@@ -37,10 +37,18 @@ class _AppShellState extends ConsumerState<AppShell> {
   static const double _upperSheetSize = 0.78;
   static const double _maxSheetSize = 1.0;
   static const double _fullScreenTrigger = 0.90;
+  static const double _liveCloseThreshold = 0.30;
+
+  static const String _searchTitle = 'Search';
+  static const String _chatTitle = 'Chat';
+  static const String _reservationsTitle = 'My Reservations';
+  static const String _createEventTitle = 'Create Event';
+  static const String _inboxTitle = 'Inbox';
+  static const String _profileTitle = 'My Profile';
+  static const String _openFiltersTooltip = 'Open filters';
 
   final GlobalKey<MapHomeScreenState> _mapKey = GlobalKey<MapHomeScreenState>();
 
-  bool _isFullScreen = false;
   bool _showFilter = false;
   bool _showDrawer = false;
   bool _hasActiveNavigation = false;
@@ -50,26 +58,25 @@ class _AppShellState extends ConsumerState<AppShell> {
 
   MapFilterSelection _mapFilterSelection = MapFilterSelection.defaults();
 
-  double _baseMinExtentFor(
-    ShellOverlayPage? overlayPage,
-    ShellTab? selectedTab,
-  ) {
+  double _baseMinExtentFor(ShellOverlayPage? overlayPage) {
     if (overlayPage == ShellOverlayPage.search) {
       return _searchMinSheetSize;
     }
+
     return _baseMinSheetSize;
   }
 
   double _effectiveMinExtent(
     BuildContext context,
     ShellOverlayPage? overlayPage,
-    ShellTab? selectedTab,
   ) {
-    final baseMin = _baseMinExtentFor(overlayPage, selectedTab);
+    final baseMin = _baseMinExtentFor(overlayPage);
     final keyboardInset = MediaQuery.of(context).viewInsets.bottom;
     final screenHeight = MediaQuery.of(context).size.height;
 
-    if (keyboardInset <= 0) return baseMin;
+    if (keyboardInset <= 0) {
+      return baseMin;
+    }
 
     final keyboardFraction = keyboardInset / screenHeight;
 
@@ -93,11 +100,16 @@ class _AppShellState extends ConsumerState<AppShell> {
     if (!mounted) return;
 
     setState(() {
-      _isFullScreen = false;
       _sheetExtent = _midSheetSize;
-      if (!keepFilter) _showFilter = false;
-      if (!keepDrawer) _showDrawer = false;
+      if (!keepFilter) {
+        _showFilter = false;
+      }
+      if (!keepDrawer) {
+        _showDrawer = false;
+      }
     });
+
+    ref.read(shellUiControllerProvider.notifier).setFullScreen(false);
   }
 
   void _setSheetExtent(
@@ -106,34 +118,47 @@ class _AppShellState extends ConsumerState<AppShell> {
   }) {
     if (!mounted) return;
 
-    final clamped = extent.clamp(minExtent, _maxSheetSize);
+    final clampedExtent = extent.clamp(minExtent, _maxSheetSize);
+    final isFullScreen = clampedExtent >= _fullScreenTrigger;
+
     setState(() {
-      _sheetExtent = clamped;
-      _isFullScreen = clamped >= _fullScreenTrigger;
+      _sheetExtent = clampedExtent;
     });
+
+    ref.read(shellUiControllerProvider.notifier).setFullScreen(isFullScreen);
+  }
+
+  void _dismissCurrentSheet(ShellOverlayPage? overlayPage) {
+    if (overlayPage != null) {
+      _closeOverlayOnly();
+    } else {
+      _closeSheet();
+    }
   }
 
   void _handleTabTap(ShellTab tab) {
-    final current = ref.read(shellControllerProvider);
+    final currentTab = ref.read(shellControllerProvider);
 
-    if (current == tab) {
-      _closeSheet();
+    ref.read(shellUiControllerProvider.notifier).closeSheet();
+
+    if (currentTab == tab) {
+      ref.read(shellControllerProvider.notifier).close();
+      _resetTransientUi();
       return;
     }
 
-    ref.read(shellOverlayPageProvider.notifier).state = null;
     _resetTransientUi();
     ref.read(shellControllerProvider.notifier).openTab(tab);
   }
 
   void _closeSheet() {
     ref.read(shellControllerProvider.notifier).close();
-    ref.read(shellOverlayPageProvider.notifier).state = null;
+    ref.read(shellUiControllerProvider.notifier).closeSheet();
     _resetTransientUi();
   }
 
-  void _closeSearchOverlayOnly() {
-    ref.read(shellOverlayPageProvider.notifier).state = null;
+  void _closeOverlayOnly() {
+    ref.read(shellUiControllerProvider.notifier).closeSheet();
     _resetTransientUi();
   }
 
@@ -155,34 +180,38 @@ class _AppShellState extends ConsumerState<AppShell> {
 
   void _openSearchSheet() {
     ref.read(shellControllerProvider.notifier).close();
-    ref.read(shellOverlayPageProvider.notifier).state = ShellOverlayPage.search;
+    ref.read(shellUiControllerProvider.notifier).openSheet(
+      ShellOverlayPage.search,
+    );
     _resetTransientUi();
   }
 
   void _openDrawer() {
     ref.read(shellControllerProvider.notifier).close();
-    ref.read(shellOverlayPageProvider.notifier).state = null;
+    ref.read(shellUiControllerProvider.notifier).closeSheet();
 
     if (!mounted) return;
 
     setState(() {
       _showDrawer = true;
       _showFilter = false;
-      _isFullScreen = false;
       _sheetExtent = _midSheetSize;
     });
+
+    ref.read(shellUiControllerProvider.notifier).setFullScreen(false);
   }
 
   void _toggleFilter() {
-    ref.read(shellOverlayPageProvider.notifier).state = null;
+    ref.read(shellUiControllerProvider.notifier).closeSheet();
 
     if (!mounted) return;
 
     setState(() {
       _showFilter = !_showFilter;
       _showDrawer = false;
-      _isFullScreen = false;
     });
+
+    ref.read(shellUiControllerProvider.notifier).setFullScreen(false);
   }
 
   void _handleBearingChanged(double bearing) {
@@ -201,18 +230,43 @@ class _AppShellState extends ConsumerState<AppShell> {
     });
   }
 
+  Future<void> _handleEventCreated(CreateEventSuccessResult result) async {
+    _closeSheet();
+
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          result.published
+              ? 'Event created successfully.'
+              : 'Event created successfully.',
+        ),
+      ),
+    );
+
+    await _mapKey.currentState?.reloadMapPins(forceResync: true);
+    await _mapKey.currentState?.focusOnEventLocation(
+      latitude: result.latitude,
+      longitude: result.longitude,
+    );
+
+    // Optional:
+    // await _openEventDetails(result.eventId);
+  }
+
   String _titleForTab(ShellTab tab) {
     switch (tab) {
       case ShellTab.chat:
-        return 'Chat';
+        return _chatTitle;
       case ShellTab.reservations:
-        return 'My Reservations';
+        return _reservationsTitle;
       case ShellTab.createEvent:
-        return 'Create Event';
+        return _createEventTitle;
       case ShellTab.inbox:
-        return 'Inbox';
+        return _inboxTitle;
       case ShellTab.profile:
-        return 'My Profile';
+        return _profileTitle;
     }
   }
 
@@ -223,7 +277,9 @@ class _AppShellState extends ConsumerState<AppShell> {
       case ShellTab.reservations:
         return const ReservationsScreen();
       case ShellTab.createEvent:
-        return const CreateEventScreen();
+        return CreateEventScreen(
+          onCreated: _handleEventCreated,
+        );
       case ShellTab.inbox:
         return const InboxScreen();
       case ShellTab.profile:
@@ -236,7 +292,7 @@ class _AppShellState extends ConsumerState<AppShell> {
       MaterialPageRoute(
         builder: (_) => EventDetailsScreen(
           eventId: eventId,
-          onCloseParentSearchSheet: _closeSearchOverlayOnly,
+          onCloseParentSearchSheet: _closeOverlayOnly,
         ),
       ),
     );
@@ -246,13 +302,25 @@ class _AppShellState extends ConsumerState<AppShell> {
     DragUpdateDetails details,
     double availableHeight,
     double minExtent,
+    ShellOverlayPage? overlayPage,
   ) {
     final delta = details.primaryDelta ?? 0;
     final fractionDelta = delta / availableHeight;
-    _setSheetExtent(
-      _sheetExtent - fractionDelta,
-      minExtent: minExtent,
-    );
+    final nextExtent = _sheetExtent - fractionDelta;
+
+    if (nextExtent <= _liveCloseThreshold) {
+      _dismissCurrentSheet(overlayPage);
+      return;
+    }
+
+    final clampedExtent = nextExtent.clamp(minExtent, _maxSheetSize);
+    final isFullScreen = clampedExtent >= _fullScreenTrigger;
+
+    setState(() {
+      _sheetExtent = clampedExtent;
+    });
+
+    ref.read(shellUiControllerProvider.notifier).setFullScreen(isFullScreen);
   }
 
   void _handleSheetDragEnd(
@@ -260,6 +328,11 @@ class _AppShellState extends ConsumerState<AppShell> {
     ShellOverlayPage? overlayPage,
     double minExtent,
   ) {
+    if (_sheetExtent <= _liveCloseThreshold) {
+      _dismissCurrentSheet(overlayPage);
+      return;
+    }
+
     final velocity = details.primaryVelocity ?? 0;
 
     final targets = <double>[
@@ -282,11 +355,7 @@ class _AppShellState extends ConsumerState<AppShell> {
 
     if (velocity > 700) {
       if (_sheetExtent <= minExtent + 0.03) {
-        if (overlayPage != null) {
-          _closeSearchOverlayOnly();
-        } else {
-          _closeSheet();
-        }
+        _dismissCurrentSheet(overlayPage);
         return;
       }
       target = minExtent;
@@ -303,13 +372,15 @@ class _AppShellState extends ConsumerState<AppShell> {
   @override
   Widget build(BuildContext context) {
     final selectedTab = ref.watch(shellControllerProvider);
-    final overlayPage = ref.watch(shellOverlayPageProvider);
+    final shellUiState = ref.watch(shellUiControllerProvider);
+    final overlayPage = shellUiState.overlayPage;
+    final isFullScreen = shellUiState.isFullScreen;
+
     final mediaQuery = MediaQuery.of(context);
     final screenHeight = mediaQuery.size.height;
     final minSheetExtent = _effectiveMinExtent(
       context,
       overlayPage,
-      selectedTab,
     );
 
     if (_sheetExtent < minSheetExtent) {
@@ -322,16 +393,16 @@ class _AppShellState extends ConsumerState<AppShell> {
       });
     }
 
-    final hasSheetPage = selectedTab != null || overlayPage != null;
-    final anyOverlay = _showFilter || _showDrawer || overlayPage != null;
+    final hasSheetPage = selectedTab != null || shellUiState.hasOverlay;
+    final hasAnyOverlay = _showFilter || _showDrawer || shellUiState.hasOverlay;
 
     final showTopBar =
         !_showDrawer &&
-        !_isFullScreen &&
-        overlayPage == null &&
+        !isFullScreen &&
+        !shellUiState.hasOverlay &&
         selectedTab == null;
 
-    return GlassScaffold(
+    return AppScaffold(
       child: Scaffold(
         backgroundColor: Colors.transparent,
         extendBody: true,
@@ -344,7 +415,7 @@ class _AppShellState extends ConsumerState<AppShell> {
                 filterSelection: _mapFilterSelection,
                 onBearingChanged: _handleBearingChanged,
                 onEventSelected: _openEventDetails,
-                onCloseSearchOverlay: _closeSearchOverlayOnly,
+                onCloseSearchOverlay: _closeOverlayOnly,
                 onNavigationUiVisibilityChanged:
                     _handleNavigationUiVisibilityChanged,
               ),
@@ -370,6 +441,7 @@ class _AppShellState extends ConsumerState<AppShell> {
                           onClose: _closeFilter,
                           onApply: (selection) {
                             if (!mounted) return;
+
                             setState(() {
                               _mapFilterSelection = selection;
                               _showFilter = false;
@@ -407,13 +479,13 @@ class _AppShellState extends ConsumerState<AppShell> {
                     padding: const EdgeInsets.fromLTRB(0, 6, 16, 0),
                     child: AppIconCircleButton(
                       icon: Icons.tune_rounded,
-                      tooltip: 'Open filters',
+                      tooltip: _openFiltersTooltip,
                       onPressed: _toggleFilter,
                     ),
                   ),
                 ),
               ),
-            if (!anyOverlay && !_isFullScreen && selectedTab == null)
+            if (!hasAnyOverlay && !isFullScreen && selectedTab == null)
               Positioned(
                 right: 16,
                 bottom: 140,
@@ -425,14 +497,14 @@ class _AppShellState extends ConsumerState<AppShell> {
             if (hasSheetPage)
               Positioned.fill(
                 child: IgnorePointer(
-                  ignoring: _isFullScreen,
+                  ignoring: isFullScreen,
                   child: GestureDetector(
-                    onTap: overlayPage != null
-                        ? _closeSearchOverlayOnly
+                    onTap: shellUiState.hasOverlay
+                        ? _closeOverlayOnly
                         : _closeSheet,
                     child: Container(
                       color: Colors.black.withValues(
-                        alpha: _isFullScreen ? 0.05 : 0.14,
+                        alpha: isFullScreen ? 0.05 : 0.14,
                       ),
                     ),
                   ),
@@ -453,9 +525,9 @@ class _AppShellState extends ConsumerState<AppShell> {
                         final Widget body;
 
                         if (overlayPage == ShellOverlayPage.search) {
-                          title = 'Search';
+                          title = _searchTitle;
                           body = SearchSheet(
-                            onCloseSheet: _closeSearchOverlayOnly,
+                            onCloseSheet: _closeOverlayOnly,
                           );
                         } else {
                           final tab = selectedTab!;
@@ -465,13 +537,14 @@ class _AppShellState extends ConsumerState<AppShell> {
 
                         return ShellSheetContent(
                           title: title,
-                          onClose: overlayPage != null
-                              ? _closeSearchOverlayOnly
+                          onClose: shellUiState.hasOverlay
+                              ? _closeOverlayOnly
                               : _closeSheet,
                           onDragUpdate: (details) => _handleSheetDragUpdate(
                             details,
                             screenHeight,
                             minSheetExtent,
+                            overlayPage,
                           ),
                           onDragEnd: (details) => _handleSheetDragEnd(
                             details,
@@ -479,7 +552,7 @@ class _AppShellState extends ConsumerState<AppShell> {
                             minSheetExtent,
                           ),
                           body: body,
-                          isFullScreen: _isFullScreen,
+                          isFullScreen: isFullScreen,
                         );
                       },
                     ),
@@ -490,9 +563,9 @@ class _AppShellState extends ConsumerState<AppShell> {
         ),
         bottomNavigationBar: AnimatedOpacity(
           duration: const Duration(milliseconds: 180),
-          opacity: _isFullScreen ? 0.0 : 1.0,
+          opacity: isFullScreen ? 0.0 : 1.0,
           child: IgnorePointer(
-            ignoring: _isFullScreen,
+            ignoring: isFullScreen,
             child: ShellBottomNavBar(
               selectedTab: selectedTab,
               onTap: _handleTabTap,

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using UserService.API.Extensions;
 using UserService.Application.DTOs;
 using UserService.Application.Interfaces.Services;
+using UserService.Infrastructure.Services;
 
 namespace UserService.API.Controllers;
 
@@ -12,10 +13,11 @@ namespace UserService.API.Controllers;
 public class UsersController : ControllerBase
 {
     private readonly IUserService _userService;
-
-    public UsersController(IUserService userService)
+    private readonly IPayPalService _payPalService;
+    public UsersController(IUserService userService, IPayPalService payPalService)
     {
         _userService = userService;
+        _payPalService = payPalService;
     }
 
     [HttpGet("profiles")]
@@ -30,6 +32,15 @@ public class UsersController : ControllerBase
     public async Task<IActionResult> GetMyProfile()
     {
         var result = await _userService.GetProfileAsync(User.GetUserId());
+        return result.Success
+            ? Ok(result.Data)
+            : StatusCode(result.StatusCode, new { error = result.Error });
+    }
+
+    [HttpGet("me/paypal/status")]
+    public async Task<IActionResult> GetPayPalStatus()
+    {
+        var result = await _payPalService.GetStatusAsync();
         return result.Success
             ? Ok(result.Data)
             : StatusCode(result.StatusCode, new { error = result.Error });

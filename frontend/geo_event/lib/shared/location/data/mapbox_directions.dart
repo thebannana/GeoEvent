@@ -1,5 +1,5 @@
 import 'package:dio/dio.dart';
-import '../../../../core/config/app_env.dart';
+import 'package:geo_event/core/config/app_environment.dart';
 
 class MapboxDirectionsApi {
   final Dio dio;
@@ -12,13 +12,13 @@ class MapboxDirectionsApi {
     required double destinationLat,
     required double destinationLng,
   }) async {
-    AppEnv.validate();
+    AppEnvironment.validateAll();
 
     final response = await dio.get<Map<String, dynamic>>(
       'https://api.mapbox.com/directions/v5/mapbox/driving-traffic/'
       '$originLng,$originLat;$destinationLng,$destinationLat',
       queryParameters: {
-        'access_token': AppEnv.mapboxToken,
+        'access_token': AppEnvironment.mapboxAccessToken,
         'geometries': 'geojson',
         'overview': 'full',
         'steps': 'true',

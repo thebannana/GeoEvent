@@ -14,6 +14,8 @@ try
 {
     var builder = WebApplication.CreateBuilder(args);
 
+    builder.Configuration.AddEnvironmentVariables();
+
     if (!builder.Environment.IsEnvironment("Testing"))
     {
         builder.Host.UseSerilog((ctx, cfg) =>
@@ -39,10 +41,10 @@ try
     var jwtSettings = builder.Configuration.GetSection("Jwt");
     var issuer = jwtSettings["Issuer"];
     var audience = jwtSettings["Audience"];
-    var secretKey = jwtSettings["SecretKey"];
+    var secret = jwtSettings["Secret"];
 
-    if (string.IsNullOrWhiteSpace(secretKey))
-        throw new InvalidOperationException("JWT SecretKey is missing.");
+    if (string.IsNullOrWhiteSpace(secret))
+        throw new InvalidOperationException("JWT Secret is missing.");
     if (string.IsNullOrWhiteSpace(issuer))
         throw new InvalidOperationException("JWT Issuer is missing.");
     if (string.IsNullOrWhiteSpace(audience))
@@ -64,7 +66,7 @@ try
                 ValidIssuer = issuer,
                 ValidAudience = audience,
                 IssuerSigningKey = new SymmetricSecurityKey(
-                    Encoding.UTF8.GetBytes(secretKey)),
+                    Encoding.UTF8.GetBytes(secret)),
                 ClockSkew = TimeSpan.Zero,
                 RoleClaimType = "role"
             };
@@ -107,7 +109,10 @@ try
 
     var corsOrigins = builder.Configuration
         .GetSection("Cors:AllowedOrigins")
-        .Get<string[]>();
+        .Get<string[]>()?
+        .Where(origin => !string.IsNullOrWhiteSpace(origin))
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .ToArray();
 
     if (corsOrigins == null || corsOrigins.Length == 0)
         throw new InvalidOperationException("Cors:AllowedOrigins is not configured.");

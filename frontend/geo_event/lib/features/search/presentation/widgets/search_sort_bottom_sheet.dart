@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/widgets/app_bottom_sheet_container.dart';
+import '../../../../core/widgets/layout/app_bottom_sheet_container.dart';
 import '../../domain/sort_option.dart';
 
 class SearchSortBottomSheet extends StatelessWidget {
@@ -18,7 +18,7 @@ class SearchSortBottomSheet extends StatelessWidget {
           selected.sortDescending == value.sortDescending;
 
       return ListTile(
-        onTap: () => Navigator.pop(context, value),
+        onTap: () => Navigator.of(context).pop(value),
         contentPadding: EdgeInsets.zero,
         title: Text(
           value.label,
@@ -36,38 +36,49 @@ class SearchSortBottomSheet extends StatelessWidget {
     }
 
     return AppBottomSheetContainer(
-  scrollable: false,
-  child: ConstrainedBox(
-    constraints: BoxConstraints(
-      maxHeight: MediaQuery.of(context).size.height * 0.7,
-    ),
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        const Padding(
-          padding: EdgeInsets.fromLTRB(4, 4, 4, 8),
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: Text(
-              'Sort events',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
+      scrollable: false,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.7,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(4, 4, 0, 8),
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Sort events',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.close_rounded),
+                    tooltip: 'Close',
+                  ),
+                ],
               ),
             ),
-          ),
-        ),
-        Flexible(
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: SortOption.all.map(tile).toList(),
+            Flexible(
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: SortOption.all.map(tile).toList(),
+                ),
+              ),
             ),
-          ),
+          ],
         ),
-      ],
-    ),
-  ),
-);
+      ),
+    );
   }
 }

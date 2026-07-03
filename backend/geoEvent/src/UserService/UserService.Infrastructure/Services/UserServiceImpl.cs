@@ -127,7 +127,6 @@ public class UserServiceImpl : IUserService
             FirstName = user.Person?.FirstName ?? string.Empty,
             LastName = user.Person?.LastName ?? string.Empty,
             ImageUrl = string.IsNullOrWhiteSpace(user.Person?.ImageUrl) ? null : user.Person.ImageUrl,
-            CityName = null,
             EventsCount = 0,
             FollowersCount = 0,
             FollowingCount = 0,
@@ -205,9 +204,6 @@ public class UserServiceImpl : IUserService
 
         if (request.ImageUrl is not null)
             person.ImageUrl = request.ImageUrl.Trim();
-
-        if (request.CityId is not null)
-            person.CityId = request.CityId;
 
         person.UpdatedAt = DateTime.UtcNow;
 
@@ -512,7 +508,6 @@ public class UserServiceImpl : IUserService
         FirstName = user.Person?.FirstName ?? string.Empty,
         LastName = user.Person?.LastName ?? string.Empty,
         ImageUrl = string.IsNullOrWhiteSpace(user.Person?.ImageUrl) ? null : user.Person.ImageUrl,
-        CityName = null,
         AverageRating = averageRating,
         RatingsCount = ratingsCount,
         MyRating = myRating
@@ -536,7 +531,6 @@ public class UserServiceImpl : IUserService
                 FirstName = user.Person?.FirstName ?? string.Empty,
                 LastName = user.Person?.LastName ?? string.Empty,
                 ImageUrl = string.IsNullOrWhiteSpace(user.Person?.ImageUrl) ? null : user.Person.ImageUrl,
-                CityName = null,
                 EventsCount = 0,
                 FollowersCount = 0,
                 FollowingCount = 0,
@@ -626,8 +620,6 @@ public class UserServiceImpl : IUserService
             ImageUrl = person.ImageUrl,
             Role = user.Role.ToString(),
             CreatedAt = user.CreatedAt,
-            CityId = person.CityId,
-            CityName = null
         };
     }
 
@@ -638,7 +630,6 @@ public class UserServiceImpl : IUserService
         FirstName = user.Person?.FirstName ?? string.Empty,
         LastName = user.Person?.LastName ?? string.Empty,
         ImageUrl = string.IsNullOrWhiteSpace(user.Person?.ImageUrl) ? null : user.Person.ImageUrl,
-        CityName = null,
         EventsCount = 0,
         FollowersCount = 0,
         FollowingCount = 0,

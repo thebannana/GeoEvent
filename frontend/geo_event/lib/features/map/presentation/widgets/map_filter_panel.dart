@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../shared/events/providers/event_providers.dart';
 import '../../../../shared/location/models/map_filter_selection.dart';
-import 'map_filter_controls.dart';
+import 'map_filter_widgets.dart';
 
 @immutable
 class _SegmentViewData {
@@ -59,6 +59,10 @@ class MapFilterPanel extends ConsumerStatefulWidget {
 class _MapFilterPanelState extends ConsumerState<MapFilterPanel>
     with SingleTickerProviderStateMixin {
   static const double _priceMax = 500;
+  static const double _minPanelWidth = 280;
+  static const double _maxPanelWidth = 360;
+  static const double _panelMinHeight = 460;
+  static const double _panelMaxHeight = 720;
 
   late final AnimationController _controller;
   late final Animation<Offset> _slide;
@@ -75,8 +79,8 @@ class _MapFilterPanelState extends ConsumerState<MapFilterPanel>
   String? _error;
 
   RangeValues get _priceRange => RangeValues(
-        _selection.minPrice ?? 0,
-        _selection.maxPrice ?? _priceMax,
+        (_selection.minPrice ?? 0).clamp(0, _priceMax),
+        (_selection.maxPrice ?? _priceMax).clamp(0, _priceMax),
       );
 
   @override
@@ -109,10 +113,12 @@ class _MapFilterPanelState extends ConsumerState<MapFilterPanel>
   @override
   void didUpdateWidget(covariant MapFilterPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
+
     if (oldWidget.initialSelection != widget.initialSelection) {
       setState(() {
         _selection = widget.initialSelection;
       });
+      _loadInitialData();
     }
   }
 
@@ -127,7 +133,11 @@ class _MapFilterPanelState extends ConsumerState<MapFilterPanel>
 
     setState(() {
       _loadingSegments = true;
+      _loadingGenres = false;
+      _loadingSubGenres = false;
       _error = null;
+      _genres = [];
+      _subGenres = [];
     });
 
     try {
@@ -150,7 +160,7 @@ class _MapFilterPanelState extends ConsumerState<MapFilterPanel>
             );
           })
           .whereType<_SegmentViewData>()
-          .toList();
+          .toList(growable: false);
 
       if (!mounted) return;
 
@@ -168,6 +178,7 @@ class _MapFilterPanelState extends ConsumerState<MapFilterPanel>
       }
     } catch (e) {
       if (!mounted) return;
+
       setState(() {
         _loadingSegments = false;
         _error = e.toString().replaceFirst('Exception: ', '');
@@ -208,7 +219,7 @@ class _MapFilterPanelState extends ConsumerState<MapFilterPanel>
             );
           })
           .whereType<_GenreViewData>()
-          .toList();
+          .toList(growable: false);
 
       if (!mounted) return;
 
@@ -218,9 +229,7 @@ class _MapFilterPanelState extends ConsumerState<MapFilterPanel>
       });
     } catch (_) {
       if (!mounted) return;
-      setState(() {
-        _loadingGenres = false;
-      });
+      setState(() => _loadingGenres = false);
     }
   }
 
@@ -255,7 +264,7 @@ class _MapFilterPanelState extends ConsumerState<MapFilterPanel>
             );
           })
           .whereType<_SubGenreViewData>()
-          .toList();
+          .toList(growable: false);
 
       if (!mounted) return;
 
@@ -265,13 +274,13 @@ class _MapFilterPanelState extends ConsumerState<MapFilterPanel>
       });
     } catch (_) {
       if (!mounted) return;
-      setState(() {
-        _loadingSubGenres = false;
-      });
+      setState(() => _loadingSubGenres = false);
     }
   }
 
   String _buildPriceLabel() {
+    if (_selection.freeOnly) return 'Free only';
+
     final min = _selection.minPrice;
     final max = _selection.maxPrice;
 
@@ -281,28 +290,9 @@ class _MapFilterPanelState extends ConsumerState<MapFilterPanel>
     return '\$${min.round()} – \$${max.round()}';
   }
 
-  Future<void> _close() async {
-    await _controller.reverse();
-    if (mounted) {
-      widget.onClose();
-    }
-  }
-
-  Future<void> _apply() async {
-    widget.onApply(_selection);
-    await _close();
-  }
-
-  void _reset() {
-    setState(() {
-      _selection = MapFilterSelection.defaults();
-      _genres = [];
-      _subGenres = [];
-    });
-  }
-
   IconData _segmentIcon(String name) {
     final value = name.toLowerCase();
+
     if (value.contains('music') || value.contains('concert')) {
       return Icons.music_note_rounded;
     }
@@ -324,7 +314,336 @@ class _MapFilterPanelState extends ConsumerState<MapFilterPanel>
     if (value.contains('social')) {
       return Icons.people_rounded;
     }
+
     return Icons.apps_rounded;
+  }
+
+  Future<void> _close() async {
+    await _controller.reverse();
+    if (mounted) {
+      widget.onClose();
+    }
+  }
+
+  Future<void> _apply() async {
+    widget.onApply(_selection);
+    await _close();
+  }
+
+  void _reset() {
+    setState(() {
+      _selection = const MapFilterSelection.defaults();
+      _genres = [];
+      _subGenres = [];
+      _error = null;
+      _loadingGenres = false;
+      _loadingSubGenres = false;
+    });
+  }
+
+  void _clearSegmentSelection() {
+    setState(() {
+      _selection = _selection.copyWith(
+        clearSegment: true,
+        clearGenre: true,
+        clearSubGenre: true,
+      );
+      _genres = [];
+      _subGenres = [];
+    });
+  }
+
+  void _clearGenreSelection() {
+    setState(() {
+      _selection = _selection.copyWith(
+        clearGenre: true,
+        clearSubGenre: true,
+      );
+      _subGenres = [];
+    });
+  }
+
+  void _clearSubGenreSelection() {
+    setState(() {
+      _selection = _selection.copyWith(clearSubGenre: true);
+    });
+  }
+
+  void _updateRadius(double value) {
+    setState(() {
+      _selection = _selection.copyWith(radiusKm: value);
+    });
+  }
+
+  void _toggleGlobal(bool value) {
+    setState(() {
+      _selection = _selection.copyWith(showGlobalEvents: value);
+    });
+  }
+
+  void _toggleFreeOnly(bool value) {
+    setState(() {
+      _selection = _selection.copyWith(
+        freeOnly: value,
+        clearMinPrice: value,
+        clearMaxPrice: value,
+      );
+    });
+  }
+
+  void _toggleTodayOnly(bool value) {
+    setState(() {
+      _selection = _selection.copyWith(todayOnly: value);
+    });
+  }
+
+  void _togglePreferences(bool value) {
+    setState(() {
+      _selection = _selection.copyWith(usePreferences: value);
+    });
+  }
+
+  void _updatePriceRange(RangeValues values) {
+    setState(() {
+      _selection = _selection.copyWith(
+        minPrice: values.start > 0 ? values.start : null,
+        maxPrice: values.end < _priceMax ? values.end : null,
+        clearMinPrice: values.start == 0,
+        clearMaxPrice: values.end == _priceMax,
+        freeOnly: false,
+      );
+    });
+  }
+
+  Widget _buildSegmentSection() {
+    return MapFilterGroupCard(
+      title: 'Segment',
+      child: _loadingSegments
+          ? const MapLoadingState()
+          : _error != null
+              ? MapFilterErrorText(message: _error!)
+              : Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    MapChoicePill(
+                      label: 'All',
+                      icon: Icons.apps_rounded,
+                      selected: _selection.segmentId == null,
+                      onTap: _clearSegmentSelection,
+                    ),
+                    ..._segments.map((segment) {
+                      final selected = _selection.segmentId == segment.id;
+
+                      return MapChoicePill(
+                        label: segment.name,
+                        icon: _segmentIcon(segment.name),
+                        selected: selected,
+                        onTap: () async {
+                          if (selected) return;
+                          await _loadGenres(segment.id);
+                        },
+                      );
+                    }),
+                  ],
+                ),
+    );
+  }
+
+  Widget _buildGenreSection() {
+    return MapFilterGroupCard(
+      title: 'Genre',
+      child: _loadingGenres
+          ? const MapLoadingState()
+          : Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                MapChoicePill(
+                  label: 'All',
+                  selected: _selection.genreId == null,
+                  onTap: _clearGenreSelection,
+                ),
+                ..._genres.map((genre) {
+                  final selected = _selection.genreId == genre.id;
+
+                  return MapChoicePill(
+                    label: genre.name,
+                    selected: selected,
+                    onTap: () async {
+                      if (selected) return;
+                      await _loadSubGenres(genre.id);
+                    },
+                  );
+                }),
+              ],
+            ),
+    );
+  }
+
+  Widget _buildSubGenreSection() {
+    return MapFilterGroupCard(
+      title: 'Subgenre',
+      child: _loadingSubGenres
+          ? const MapLoadingState()
+          : Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                MapChoicePill(
+                  label: 'All',
+                  selected: _selection.subGenreId == null,
+                  onTap: _clearSubGenreSelection,
+                ),
+                ..._subGenres.map((subGenre) {
+                  final selected = _selection.subGenreId == subGenre.id;
+
+                  return MapChoicePill(
+                    label: subGenre.name,
+                    selected: selected,
+                    onTap: () {
+                      setState(() {
+                        _selection = _selection.copyWith(
+                          subGenreId: subGenre.id,
+                        );
+                      });
+                    },
+                  );
+                }),
+              ],
+            ),
+    );
+  }
+
+  Widget _buildCategoriesSection() {
+    return MapFilterSection(
+      title: 'Categories',
+      children: [
+        _buildSegmentSection(),
+        _buildGenreSection(),
+        _buildSubGenreSection(),
+      ],
+    );
+  }
+
+  Widget _buildDistanceSection() {
+    return MapFilterSection(
+      title: 'Distance',
+      children: [
+        MapSliderCard(
+          label: _selection.showGlobalEvents
+              ? 'Global events enabled'
+              : 'Radius ${_selection.radiusKm.round()} km',
+          value: _selection.radiusKm,
+          min: 1,
+          max: 500,
+          divisions: 99,
+          enabled: !_selection.showGlobalEvents,
+          onChanged: _updateRadius,
+        ),
+        MapToggleCard(
+          label: 'Show global events',
+          subtitle:
+              'Disable distance filtering and show events from anywhere.',
+          value: _selection.showGlobalEvents,
+          onChanged: _toggleGlobal,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPriceSection() {
+    return MapFilterSection(
+      title: 'Price',
+      children: [
+        MapRangeSliderCard(
+          label: _buildPriceLabel(),
+          values: _priceRange,
+          min: 0,
+          max: _priceMax,
+          divisions: 100,
+          onChanged: _selection.freeOnly ? (_) {} : _updatePriceRange,
+        ),
+        if (_selection.freeOnly)
+          const Padding(
+            padding: EdgeInsets.only(top: 4),
+            child: Text(
+              'Price range is disabled while free-only is enabled.',
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildOptionsSection() {
+    return MapFilterSection(
+      title: 'Options',
+      children: [
+        MapToggleCard(
+          label: 'Free events only',
+          subtitle: 'Only show events with no ticket price.',
+          value: _selection.freeOnly,
+          onChanged: _toggleFreeOnly,
+        ),
+        MapToggleCard(
+          label: 'Today only',
+          subtitle: 'Only show events happening today.',
+          value: _selection.todayOnly,
+          onChanged: _toggleTodayOnly,
+        ),
+        MapToggleCard(
+          label: 'Use my preferences',
+          subtitle: 'Blend map results with your saved interests.',
+          value: _selection.usePreferences,
+          onChanged: _togglePreferences,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFooter() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 14, 20, 18),
+      child: Row(
+        children: [
+          Expanded(
+            child: OutlinedButton(
+              onPressed: _reset,
+              style: OutlinedButton.styleFrom(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                padding: const EdgeInsets.symmetric(vertical: 14),
+              ),
+              child: const Text(
+                'Reset',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            flex: 2,
+            child: FilledButton(
+              onPressed: _apply,
+              style: FilledButton.styleFrom(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                padding: const EdgeInsets.symmetric(vertical: 14),
+              ),
+              child: const Text(
+                'Apply filters',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 15,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -346,10 +665,10 @@ class _MapFilterPanelState extends ConsumerState<MapFilterPanel>
               child: SlideTransition(
                 position: _slide,
                 child: Container(
-                  width: width.clamp(280.0, 360.0),
+                  width: width.clamp(_minPanelWidth, _maxPanelWidth),
                   constraints: const BoxConstraints(
-                    minHeight: 460,
-                    maxHeight: 720,
+                    minHeight: _panelMinHeight,
+                    maxHeight: _panelMaxHeight,
                   ),
                   decoration: BoxDecoration(
                     color: isDark
@@ -387,235 +706,13 @@ class _MapFilterPanelState extends ConsumerState<MapFilterPanel>
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              MapFilterSection(
-                                title: 'Categories',
-                                children: [
-                                  MapFilterGroupCard(
-                                    title: 'Segment',
-                                    child: _loadingSegments
-                                        ? const MapLoadingState()
-                                        : _error != null
-                                            ? MapFilterErrorText(message: _error!)
-                                            : Wrap(
-                                                spacing: 8,
-                                                runSpacing: 8,
-                                                children: [
-                                                  MapChoicePill(
-                                                    label: 'All',
-                                                    icon: Icons.apps_rounded,
-                                                    selected:
-                                                        _selection.segmentId == null,
-                                                    onTap: () {
-                                                      setState(() {
-                                                        _selection = _selection.copyWith(
-                                                          clearSegment: true,
-                                                          clearGenre: true,
-                                                          clearSubGenre: true,
-                                                        );
-                                                        _genres = [];
-                                                        _subGenres = [];
-                                                      });
-                                                    },
-                                                  ),
-                                                  ..._segments.map((segment) {
-                                                    final selected =
-                                                        _selection.segmentId ==
-                                                            segment.id;
-                                                    return MapChoicePill(
-                                                      label: segment.name,
-                                                      icon: _segmentIcon(segment.name),
-                                                      selected: selected,
-                                                      onTap: () async {
-                                                        if (selected) return;
-                                                        await _loadGenres(segment.id);
-                                                      },
-                                                    );
-                                                  }),
-                                                ],
-                                              ),
-                                  ),
-                                  MapFilterGroupCard(
-                                    title: 'Genre',
-                                    child: _loadingGenres
-                                        ? const MapLoadingState()
-                                        : Wrap(
-                                            spacing: 8,
-                                            runSpacing: 8,
-                                            children: [
-                                              MapChoicePill(
-                                                label: 'All',
-                                                selected: _selection.genreId == null,
-                                                onTap: () {
-                                                  setState(() {
-                                                    _selection = _selection.copyWith(
-                                                      clearGenre: true,
-                                                      clearSubGenre: true,
-                                                    );
-                                                    _subGenres = [];
-                                                  });
-                                                },
-                                              ),
-                                              ..._genres.map((genre) {
-                                                return MapChoicePill(
-                                                  label: genre.name,
-                                                  selected:
-                                                      _selection.genreId == genre.id,
-                                                  onTap: () async {
-                                                    if (_selection.genreId ==
-                                                        genre.id) {
-                                                      return;
-                                                    }
-                                                    await _loadSubGenres(genre.id);
-                                                  },
-                                                );
-                                              }),
-                                            ],
-                                          ),
-                                  ),
-                                  MapFilterGroupCard(
-                                    title: 'Subgenre',
-                                    child: _loadingSubGenres
-                                        ? const MapLoadingState()
-                                        : Wrap(
-                                            spacing: 8,
-                                            runSpacing: 8,
-                                            children: [
-                                              MapChoicePill(
-                                                label: 'All',
-                                                selected:
-                                                    _selection.subGenreId == null,
-                                                onTap: () {
-                                                  setState(() {
-                                                    _selection = _selection.copyWith(
-                                                      clearSubGenre: true,
-                                                    );
-                                                  });
-                                                },
-                                              ),
-                                              ..._subGenres.map((subGenre) {
-                                                return MapChoicePill(
-                                                  label: subGenre.name,
-                                                  selected:
-                                                      _selection.subGenreId ==
-                                                          subGenre.id,
-                                                  onTap: () {
-                                                    setState(() {
-                                                      _selection = _selection.copyWith(
-                                                        subGenreId: subGenre.id,
-                                                      );
-                                                    });
-                                                  },
-                                                );
-                                              }),
-                                            ],
-                                          ),
-                                  ),
-                                ],
-                              ),
+                              _buildCategoriesSection(),
                               const SizedBox(height: 18),
-                              MapFilterSection(
-                                title: 'Distance',
-                                children: [
-                                  MapSliderCard(
-                                    label: _selection.showGlobalEvents
-                                        ? 'Global events enabled'
-                                        : 'Radius ${_selection.radiusKm.round()} km',
-                                    value: _selection.radiusKm,
-                                    min: 1,
-                                    max: 500,
-                                    divisions: 99,
-                                    enabled: !_selection.showGlobalEvents,
-                                    onChanged: (value) => setState(
-                                      () => _selection =
-                                          _selection.copyWith(radiusKm: value),
-                                    ),
-                                  ),
-                                  MapToggleCard(
-                                    label: 'Show global events',
-                                    subtitle:
-                                        'Disable distance filtering and show events from anywhere.',
-                                    value: _selection.showGlobalEvents,
-                                    onChanged: (v) => setState(
-                                      () => _selection = _selection.copyWith(
-                                        showGlobalEvents: v,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
+                              _buildDistanceSection(),
                               const SizedBox(height: 18),
-                              MapFilterSection(
-                                title: 'Price',
-                                children: [
-                                  MapRangeSliderCard(
-                                    label: _buildPriceLabel(),
-                                    values: _priceRange,
-                                    min: 0,
-                                    max: _priceMax,
-                                    divisions: 100,
-                                    onChanged: (values) {
-                                      setState(() {
-                                        _selection = _selection.copyWith(
-                                          minPrice:
-                                              values.start > 0 ? values.start : null,
-                                          maxPrice: values.end < _priceMax
-                                              ? values.end
-                                              : null,
-                                          clearMinPrice: values.start == 0,
-                                          clearMaxPrice: values.end == _priceMax,
-                                          freeOnly: false,
-                                        );
-                                      });
-                                    },
-                                  ),
-                                ],
-                              ),
+                              _buildPriceSection(),
                               const SizedBox(height: 18),
-                              MapFilterSection(
-                                title: 'Options',
-                                children: [
-                                  MapToggleCard(
-                                    label: 'Free events only',
-                                    subtitle:
-                                        'Only show events with no ticket price.',
-                                    value: _selection.freeOnly,
-                                    onChanged: (v) {
-                                      setState(() {
-                                        _selection = _selection.copyWith(
-                                          freeOnly: v,
-                                          clearMinPrice: v,
-                                          clearMaxPrice: v,
-                                        );
-                                      });
-                                    },
-                                  ),
-                                  MapToggleCard(
-                                    label: 'Today only',
-                                    subtitle:
-                                        'Only show events happening today.',
-                                    value: _selection.todayOnly,
-                                    onChanged: (v) {
-                                      setState(() {
-                                        _selection =
-                                            _selection.copyWith(todayOnly: v);
-                                      });
-                                    },
-                                  ),
-                                  MapToggleCard(
-                                    label: 'Use my preferences',
-                                    subtitle:
-                                        'Blend map results with your saved interests.',
-                                    value: _selection.usePreferences,
-                                    onChanged: (v) {
-                                      setState(() {
-                                        _selection = _selection.copyWith(
-                                          usePreferences: v,
-                                        );
-                                      });
-                                    },
-                                  ),
-                                ],
-                              ),
+                              _buildOptionsSection(),
                             ],
                           ),
                         ),
@@ -626,50 +723,7 @@ class _MapFilterPanelState extends ConsumerState<MapFilterPanel>
                             ? const Color(0xFF2A303A)
                             : const Color(0xFFE3EAF3),
                       ),
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 14, 20, 18),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: OutlinedButton(
-                                onPressed: _reset,
-                                style: OutlinedButton.styleFrom(
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(16),
-                                  ),
-                                  padding:
-                                      const EdgeInsets.symmetric(vertical: 14),
-                                ),
-                                child: const Text(
-                                  'Reset',
-                                  style: TextStyle(fontWeight: FontWeight.w700),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              flex: 2,
-                              child: FilledButton(
-                                onPressed: _apply,
-                                style: FilledButton.styleFrom(
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(16),
-                                  ),
-                                  padding:
-                                      const EdgeInsets.symmetric(vertical: 14),
-                                ),
-                                child: const Text(
-                                  'Apply Filters',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 15,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+                      _buildFooter(),
                     ],
                   ),
                 ),

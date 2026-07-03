@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/widgets/app_bottom_sheet_container.dart';
-import '../../../../core/widgets/app_surface_card.dart';
+import '../../../../core/widgets/layout/app_bottom_sheet_container.dart';
+import '../../../../core/widgets/surfaces/app_surface_card.dart';
 import '../../../../shared/events/models/create_event_models.dart';
 
 class EventShareSheet extends StatelessWidget {
@@ -28,11 +28,7 @@ class EventShareSheet extends StatelessWidget {
         ? item.coverImageUrl!.trim()
         : (item.imageUrls.isNotEmpty ? item.imageUrls.first : null);
 
-    final locationText = item.isOnline
-        ? 'Online event'
-        : (item.venueName?.trim().isNotEmpty == true
-            ? item.venueName!.trim()
-            : 'Location TBA');
+    final locationText = '${item.latitude.toStringAsFixed(6)}, ${item.longitude.toStringAsFixed(6)}';
 
     return AppBottomSheetContainer(
       scrollable: false,
@@ -49,7 +45,7 @@ class EventShareSheet extends StatelessWidget {
                         width: 56,
                         height: 56,
                         fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) =>
+                        errorBuilder: (_, _, _) =>
                             _shareImageFallback(context),
                       )
                     : _shareImageFallback(context),

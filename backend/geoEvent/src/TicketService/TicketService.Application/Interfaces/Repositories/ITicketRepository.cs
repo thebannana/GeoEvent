@@ -38,4 +38,5 @@ public interface ITicketRepository
     Task<PaymentDetail?> GetPaymentByTransactionIdAsync(string transactionId);
 
     Task<PagedResult<Reservation>> GetEventReservationsAsync(int eventId, ReservationFilterDto filter);
+    Task UpdatePaymentDetailAsync(PaymentDetail payment);
 }

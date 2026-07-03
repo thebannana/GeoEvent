@@ -3,12 +3,12 @@ using GeoEvent.HelperWorkers.Consumers;
 using GeoEvent.HelperWorkers.Consumers.Messages;
 using GeoEvent.HelperWorkers.Consumers.Notifications;
 using GeoEvent.HelperWorkers.Consumers.Tickets;
-using GeoEvent.HelperWorkers.DTOs;
 using GeoEvent.HelperWorkers.Interfaces;
 using GeoEvent.HelperWorkers.Options;
 using GeoEvent.HelperWorkers.Services;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
+using NotificationService.Worker.Options;
 using TicketService.Infrastructure.Persistence;
 using TicketService.Infrastructure.Repositories;
 using UserService.Application.Interfaces.Repositories;
@@ -44,8 +44,6 @@ if (builder.Environment.IsDevelopment())
     }
 }
 
-builder.Configuration.AddEnvironmentVariables();
-
 var userDbConnectionString = builder.Configuration.GetConnectionString("UserDb");
 if (string.IsNullOrWhiteSpace(userDbConnectionString))
     throw new InvalidOperationException("Missing configuration: ConnectionStrings:UserDb");
@@ -80,10 +78,12 @@ builder.Services.AddScoped<ITicketRepository, TicketRepository>();
 var eventServiceBaseUrl = builder.Configuration["Services:EventService"];
 if (string.IsNullOrWhiteSpace(eventServiceBaseUrl))
     throw new InvalidOperationException("Missing configuration: Services:EventService");
+if (!Uri.TryCreate(eventServiceBaseUrl, UriKind.Absolute, out var eventServiceUri))
+    throw new InvalidOperationException("Invalid configuration: Services:EventService must be an absolute URL");
 
 builder.Services.AddHttpClient<IExternalValidationService, ExternalValidationService>(client =>
 {
-    client.BaseAddress = new Uri(eventServiceBaseUrl);
+    client.BaseAddress = eventServiceUri;
     client.DefaultRequestHeaders.Accept.Add(
         new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
 });
@@ -94,6 +94,8 @@ builder.Services.AddScoped<IEmailSender, SmtpEmailSender>();
 var notificationServiceBaseUrl = builder.Configuration["Services:NotificationService:BaseUrl"];
 if (string.IsNullOrWhiteSpace(notificationServiceBaseUrl))
     throw new InvalidOperationException("Missing configuration: Services:NotificationService:BaseUrl");
+if (!Uri.TryCreate(notificationServiceBaseUrl, UriKind.Absolute, out var notificationServiceUri))
+    throw new InvalidOperationException("Invalid configuration: Services:NotificationService:BaseUrl must be an absolute URL");
 
 var notificationServiceInternalApiKey = builder.Configuration["Services:NotificationService:InternalApiKey"];
 if (string.IsNullOrWhiteSpace(notificationServiceInternalApiKey))
@@ -107,7 +109,7 @@ builder.Services.Configure<NotificationServiceOptions>(options =>
 
 builder.Services.AddHttpClient<INotificationApiClient, NotificationApiClient>(client =>
 {
-    client.BaseAddress = new Uri(notificationServiceBaseUrl);
+    client.BaseAddress = notificationServiceUri;
     client.Timeout = TimeSpan.FromSeconds(15);
     client.DefaultRequestHeaders.Accept.Add(
         new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
@@ -117,6 +119,8 @@ builder.Services.AddHttpClient<INotificationApiClient, NotificationApiClient>(cl
 var messageServiceBaseUrl = builder.Configuration["Services:MessageService:BaseUrl"];
 if (string.IsNullOrWhiteSpace(messageServiceBaseUrl))
     throw new InvalidOperationException("Missing configuration: Services:MessageService:BaseUrl");
+if (!Uri.TryCreate(messageServiceBaseUrl, UriKind.Absolute, out var messageServiceUri))
+    throw new InvalidOperationException("Invalid configuration: Services:MessageService:BaseUrl must be an absolute URL");
 
 var messageServiceInternalApiKey = builder.Configuration["Services:MessageService:InternalApiKey"];
 if (string.IsNullOrWhiteSpace(messageServiceInternalApiKey))
@@ -124,7 +128,7 @@ if (string.IsNullOrWhiteSpace(messageServiceInternalApiKey))
 
 builder.Services.AddHttpClient<IMessageChatAdminClient, MessageChatAdminClient>(client =>
 {
-    client.BaseAddress = new Uri(messageServiceBaseUrl);
+    client.BaseAddress = messageServiceUri;
     client.Timeout = TimeSpan.FromSeconds(15);
     client.DefaultRequestHeaders.Accept.Add(
         new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
@@ -179,6 +183,11 @@ builder.Services.AddMassTransit(x =>
     x.AddConsumer<ReservationCancelledIntegrationConsumer>();
     x.AddConsumer<UserDeletedConsumer>();
     x.AddConsumer<UserEventPreferenceInteractionConsumer>();
+
+    x.AddConsumer<EventRefundRequestedNotificationConsumer>();
+    x.AddConsumer<ReservationRefundApprovedNotificationConsumer>();
+    x.AddConsumer<ReservationRefundRejectedNotificationConsumer>();
+    x.AddConsumer<ReservationRemovedByOrganizerNotificationConsumer>();
 
     x.UsingRabbitMq((context, cfg) =>
     {

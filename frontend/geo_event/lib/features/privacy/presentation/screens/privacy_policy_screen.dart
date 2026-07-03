@@ -1,16 +1,54 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/widgets/app_surface_card.dart';
-import '../../../../core/widgets/glass_scaffold.dart';
+import '../../../../core/widgets/layout/app_scaffold.dart';
+import '../../../../core/widgets/surfaces/app_surface_card.dart';
 
 class PrivacyPolicyScreen extends StatelessWidget {
   const PrivacyPolicyScreen({super.key});
+
+  static const _lastUpdated = 'May 29, 2026';
+
+  static const List<String> _dataCollectionItems = [
+    'Account details such as your name, email address, and login information.',
+    'Event activity such as reservations, tickets, favorites, and notifications.',
+    'Approximate or precise location data if location-based discovery is enabled.',
+    'Basic device and diagnostic information such as crash logs and app performance data.',
+  ];
+
+  static const List<String> _dataUsageItems = [
+    'To help you discover nearby events and relevant recommendations.',
+    'To manage reservations, tickets, reminders, and event updates.',
+    'To improve app stability, security, and performance.',
+    'To communicate essential account or event-related information.',
+  ];
+
+  static const List<String> _permissionItems = [
+    'Location: used to show relevant events near you and improve map-based discovery.',
+    'Notifications: used to send reservation updates, reminders, and important event activity.',
+    'Camera or media access: only needed if profile photos, event media, or uploads are supported.',
+  ];
+
+  static const List<String> _userChoiceItems = [
+    'You can choose whether to grant certain device permissions.',
+    'You can stop using location-based features by disabling location access in system settings.',
+    'You can disable push notifications in your device settings.',
+    'You may request account or personal data deletion according to the final published policy.',
+  ];
+
+  static const String _introText =
+      'This privacy policy explains the main categories of data GeoEvent may process, the reasons for processing, and the basic choices available to users when using the application.';
+
+  static const String _thirdPartyText =
+      'GeoEvent may rely on third-party services for authentication, payments, analytics, maps, notifications, or crash reporting. Those services should be clearly identified in the final published policy used for release builds.';
+
+  static const String _contactText =
+      'For privacy-related questions, personal data requests, or account concerns, provide the official support or legal contact email used by the project.';
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return GlassScaffold(
+    return AppScaffold(
       appBar: AppBar(
         title: const Text('Privacy Policy'),
         backgroundColor: Colors.transparent,
@@ -28,7 +66,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           Text(
-            'Last updated: May 29, 2026',
+            'Last updated: $_lastUpdated',
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
@@ -36,65 +74,38 @@ class PrivacyPolicyScreen extends StatelessWidget {
           const SizedBox(height: 20),
           AppSurfaceCard(
             child: Text(
-              'This screen is a product-ready placeholder for GeoEvent. Replace it with your final legal text before release, but keep the same structure so users can clearly understand what data the app uses and why.',
+              _introText,
               style: theme.textTheme.bodyMedium?.copyWith(height: 1.5),
             ),
           ),
           const SizedBox(height: 20),
-          _SectionBlock(
+          const _SectionBlock(
             title: 'What GeoEvent may collect',
-            child: const _BulletList(
-              items: [
-                'Account details such as your name, email address, and login information.',
-                'Event activity such as reservations, tickets, favorites, and notifications.',
-                'Approximate or precise location data if location-based discovery is enabled.',
-                'Basic device and diagnostic information such as crash logs and app performance data.',
-              ],
-            ),
+            child: _BulletList(items: _dataCollectionItems),
           ),
-          _SectionBlock(
+          const _SectionBlock(
             title: 'How data may be used',
-            child: const _BulletList(
-              items: [
-                'To help you discover nearby events and relevant recommendations.',
-                'To manage reservations, tickets, reminders, and event updates.',
-                'To improve app stability, security, and performance.',
-                'To communicate essential account or event-related information.',
-              ],
-            ),
+            child: _BulletList(items: _dataUsageItems),
           ),
-          _SectionBlock(
+          const _SectionBlock(
             title: 'Permissions',
-            child: const _BulletList(
-              items: [
-                'Location: used to show relevant events near you and improve map-based discovery.',
-                'Notifications: used to send reservation updates, reminders, and important event activity.',
-                'Camera or media access: only needed if profile photos, event media, or uploads are supported.',
-              ],
-            ),
+            child: _BulletList(items: _permissionItems),
           ),
-          _SectionBlock(
+          const _SectionBlock(
             title: 'Your choices',
-            child: const _BulletList(
-              items: [
-                'You can choose whether to grant certain device permissions.',
-                'You can stop using location-based features by disabling location access in system settings.',
-                'You can disable push notifications in your device settings.',
-                'You may request account or personal data deletion according to the final published policy.',
-              ],
-            ),
+            child: _BulletList(items: _userChoiceItems),
           ),
           _SectionBlock(
             title: 'Third-party services',
             child: Text(
-              'GeoEvent may rely on third-party services for authentication, payments, analytics, maps, notifications, or crash reporting. The final version of this policy should identify those services clearly before public release.',
+              _thirdPartyText,
               style: theme.textTheme.bodyMedium?.copyWith(height: 1.5),
             ),
           ),
           _SectionBlock(
             title: 'Contact',
             child: Text(
-              'For privacy-related questions, data requests, or account concerns, add your official support or legal contact email here.',
+              _contactText,
               style: theme.textTheme.bodyMedium?.copyWith(height: 1.5),
             ),
           ),

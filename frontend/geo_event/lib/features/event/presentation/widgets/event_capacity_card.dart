@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/widgets/app_surface_card.dart';
+import '../../../../core/widgets/surfaces/app_surface_card.dart';
 
 class AttendeePreviewUser {
   final int userId;
@@ -41,7 +41,8 @@ class EventCapacityCard extends StatelessWidget {
     final progress = (normalizedReserved / safeCapacity).clamp(0.0, 1.0);
     final left = (capacity - normalizedReserved).clamp(0, capacity);
 
-    final muted = text.bodyMedium?.color ?? scheme.onSurface.withValues(alpha: 0.72);
+    final muted =
+        text.bodyMedium?.color ?? scheme.onSurface.withValues(alpha: 0.72);
     final faint = scheme.onSurface.withValues(alpha: 0.60);
 
     return AppSurfaceCard(
@@ -79,7 +80,7 @@ class EventCapacityCard extends StatelessWidget {
               minHeight: 10,
               backgroundColor: scheme.surfaceContainerHighest,
               valueColor: AlwaysStoppedAnimation<Color>(
-                progress >= 0.9 ? theme.colorScheme.error : scheme.primary,
+                progress >= 0.9 ? scheme.error : scheme.primary,
               ),
             ),
           ),

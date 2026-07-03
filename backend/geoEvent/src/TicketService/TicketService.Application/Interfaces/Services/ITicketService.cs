@@ -24,7 +24,14 @@ public interface ITicketService
     Task<ServiceResult<PagedResult<ReservationResponseDto>>> GetUserReservationsAsync(
         int userId, ReservationFilterDto filter);
 
+    Task<ServiceResult<bool>> AttachPendingPayPalOrderAsync(int reservationId, int userId, string providerOrderId);
     Task<ServiceResult<bool>> ExpireReservationsAsync();
+
+    Task<ServiceResult<ReservationResponseDto>> MarkCashCollectedAsync(
+    int eventId,
+    int reservationId,
+    int organizerUserId,
+    string organizerRole);
 
     Task<ServiceResult<PagedResult<OrganizerReservationResponseDto>>> GetEventReservationsAsync(
         int eventId,
@@ -60,4 +67,23 @@ public interface ITicketService
 
     Task CancelUserReservationsAsync(int userId);
     Task CancelTicketsByEventAsync(int eventId);
+
+    Task<ServiceResult<ReservationResponseDto>> RequestRefundAsync(
+        int reservationId,
+        RequestRefundDto dto,
+        int userId);
+
+    Task<ServiceResult<ReservationResponseDto>> ApproveRefundAsync(
+        int eventId,
+        int reservationId,
+        ApproveRefundDto dto,
+        int organizerUserId,
+        string organizerRole);
+
+    Task<ServiceResult<ReservationResponseDto>> RejectRefundAsync(
+        int eventId,
+        int reservationId,
+        RejectRefundDto dto,
+        int organizerUserId,
+        string organizerRole);
 }

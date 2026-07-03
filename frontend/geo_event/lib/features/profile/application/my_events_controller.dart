@@ -1,7 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_client.dart';
-import '../../auth/application/auth_controller.dart';
 import '../../profile/application/profile_controller.dart';
 import '../../../shared/events/data/my_events_api.dart';
 import '../../../shared/events/data/my_events_repository.dart';
@@ -21,36 +20,37 @@ final myEventsProvider =
 );
 
 class MyEventsController extends AsyncNotifier<List<MyEventResponseDto>> {
-  @override
-  Future<List<MyEventResponseDto>> build() async {
-    ref.watch(sessionUserIdProvider);
+  MyEventsRepository get _repository => ref.read(myEventsRepositoryProvider);
 
-    final profile = await ref.watch(profileControllerProvider.future);
-    final repo = ref.read(myEventsRepositoryProvider);
-    return repo.getMyEvents(profile.userId);
+  @override
+  Future<List<MyEventResponseDto>> build() {
+    return _load();
   }
 
   Future<void> refresh() async {
     state = const AsyncLoading();
-    state = await AsyncValue.guard(() async {
-      final profile = await ref.read(profileControllerProvider.future);
-      final repo = ref.read(myEventsRepositoryProvider);
-      return repo.getMyEvents(profile.userId);
-    });
+    state = await AsyncValue.guard(_load);
   }
 
   Future<bool> deleteEvent(int eventId) async {
-    final current = state.valueOrNull ?? const <MyEventResponseDto>[];
+    final currentItems = state.valueOrNull ?? const <MyEventResponseDto>[];
 
     try {
-      await ref.read(myEventsRepositoryProvider).deleteEvent(eventId);
+      await _repository.deleteEvent(eventId);
 
       state = AsyncData(
-        current.where((e) => e.eventId != eventId).toList(),
+        currentItems.where((event) => event.eventId != eventId).toList(),
       );
+
       return true;
     } catch (_) {
+      state = AsyncData(currentItems);
       return false;
     }
+  }
+
+  Future<List<MyEventResponseDto>> _load() async {
+    final profile = await ref.read(profileControllerProvider.future);
+    return _repository.getMyEvents(profile.userId);
   }
 }

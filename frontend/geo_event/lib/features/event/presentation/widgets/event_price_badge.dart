@@ -10,29 +10,28 @@ class EventPriceBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final isFree = price <= 0;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       decoration: BoxDecoration(
+        color: isFree
+            ? scheme.primary.withValues(alpha: 0.10)
+            : scheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(999),
-        gradient: const LinearGradient(
-          colors: [Color(0xFF70B8FF), Color(0xFF2D6DAA)],
+        border: Border.all(
+          color: isFree
+              ? scheme.primary.withValues(alpha: 0.28)
+              : scheme.outline.withValues(alpha: 0.20),
         ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.2),
-            blurRadius: 18,
-            offset: const Offset(0, 8),
-          ),
-        ],
       ),
       child: Text(
         isFree ? 'Free' : '${price.toStringAsFixed(price % 1 == 0 ? 0 : 2)} BAM',
-        style: const TextStyle(
-          color: Colors.white,
+        style: theme.textTheme.labelLarge?.copyWith(
+          color: isFree ? scheme.primary : scheme.onSurface,
           fontWeight: FontWeight.w700,
-          fontSize: 14,
         ),
       ),
     );

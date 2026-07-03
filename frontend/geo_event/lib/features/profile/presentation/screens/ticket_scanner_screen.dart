@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
-import '../../../../core/widgets/app_bottom_sheet_container.dart';
-import '../../../../core/widgets/app_spinner.dart';
+import '../../../../core/widgets/feedback/app_spinner.dart';
+import '../../../../core/widgets/layout/app_bottom_sheet_container.dart';
 import '../../../../shared/profile/providers/profile_providers.dart';
 import '../widgets/ticket_scan_result_sheet.dart';
 
@@ -28,7 +28,7 @@ class _TicketScannerScreenState extends ConsumerState<TicketScannerScreen> {
   String? _lastScannedValue;
 
   Future<void> _handleBarcode(BarcodeCapture capture) async {
-    if (_isHandlingScan) return;
+    if (_isHandlingScan || capture.barcodes.isEmpty) return;
 
     final qrCode = capture.barcodes.first.rawValue?.trim();
     if (qrCode == null || qrCode.isEmpty) return;
@@ -47,6 +47,8 @@ class _TicketScannerScreenState extends ConsumerState<TicketScannerScreen> {
     });
 
     try {
+      await _controller.stop();
+
       final result = await ref.read(ticketScannerRepositoryProvider).validateTicket(
             eventId: widget.eventId,
             qrCode: trimmed,
@@ -60,13 +62,18 @@ class _TicketScannerScreenState extends ConsumerState<TicketScannerScreen> {
         backgroundColor: Colors.transparent,
         builder: (_) => TicketScanResultSheet(result: result),
       );
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Scan failed: $e')),
-      );
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text('Ticket validation failed. Please try again.'),
+          ),
+        );
     } finally {
       if (mounted) {
+        await _controller.start();
         setState(() {
           _isHandlingScan = false;
           _lastScannedValue = null;
@@ -76,16 +83,16 @@ class _TicketScannerScreenState extends ConsumerState<TicketScannerScreen> {
   }
 
   Future<void> _openManualCodeInput() async {
-  final code = await showModalBottomSheet<String>(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
-    builder: (context) => const _ManualTicketCodeSheet(),
-  );
+    final code = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => const _ManualTicketCodeSheet(),
+    );
 
-  if (!mounted || code == null || code.trim().isEmpty) return;
-  await _submitCode(code);
-}
+    if (!mounted || code == null || code.trim().isEmpty) return;
+    await _submitCode(code);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -94,7 +101,9 @@ class _TicketScannerScreenState extends ConsumerState<TicketScannerScreen> {
         title: Text(widget.eventTitle),
         actions: [
           IconButton(
-            tooltip: 'Enter code manually',
+            tooltip: _isHandlingScan
+                ? 'Manual entry is unavailable while validation is in progress'
+                : 'Enter code manually',
             onPressed: _isHandlingScan ? null : _openManualCodeInput,
             icon: const Icon(Icons.keyboard_alt_rounded),
           ),
@@ -154,6 +163,7 @@ class _ManualTicketCodeSheet extends StatefulWidget {
 
 class _ManualTicketCodeSheetState extends State<_ManualTicketCodeSheet> {
   late final TextEditingController _controller;
+  final _formKey = GlobalKey<FormState>();
 
   @override
   void initState() {
@@ -168,7 +178,8 @@ class _ManualTicketCodeSheetState extends State<_ManualTicketCodeSheet> {
   }
 
   void _submit() {
-    Navigator.of(context).pop(_controller.text);
+    if (!_formKey.currentState!.validate()) return;
+    Navigator.of(context).pop(_controller.text.trim());
   }
 
   @override
@@ -179,37 +190,47 @@ class _ManualTicketCodeSheetState extends State<_ManualTicketCodeSheet> {
       ),
       child: AppBottomSheetContainer(
         scrollable: false,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              'Enter ticket code',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Enter ticket code',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _controller,
-              autofocus: true,
-              textInputAction: TextInputAction.done,
-              decoration: const InputDecoration(
-                labelText: 'QR code / token',
-                hintText: 'Paste or type the ticket code',
-                border: OutlineInputBorder(),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _controller,
+                autofocus: true,
+                textInputAction: TextInputAction.done,
+                decoration: const InputDecoration(
+                  labelText: 'QR code / token',
+                  hintText: 'Paste or type the ticket code',
+                  border: OutlineInputBorder(),
+                ),
+                validator: (value) {
+                  final text = value?.trim() ?? '';
+                  if (text.isEmpty) {
+                    return 'Enter a ticket code to continue.';
+                  }
+                  return null;
+                },
+                onFieldSubmitted: (_) => _submit(),
               ),
-              onSubmitted: (_) => _submit(),
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                onPressed: _submit,
-                child: const Text('Validate code'),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: _submit,
+                  child: const Text('Validate code'),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

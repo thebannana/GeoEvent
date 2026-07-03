@@ -21,6 +21,7 @@ class MapboxCitySearchResult {
       if ((regionName ?? '').trim().isNotEmpty) regionName,
       if ((countryName ?? '').trim().isNotEmpty) countryName,
     ];
+
     return parts.join(', ');
   }
 }

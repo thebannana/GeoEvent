@@ -11,7 +11,6 @@ class CommentItem {
   final int? parentCommentId;
   final int replyCount;
   final List<CommentItem> replies;
-
   final String? username;
   final String? displayName;
   final String? avatarUrl;
@@ -41,14 +40,37 @@ class CommentItem {
     this.isReplyLoading = false,
   });
 
+  String get authorName {
+    final dn = displayName?.trim();
+    if (dn != null && dn.isNotEmpty) return dn;
+
+    final un = username?.trim();
+    if (un != null && un.isNotEmpty) {
+      return un.replaceFirst(RegExp(r'^@+'), '');
+    }
+
+    if (userId != null) return 'User #$userId';
+    return 'Unknown user';
+  }
+
+  String get authorHandle {
+    final un = username?.trim();
+    if (un == null || un.isEmpty) return '';
+
+    final cleaned = un.replaceFirst(RegExp(r'^@+'), '');
+    return cleaned.isEmpty ? '' : '@$cleaned';
+  }
+
   factory CommentItem.fromJson(Map<String, dynamic> json) {
+    final hasRepliesField = json.containsKey('replies');
     final rawReplies = json['replies'];
+
     final replies = rawReplies is List
         ? rawReplies
             .whereType<Map>()
             .map((e) => CommentItem.fromJson(Map<String, dynamic>.from(e)))
-            .toList()
-        : <CommentItem>[];
+            .toList(growable: false)
+        : const <CommentItem>[];
 
     return CommentItem(
       commentId: _asInt(json['commentId']),
@@ -67,6 +89,8 @@ class CommentItem {
       displayName: _asNullableString(json['displayName']),
       avatarUrl: _asNullableString(json['avatarUrl']),
       isLiked: _asBool(json['isLiked']),
+      areRepliesLoaded: hasRepliesField,
+      isReplyLoading: false,
     );
   }
 
@@ -112,63 +136,53 @@ class CommentItem {
     );
   }
 
-  String get authorName {
-    if ((displayName ?? '').trim().isNotEmpty) return displayName!.trim();
-    if ((username ?? '').trim().isNotEmpty) return username!.trim();
-    if (userId != null) return 'User #$userId';
-    return 'Unknown user';
+  static int _asInt(dynamic v) {
+    if (v is int) return v;
+    if (v is num) return v.toInt();
+    return int.tryParse('$v') ?? 0;
   }
 
-  String get authorHandle {
-    if ((username ?? '').trim().isNotEmpty) return '@${username!.trim()}';
-    return '';
+  static int? _asNullableInt(dynamic v) {
+    if (v == null) return null;
+    if (v is int) return v;
+    if (v is num) return v.toInt();
+    return int.tryParse('$v');
   }
 
-  static int _asInt(dynamic value) {
-    if (value is int) return value;
-    return int.tryParse('$value') ?? 0;
+  static bool _asBool(dynamic v) {
+    if (v is bool) return v;
+    final t = '$v'.toLowerCase().trim();
+    return t == 'true' || t == '1';
   }
 
-  static int? _asNullableInt(dynamic value) {
-    if (value == null) return null;
-    if (value is int) return value;
-    return int.tryParse('$value');
+  static DateTime? _asDateTime(dynamic v) {
+    if (v == null) return null;
+
+    final raw = v.toString().trim();
+    if (raw.isEmpty) return null;
+
+    final parsed = DateTime.tryParse(raw);
+    if (parsed == null) return null;
+
+    if (raw.endsWith('Z') || raw.contains('+')) {
+      return parsed.toLocal();
+    }
+
+    return DateTime.utc(
+      parsed.year,
+      parsed.month,
+      parsed.day,
+      parsed.hour,
+      parsed.minute,
+      parsed.second,
+      parsed.millisecond,
+      parsed.microsecond,
+    ).toLocal();
   }
 
-  static bool _asBool(dynamic value) {
-    if (value is bool) return value;
-    final text = '$value'.toLowerCase().trim();
-    return text == 'true' || text == '1';
-  }
-
-static DateTime? _asDateTime(dynamic value) {
-  if (value == null) return null;
-
-  final raw = value.toString().trim();
-  if (raw.isEmpty) return null;
-
-  final parsed = DateTime.tryParse(raw);
-  if (parsed == null) return null;
-
-  if (raw.endsWith('Z') || raw.contains('+')) {
-    return parsed.toLocal();
-  }
-
-  return DateTime.utc(
-    parsed.year,
-    parsed.month,
-    parsed.day,
-    parsed.hour,
-    parsed.minute,
-    parsed.second,
-    parsed.millisecond,
-    parsed.microsecond,
-  ).toLocal();
-}
-
-  static String? _asNullableString(dynamic value) {
-    if (value == null) return null;
-    final text = value.toString().trim();
-    return text.isEmpty ? null : text;
+  static String? _asNullableString(dynamic v) {
+    if (v == null) return null;
+    final t = v.toString().trim();
+    return t.isEmpty ? null : t;
   }
 }

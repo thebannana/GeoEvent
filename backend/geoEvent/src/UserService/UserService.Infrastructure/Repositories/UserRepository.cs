@@ -123,8 +123,7 @@ public class UserRepository : IUserRepository
     public async Task<User> CreateAsync(User user, Person person)
     {
         await _context.People.AddAsync(person);
-        await _context.SaveChangesAsync();
-        user.PersonId = person.PersonId;
+        user.Person = person;
         await _context.Users.AddAsync(user);
         await _context.SaveChangesAsync();
         return user;

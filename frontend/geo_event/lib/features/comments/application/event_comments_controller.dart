@@ -1,51 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/errors/error_mapper.dart';
 import '../../../../shared/comments/models/comment_item.dart';
 import '../../../../shared/comments/providers/comment_providers.dart';
-
-class EventCommentsState {
-  final List<CommentItem> comments;
-  final bool isLoading;
-  final bool isSubmitting;
-  final String? error;
-  final int? replyingToCommentId;
-  final int? editingCommentId;
-
-  const EventCommentsState({
-    this.comments = const [],
-    this.isLoading = true,
-    this.isSubmitting = false,
-    this.error,
-    this.replyingToCommentId,
-    this.editingCommentId,
-  });
-
-  bool get hasError => error != null && error!.trim().isNotEmpty;
-
-  EventCommentsState copyWith({
-    List<CommentItem>? comments,
-    bool? isLoading,
-    bool? isSubmitting,
-    String? error,
-    bool clearError = false,
-    int? replyingToCommentId,
-    bool clearReplyingTo = false,
-    int? editingCommentId,
-    bool clearEditing = false,
-  }) {
-    return EventCommentsState(
-      comments: comments ?? this.comments,
-      isLoading: isLoading ?? this.isLoading,
-      isSubmitting: isSubmitting ?? this.isSubmitting,
-      error: clearError ? null : (error ?? this.error),
-      replyingToCommentId: clearReplyingTo
-          ? null
-          : (replyingToCommentId ?? this.replyingToCommentId),
-      editingCommentId:
-          clearEditing ? null : (editingCommentId ?? this.editingCommentId),
-    );
-  }
-}
+import '../../../shared/comments/data/comments_repository.dart';
+import '../../../shared/comments/models/event_comments_state.dart';
 
 final eventCommentsControllerProvider = StateNotifierProvider.autoDispose
     .family<EventCommentsController, EventCommentsState, int>((ref, eventId) {
@@ -53,13 +12,15 @@ final eventCommentsControllerProvider = StateNotifierProvider.autoDispose
 });
 
 class EventCommentsController extends StateNotifier<EventCommentsState> {
-  final Ref ref;
-  final int eventId;
-
-  EventCommentsController(this.ref, this.eventId)
+  EventCommentsController(this._ref, this._eventId)
       : super(const EventCommentsState()) {
     load();
   }
+
+  final Ref _ref;
+  final int _eventId;
+
+  CommentsRepository get _repo => _ref.read(commentsRepositoryProvider);
 
   Future<void> load() async {
     state = state.copyWith(
@@ -68,66 +29,74 @@ class EventCommentsController extends StateNotifier<EventCommentsState> {
     );
 
     try {
-      final comments =
-          await ref.read(commentsRepositoryProvider).getEventComments(eventId);
+      final comments = await _repo.getEventComments(_eventId);
+      if (!mounted) return;
 
       state = state.copyWith(
         comments: comments,
         isLoading: false,
-        isSubmitting: false,
-        clearError: true,
       );
-    } catch (e) {
+    } catch (e, st) {
+      if (!mounted) return;
+
       state = state.copyWith(
         isLoading: false,
-        error: e.toString(),
+        error: ErrorMapper.toMessage(e, stackTrace: st),
       );
     }
   }
 
   Future<void> refresh() async {
     try {
-      final comments =
-          await ref.read(commentsRepositoryProvider).getEventComments(eventId);
+      final comments = await _repo.getEventComments(_eventId);
+      if (!mounted) return;
 
       state = state.copyWith(
         comments: comments,
         clearError: true,
       );
-    } catch (e) {
-      state = state.copyWith(error: e.toString());
+    } catch (e, st) {
+      if (!mounted) return;
+
+      state = state.copyWith(
+        error: ErrorMapper.toMessage(e, stackTrace: st),
+      );
     }
   }
 
   void startReply(int commentId) {
+    if (!mounted) return;
+
     state = state.copyWith(
       replyingToCommentId: commentId,
-      clearReplyingTo: false,
       clearEditing: true,
       clearError: true,
     );
   }
 
   void cancelReply() {
+    if (!mounted) return;
     state = state.copyWith(clearReplyingTo: true);
   }
 
   void startEdit(int commentId) {
+    if (!mounted) return;
+
     state = state.copyWith(
       editingCommentId: commentId,
-      clearEditing: false,
       clearReplyingTo: true,
       clearError: true,
     );
   }
 
   void cancelEdit() {
+    if (!mounted) return;
     state = state.copyWith(clearEditing: true);
   }
 
-  Future<void> submitComment(String rawText) async {
+  Future<bool> submitComment(String rawText) async {
     final text = rawText.trim();
-    if (text.isEmpty) return;
+    if (text.isEmpty || state.isSubmitting) return false;
 
     state = state.copyWith(
       isSubmitting: true,
@@ -135,45 +104,59 @@ class EventCommentsController extends StateNotifier<EventCommentsState> {
     );
 
     try {
-      final created = await ref.read(commentsRepositoryProvider).createComment(
-            eventId: eventId,
-            content: text,
-            parentCommentId: state.replyingToCommentId,
-          );
+      final replyingTo = state.replyingToCommentId;
 
-      if (state.replyingToCommentId != null) {
-        final parentId = state.replyingToCommentId!;
+      final created = await _repo.createComment(
+        eventId: _eventId,
+        content: text,
+        parentCommentId: replyingTo,
+      );
+
+      if (!mounted) return false;
+
+      if (replyingTo != null) {
         final updated = _appendReply(
           state.comments,
-          parentId,
-          created.copyWith(isReply: true),
+          replyingTo,
+          created.copyWith(
+            isReply: true,
+            areRepliesLoaded: true,
+          ),
         );
 
         state = state.copyWith(
           comments: updated,
           isSubmitting: false,
           clearReplyingTo: true,
+          clearEditing: true,
         );
       } else {
         state = state.copyWith(
           comments: [created, ...state.comments],
           isSubmitting: false,
+          clearReplyingTo: true,
+          clearEditing: true,
         );
       }
-    } catch (e) {
+
+      return true;
+    } catch (e, st) {
+      if (!mounted) return false;
+
       state = state.copyWith(
         isSubmitting: false,
-        error: e.toString(),
+        error: ErrorMapper.toMessage(e, stackTrace: st),
       );
+      return false;
     }
   }
 
-  Future<void> saveEdit({
+  Future<bool> saveEdit({
     required int commentId,
     required String rawText,
   }) async {
     final text = rawText.trim();
-    if (text.isEmpty) return;
+    if (text.isEmpty || state.isSubmitting) return false;
 
     state = state.copyWith(
       isSubmitting: true,
@@ -181,37 +164,47 @@ class EventCommentsController extends StateNotifier<EventCommentsState> {
     );
 
     try {
-      final updated = await ref.read(commentsRepositoryProvider).updateComment(
-            commentId: commentId,
-            content: text,
-          );
+      final updated = await _repo.updateComment(
+        commentId: commentId,
+        content: text,
+      );
+
+      if (!mounted) return false;
 
       state = state.copyWith(
         comments: _replaceComment(state.comments, updated),
         isSubmitting: false,
         clearEditing: true,
       );
-    } catch (e) {
+
+      return true;
+    } catch (e, st) {
+      if (!mounted) return false;
+
       state = state.copyWith(
         isSubmitting: false,
-        error: e.toString(),
+        error: ErrorMapper.toMessage(e, stackTrace: st),
       );
+      return false;
     }
   }
 
   Future<void> deleteComment(int commentId) async {
     final before = state.comments;
+
     state = state.copyWith(
       comments: _markDeleted(before, commentId),
       clearError: true,
     );
 
     try {
-      await ref.read(commentsRepositoryProvider).deleteComment(commentId);
-    } catch (e) {
+      await _repo.deleteComment(commentId);
+    } catch (e, st) {
+      if (!mounted) return;
+
       state = state.copyWith(
         comments: before,
-        error: e.toString(),
+        error: ErrorMapper.toMessage(e, stackTrace: st),
       );
     }
   }
@@ -225,6 +218,7 @@ class EventCommentsController extends StateNotifier<EventCommentsState> {
     );
 
     final before = state.comments;
+
     state = state.copyWith(
       comments: _replaceComment(before, optimistic),
       clearError: true,
@@ -232,21 +226,25 @@ class EventCommentsController extends StateNotifier<EventCommentsState> {
 
     try {
       if (comment.isLiked) {
-        await ref.read(commentsRepositoryProvider).unlikeComment(comment.commentId);
+        await _repo.unlikeComment(comment.commentId);
       } else {
-        await ref.read(commentsRepositoryProvider).likeComment(comment.commentId);
+        await _repo.likeComment(comment.commentId);
       }
-    } catch (e) {
+    } catch (e, st) {
+      if (!mounted) return;
+
       state = state.copyWith(
         comments: before,
-        error: e.toString(),
+        error: ErrorMapper.toMessage(e, stackTrace: st),
       );
     }
   }
 
   Future<void> loadReplies(int commentId) async {
     final target = _findComment(state.comments, commentId);
-    if (target == null || target.isReplyLoading) return;
+    if (target == null || target.isReplyLoading || target.areRepliesLoaded) {
+      return;
+    }
 
     state = state.copyWith(
       comments: _setReplyLoading(state.comments, commentId, true),
@@ -254,16 +252,18 @@ class EventCommentsController extends StateNotifier<EventCommentsState> {
     );
 
     try {
-      final replies =
-          await ref.read(commentsRepositoryProvider).getReplies(commentId);
+      final replies = await _repo.getReplies(commentId);
+      if (!mounted) return;
 
       state = state.copyWith(
         comments: _setReplies(state.comments, commentId, replies),
       );
-    } catch (e) {
+    } catch (e, st) {
+      if (!mounted) return;
+
       state = state.copyWith(
         comments: _setReplyLoading(state.comments, commentId, false),
-        error: e.toString(),
+        error: ErrorMapper.toMessage(e, stackTrace: st),
       );
     }
   }
@@ -277,12 +277,17 @@ class EventCommentsController extends StateNotifier<EventCommentsState> {
     return null;
   }
 
-  List<CommentItem> _replaceComment(List<CommentItem> items, CommentItem updated) {
+  List<CommentItem> _replaceComment(
+    List<CommentItem> items,
+    CommentItem updated,
+  ) {
     return items.map((item) {
       if (item.commentId == updated.commentId) return updated;
       if (item.replies.isEmpty) return item;
-      return item.copyWith(replies: _replaceComment(item.replies, updated));
-    }).toList();
+      return item.copyWith(
+        replies: _replaceComment(item.replies, updated),
+      );
+    }).toList(growable: false);
   }
 
   List<CommentItem> _markDeleted(List<CommentItem> items, int commentId) {
@@ -293,10 +298,11 @@ class EventCommentsController extends StateNotifier<EventCommentsState> {
           isDeleted: true,
         );
       }
-
       if (item.replies.isEmpty) return item;
-      return item.copyWith(replies: _markDeleted(item.replies, commentId));
-    }).toList();
+      return item.copyWith(
+        replies: _markDeleted(item.replies, commentId),
+      );
+    }).toList(growable: false);
   }
 
   List<CommentItem> _appendReply(
@@ -306,36 +312,34 @@ class EventCommentsController extends StateNotifier<EventCommentsState> {
   ) {
     return items.map((item) {
       if (item.commentId == parentId) {
-        final nextReplies = [...item.replies, reply];
         return item.copyWith(
-          replies: nextReplies,
+          replies: [...item.replies, reply],
           areRepliesLoaded: true,
           isReplyLoading: false,
           replyCount: item.replyCount + 1,
         );
       }
-
       if (item.replies.isEmpty) return item;
       return item.copyWith(
         replies: _appendReply(item.replies, parentId, reply),
       );
-    }).toList();
+    }).toList(growable: false);
   }
 
   List<CommentItem> _setReplyLoading(
     List<CommentItem> items,
     int commentId,
-    bool isLoading,
+    bool loading,
   ) {
     return items.map((item) {
       if (item.commentId == commentId) {
-        return item.copyWith(isReplyLoading: isLoading);
+        return item.copyWith(isReplyLoading: loading);
       }
       if (item.replies.isEmpty) return item;
       return item.copyWith(
-        replies: _setReplyLoading(item.replies, commentId, isLoading),
+        replies: _setReplyLoading(item.replies, commentId, loading),
       );
-    }).toList();
+    }).toList(growable: false);
   }
 
   List<CommentItem> _setReplies(
@@ -347,6 +351,7 @@ class EventCommentsController extends StateNotifier<EventCommentsState> {
       if (item.commentId == commentId) {
         return item.copyWith(
           replies: replies,
+          replyCount: replies.length,
           areRepliesLoaded: true,
           isReplyLoading: false,
         );
@@ -355,6 +360,6 @@ class EventCommentsController extends StateNotifier<EventCommentsState> {
       return item.copyWith(
         replies: _setReplies(item.replies, commentId, replies),
       );
-    }).toList();
+    }).toList(growable: false);
   }
 }

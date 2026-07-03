@@ -3,26 +3,48 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:geo_event/core/config/app_environment.dart';
 import 'package:image_picker/image_picker.dart';
 
-import '../../../../core/config/app_env.dart';
-import '../../../../core/widgets/app_spinner.dart';
+import '../../../../core/widgets/feedback/app_spinner.dart';
 import '../../../../shared/events/models/create_event_models.dart';
 import '../../../../shared/events/models/create_event_state.dart';
+import '../../../../shared/events/providers/event_refresh_providers.dart';
 import '../../application/create_event_controller.dart';
 import '../widgets/create_event_form.dart';
 import '../widgets/create_event_image_picker.dart';
 import '../widgets/create_event_location_picker.dart';
 import '../widgets/create_event_taxonomy_section.dart';
 
-class CreateEventScreen extends ConsumerStatefulWidget {
-  const CreateEventScreen({super.key});
+class CreateEventSuccessResult {
+  const CreateEventSuccessResult({
+    required this.eventId,
+    required this.title,
+    required this.latitude,
+    required this.longitude,
+    required this.published,
+  });
 
-  @override
-  ConsumerState<CreateEventScreen> createState() => _CreateEventScreenState();
+  final int eventId;
+  final String title;
+  final double latitude;
+  final double longitude;
+  final bool published;
 }
 
-class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
+class CreateEventScreen extends ConsumerStatefulWidget {
+  const CreateEventScreen({
+    super.key,
+    this.onCreated,
+  });
+
+  final Future<void> Function(CreateEventSuccessResult result)? onCreated;
+
+  @override
+  ConsumerState<CreateEventScreen> createState() => CreateEventScreenState();
+}
+
+class CreateEventScreenState extends ConsumerState<CreateEventScreen> {
   final titleCtrl = TextEditingController();
   final descriptionCtrl = TextEditingController();
   final capacityCtrl = TextEditingController();
@@ -64,7 +86,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     final controller = ref.read(createEventControllerProvider.notifier);
     final theme = Theme.of(context);
 
-    _syncFreePrice(state);
+    syncFreePrice(state);
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(18, 18, 18, 24),
@@ -78,7 +100,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         ),
         const SizedBox(height: 6),
         Text(
-          'Fill in the details, save a draft, or publish your event.',
+          'Fill in the details and publish your event.',
           style: TextStyle(
             fontSize: 13,
             color: theme.textTheme.bodySmall?.color,
@@ -89,8 +111,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
           const LinearProgressIndicator(),
           const SizedBox(height: 12),
         ],
-        if (state.errorMessage != null &&
-            state.errorMessage!.trim().isNotEmpty) ...[
+        if (state.errorMessage != null && state.errorMessage!.trim().isNotEmpty) ...[
           InlineBanner(
             message: state.errorMessage!,
             isError: true,
@@ -119,23 +140,25 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
           formatDateTime: formatDateTime,
           onPickStartDate: () async {
             final picked = await pickDateTime(context, initial: startAt);
-            if (picked != null && mounted) {
-              setState(() => startAt = picked);
-            }
+            if (!mounted || picked == null) return;
+            setState(() => startAt = picked);
           },
           onPickEndDate: () async {
             final picked = await pickDateTime(
               context,
               initial: endAt ?? startAt,
             );
-            if (picked != null && mounted) {
-              setState(() => endAt = picked);
-            }
+            if (!mounted || picked == null) return;
+            setState(() => endAt = picked);
           },
           onFreeChanged: (value) {
             controller.setFree(value);
             if (value) {
-              priceCtrl.text = '0';
+              priceCtrl.value = priceCtrl.value.copyWith(
+                text: '0',
+                selection: const TextSelection.collapsed(offset: 1),
+                composing: TextRange.empty,
+              );
             }
           },
         ),
@@ -159,7 +182,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
           state: state,
           onTapPickLocation: () async {
             try {
-              AppEnv.validate();
+              AppEnvironment.validateAll();
             } catch (_) {
               if (!context.mounted) return;
               ScaffoldMessenger.of(context).showSnackBar(
@@ -183,52 +206,32 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
               controller.setSelectedLocation(picked);
             }
           },
-          onClearLocation: controller.clearSelectedLocation,
+          onClearLocation: state.submitting ? null : controller.clearSelectedLocation,
         ),
         const SizedBox(height: 18),
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton(
-                onPressed: state.submitting
-                    ? null
-                    : () => submit(state, controller, publish: false),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 13),
-                  child: state.submitting
-                      ? const AppSpinner(size: 18, strokeWidth: 2)
-                      : const Text('Save draft'),
-                ),
-              ),
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton(
+            onPressed: state.submitting ? null : () => submit(state, controller),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 13),
+              child: state.submitting
+                  ? const AppSpinner(size: 18, strokeWidth: 2)
+                  : const Text('Publish'),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: FilledButton(
-                onPressed: state.submitting
-                    ? null
-                    : () => submit(state, controller, publish: true),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 13),
-                  child: state.submitting
-                      ? const AppSpinner(size: 18, strokeWidth: 2)
-                      : const Text('Publish'),
-                ),
-              ),
-            ),
-          ],
+          ),
         ),
       ],
     );
   }
 
-  void _syncFreePrice(CreateEventState state) {
+  void syncFreePrice(CreateEventState state) {
     if (!state.isFree) return;
     if (priceCtrl.text == '0') return;
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       if (priceCtrl.text == '0') return;
-
       priceCtrl.value = priceCtrl.value.copyWith(
         text: '0',
         selection: const TextSelection.collapsed(offset: 1),
@@ -242,7 +245,6 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
       source: ImageSource.gallery,
       imageQuality: 85,
     );
-
     if (file == null) return;
 
     final validationError = await validatePickedImageWithSize(file);
@@ -252,6 +254,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     }
 
     final bytes = kIsWeb ? await file.readAsBytes() : null;
+
     controller.setFeaturedImage(
       EventImageUploadItem(
         localPath: file.path,
@@ -284,11 +287,13 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
         continue;
       }
 
+      final bytes = kIsWeb ? await file.readAsBytes() : null;
+
       newItems.add(
         EventImageUploadItem(
           localPath: file.path,
           isCover: false,
-          previewBytes: kIsWeb ? await file.readAsBytes() : null,
+          previewBytes: bytes,
         ),
       );
     }
@@ -299,9 +304,8 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
 
   Future<void> submit(
     CreateEventState state,
-    CreateEventController controller, {
-    required bool publish,
-  }) async {
+    CreateEventController controller,
+  ) async {
     final title = titleCtrl.text.trim();
     final description = descriptionCtrl.text.trim();
     final capacity = int.tryParse(capacityCtrl.text.trim());
@@ -313,9 +317,9 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
       return;
     }
 
-    if (description.length < 10 || description.length > 5000) {
+    if (description.length < 10 || description.length > 4000) {
       controller.setFormError(
-        'Description must be between 10 and 5000 characters.',
+        'Description must be between 10 and 4000 characters.',
       );
       return;
     }
@@ -335,7 +339,7 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
       return;
     }
 
-    if (startAt!.isBefore(DateTime.now())) {
+    if (!startAt!.isAfter(DateTime.now())) {
       controller.setFormError('Start date must be in the future.');
       return;
     }
@@ -350,27 +354,36 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
       return;
     }
 
-    await controller.submit(
+    final createdEvent = await controller.submit(
       title: title,
       description: description,
       segmentId: state.segmentId,
       genreId: state.genreId,
       subGenreId: state.subGenreId,
-      venueId: null,
-      cityId: null,
       latitude: selectedLocation.latitude,
       longitude: selectedLocation.longitude,
       startDateTime: startAt!,
       endDateTime: endAt!,
       capacity: capacity,
       price: price,
-      isOnline: false,
       tags: nullableString(tagsCtrl.text),
-      externalUrl: null,
       accessibilityInfo: nullableString(accessibilityCtrl.text),
       promoterName: nullableString(promoterCtrl.text),
       locale: 'bs-BA',
-      publish: publish,
+    );
+
+    if (!mounted || createdEvent == null) return;
+
+    triggerEventMapRefresh(ref);
+
+    await widget.onCreated?.call(
+      CreateEventSuccessResult(
+        eventId: createdEvent.eventId,
+        title: createdEvent.title,
+        latitude: selectedLocation.latitude,
+        longitude: selectedLocation.longitude,
+        published: true,
+      ),
     );
   }
 
@@ -389,15 +402,23 @@ class _CreateEventScreenState extends ConsumerState<CreateEventScreen> {
       firstDate: today,
       lastDate: now.add(const Duration(days: 3650)),
     );
+
     if (date == null || !context.mounted) return null;
 
     final time = await showTimePicker(
       context: context,
       initialTime: TimeOfDay.fromDateTime(seed),
     );
+
     if (time == null) return null;
 
-    return DateTime(date.year, date.month, date.day, time.hour, time.minute);
+    return DateTime(
+      date.year,
+      date.month,
+      date.day,
+      time.hour,
+      time.minute,
+    );
   }
 
   Future<int?> readImageSize(XFile file) async {

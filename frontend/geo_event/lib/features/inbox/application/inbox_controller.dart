@@ -1,139 +1,260 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../core/network/api_client.dart';
+
+import '../../../core/errors/error_mapper.dart';
 import '../../../shared/notifications/data/notification_api.dart';
 import '../../../shared/notifications/data/notification_repository.dart';
-import '../../../shared/notifications/models/notification_item.dart';
-import '../../auth/application/auth_controller.dart';
+import '../../../shared/notifications/models/inbox_state.dart';
+import '../../../shared/notifications/models/notification_model.dart';
+import '../../../shared/notifications/providers/inbox_providers.dart';
 
-final notificationApiProvider = Provider<NotificationApi>((ref) {
-  return NotificationApi(ref.watch(authorizedDioProvider));
+final inboxControllerProvider =
+    StateNotifierProvider.autoDispose<InboxController, InboxState>((ref) {
+  return InboxController(ref);
 });
 
-final notificationRepositoryProvider = Provider<NotificationRepository>((ref) {
-  return NotificationRepository(ref.watch(notificationApiProvider));
+final unreadCountProvider = Provider<int>((ref) {
+  return ref.watch(inboxControllerProvider).unreadCount;
 });
 
-// ---------------------------------------------------------------------------
-// Sort order
-// ---------------------------------------------------------------------------
-enum NotificationSort { newest, oldest }
+class InboxController extends StateNotifier<InboxState> {
+  InboxController(this.ref) : super(const InboxState.initial());
 
-// ---------------------------------------------------------------------------
-// Filter
-// ---------------------------------------------------------------------------
-enum NotificationFilter { all, unread, read }
+  final Ref ref;
 
-// ---------------------------------------------------------------------------
-// State
-// ---------------------------------------------------------------------------
-class InboxState {
-  final AsyncValue<List<NotificationItem>> notifications;
-  final NotificationFilter filter;
-  final NotificationSort sort;
-  final String searchQuery;
-
-  const InboxState({
-    required this.notifications,
-    this.filter = NotificationFilter.all,
-    this.sort = NotificationSort.newest,
-    this.searchQuery = '',
-  });
-
-  InboxState copyWith({
-    AsyncValue<List<NotificationItem>>? notifications,
-    NotificationFilter? filter,
-    NotificationSort? sort,
-    String? searchQuery,
-  }) {
-    return InboxState(
-      notifications: notifications ?? this.notifications,
-      filter: filter ?? this.filter,
-      sort: sort ?? this.sort,
-      searchQuery: searchQuery ?? this.searchQuery,
-    );
-  }
-
-  List<NotificationItem> get displayed {
-    final all = notifications.valueOrNull ?? [];
-    var result = all.where((n) {
-      final matchesFilter = switch (filter) {
-        NotificationFilter.all => true,
-        NotificationFilter.unread => !n.isRead,
-        NotificationFilter.read => n.isRead,
-      };
-      final q = searchQuery.trim().toLowerCase();
-      final matchesSearch = q.isEmpty ||
-          n.title.toLowerCase().contains(q) ||
-          n.description.toLowerCase().contains(q);
-      return matchesFilter && matchesSearch;
-    }).toList();
-
-    result.sort((a, b) => switch (sort) {
-          NotificationSort.newest =>
-            b.createdAt.compareTo(a.createdAt),
-          NotificationSort.oldest =>
-            a.createdAt.compareTo(b.createdAt),
-        });
-    return result;
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Controller
-// ---------------------------------------------------------------------------
-class InboxController extends Notifier<InboxState> {
-  NotificationRepository get _repo =>
+  NotificationRepository get _repository =>
       ref.read(notificationRepositoryProvider);
 
-  @override
-  InboxState build() {
-    ref.watch(sessionUserIdProvider);
-    Future.microtask(load);
-    return const InboxState(notifications: AsyncValue.loading());
-  }
+  Future<void> loadNotifications() async {
+    if (state.isLoading) return;
 
-  Future<void> load() async {
-    state = state.copyWith(notifications: const AsyncValue.loading());
+    state = const InboxState.initial().copyWith(
+      status: InboxStatus.loading,
+      searchQuery: state.searchQuery,
+      filter: state.filter,
+      sort: state.sort,
+      clearError: true,
+    );
+
     try {
-      final items = await _repo.getNotifications(pageSize: 50);
-      state = state.copyWith(notifications: AsyncValue.data(items));
+      final notifications = await _repository.getNotifications(page: 1);
+      if (!mounted) return;
+
+      state = state.copyWith(
+        notifications: notifications,
+        status: InboxStatus.loaded,
+        hasMore: notifications.length >= NotificationApi.pageSize,
+        page: 1,
+      );
     } catch (e, st) {
-      state = state.copyWith(notifications: AsyncValue.error(e, st));
+      if (!mounted) return;
+
+      state = state.copyWith(
+        status: InboxStatus.error,
+        errorMessage: ErrorMapper.toMessage(e, stackTrace: st),
+      );
     }
   }
 
-  void setFilter(NotificationFilter f) => state = state.copyWith(filter: f);
+  Future<void> refresh() async {
+    if (state.isRefreshing) return;
 
-  void setSort(NotificationSort s) => state = state.copyWith(sort: s);
+    final previous = state.notifications;
 
-  void setSearch(String q) => state = state.copyWith(searchQuery: q);
+    state = state.copyWith(
+      status: InboxStatus.refreshing,
+      clearError: true,
+    );
 
-  Future<void> markAsRead(int id) async {
-    await _repo.markAsRead(id);
-    final updated = (state.notifications.valueOrNull ?? [])
-        .map((n) => n.notificationId == id
-            ? n.copyWith(isRead: true, readAt: DateTime.now())
-            : n)
-        .toList();
-    state = state.copyWith(notifications: AsyncValue.data(updated));
+    try {
+      final notifications = await _repository.getNotifications(page: 1);
+      if (!mounted) return;
+
+      state = state.copyWith(
+        notifications: notifications,
+        status: InboxStatus.loaded,
+        hasMore: notifications.length >= NotificationApi.pageSize,
+        page: 1,
+      );
+    } catch (e, st) {
+      if (!mounted) return;
+
+      state = state.copyWith(
+        notifications: previous,
+        status: previous.isEmpty ? InboxStatus.error : InboxStatus.loaded,
+        errorMessage: ErrorMapper.toMessage(e, stackTrace: st),
+      );
+    }
+  }
+
+  Future<void> loadMore() async {
+    if (!state.hasMore || state.isLoadingMore || state.isLoading) return;
+
+    final previous = state.notifications;
+    final nextPage = state.page + 1;
+
+    state = state.copyWith(
+      status: InboxStatus.loadingMore,
+      clearError: true,
+    );
+
+    try {
+      final more = await _repository.getNotifications(page: nextPage);
+      if (!mounted) return;
+
+      final merged = _mergeById([...state.notifications, ...more]);
+
+      state = state.copyWith(
+        notifications: merged,
+        status: InboxStatus.loaded,
+        hasMore: more.length >= NotificationApi.pageSize,
+        page: nextPage,
+      );
+    } catch (e, st) {
+      if (!mounted) return;
+
+      state = state.copyWith(
+        notifications: previous,
+        status: InboxStatus.loaded,
+        errorMessage: ErrorMapper.toMessage(e, stackTrace: st),
+      );
+    }
+  }
+
+  void setSearch(String value) {
+    if (!mounted) return;
+    state = state.copyWith(searchQuery: value, clearError: true);
+  }
+
+  void setFilter(NotificationFilter value) {
+    if (!mounted) return;
+    state = state.copyWith(filter: value, clearError: true);
+  }
+
+  void setSort(NotificationSort value) {
+    if (!mounted) return;
+    state = state.copyWith(sort: value, clearError: true);
+  }
+
+  Future<void> markAsRead(int notificationId) async {
+    final previous = state.notifications;
+
+    final targetExists = previous.any((n) => n.id == notificationId);
+    final alreadyRead =
+        previous.where((n) => n.id == notificationId).any((n) => n.isRead);
+    if (!targetExists || alreadyRead) return;
+
+    state = state.copyWith(
+      notifications: previous
+          .map((n) => n.id == notificationId ? n.copyWith(isRead: true) : n)
+          .toList(growable: false),
+      clearError: true,
+    );
+
+    try {
+      await _repository.markAsRead(notificationId);
+    } catch (e, st) {
+      if (!mounted) return;
+
+      state = state.copyWith(
+        notifications: previous,
+        errorMessage: ErrorMapper.toMessage(e, stackTrace: st),
+      );
+    }
   }
 
   Future<void> markAllAsRead() async {
-    await _repo.markAllAsRead();
-    final updated = (state.notifications.valueOrNull ?? [])
-        .map((n) => n.copyWith(isRead: true, readAt: DateTime.now()))
-        .toList();
-    state = state.copyWith(notifications: AsyncValue.data(updated));
+    final previous = state.notifications;
+
+    state = state.copyWith(
+      notifications: previous
+          .map((n) => n.copyWith(isRead: true))
+          .toList(growable: false),
+      clearError: true,
+    );
+
+    try {
+      await _repository.markAllAsRead();
+    } catch (e, st) {
+      if (!mounted) return;
+
+      state = state.copyWith(
+        notifications: previous,
+        errorMessage: ErrorMapper.toMessage(e, stackTrace: st),
+      );
+    }
   }
 
-  Future<void> delete(int id) async {
-    await _repo.delete(id);
-    final updated = (state.notifications.valueOrNull ?? [])
-        .where((n) => n.notificationId != id)
-        .toList();
-    state = state.copyWith(notifications: AsyncValue.data(updated));
+  Future<void> deleteNotification(int notificationId) async {
+    final previous = state.notifications;
+
+    state = state.copyWith(
+      notifications: previous
+          .where((n) => n.id != notificationId)
+          .toList(growable: false),
+      clearError: true,
+    );
+
+    try {
+      await _repository.deleteNotification(notificationId);
+    } catch (e, st) {
+      if (!mounted) return;
+
+      state = state.copyWith(
+        notifications: previous,
+        errorMessage: ErrorMapper.toMessage(e, stackTrace: st),
+      );
+    }
+  }
+
+  Future<void> deleteAll() async {
+    final previous = state.notifications;
+
+    state = state.copyWith(
+      notifications: const [],
+      clearError: true,
+    );
+
+    try {
+      await _repository.deleteAllNotifications();
+    } catch (e, st) {
+      if (!mounted) return;
+
+      state = state.copyWith(
+        notifications: previous,
+        errorMessage: ErrorMapper.toMessage(e, stackTrace: st),
+      );
+    }
+  }
+
+  void clearError() {
+    if (!mounted) return;
+    state = state.copyWith(clearError: true);
+  }
+
+  void onPushNotification(NotificationModel notification) {
+    if (!mounted) return;
+
+    final next = [
+      notification,
+      ...state.notifications.where((n) => n.id != notification.id),
+    ];
+
+    state = state.copyWith(
+      notifications: next,
+      status: state.status == InboxStatus.initial ? InboxStatus.loaded : null,
+    );
+  }
+
+  List<NotificationModel> _mergeById(List<NotificationModel> items) {
+    final map = <int, NotificationModel>{};
+
+    for (final item in items) {
+      map[item.id] = item;
+    }
+
+    final merged = map.values.toList(growable: false)
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+    return merged;
   }
 }
-
-final inboxControllerProvider =
-    NotifierProvider<InboxController, InboxState>(InboxController.new);

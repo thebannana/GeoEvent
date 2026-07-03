@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../../core/widgets/glass_scaffold.dart';
+import '../../../../core/widgets/layout/app_scaffold.dart';
 import '../widgets/onboarding_page_content.dart';
 
 class OnboardingScreen extends StatefulWidget {
@@ -12,10 +12,50 @@ class OnboardingScreen extends StatefulWidget {
 }
 
 class _OnboardingScreenState extends State<OnboardingScreen> {
+  static const String _loginRoute = '/login';
+  static const String _privacyRoute = '/privacy';
+
   late final PageController _pageController;
   int _currentPage = 0;
 
-  static const _pageCount = 3;
+  static const List<_OnboardingPageData> _pages = [
+    _OnboardingPageData(
+      icon: Icons.public_rounded,
+      title: 'Discover events around you',
+      description:
+          'Explore what is happening nearby with a live event map built for quick discovery.',
+      bullets: [
+        'Find concerts, gatherings, food spots, and community moments.',
+        'See events visually on the map instead of digging through long lists.',
+        'Open details fast and decide what is worth your time.',
+      ],
+    ),
+    _OnboardingPageData(
+      icon: Icons.people_alt_rounded,
+      title: 'Connect, reserve, and plan',
+      description:
+          'Keep your social plans in one place with reservations, reminders, and event updates.',
+      bullets: [
+        'Reserve spots before they fill up.',
+        'Track updates and changes without losing the thread.',
+        'Use notifications to stay on top of your plans.',
+      ],
+    ),
+    _OnboardingPageData(
+      icon: Icons.route_rounded,
+      title: 'Your event flow, simplified',
+      description:
+          'GeoEvent helps you move from discovery to attendance with less friction and better context.',
+      bullets: [
+        'Search faster with personalized results.',
+        'Manage tickets, reservations, and notifications in one app.',
+        'Jump in now and start exploring your city.',
+      ],
+    ),
+  ];
+
+  int get _pageCount => _pages.length;
+  bool get _isLastPage => _currentPage == _pageCount - 1;
 
   @override
   void initState() {
@@ -30,41 +70,53 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   void _goToLogin() {
-    context.go('/login');
+    context.go(_loginRoute);
+  }
+
+  void _openPrivacyPolicy() {
+    context.push(_privacyRoute);
+  }
+
+  Future<void> _goToPage(int pageIndex) async {
+    if (!_pageController.hasClients) return;
+
+    await _pageController.animateToPage(
+      pageIndex,
+      duration: const Duration(milliseconds: 260),
+      curve: Curves.easeOutCubic,
+    );
   }
 
   Future<void> _nextPage() async {
-    if (_currentPage >= _pageCount - 1) {
+    if (_isLastPage) {
       _goToLogin();
       return;
     }
 
-    await _pageController.animateToPage(
-      _currentPage + 1,
-      duration: const Duration(milliseconds: 260),
-      curve: Curves.easeOutCubic,
-    );
+    await _goToPage(_currentPage + 1);
   }
 
   Future<void> _skipToLast() async {
-    if (_currentPage == _pageCount - 1) {
+    if (_isLastPage) {
       _goToLogin();
       return;
     }
 
-    await _pageController.animateToPage(
-      _pageCount - 1,
-      duration: const Duration(milliseconds: 260),
-      curve: Curves.easeOutCubic,
-    );
+    await _goToPage(_pageCount - 1);
+  }
+
+  void _onPageChanged(int index) {
+    if (!mounted) return;
+    setState(() {
+      _currentPage = index;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isLastPage = _currentPage == _pageCount - 1;
 
-    return GlassScaffold(
+    return AppScaffold(
       child: SafeArea(
         child: Center(
           child: ConstrainedBox(
@@ -84,85 +136,41 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       const Spacer(),
                       TextButton(
                         onPressed: _skipToLast,
-                        child: Text(isLastPage ? 'Continue' : 'Skip'),
+                        child: Text(_isLastPage ? 'Continue' : 'Skip'),
                       ),
                     ],
                   ),
                   const SizedBox(height: 8),
                   Expanded(
-                    child: PageView(
+                    child: PageView.builder(
                       controller: _pageController,
-                      onPageChanged: (index) {
-                        if (!mounted) return;
-                        setState(() {
-                          _currentPage = index;
-                        });
+                      onPageChanged: _onPageChanged,
+                      itemCount: _pageCount,
+                      itemBuilder: (context, index) {
+                        final page = _pages[index];
+                        return OnboardingPageContent(
+                          icon: page.icon,
+                          title: page.title,
+                          description: page.description,
+                          bullets: page.bullets,
+                        );
                       },
-                      children: const [
-                        OnboardingPageContent(
-                          icon: Icons.public_rounded,
-                          title: 'Discover events around you',
-                          description:
-                              'Explore what is happening nearby with a live event map built for quick discovery.',
-                          bullets: [
-                            'Find concerts, gatherings, food spots, and community moments.',
-                            'See events visually on the map instead of digging through long lists.',
-                            'Open details fast and decide what is worth your time.',
-                          ],
-                        ),
-                        OnboardingPageContent(
-                          icon: Icons.people_alt_rounded,
-                          title: 'Connect, reserve, and plan',
-                          description:
-                              'Keep your social plans in one place with reservations, reminders, and event updates.',
-                          bullets: [
-                            'Reserve spots before they fill up.',
-                            'Track updates and changes without losing the thread.',
-                            'Use notifications to stay on top of your plans.',
-                          ],
-                        ),
-                        OnboardingPageContent(
-                          icon: Icons.route_rounded,
-                          title: 'Your event flow, simplified',
-                          description:
-                              'GeoEvent helps you move from discovery to attendance with less friction and better context.',
-                          bullets: [
-                            'Search faster with personalized results.',
-                            'Manage tickets, reservations, and notifications in one app.',
-                            'Jump in now and start exploring your city.',
-                          ],
-                        ),
-                      ],
                     ),
                   ),
                   const SizedBox(height: 18),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: List.generate(_pageCount, (index) {
-                      final selected = index == _currentPage;
-                      return AnimatedContainer(
-                        duration: const Duration(milliseconds: 180),
-                        margin: const EdgeInsets.symmetric(horizontal: 4),
-                        width: selected ? 24 : 8,
-                        height: 8,
-                        decoration: BoxDecoration(
-                          color: selected
-                              ? theme.colorScheme.primary
-                              : theme.colorScheme.primary.withValues(alpha: 0.22),
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                      );
-                    }),
+                  _OnboardingPageIndicator(
+                    pageCount: _pageCount,
+                    currentPage: _currentPage,
                   ),
                   const SizedBox(height: 22),
                   SizedBox(
                     width: double.infinity,
                     child: FilledButton(
-                      onPressed: isLastPage ? _goToLogin : _nextPage,
+                      onPressed: _isLastPage ? _goToLogin : _nextPage,
                       style: FilledButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 16),
                       ),
-                      child: Text(isLastPage ? 'Get Started' : 'Next'),
+                      child: Text(_isLastPage ? 'Get Started' : 'Next'),
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -178,7 +186,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   ),
                   const SizedBox(height: 8),
                   TextButton(
-                    onPressed: () => context.push('/privacy'),
+                    onPressed: _openPrivacyPolicy,
                     child: const Text('Privacy Policy'),
                   ),
                 ],
@@ -189,4 +197,53 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       ),
     );
   }
+}
+
+class _OnboardingPageIndicator extends StatelessWidget {
+  final int pageCount;
+  final int currentPage;
+
+  const _OnboardingPageIndicator({
+    required this.pageCount,
+    required this.currentPage,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: List.generate(pageCount, (index) {
+        final selected = index == currentPage;
+
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          margin: const EdgeInsets.symmetric(horizontal: 4),
+          width: selected ? 24 : 8,
+          height: 8,
+          decoration: BoxDecoration(
+            color: selected
+                ? theme.colorScheme.primary
+                : theme.colorScheme.primary.withValues(alpha: 0.22),
+            borderRadius: BorderRadius.circular(999),
+          ),
+        );
+      }),
+    );
+  }
+}
+
+class _OnboardingPageData {
+  final IconData icon;
+  final String title;
+  final String description;
+  final List<String> bullets;
+
+  const _OnboardingPageData({
+    required this.icon,
+    required this.title,
+    required this.description,
+    required this.bullets,
+  });
 }

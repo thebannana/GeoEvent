@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/widgets/app_chip.dart';
-import '../../../../core/widgets/app_empty_state.dart';
-import '../../../../core/widgets/app_error_view.dart';
-import '../../../../core/widgets/app_loading_indicator.dart';
+import '../../../../core/widgets/feedback/app_confirm_dialog.dart';
+import '../../../../core/widgets/feedback/app_empty_state.dart';
+import '../../../../core/widgets/feedback/app_error_state.dart';
+import '../../../../core/widgets/feedback/app_loading_indicator.dart';
+import '../../../../core/widgets/inputs/app_chip.dart';
 import '../../../../shared/reservations/models/reservation.dart';
-import '../../../search/presentation/widgets/search_bar.dart';
+import '../../../../shared/reservations/models/reservation_status.dart';
 import '../../application/reservations_controller.dart';
 import '../widgets/reservation_card.dart';
 
@@ -19,138 +20,158 @@ class ReservationsScreen extends ConsumerStatefulWidget {
 }
 
 class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
-  final _searchController = TextEditingController();
+  final _scrollController = ScrollController();
 
   static const _filters = <_ReservationFilter>[
     _ReservationFilter(label: 'All', value: null),
-    _ReservationFilter(label: 'Confirmed', value: 'Confirmed'),
-    _ReservationFilter(label: 'Cancelled', value: 'Cancelled'),
-    _ReservationFilter(label: 'Expired', value: 'Expired'),
+    _ReservationFilter(label: 'Pending', value: ReservationStatus.pending),
+    _ReservationFilter(label: 'Confirmed', value: ReservationStatus.confirmed),
+    _ReservationFilter(label: 'Cancelled', value: ReservationStatus.cancelled),
+    _ReservationFilter(label: 'Expired', value: ReservationStatus.expired),
+    _ReservationFilter(label: 'Refunded', value: ReservationStatus.refunded),
   ];
 
   @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_onScroll);
+  }
+
+  @override
   void dispose() {
-    _searchController.dispose();
+    _scrollController
+      ..removeListener(_onScroll)
+      ..dispose();
     super.dispose();
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+
+    final position = _scrollController.position;
+    if (position.pixels >= position.maxScrollExtent - 240) {
+      ref.read(reservationsControllerProvider.notifier).loadMore();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final state = ref.watch(reservationsControllerProvider);
+    final asyncState = ref.watch(reservationsControllerProvider);
     final ctrl = ref.read(reservationsControllerProvider.notifier);
-
-    final filteredReservations = state.filteredItems;
-
-    if (_searchController.text != state.searchQuery) {
-      _searchController.value = _searchController.value.copyWith(
-        text: state.searchQuery,
-        selection: TextSelection.collapsed(offset: state.searchQuery.length),
-        composing: TextRange.empty,
-      );
-    }
 
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: RefreshIndicator(
-        onRefresh: ctrl.load,
+        onRefresh: ctrl.refresh,
         child: CustomScrollView(
+          controller: _scrollController,
           physics: const AlwaysScrollableScrollPhysics(
             parent: ClampingScrollPhysics(),
           ),
           slivers: [
             SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(18, 14, 18, 0),
-                child: SearchBarWidget(
-                  controller: _searchController,
-                  onChanged: ctrl.setSearch,
-                  onClear: () {
-                    _searchController.clear();
-                    ctrl.setSearch('');
-                  },
-                ),
-              ),
-            ),
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(18, 12, 18, 6),
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      for (var i = 0; i < _filters.length; i++) ...[
-                        AppChip(
-                          label: _filters[i].label,
-                          selected: state.activeStatus == _filters[i].value,
-                          onTap: () => ctrl.setFilter(_filters[i].value),
-                        ),
-                        if (i != _filters.length - 1)
-                          const SizedBox(width: 8),
+              child: asyncState.when(
+                loading: () => const SizedBox.shrink(),
+                error: (_, _) => const SizedBox.shrink(),
+                data: (data) => Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 14, 18, 6),
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        for (var i = 0; i < _filters.length; i++) ...[
+                          AppChip(
+                            label: _filters[i].label,
+                            selected: data.statusFilter == _filters[i].value,
+                            onTap: () =>
+                                ctrl.setStatusFilter(_filters[i].value),
+                          ),
+                          if (i != _filters.length - 1)
+                            const SizedBox(width: 8),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
                 ),
               ),
             ),
-            if (state.paged.isLoading)
-              const SliverPadding(
-                padding: EdgeInsets.fromLTRB(18, 16, 18, 24),
-                sliver: SliverToBoxAdapter(
-                  child: AppLoadingIndicator(
-                    title: 'Loading reservations',
-                    message: 'Please wait while we prepare your bookings.',
-                    centered: false,
+            ...asyncState.when(
+              loading: () => [
+                const SliverPadding(
+                  padding: EdgeInsets.fromLTRB(18, 16, 18, 24),
+                  sliver: SliverToBoxAdapter(
+                    child: AppLoadingIndicator(
+                      title: 'Loading reservations',
+                      message: 'Please wait while we prepare your bookings.',
+                      centered: false,
+                    ),
                   ),
                 ),
-              )
-            else if (state.paged.hasError)
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
-                sliver: SliverToBoxAdapter(
-                  child: AppErrorState(
-                    title: 'Failed to load reservations',
-                    message: 'Pull to refresh or try again.',
-                    onRetry: ctrl.load,
+              ],
+              error: (_, _) => [
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
+                  sliver: SliverToBoxAdapter(
+                    child: AppErrorState(
+                      title: 'Failed to load reservations',
+                      message: 'Pull to refresh or try again.',
+                      onRetry: ctrl.refresh,
+                    ),
                   ),
                 ),
-              )
-            else if (filteredReservations.isEmpty)
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
-                sliver: SliverToBoxAdapter(
-                  child: AppEmptyState(
-                    icon: Icons.confirmation_num_outlined,
-                    title: state.searchQuery.trim().isNotEmpty
-                        ? 'No matching reservations'
-                        : state.activeStatus == null
-                            ? 'No reservations yet'
-                            : 'No matching results',
-                    message: state.searchQuery.trim().isNotEmpty
-                        ? 'Try a different search term.'
-                        : state.activeStatus == null
-                            ? 'Reserved events and tickets will appear here.'
-                            : 'No ${state.activeStatus!.toLowerCase()} reservations found.',
-                  ),
-                ),
-              )
-            else
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
-                sliver: SliverList.separated(
-                  itemCount: filteredReservations.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 10),
-                  itemBuilder: (context, index) {
-                    final reservation = filteredReservations[index];
-                    return ReservationCard(
-                      reservation: reservation,
-                      onCancel: () => _confirmCancel(
-                        context,
-                        reservation,
+              ],
+              data: (data) {
+                if (data.items.isEmpty) {
+                  return [
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
+                      sliver: SliverToBoxAdapter(
+                        child: AppEmptyState(
+                          icon: Icons.confirmation_num_outlined,
+                          title: data.statusFilter == null
+                              ? 'No reservations yet'
+                              : 'No matching results',
+                          message: data.statusFilter == null
+                              ? 'Reserved events and tickets will appear here.'
+                              : 'No ${data.statusFilter!.apiValue.toLowerCase()} reservations found.',
+                        ),
                       ),
-                    );
-                  },
-                ),
-              ),
+                    ),
+                  ];
+                }
+
+                return [
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
+                    sliver: SliverList.separated(
+                      itemCount: data.items.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 10),
+                      itemBuilder: (context, index) {
+                        final reservation = data.items[index];
+                        return ReservationCard(
+                          reservation: reservation,
+                          onCancel: reservation.canBeCancelled
+                              ? () => _confirmCancel(context, reservation)
+                              : null,
+                          onRefund: reservation.canRequestRefund
+                              ? () => _requestRefund(context, reservation)
+                              : null,
+                        );
+                      },
+                    ),
+                  ),
+                  if (data.isFetchingMore)
+                    const SliverToBoxAdapter(
+                      child: Padding(
+                        padding: EdgeInsets.only(bottom: 24),
+                        child: Center(
+                          child: CircularProgressIndicator(),
+                        ),
+                      ),
+                    ),
+                ];
+              },
+            ),
             const SliverToBoxAdapter(
               child: SizedBox(height: 20),
             ),
@@ -164,54 +185,122 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
     BuildContext context,
     Reservation reservation,
   ) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Cancel reservation?'),
-        content: Text(
-          'Reservation #${reservation.reservationId} for '
+    final messenger = ScaffoldMessenger.of(context);
+
+    final confirmed = await AppConfirmDialog.show(
+      context,
+      title: 'Cancel reservation?',
+      message: 'Reservation #${reservation.reservationId} for '
           '${reservation.quantity} ticket${reservation.quantity > 1 ? 's' : ''} '
           'will be cancelled.',
+      cancelLabel: 'Keep',
+      confirmLabel: 'Cancel reservation',
+      destructive: true,
+    );
+
+    if (!confirmed || !mounted) return;
+
+    try {
+      await ref
+          .read(reservationsControllerProvider.notifier)
+          .cancelReservation(reservation.reservationId);
+
+      if (!mounted) return;
+
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Reservation cancelled.'),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Could not cancel. Please try again.'),
+        ),
+      );
+    }
+  }
+
+  Future<void> _requestRefund(
+  BuildContext context,
+  Reservation reservation,
+) async {
+  final reasonController = TextEditingController();
+
+  try {
+    final reason = await showDialog<String?>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Request refund?'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Reservation #${reservation.reservationId} for '
+              '${reservation.quantity} ticket${reservation.quantity > 1 ? 's' : ''} '
+              'will be submitted for admin review.',
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: reasonController,
+              autofocus: true,
+              minLines: 2,
+              maxLines: 4,
+              textInputAction: TextInputAction.done,
+              decoration: const InputDecoration(
+                labelText: 'Reason',
+                hintText: 'Explain why you want a refund',
+              ),
+            ),
+          ],
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
+            onPressed: () => Navigator.pop(ctx, null),
             child: const Text('Keep'),
           ),
           FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.error,
-            ),
-            child: const Text('Cancel reservation'),
+            onPressed: () => Navigator.pop(ctx, reasonController.text.trim()),
+            child: const Text('Send request'),
           ),
         ],
       ),
     );
 
-    if (confirmed != true || !context.mounted) return;
+    if (reason == null || !mounted) return;
 
-    final success = await ref
-        .read(reservationsControllerProvider.notifier)
-        .cancel(reservation.reservationId);
+    await ref.read(reservationsControllerProvider.notifier).requestRefund(
+          reservation.reservationId,
+          reason: reason.isEmpty ? null : reason,
+        );
 
-    if (!context.mounted) return;
+    if (!mounted) return;
 
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          success
-              ? 'Reservation cancelled.'
-              : 'Could not cancel. Please try again.',
-        ),
+      const SnackBar(
+        content: Text('Refund request submitted.'),
       ),
     );
+  } catch (e) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Could not submit refund request. Please try again.'),
+      ),
+    );
+  } finally {
+    reasonController.dispose();
   }
+}
 }
 
 class _ReservationFilter {
   final String label;
-  final String? value;
+  final ReservationStatus? value;
 
   const _ReservationFilter({
     required this.label,

@@ -8,7 +8,6 @@ public class Person
     public string PhoneNumber { get; set; } = string.Empty;
     public DateTime BirthDate { get; set; }
     public string ImageUrl { get; set; } = string.Empty;
-    public int? CityId { get; set; }
     public DateTime? UpdatedAt { get; set; }
     public bool IsDeleted { get; set; } = false;
     public DateTime? DeletedAt { get; set; }

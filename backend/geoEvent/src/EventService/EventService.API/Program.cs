@@ -25,7 +25,19 @@ builder.Configuration.AddEnvironmentVariables();
 var jwtSecret = builder.Configuration["Jwt:Secret"];
 if (string.IsNullOrWhiteSpace(jwtSecret))
 {
-    throw new InvalidOperationException("Missing configuration value: Jwt__Secret");
+    throw new InvalidOperationException("Missing configuration: Jwt:Secret");
+}
+
+var jwtIssuer = builder.Configuration["Jwt:Issuer"];
+if (string.IsNullOrWhiteSpace(jwtIssuer))
+{
+    throw new InvalidOperationException("Missing configuration: Jwt:Issuer");
+}
+
+var jwtAudience = builder.Configuration["Jwt:Audience"];
+if (string.IsNullOrWhiteSpace(jwtAudience))
+{
+    throw new InvalidOperationException("Missing configuration: Jwt:Audience");
 }
 
 var allowedOrigins = builder.Configuration
@@ -43,7 +55,7 @@ builder.Services.AddCors(options =>
     {
         if (allowedOrigins.Length == 0)
         {
-            throw new InvalidOperationException("At least one CORS origin must be configured in Cors__AllowedOrigins__0.");
+            throw new InvalidOperationException("At least one CORS origin must be configured in Cors:AllowedOrigins.");
         }
 
         policy
@@ -89,9 +101,9 @@ builder.Services
             ValidateIssuerSigningKey = true,
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret)),
             ValidateIssuer = true,
-            ValidIssuer = builder.Configuration["Jwt:Issuer"],
+            ValidIssuer = jwtIssuer,
             ValidateAudience = true,
-            ValidAudience = builder.Configuration["Jwt:Audience"],
+            ValidAudience = jwtAudience,
             ValidateLifetime = true,
             ClockSkew = TimeSpan.Zero
         };
@@ -114,7 +126,7 @@ builder.Services.AddSwaggerGen(options =>
     {
         Name = "Authorization",
         Type = SecuritySchemeType.Http,
-        Scheme = "Bearer",
+        Scheme = "bearer",
         BearerFormat = "JWT",
         In = ParameterLocation.Header,
         Description = "Enter your JWT bearer token."

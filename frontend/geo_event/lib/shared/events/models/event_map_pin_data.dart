@@ -1,16 +1,12 @@
 import 'package:flutter/material.dart';
 
-import '../../../core/utils/color_utils.dart';
+import '../../../core/utils/color_parser.dart';
 import 'create_event_models.dart';
 
-enum EventPinPriority {
-  high,
-  medium,
-  low,
-}
+enum EventPinPriority { high, medium, low }
 
 class EventMapPinData {
-  final String id;
+  final int id;
   final double lat;
   final double lng;
   final String title;
@@ -30,26 +26,40 @@ class EventMapPinData {
     required this.priority,
   });
 
+  static const int _highThreshold = 60;
+  static const int _mediumThreshold = 35;
+  static const Color _fallbackPinColor = Color(0xFF7C4DFF);
+
   factory EventMapPinData.fromEventItem(
     EventItem item, {
     int recommendationScore = 0,
   }) {
-    final priority = recommendationScore >= 60
-        ? EventPinPriority.high
-        : recommendationScore >= 35
-            ? EventPinPriority.medium
-            : EventPinPriority.low;
-
     return EventMapPinData(
-      id: item.eventId.toString(),
+      id: item.eventId,
       lat: item.latitude,
       lng: item.longitude,
       title: item.title,
       imageUrl: item.coverImageUrl ??
           (item.imageUrls.isNotEmpty ? item.imageUrls.first : null),
-      categoryColor: parseHexColor(item.segmentColor),
+      categoryColor: _resolveCategoryColor(item.segmentColor),
       recommendationScore: recommendationScore,
-      priority: priority,
+      priority: _resolvePriority(recommendationScore),
     );
+  }
+
+  static EventPinPriority _resolvePriority(int score) {
+    if (score >= _highThreshold) return EventPinPriority.high;
+    if (score >= _mediumThreshold) return EventPinPriority.medium;
+    return EventPinPriority.low;
+  }
+
+  static Color _resolveCategoryColor(String? rawColor) {
+    final trimmed = rawColor?.trim() ?? '';
+    if (trimmed.isEmpty) return _fallbackPinColor;
+
+    final parsed = parseHex(trimmed);
+    if (parsed.alpha == 0) return _fallbackPinColor;
+
+    return parsed;
   }
 }

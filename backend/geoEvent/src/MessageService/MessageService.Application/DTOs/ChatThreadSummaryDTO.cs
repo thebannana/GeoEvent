@@ -16,4 +16,5 @@ public class ChatThreadSummaryDto
     public string? OtherUserAvatarUrl { get; set; }
     public bool? OtherUserIsOnline { get; set; }
     public DateTime? OtherUserLastActiveAt { get; set; }
+    public string? OtherUserUsername { get; set; }
 }

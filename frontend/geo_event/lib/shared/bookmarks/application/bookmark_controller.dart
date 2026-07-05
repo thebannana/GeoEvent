@@ -1,48 +1,107 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../features/auth/application/auth_controller.dart';
+import '../../../../features/auth/application/auth_controller.dart';
 import '../data/bookmark_repository.dart';
 import '../models/bookmark.dart';
+import '../models/paged_list_state.dart';
 import '../providers/bookmark_providers.dart';
 
-class BookmarksController extends AsyncNotifier<List<Bookmark>> {
-  BookmarkRepository get _repository => ref.read(bookmarkRepositoryProvider);
+final bookmarksProvider =
+    StateNotifierProvider<BookmarksController, PagedListState<Bookmark>>((ref) {
+  ref.watch(sessionUserIdProvider);
+  return BookmarksController(ref.read(bookmarkRepositoryProvider));
+});
 
-  @override
-  Future<List<Bookmark>> build() async {
-    ref.watch(sessionUserIdProvider);
-    return _loadBookmarks();
-  }
+class BookmarksController extends StateNotifier<PagedListState<Bookmark>> {
+  BookmarksController(this.repository) : super(const PagedListState<Bookmark>());
 
-  Future<List<Bookmark>> _loadBookmarks() async {
-    final items = await _repository.getBookmarks();
-    return _sort(items);
-  }
-
-  List<Bookmark> _current() => state.valueOrNull ?? const <Bookmark>[];
+  final BookmarkRepository repository;
+  String _query = '';
+  int _requestId = 0;
 
   List<Bookmark> _sort(Iterable<Bookmark> items) {
-    final list = items.toList()..sort((a, b) => b.savedAt.compareTo(a.savedAt));
+    final list = items.toList()
+      ..sort((a, b) => b.savedAt.compareTo(a.savedAt));
     return List.unmodifiable(list);
   }
 
-  String? _normalizeMemo(String? memo) {
-    final trimmed = memo?.trim();
-    if (trimmed == null || trimmed.isEmpty) return null;
-    return trimmed;
+  String? _normalizeQuery(String query) {
+    final trimmed = query.trim();
+    return trimmed.isEmpty ? null : trimmed;
+  }
+
+  Future<void> loadInitial({String query = '', bool force = false}) async {
+    if (state.loadedInitial && !force && _query == query.trim()) return;
+    _query = query.trim();
+    await _loadPage(reset: true);
+  }
+
+  Future<void> search(String query) async {
+    _query = query.trim();
+    await _loadPage(reset: true);
   }
 
   Future<void> refresh() async {
-    state = const AsyncLoading();
-    state = await AsyncValue.guard(_loadBookmarks);
+    await _loadPage(reset: true);
+  }
+
+  Future<void> loadMore() async {
+    if (state.loading || state.loadingMore || !state.hasMore) return;
+    await _loadPage(reset: false);
+  }
+
+  Future<void> _loadPage({required bool reset}) async {
+    final requestId = ++_requestId;
+    final nextPage = reset ? 1 : state.page + 1;
+
+    state = state.copyWith(
+      loading: reset,
+      loadingMore: !reset,
+      clearError: true,
+    );
+
+    try {
+      final result = await repository.getBookmarksPaged(
+        searchTerm: _normalizeQuery(_query),
+        page: nextPage,
+        pageSize: state.pageSize,
+      );
+
+      if (requestId != _requestId) return;
+
+      final merged = reset
+          ? _sort(result.items)
+          : _sort([...state.items, ...result.items]);
+
+      state = state.copyWith(
+        items: merged,
+        loading: false,
+        loadingMore: false,
+        loadedInitial: true,
+        page: result.page,
+        pageSize: result.pageSize,
+        totalCount: result.totalCount,
+        hasMore: result.hasNextPage ||
+            ((result.page * result.pageSize) < result.totalCount),
+      );
+    } catch (e) {
+      if (requestId != _requestId) return;
+
+      state = state.copyWith(
+        items: reset ? const [] : state.items,
+        loading: false,
+        loadingMore: false,
+        error: e.toString().replaceFirst('Exception: ', ''),
+      );
+    }
   }
 
   bool isBookmarked(int eventId) {
-    return _current().any((b) => b.eventId == eventId);
+    return state.items.any((b) => b.eventId == eventId);
   }
 
   Bookmark? bookmarkForEvent(int eventId) {
-    for (final bookmark in _current()) {
+    for (final bookmark in state.items) {
       if (bookmark.eventId == eventId) return bookmark;
     }
     return null;
@@ -52,16 +111,21 @@ class BookmarksController extends AsyncNotifier<List<Bookmark>> {
     required int eventId,
     String? memo,
   }) async {
-    final snapshot = _current();
     final existing = bookmarkForEvent(eventId);
     if (existing != null) return existing;
 
-    final created = await _repository.createBookmark(
+    final created = await repository.createBookmark(
       eventId: eventId,
-      memo: _normalizeMemo(memo),
+      memo: memo?.trim().isEmpty == true ? null : memo?.trim(),
     );
 
-    state = AsyncData(_sort([created, ...snapshot]));
+    final updated = _sort([created, ...state.items]);
+
+    state = state.copyWith(
+      items: updated,
+      totalCount: state.totalCount + 1,
+    );
+
     return created;
   }
 
@@ -69,57 +133,69 @@ class BookmarksController extends AsyncNotifier<List<Bookmark>> {
     required int bookmarkId,
     String? memo,
   }) async {
-    final snapshot = _current();
-    final index = snapshot.indexWhere((b) => b.bookmarkId == bookmarkId);
+    final index = state.items.indexWhere((b) => b.bookmarkId == bookmarkId);
     if (index == -1) return null;
 
-    final normalizedMemo = _normalizeMemo(memo);
-    final previousBookmark = snapshot[index];
+    final normalizedMemo = memo?.trim().isEmpty == true ? null : memo?.trim();
+    final previous = state.items[index];
 
-    final optimisticBookmark = previousBookmark.copyWith(
+    final optimistic = previous.copyWith(
       memo: normalizedMemo,
       clearMemo: normalizedMemo == null,
     );
 
-    final optimisticList = [...snapshot];
-    optimisticList[index] = optimisticBookmark;
-    state = AsyncData(List.unmodifiable(optimisticList));
+    final optimisticItems = [...state.items];
+    optimisticItems[index] = optimistic;
+
+    state = state.copyWith(items: List.unmodifiable(optimisticItems));
 
     try {
-      final updated = await _repository.updateBookmark(
+      final updated = await repository.updateBookmark(
         bookmarkId: bookmarkId,
         memo: normalizedMemo,
       );
 
-      final confirmedList = [...optimisticList];
+      final confirmed = [...state.items];
       final confirmedIndex =
-          confirmedList.indexWhere((b) => b.bookmarkId == bookmarkId);
+          confirmed.indexWhere((b) => b.bookmarkId == bookmarkId);
 
       if (confirmedIndex != -1) {
-        confirmedList[confirmedIndex] = updated;
+        confirmed[confirmedIndex] = updated;
       }
 
-      state = AsyncData(_sort(confirmedList));
+      state = state.copyWith(items: _sort(confirmed));
       return updated;
     } catch (_) {
-      state = AsyncData(List.unmodifiable(snapshot));
+      final rollback = [...state.items];
+      final rollbackIndex =
+          rollback.indexWhere((b) => b.bookmarkId == bookmarkId);
+
+      if (rollbackIndex != -1) {
+        rollback[rollbackIndex] = previous;
+      }
+
+      state = state.copyWith(items: List.unmodifiable(rollback));
       rethrow;
     }
   }
 
   Future<void> deleteBookmark(int bookmarkId) async {
-    final snapshot = _current();
+    final snapshot = state.items;
+    final updated =
+        snapshot.where((b) => b.bookmarkId != bookmarkId).toList(growable: false);
 
-    final updated = snapshot
-        .where((b) => b.bookmarkId != bookmarkId)
-        .toList(growable: false);
-
-    state = AsyncData(List.unmodifiable(updated));
+    state = state.copyWith(
+      items: List.unmodifiable(updated),
+      totalCount: state.totalCount > 0 ? state.totalCount - 1 : 0,
+    );
 
     try {
-      await _repository.deleteBookmark(bookmarkId);
+      await repository.deleteBookmark(bookmarkId);
     } catch (_) {
-      state = AsyncData(List.unmodifiable(snapshot));
+      state = state.copyWith(
+        items: List.unmodifiable(snapshot),
+        totalCount: state.totalCount + 1,
+      );
       rethrow;
     }
   }
@@ -127,7 +203,6 @@ class BookmarksController extends AsyncNotifier<List<Bookmark>> {
   Future<void> removeBookmarkByEventId(int eventId) async {
     final bookmark = bookmarkForEvent(eventId);
     if (bookmark == null) return;
-
     await deleteBookmark(bookmark.bookmarkId);
   }
 
@@ -135,57 +210,13 @@ class BookmarksController extends AsyncNotifier<List<Bookmark>> {
     required int eventId,
     String? memo,
   }) async {
-    final snapshot = _current();
     final existing = bookmarkForEvent(eventId);
 
     if (existing != null) {
-      final updated = snapshot
-          .where((b) => b.bookmarkId != existing.bookmarkId)
-          .toList(growable: false);
-
-      state = AsyncData(List.unmodifiable(updated));
-
-      try {
-        await _repository.deleteBookmark(existing.bookmarkId);
-      } catch (_) {
-        state = AsyncData(List.unmodifiable(snapshot));
-        rethrow;
-      }
+      await deleteBookmark(existing.bookmarkId);
       return;
     }
 
-    final optimistic = Bookmark(
-      bookmarkId: -eventId,
-      eventId: eventId,
-      userId: null,
-      title: 'Saved event',
-      imageUrl: '',
-      memo: _normalizeMemo(memo),
-      savedAt: DateTime.now(),
-    );
-
-    final optimisticList = _sort([optimistic, ...snapshot]);
-    state = AsyncData(optimisticList);
-
-    try {
-      final created = await _repository.createBookmark(
-        eventId: eventId,
-        memo: _normalizeMemo(memo),
-      );
-
-      final confirmed = [
-        for (final bookmark in optimisticList)
-          if (bookmark.bookmarkId == optimistic.bookmarkId &&
-              bookmark.eventId == optimistic.eventId)
-            created
-          else
-            bookmark,
-      ];
-
-      state = AsyncData(_sort(confirmed));
-    } catch (_) {
-      state = AsyncData(List.unmodifiable(snapshot));
-      rethrow;
-    }
+    await addBookmark(eventId: eventId, memo: memo);
   }
 }

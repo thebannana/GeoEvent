@@ -8,41 +8,55 @@ class PrivacyPolicyScreen extends StatelessWidget {
 
   static const _lastUpdated = 'May 29, 2026';
 
+  static const String _introText =
+      'This privacy policy explains the main categories of data GeoEvent may process, why that data is used, and the basic choices available to you when using the application.';
+
   static const List<String> _dataCollectionItems = [
     'Account details such as your name, email address, and login information.',
     'Event activity such as reservations, tickets, favorites, and notifications.',
-    'Approximate or precise location data if location-based discovery is enabled.',
+    'Approximate or precise location data when you enable location-based discovery.',
     'Basic device and diagnostic information such as crash logs and app performance data.',
   ];
 
   static const List<String> _dataUsageItems = [
-    'To help you discover nearby events and relevant recommendations.',
+    'To help you discover nearby events and personalized recommendations.',
     'To manage reservations, tickets, reminders, and event updates.',
     'To improve app stability, security, and performance.',
     'To communicate essential account or event-related information.',
   ];
 
   static const List<String> _permissionItems = [
-    'Location: used to show relevant events near you and improve map-based discovery.',
+    'Location: used to show relevant events near you and to improve map-based discovery and routing.',
     'Notifications: used to send reservation updates, reminders, and important event activity.',
-    'Camera or media access: only needed if profile photos, event media, or uploads are supported.',
+    'Camera and media access: used only when you upload profile photos or event media.',
+  ];
+
+  static const List<String> _recommendationItems = [
+    'GeoEvent uses a recommendation system that considers your saved interests, past activity, and basic popularity signals.',
+    'Recommendation data is used only to improve your experience in the app and is not sold to third parties.',
+  ];
+
+  static const List<String> _paymentItems = [
+    'GeoEvent supports online payments through PayPal for certain reservations.',
+    'Cash payments are handled directly between you and the event organizer, and any issues or disputes related to cash are the organizer’s responsibility.',
+    'Refunds processed through the app are limited to PayPal payments and are based on the actual amount charged via PayPal.',
   ];
 
   static const List<String> _userChoiceItems = [
-    'You can choose whether to grant certain device permissions.',
-    'You can stop using location-based features by disabling location access in system settings.',
+    'You can choose whether to grant device permissions such as location, notifications, or camera access.',
+    'You can stop using location-based features by disabling location access in your device system settings.',
     'You can disable push notifications in your device settings.',
-    'You may request account or personal data deletion according to the final published policy.',
+    'You may request account or personal data deletion according to the final published policy used by the project.',
   ];
 
-  static const String _introText =
-      'This privacy policy explains the main categories of data GeoEvent may process, the reasons for processing, and the basic choices available to users when using the application.';
+  static const String _dataProtectionText =
+      'GeoEvent does not sell your personal information. Data is collected only to provide and improve the service, personalize event discovery, and keep your reservations and tickets in sync with your activity.';
 
   static const String _thirdPartyText =
-      'GeoEvent may rely on third-party services for authentication, payments, analytics, maps, notifications, or crash reporting. Those services should be clearly identified in the final published policy used for release builds.';
+      'GeoEvent may rely on third-party services such as PayPal for payments, Mapbox for maps, and analytics or crash reporting providers. These services will be listed in the final published policy used for production builds, along with links to their own privacy terms.';
 
   static const String _contactText =
-      'For privacy-related questions, personal data requests, or account concerns, provide the official support or legal contact email used by the project.';
+      'For privacy-related questions, personal data requests, or account concerns, use the official support or legal contact email provided by the project (kundodenis@gmail.com).';
 
   @override
   Widget build(BuildContext context) {
@@ -92,8 +106,23 @@ class PrivacyPolicyScreen extends StatelessWidget {
             child: _BulletList(items: _permissionItems),
           ),
           const _SectionBlock(
+            title: 'Recommendation system',
+            child: _BulletList(items: _recommendationItems),
+          ),
+          const _SectionBlock(
+            title: 'Payments and refunds',
+            child: _BulletList(items: _paymentItems),
+          ),
+          const _SectionBlock(
             title: 'Your choices',
             child: _BulletList(items: _userChoiceItems),
+          ),
+          _SectionBlock(
+            title: 'Data protection',
+            child: Text(
+              _dataProtectionText,
+              style: theme.textTheme.bodyMedium?.copyWith(height: 1.5),
+            ),
           ),
           _SectionBlock(
             title: 'Third-party services',

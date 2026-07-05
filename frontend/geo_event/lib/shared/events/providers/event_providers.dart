@@ -3,8 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/network/api_client.dart';
 import '../data/events_api.dart';
 import '../data/events_repository.dart';
-import '../data/my_events_api.dart';
-import '../data/my_events_repository.dart';
+import '../../my_events/data/my_events_api.dart';
+import '../../my_events/data/my_events_repository.dart';
 
 final eventsApiProvider = Provider<EventsApi>((ref) {
   return EventsApi(ref.watch(authorizedDioProvider));

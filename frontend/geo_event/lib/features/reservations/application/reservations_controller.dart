@@ -2,56 +2,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../features/auth/application/auth_controller.dart';
 import '../../../shared/reservations/data/reservations_repository.dart';
-import '../../../shared/reservations/models/reservation.dart';
+import '../../../shared/reservations/models/reservation_query.dart';
+import '../../../shared/reservations/models/reservation_state.dart';
 import '../../../shared/reservations/models/reservation_status.dart';
 import '../../../shared/reservations/providers/reservation_providers.dart';
-
-class ReservationsState {
-  final List<Reservation> items;
-  final int page;
-  final int pageSize;
-  final bool hasMore;
-  final bool isFetchingMore;
-  final ReservationStatus? statusFilter;
-
-  const ReservationsState({
-    required this.items,
-    required this.page,
-    required this.pageSize,
-    required this.hasMore,
-    required this.isFetchingMore,
-    this.statusFilter,
-  });
-
-  const ReservationsState.initial({this.statusFilter})
-      : items = const [],
-        page = 1,
-        pageSize = 20,
-        hasMore = true,
-        isFetchingMore = false;
-
-  ReservationsState copyWith({
-    List<Reservation>? items,
-    int? page,
-    int? pageSize,
-    bool? hasMore,
-    bool? isFetchingMore,
-    Object? statusFilter = _sentinel,
-  }) {
-    return ReservationsState(
-      items: items ?? this.items,
-      page: page ?? this.page,
-      pageSize: pageSize ?? this.pageSize,
-      hasMore: hasMore ?? this.hasMore,
-      isFetchingMore: isFetchingMore ?? this.isFetchingMore,
-      statusFilter: identical(statusFilter, _sentinel)
-          ? this.statusFilter
-          : statusFilter as ReservationStatus?,
-    );
-  }
-}
-
-const _sentinel = Object();
 
 final reservationsControllerProvider =
     AsyncNotifierProvider<ReservationsController, ReservationsState>(
@@ -61,72 +15,200 @@ final reservationsControllerProvider =
 class ReservationsController extends AsyncNotifier<ReservationsState> {
   late final ReservationsRepository _repository;
 
+  static const int _defaultPageSize = ReservationsQuery.defaultPageSize;
+
   @override
   Future<ReservationsState> build() async {
     ref.watch(sessionUserIdProvider);
     _repository = ref.read(reservationsRepositoryProvider);
-    return _loadFirstPage();
+    return _loadPage(
+      const ReservationsQuery(page: 1, pageSize: _defaultPageSize),
+      append: false,
+      current: null,
+    );
   }
 
-  Future<ReservationsState> _loadFirstPage({
-    ReservationStatus? status,
+  Future<ReservationsState> _loadPage(
+    ReservationsQuery query, {
+    required bool append,
+    ReservationsState? current,
   }) async {
     final result = await _repository.getMyReservations(
-      page: 1,
-      pageSize: 20,
-      status: status,
+      page: query.normalizedPage,
+      pageSize: query.normalizedPageSize,
+      status: query.status,
+      eventId: query.eventId,
     );
 
+    final mergedItems = append && current != null
+        ? [...current.items, ...result.items]
+        : result.items;
+
+    final hasMore = result.page < result.totalPages;
+
     return ReservationsState(
-      items: result.items,
+      items: mergedItems,
+      statusFilter: query.status,
+      eventIdFilter: query.eventId,
+      isLoading: false,
+      isRefreshing: false,
+      isFetchingMore: false,
+      hasMore: hasMore,
       page: result.page,
       pageSize: result.pageSize,
-      hasMore: result.page < result.totalPages,
-      isFetchingMore: false,
-      statusFilter: status,
+      totalCount: result.totalCount,
+      error: null,
+    );
+  }
+
+  ReservationsQuery _currentQuery([ReservationsState? current]) {
+    final value = current ?? state.valueOrNull;
+    return ReservationsQuery(
+      status: value?.statusFilter,
+      eventId: value?.eventIdFilter,
+      page: value?.page ?? 1,
+      pageSize: value?.pageSize ?? _defaultPageSize,
     );
   }
 
   Future<void> refresh() async {
-    final currentFilter = state.valueOrNull?.statusFilter;
-    state = const AsyncLoading();
+    final current = state.valueOrNull;
+    final query = _currentQuery(current).firstPage();
+
+    if (current != null) {
+      state = AsyncData(
+        current.copyWith(
+          isRefreshing: true,
+          isFetchingMore: false,
+          clearError: true,
+        ),
+      );
+    } else {
+      state = const AsyncLoading();
+    }
+
     state = await AsyncValue.guard(
-      () => _loadFirstPage(status: currentFilter),
+      () => _loadPage(query, append: false, current: current),
     );
   }
 
   Future<void> setStatusFilter(ReservationStatus? status) async {
-    state = const AsyncLoading();
+    final current = state.valueOrNull;
+    final query = _currentQuery(current).copyWith(
+      status: status,
+      page: 1,
+    );
+
+    if (current != null) {
+      state = AsyncData(
+        current.copyWith(
+          isLoading: true,
+          isFetchingMore: false,
+          clearError: true,
+        ),
+      );
+    } else {
+      state = const AsyncLoading();
+    }
+
     state = await AsyncValue.guard(
-      () => _loadFirstPage(status: status),
+      () => _loadPage(query, append: false, current: current),
+    );
+  }
+
+  Future<void> setEventFilter(int? eventId) async {
+    final current = state.valueOrNull;
+    final query = _currentQuery(current).copyWith(
+      eventId: eventId,
+      page: 1,
+    );
+
+    if (current != null) {
+      state = AsyncData(
+        current.copyWith(
+          isLoading: true,
+          isFetchingMore: false,
+          clearError: true,
+        ),
+      );
+    } else {
+      state = const AsyncLoading();
+    }
+
+    state = await AsyncValue.guard(
+      () => _loadPage(query, append: false, current: current),
+    );
+  }
+
+  Future<void> applyFilters({
+    ReservationStatus? status,
+    int? eventId,
+    bool clearStatus = false,
+    bool clearEventId = false,
+  }) async {
+    final current = state.valueOrNull;
+    final base = _currentQuery(current);
+
+    final query = base.copyWith(
+      status: clearStatus ? null : status,
+      eventId: clearEventId ? null : eventId,
+      page: 1,
+    );
+
+    if (current != null) {
+      state = AsyncData(
+        current.copyWith(
+          isLoading: true,
+          isFetchingMore: false,
+          clearError: true,
+        ),
+      );
+    } else {
+      state = const AsyncLoading();
+    }
+
+    state = await AsyncValue.guard(
+      () => _loadPage(query, append: false, current: current),
+    );
+  }
+
+  Future<void> clearFilters() async {
+    await applyFilters(
+      clearStatus: true,
+      clearEventId: true,
     );
   }
 
   Future<void> loadMore() async {
     final current = state.valueOrNull;
-    if (current == null || current.isFetchingMore || !current.hasMore) return;
+    if (current == null || current.isLoading || current.isFetchingMore || !current.hasMore) {
+      return;
+    }
 
-    state = AsyncData(current.copyWith(isFetchingMore: true));
+    state = AsyncData(
+      current.copyWith(
+        isFetchingMore: true,
+        clearError: true,
+      ),
+    );
+
+    final query = _currentQuery(current).copyWith(page: current.page + 1);
 
     try {
-      final nextPage = current.page + 1;
-      final result = await _repository.getMyReservations(
-        page: nextPage,
-        pageSize: current.pageSize,
-        status: current.statusFilter,
+      final next = await _loadPage(
+        query,
+        append: true,
+        current: current,
       );
-
+      state = AsyncData(next);
+    } catch (e, st) {
       state = AsyncData(
         current.copyWith(
-          items: [...current.items, ...result.items],
-          page: result.page,
-          hasMore: result.page < result.totalPages,
           isFetchingMore: false,
+          error: e.toString(),
         ),
       );
-    } catch (_) {
-      state = AsyncData(current.copyWith(isFetchingMore: false));
-      rethrow;
+      Error.throwWithStackTrace(e, st);
     }
   }
 
@@ -151,7 +233,12 @@ class ReservationsController extends AsyncNotifier<ReservationsState> {
       refundRequestedAt: DateTime.now(),
     );
 
-    state = AsyncData(current.copyWith(items: optimisticItems));
+    state = AsyncData(
+      current.copyWith(
+        items: optimisticItems,
+        clearError: true,
+      ),
+    );
 
     try {
       final updated = await _repository.requestRefund(
@@ -159,10 +246,21 @@ class ReservationsController extends AsyncNotifier<ReservationsState> {
         reason: reason,
       );
 
-      final refreshedItems = [...optimisticItems];
-      refreshedItems[index] = updated;
+      final latest = state.valueOrNull ?? current;
+      final refreshedItems = [...latest.items];
+      final latestIndex = refreshedItems.indexWhere(
+        (r) => r.reservationId == reservationId,
+      );
 
-      state = AsyncData(current.copyWith(items: refreshedItems));
+      if (latestIndex != -1) {
+        refreshedItems[latestIndex] = updated;
+        state = AsyncData(
+          latest.copyWith(
+            items: refreshedItems,
+            clearError: true,
+          ),
+        );
+      }
     } catch (_) {
       state = AsyncData(current);
       rethrow;
@@ -186,7 +284,12 @@ class ReservationsController extends AsyncNotifier<ReservationsState> {
       cancelledAt: DateTime.now(),
     );
 
-    state = AsyncData(current.copyWith(items: updatedItems));
+    state = AsyncData(
+      current.copyWith(
+        items: updatedItems,
+        clearError: true,
+      ),
+    );
 
     try {
       await _repository.cancelReservation(reservationId);

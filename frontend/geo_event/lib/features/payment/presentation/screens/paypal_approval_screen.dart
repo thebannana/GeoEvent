@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../../core/widgets/layout/app_scaffold.dart';
 import '../../../../shared/payment/data/paypal_return_coordinator.dart';
 import '../../../../shared/profile/models/paypal_approval_result.dart';
 
@@ -106,11 +107,11 @@ class _PayPalApprovalScreenState extends ConsumerState<PayPalApprovalScreen>
       },
     );
 
-    return Scaffold(
+    return AppScaffold(
       appBar: AppBar(
         title: const Text('PayPal Checkout'),
       ),
-      body: Padding(
+      child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

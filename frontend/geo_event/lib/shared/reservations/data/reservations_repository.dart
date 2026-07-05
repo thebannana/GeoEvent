@@ -10,13 +10,15 @@ class ReservationsRepository {
 
   Future<PagedResult<Reservation>> getMyReservations({
     int page = 1,
-    int pageSize = 20,
+    int pageSize = ReservationsApi.defaultPageSize,
     ReservationStatus? status,
+    int? eventId,
   }) {
     return api.getMyReservations(
       page: page,
       pageSize: pageSize,
       status: status,
+      eventId: eventId,
     );
   }
 

@@ -91,15 +91,63 @@ public class ChatServiceImpl : IChatService
         });
     }
 
-    public async Task<ServiceResult<List<ChatThreadSummaryDto>>> GetThreadsAsync(int userId)
+    public async Task<ServiceResult<PagedResult<ChatThreadSummaryDto>>> GetThreadsAsync(
+    int userId,
+    ChatThreadsFilterDto? filter)
     {
-        var threads = await _repository.GetUserThreadsAsync(userId);
-        var result = new List<ChatThreadSummaryDto>();
+        filter ??= new ChatThreadsFilterDto();
 
-        foreach (var thread in threads)
-            result.Add(await MapThreadSummaryAsync(thread, userId));
+        var page = filter.Page <= 0 ? 1 : filter.Page;
+        var pageSize = filter.PageSize <= 0 ? 20 : Math.Min(filter.PageSize, 50);
+        var searchTerm = string.IsNullOrWhiteSpace(filter.SearchTerm)
+            ? null
+            : filter.SearchTerm.Trim();
 
-        return ServiceResult<List<ChatThreadSummaryDto>>.Ok(result);
+        if (filter.UnreadOnly)
+        {
+            return ServiceResult<PagedResult<ChatThreadSummaryDto>>.Fail(
+                "Unread-only filtering is not supported by the current chat participant schema.");
+        }
+
+        var pagedThreads = await _repository.GetUserThreadsAsync(
+            userId,
+            page,
+            pageSize,
+            null,
+            false);
+
+        var mappedItems = new List<ChatThreadSummaryDto>();
+
+        foreach (var thread in pagedThreads.Items)
+        {
+            var dto = await MapThreadSummaryAsync(thread, userId);
+            mappedItems.Add(dto);
+        }
+
+        if (!string.IsNullOrWhiteSpace(searchTerm))
+        {
+            mappedItems = mappedItems
+                .Where(x =>
+                    (!string.IsNullOrWhiteSpace(x.Title) &&
+                     x.Title.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)) ||
+                    (!string.IsNullOrWhiteSpace(x.LastMessageContent) &&
+                     x.LastMessageContent.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)) ||
+                    (!string.IsNullOrWhiteSpace(x.OtherUserDisplayName) &&
+                     x.OtherUserDisplayName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)) ||
+                    (!string.IsNullOrWhiteSpace(x.OtherUserUsername) &&
+                     x.OtherUserUsername.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)))
+                .ToList();
+        }
+
+        var result = new PagedResult<ChatThreadSummaryDto>
+        {
+            Items = mappedItems,
+            TotalCount = mappedItems.Count,
+            Page = page,
+            PageSize = pageSize
+        };
+
+        return ServiceResult<PagedResult<ChatThreadSummaryDto>>.Ok(result);
     }
 
     public async Task<ServiceResult<bool>> LeaveThreadAsync(long threadId, int userId)
@@ -224,27 +272,34 @@ public class ChatServiceImpl : IChatService
         await _repository.UpdateParticipantAsync(participant);
     }
 
-    public async Task<ServiceResult<PagedResult<ChatMessageDto>>> GetMessagesAsync(long threadId, int userId, int page, int pageSize)
+    public async Task<ServiceResult<PagedResult<ChatMessageDto>>> GetMessagesAsync(
+    long threadId,
+    int userId,
+    ChatMessagesFilterDto? filter)
     {
-        if (page <= 0)
-            return ServiceResult<PagedResult<ChatMessageDto>>.Fail("Page must be greater than 0.");
+        filter ??= new ChatMessagesFilterDto();
 
-        if (pageSize <= 0 || pageSize > 100)
-            return ServiceResult<PagedResult<ChatMessageDto>>.Fail("PageSize must be between 1 and 100.");
+        var page = filter.Page <= 0 ? 1 : filter.Page;
+        var pageSize = filter.PageSize <= 0 ? 30 : Math.Min(filter.PageSize, 100);
 
         if (!await _repository.IsParticipantAsync(threadId, userId))
-            return ServiceResult<PagedResult<ChatMessageDto>>.Forbidden("You are not a participant of this thread.");
-
-        var paged = await _repository.GetMessagesAsync(threadId, page, pageSize);
-        var mapped = await MapMessagesAsync(paged.Items, userId);
-
-        return ServiceResult<PagedResult<ChatMessageDto>>.Ok(new PagedResult<ChatMessageDto>
         {
-            Items = mapped,
-            TotalCount = paged.TotalCount,
-            Page = paged.Page,
-            PageSize = paged.PageSize
-        });
+            return ServiceResult<PagedResult<ChatMessageDto>>.Forbidden(
+                "You are not a participant of this thread.");
+        }
+
+        var pagedMessages = await _repository.GetMessagesAsync(threadId, page, pageSize);
+        var mappedMessages = await MapMessagesAsync(pagedMessages.Items, userId);
+
+        var result = new PagedResult<ChatMessageDto>
+        {
+            Items = mappedMessages,
+            TotalCount = pagedMessages.TotalCount,
+            Page = pagedMessages.Page,
+            PageSize = pagedMessages.PageSize
+        };
+
+        return ServiceResult<PagedResult<ChatMessageDto>>.Ok(result);
     }
 
     public async Task<ServiceResult<ChatMessageDto>> SendMessageAsync(long threadId, int userId, SendThreadMessageDto dto)
@@ -513,12 +568,33 @@ public class ChatServiceImpl : IChatService
         return ServiceResult<bool>.Ok(true);
     }
 
-    public async Task<ServiceResult<List<ChatParticipantDto>>> GetParticipantsAsync(long threadId, int userId)
+    public async Task<ServiceResult<PagedResult<ChatParticipantDto>>> GetParticipantsAsync(
+        long threadId,
+        int userId,
+        int page,
+        int pageSize)
     {
-        if (!await _repository.IsParticipantAsync(threadId, userId))
-            return ServiceResult<List<ChatParticipantDto>>.Forbidden("You are not a participant of this thread.");
+        page = page <= 0 ? 1 : page;
+        pageSize = pageSize <= 0 ? 20 : Math.Min(pageSize, 50);
 
-        return ServiceResult<List<ChatParticipantDto>>.Ok(await BuildParticipantsAsync(threadId));
+        if (!await _repository.IsParticipantAsync(threadId, userId))
+            return ServiceResult<PagedResult<ChatParticipantDto>>.Forbidden("You are not a participant of this thread.");
+
+        var participants = await BuildParticipantsAsync(threadId);
+        var totalCount = participants.Count;
+        var pagedItems = participants
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToList();
+
+        return ServiceResult<PagedResult<ChatParticipantDto>>.Ok(
+            new PagedResult<ChatParticipantDto>
+            {
+                Items = pagedItems,
+                TotalCount = totalCount,
+                Page = page,
+                PageSize = pageSize
+            });
     }
 
     public Task<bool> IsParticipantAsync(long threadId, int userId) =>

@@ -3,14 +3,16 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/widgets/inputs/app_chip.dart';
 import '../../../../core/widgets/feedback/app_empty_state.dart';
 import '../../../../core/widgets/feedback/app_error_state.dart';
 import '../../../../core/widgets/feedback/app_loading_indicator.dart';
+import '../../../../core/widgets/feedback/app_spinner.dart';
+import '../../../../core/widgets/inputs/app_chip.dart';
 import '../../../../shared/events/models/create_event_models.dart';
 import '../../../../shared/events/providers/event_providers.dart';
 import '../../../../shared/location/models/event_directions_request.dart';
 import '../../../../shared/location/providers/directions_providers.dart';
+import '../../application/search_controller.dart';
 import '../../domain/filter_selection.dart';
 import '../../domain/sort_option.dart';
 import '../widgets/search_filter_bottom_sheet.dart';
@@ -31,95 +33,46 @@ class SearchSheet extends ConsumerStatefulWidget {
 
 class _SearchSheetState extends ConsumerState<SearchSheet> {
   final TextEditingController _textController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
   Timer? _debounce;
-
-  List<EventItem> _results = [];
-  bool _loading = false;
-  String? _error;
-
-  int? _selectedSegmentId;
-  int? _selectedGenreId;
-  int? _selectedSubGenreId;
-
-  String _sortBy = 'Recommended';
-  bool _sortDescending = true;
-
-  int _requestId = 0;
   bool _isDialogOpen = false;
-
-  bool get _hasActiveFilters =>
-      _selectedSegmentId != null ||
-      _selectedGenreId != null ||
-      _selectedSubGenreId != null;
-
-  String get _query => _textController.text.trim();
-
-  String get _sortLabel {
-    if (_sortBy == 'Recommended') return 'Recommended';
-    if (_sortBy == 'LikesCount' && _sortDescending) return 'Most liked';
-    if (_sortBy == 'ViewCount' && _sortDescending) return 'Most viewed';
-    if (_sortBy == 'Price' && !_sortDescending) return 'Lowest price';
-    if (_sortBy == 'Price' && _sortDescending) return 'Highest price';
-    if (_sortBy == 'StartDateTime' && !_sortDescending) return 'Soonest';
-    if (_sortBy == 'StartDateTime' && _sortDescending) return 'Latest';
-    return 'Sort';
-  }
-
-  List<EventItem> _removeUnavailableEvents(List<EventItem> items) {
-    return items.where((item) => item.isVisibleInSearch).toList();
-  }
 
   @override
   void initState() {
     super.initState();
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadInitialResults();
+      ref.read(searchControllerProvider.notifier).loadInitial();
     });
+
+    _scrollController.addListener(_onScroll);
   }
 
   @override
   void dispose() {
     _debounce?.cancel();
     _textController.dispose();
+    _scrollController
+      ..removeListener(_onScroll)
+      ..dispose();
     super.dispose();
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+
+    final position = _scrollController.position;
+    if (position.pixels >= position.maxScrollExtent - 240) {
+      ref.read(searchControllerProvider.notifier).loadMore();
+    }
   }
 
   void _closeParentSearchSheet() {
     widget.onCloseSheet?.call();
   }
 
-  void _setLoading() {
-    if (!mounted) return;
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-  }
-
-  void _setResults(List<EventItem> results) {
-    if (!mounted) return;
-    setState(() {
-      _results = results;
-      _loading = false;
-      _error = null;
-    });
-  }
-
-  void _setError(Object error) {
-    if (!mounted) return;
-    setState(() {
-      _results = [];
-      _loading = false;
-      _error = error.toString().replaceFirst('Exception: ', '');
-    });
-  }
-
   Future<void> _reloadCurrentResults() async {
-    if (_query.isEmpty) {
-      await _loadInitialResults(force: true);
-    } else {
-      await _search(_query);
-    }
+    await ref.read(searchControllerProvider.notifier).loadInitial(force: true);
   }
 
   Future<void> _openDirections(EventItem item) async {
@@ -148,103 +101,9 @@ class _SearchSheetState extends ConsumerState<SearchSheet> {
     }
 
     _debounce?.cancel();
-
-    _debounce = Timer(const Duration(milliseconds: 350), () async {
-      final query = value.trim();
-      if (query.isEmpty) {
-        await _loadInitialResults(force: true);
-      } else {
-        await _search(query);
-      }
+    _debounce = Timer(const Duration(milliseconds: 350), () {
+      ref.read(searchControllerProvider.notifier).search(value);
     });
-  }
-
-  Future<void> _loadInitialResults({bool force = false}) async {
-    if (!force && _results.isNotEmpty && _query.isEmpty) return;
-
-    final requestId = ++_requestId;
-    _setLoading();
-
-    try {
-      final items = await ref.read(eventsApiProvider).searchEvents(
-            page: 1,
-            pageSize: 20,
-            sortBy: _sortBy,
-            sortDescending: _sortDescending,
-            segmentId: _selectedSegmentId,
-            genreId: _selectedGenreId,
-            subGenreId: _selectedSubGenreId,
-          );
-
-      if (!mounted || requestId != _requestId) return;
-      final visibleItems = _removeUnavailableEvents(items);
-      _setResults(visibleItems);
-    } catch (e) {
-      if (!mounted || requestId != _requestId) return;
-      _setError(e);
-    }
-  }
-
-  Future<void> _search(String query) async {
-    final trimmed = query.trim();
-
-    if (trimmed.isEmpty) {
-      await _loadInitialResults(force: true);
-      return;
-    }
-
-    final requestId = ++_requestId;
-    _setLoading();
-
-    try {
-      final items = await ref.read(eventsApiProvider).searchEvents(
-            searchTerm: trimmed,
-            page: 1,
-            pageSize: 20,
-            sortBy: _sortBy,
-            sortDescending: _sortDescending,
-            segmentId: _selectedSegmentId,
-            genreId: _selectedGenreId,
-            subGenreId: _selectedSubGenreId,
-          );
-
-      final q = trimmed.toLowerCase();
-
-      double score(EventItem item) {
-        var total = 0.0;
-
-        final title = item.title.toLowerCase();
-        final description = item.description.toLowerCase();
-        final segment = (item.segmentName ?? '').toLowerCase();
-        final genre = (item.genreName ?? '').toLowerCase();
-        final subGenre = (item.subGenreName ?? '').toLowerCase();
-        final tags = (item.tags ?? '').toLowerCase();
-        final promoter = (item.promoterName ?? '').toLowerCase();
-
-        if (title.contains(q)) total += 90;
-        if (description.contains(q)) total += 30;
-        if (segment.contains(q)) total += 28;
-        if (genre.contains(q)) total += 24;
-        if (subGenre.contains(q)) total += 20;
-        if (tags.contains(q)) total += 18;
-        if (promoter.contains(q)) total += 14;
-
-        total += item.likesCount / 20;
-        total += item.viewCount / 200;
-
-        return total;
-      }
-
-      final visibleItems = _removeUnavailableEvents(items);
-      final ranked = [...visibleItems]
-        ..sort((a, b) => score(b).compareTo(score(a)));
-
-      if (!mounted || requestId != _requestId) return;
-      _setResults(ranked);
-    } catch (e) {
-      if (!mounted || requestId != _requestId) return;
-      _setError(e);
-    }
   }
 
   Future<T?> _showSheetSafeDialog<T>({
@@ -292,66 +151,108 @@ class _SearchSheetState extends ConsumerState<SearchSheet> {
   }
 
   Future<void> _openSortSheet() async {
+    final currentState = ref.read(searchControllerProvider);
+
     final selected = await _showSheetSafeDialog<SortOption>(
       child: SearchSortBottomSheet(
-        selected: SortOption(
-          sortBy: _sortBy,
-          sortDescending: _sortDescending,
-          label: _sortLabel,
-        ),
+        selected: currentState.sort,
       ),
     );
 
     if (selected == null || !mounted) return;
-
-    setState(() {
-      _sortBy = selected.sortBy;
-      _sortDescending = selected.sortDescending;
-    });
-
-    await _reloadCurrentResults();
+    await ref.read(searchControllerProvider.notifier).applySort(selected);
   }
 
   Future<void> _openFilterSheet() async {
     try {
+      final currentState = ref.read(searchControllerProvider);
       final segments = await ref.read(eventsApiProvider).getSegments();
 
       if (!mounted) return;
 
       final result = await _showSheetSafeDialog<FilterSelection>(
         child: SearchFilterBottomSheet(
-          initialSegmentId: _selectedSegmentId,
-          initialGenreId: _selectedGenreId,
-          initialSubGenreId: _selectedSubGenreId,
+          initialSegmentId: currentState.filter.segmentId,
+          initialGenreId: currentState.filter.genreId,
+          initialSubGenreId: currentState.filter.subGenreId,
           segments: segments,
         ),
       );
 
       if (result == null || !mounted) return;
-
-      setState(() {
-        _selectedSegmentId = result.segmentId;
-        _selectedGenreId = result.genreId;
-        _selectedSubGenreId = result.subGenreId;
-      });
-
-      await _reloadCurrentResults();
+      await ref.read(searchControllerProvider.notifier).applyFilter(result);
     } catch (e) {
-      _setError(e);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            e.toString().replaceFirst('Exception: ', ''),
+          ),
+        ),
+      );
     }
   }
 
-  Widget _buildBody() {
-    final query = _query;
+  Widget _buildFooter({
+    required bool loadingMore,
+    required bool hasMore,
+    required int loadedCount,
+    required int totalCount,
+  }) {
+    if (loadingMore) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 16),
+        child: Center(
+          child: AppSpinner(size: 22, strokeWidth: 2),
+        ),
+      );
+    }
 
-    if (_loading && _results.isEmpty) {
+    if (hasMore) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        child: Center(
+          child: OutlinedButton.icon(
+            onPressed: () =>
+                ref.read(searchControllerProvider.notifier).loadMore(),
+            icon: const Icon(Icons.expand_more_rounded),
+            label: Text(
+              totalCount > 0
+                  ? 'Load more ($loadedCount/$totalCount)'
+                  : 'Load more',
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (loadedCount == 0) {
+      return const SizedBox.shrink();
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      child: Center(
+        child: Text(
+          'Showing all $loadedCount events',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBody() {
+    final state = ref.watch(searchControllerProvider);
+    final query = _textController.text.trim();
+
+    if (state.loading && state.results.isEmpty) {
       return ListView(
         physics: const AlwaysScrollableScrollPhysics(
           parent: ClampingScrollPhysics(),
         ),
-        children: [
-          const SizedBox(height: 28),
-          const Padding(
+        children: const [
+          SizedBox(height: 28),
+          Padding(
             padding: EdgeInsets.symmetric(horizontal: 16),
             child: AppLoadingIndicator(
               title: 'Loading events',
@@ -359,12 +260,12 @@ class _SearchSheetState extends ConsumerState<SearchSheet> {
               centered: false,
             ),
           ),
-          const SizedBox(height: 24),
+          SizedBox(height: 24),
         ],
       );
     }
 
-    if (_error != null && _results.isEmpty) {
+    if (state.error != null && state.results.isEmpty) {
       return ListView(
         physics: const AlwaysScrollableScrollPhysics(
           parent: ClampingScrollPhysics(),
@@ -372,14 +273,14 @@ class _SearchSheetState extends ConsumerState<SearchSheet> {
         padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
         children: [
           AppErrorState(
-            message: _error!,
+            message: state.error!,
             onRetry: _reloadCurrentResults,
           ),
         ],
       );
     }
 
-    if (query.isEmpty && _results.isEmpty) {
+    if (query.isEmpty && state.results.isEmpty) {
       return ListView(
         physics: const AlwaysScrollableScrollPhysics(
           parent: ClampingScrollPhysics(),
@@ -394,7 +295,7 @@ class _SearchSheetState extends ConsumerState<SearchSheet> {
       );
     }
 
-    if (query.isNotEmpty && _results.isEmpty) {
+    if (query.isNotEmpty && state.results.isEmpty) {
       return ListView(
         physics: const AlwaysScrollableScrollPhysics(
           parent: ClampingScrollPhysics(),
@@ -410,16 +311,17 @@ class _SearchSheetState extends ConsumerState<SearchSheet> {
     }
 
     return ListView.builder(
+      controller: _scrollController,
       physics: const AlwaysScrollableScrollPhysics(
         parent: ClampingScrollPhysics(),
       ),
       padding: const EdgeInsets.only(bottom: 24),
-      itemCount: _results.length + 1,
+      itemCount: state.results.length + 2,
       itemBuilder: (context, index) {
         if (index == 0) {
           return Column(
             children: [
-              if (_error != null)
+              if (state.error != null)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
                   child: Material(
@@ -439,7 +341,7 @@ class _SearchSheetState extends ConsumerState<SearchSheet> {
                           const SizedBox(width: 10),
                           Expanded(
                             child: Text(
-                              _error!,
+                              state.error!,
                               style: Theme.of(context)
                                   .textTheme
                                   .bodySmall
@@ -456,7 +358,7 @@ class _SearchSheetState extends ConsumerState<SearchSheet> {
                     ),
                   ),
                 ),
-              if (_loading)
+              if (state.loading)
                 const Padding(
                   padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
                   child: LinearProgressIndicator(minHeight: 3),
@@ -465,7 +367,16 @@ class _SearchSheetState extends ConsumerState<SearchSheet> {
           );
         }
 
-        final item = _results[index - 1];
+        if (index == state.results.length + 1) {
+          return _buildFooter(
+            loadingMore: state.loadingMore,
+            hasMore: state.hasMore,
+            loadedCount: state.results.length,
+            totalCount: state.totalCount,
+          );
+        }
+
+        final item = state.results[index - 1];
         return SearchResultCard(
           item: item,
           onOpenDirections: _openDirections,
@@ -477,7 +388,16 @@ class _SearchSheetState extends ConsumerState<SearchSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final query = _query;
+    final state = ref.watch(searchControllerProvider);
+    final query = _textController.text.trim();
+
+    if (_textController.text != state.query) {
+      _textController.value = _textController.value.copyWith(
+        text: state.query,
+        selection: TextSelection.collapsed(offset: state.query.length),
+        composing: TextRange.empty,
+      );
+    }
 
     return RefreshIndicator(
       onRefresh: _reloadCurrentResults,
@@ -498,9 +418,7 @@ class _SearchSheetState extends ConsumerState<SearchSheet> {
                     ? IconButton(
                         onPressed: () async {
                           _debounce?.cancel();
-                          _textController.clear();
-                          if (mounted) setState(() {});
-                          await _loadInitialResults(force: true);
+                          await ref.read(searchControllerProvider.notifier).clearQuery();
                         },
                         icon: const Icon(Icons.close_rounded),
                         tooltip: 'Clear search',
@@ -517,16 +435,16 @@ class _SearchSheetState extends ConsumerState<SearchSheet> {
               child: Row(
                 children: [
                   AppChip(
-                    label: _hasActiveFilters ? 'Filtered' : 'Filter',
+                    label: state.hasActiveFilters ? 'Filtered' : 'Filter',
                     onTap: _openFilterSheet,
-                    selected: _hasActiveFilters,
+                    selected: state.hasActiveFilters,
                     icon: Icons.tune_rounded,
                   ),
                   const SizedBox(width: 8),
                   AppChip(
-                    label: _sortLabel,
+                    label: state.sort.label,
                     onTap: _openSortSheet,
-                    selected: _sortLabel != 'Sort',
+                    selected: true,
                     icon: Icons.swap_vert_rounded,
                   ),
                 ],

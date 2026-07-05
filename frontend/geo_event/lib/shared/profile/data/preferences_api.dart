@@ -1,6 +1,8 @@
 import 'package:dio/dio.dart';
 
 import '../../../../core/network/api_endpoints.dart';
+import '../models/paged_result.dart';
+import '../models/preferences_query.dart';
 import '../models/user_preference.dart';
 
 class PreferencesApi {
@@ -8,14 +10,27 @@ class PreferencesApi {
 
   final Dio dio;
 
-  Future<List<UserPreference>> getPreferences() async {
-    final response = await dio.get(ApiEndpoints.preferences);
-    return _parseList(response.data, UserPreference.fromJson);
+  Future<PagedResult<UserPreference>> getPreferences({
+    PreferencesQuery query = const PreferencesQuery(),
+  }) async {
+    final response = await dio.get(
+      ApiEndpoints.preferences,
+      queryParameters: query.toQueryParameters(),
+    );
+
+    return _parsePaged(response.data, UserPreference.fromJson);
   }
 
-  Future<List<UserPreference>> getPreferencesForUser(int userId) async {
-    final response = await dio.get(ApiEndpoints.preferencesForUser(userId));
-    return _parseList(response.data, UserPreference.fromJson);
+  Future<PagedResult<UserPreference>> getPreferencesForUser(
+    int userId, {
+    PreferencesQuery query = const PreferencesQuery(),
+  }) async {
+    final response = await dio.get(
+      ApiEndpoints.preferencesForUser(userId),
+      queryParameters: query.toQueryParameters(),
+    );
+
+    return _parsePaged(response.data, UserPreference.fromJson);
   }
 
   Future<void> deletePreference(int prefId) {
@@ -35,47 +50,18 @@ class PreferencesApi {
     );
   }
 
-  List<T> _parseList<T>(
+  PagedResult<T> _parsePaged<T>(
     dynamic raw,
     T Function(Map<String, dynamic>) fromJson,
   ) {
-    if (raw is List) {
-      return raw
-          .map(_tryMap)
-          .whereType<Map<String, dynamic>>()
-          .map(fromJson)
-          .toList();
-    }
-
-    if (raw is Map) {
-      final map = raw is Map<String, dynamic>
-          ? raw
-          : Map<String, dynamic>.from(raw);
-
-      for (final key in ['items', 'Items', 'data', 'Data', 'results', 'Results']) {
-        final value = map[key];
-        if (value is List) {
-          return value
-              .map(_tryMap)
-              .whereType<Map<String, dynamic>>()
-              .map(fromJson)
-              .toList();
-        }
-      }
-    }
-
-    return const [];
-  }
-
-  Map<String, dynamic>? _tryMap(dynamic raw) {
     if (raw is Map<String, dynamic>) {
-      return raw;
+      return PagedResult<T>.fromJson(raw, fromJson);
     }
 
     if (raw is Map) {
-      return Map<String, dynamic>.from(raw);
+      return PagedResult<T>.fromJson(Map<String, dynamic>.from(raw), fromJson);
     }
 
-    return null;
+    throw Exception('Invalid paged response format.');
   }
 }

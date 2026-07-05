@@ -1,16 +1,18 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/widgets/inputs/app_chip.dart';
-import '../screens/public_profile_screen.dart';
+import '../../../../shared/public_profile/models/public_profile_event_filter.dart';
 
 class PublicProfileEventFilters extends StatelessWidget {
   final PublicProfileEventFilter selected;
   final ValueChanged<PublicProfileEventFilter> onChanged;
+  final bool isBusy;
 
   const PublicProfileEventFilters({
     super.key,
     required this.selected,
     required this.onChanged,
+    this.isBusy = false,
   });
 
   @override
@@ -37,7 +39,7 @@ class PublicProfileEventFilters extends StatelessWidget {
       child: AppChip(
         label: label,
         selected: selected == value,
-        onTap: () => onChanged(value),
+        onTap: isBusy ? null : () => onChanged(value),
       ),
     );
   }

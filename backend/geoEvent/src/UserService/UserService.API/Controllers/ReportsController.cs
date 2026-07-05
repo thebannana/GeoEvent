@@ -30,10 +30,12 @@ public class ReportsController : ControllerBase
     }
 
     [HttpGet("my")]
-    public async Task<IActionResult> GetMyReports()
+    public async Task<IActionResult> GetMyReports(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20)
     {
         var userId = User.GetUserId();
-        var result = await _userService.GetUserReportsAsync(userId);
+        var result = await _userService.GetUserReportsAsync(userId, page, pageSize);
         return result.Success
             ? Ok(result.Data)
             : StatusCode(result.StatusCode, new { error = result.Error });

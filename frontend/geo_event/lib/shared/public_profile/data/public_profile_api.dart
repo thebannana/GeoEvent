@@ -1,12 +1,16 @@
 import 'package:dio/dio.dart';
 
 import '../../../core/network/api_endpoints.dart';
+import '../models/paged_response.dart';
 import '../models/public_profile_bundle.dart';
 import '../models/public_profile_event.dart';
+import '../models/public_profile_event_filter.dart';
 import '../models/public_profile_user.dart';
 import '../models/user_review.dart';
 
 class PublicProfileApi {
+  static const int maxPageSize = 50;
+
   final Dio _dio;
 
   const PublicProfileApi(this._dio);
@@ -42,70 +46,100 @@ class PublicProfileApi {
         .toList();
   }
 
-  Future<List<PublicProfileEvent>> getUserEvents(int userId) async {
-    final response = await _dio.get<dynamic>(
-      ApiEndpoints.publicEventsBase,
-      queryParameters: {'organizerId': userId},
-    );
+  int _normalizePageSize(int pageSize) => pageSize.clamp(1, maxPageSize);
 
-    final raw = response.data;
-    List<dynamic> data;
+  Map<String, dynamic> _buildEventQueryParams({
+    required int userId,
+    required int page,
+    required int pageSize,
+    required PublicProfileEventFilter filter,
+  }) {
+    final now = DateTime.now().toUtc();
 
-    if (raw is List) {
-      data = raw;
-    } else if (raw is Map<String, dynamic>) {
-      final items = raw['items'];
-      data = items is List ? items : const <dynamic>[];
-    } else if (raw is Map) {
-      final map = Map<String, dynamic>.from(raw);
-      final items = map['items'];
-      data = items is List ? items : const <dynamic>[];
-    } else {
-      data = const <dynamic>[];
+    final params = <String, dynamic>{
+      'organizerId': userId,
+      'page': page < 1 ? 1 : page,
+      'pageSize': _normalizePageSize(pageSize),
+    };
+
+    switch (filter) {
+      case PublicProfileEventFilter.all:
+        break;
+      case PublicProfileEventFilter.upcoming:
+        params['fromDate'] = now.toIso8601String();
+        break;
+      case PublicProfileEventFilter.past:
+        params['toDate'] = now.toIso8601String();
+        break;
+      case PublicProfileEventFilter.free:
+        params['maxPrice'] = 0;
+        break;
+      case PublicProfileEventFilter.paid:
+        params['minPrice'] = 0.01;
+        break;
     }
 
-    return data
-        .whereType<Map>()
-        .map((e) => PublicProfileEvent.fromJson(Map<String, dynamic>.from(e)))
-        .toList();
+    return params;
   }
 
-  Future<List<UserReview>> getUserReviews(
-    int userId, {
+  Future<PagedResponse<PublicProfileEvent>> getUserEvents({
+    required int userId,
+    required PublicProfileEventFilter filter,
     int page = 1,
     int pageSize = 20,
   }) async {
-    final response = await _dio.get(
+    final response = await _dio.get<dynamic>(
+      ApiEndpoints.publicEventsBase,
+      queryParameters: _buildEventQueryParams(
+        userId: userId,
+        page: page,
+        pageSize: pageSize,
+        filter: filter,
+      ),
+    );
+
+    final raw = response.data;
+    if (raw is Map<String, dynamic>) {
+      return PagedResponse<PublicProfileEvent>.fromJson(
+        raw,
+        PublicProfileEvent.fromJson,
+      );
+    }
+    if (raw is Map) {
+      return PagedResponse<PublicProfileEvent>.fromJson(
+        Map<String, dynamic>.from(raw),
+        PublicProfileEvent.fromJson,
+      );
+    }
+
+    throw Exception('Paged events response was invalid.');
+  }
+
+  Future<PagedResponse<UserReview>> getUserReviews({
+    required int userId,
+    int page = 1,
+    int pageSize = 20,
+  }) async {
+    final response = await _dio.get<dynamic>(
       ApiEndpoints.userReviews(userId),
       queryParameters: {
-        'page': page,
-        'pageSize': pageSize,
+        'page': page < 1 ? 1 : page,
+        'pageSize': _normalizePageSize(pageSize),
       },
     );
 
     final raw = response.data;
     if (raw is Map<String, dynamic>) {
-      final items = raw['items'];
-      final data = items is List ? items : const <dynamic>[];
-
-      return data
-          .whereType<Map>()
-          .map((e) => UserReview.fromJson(Map<String, dynamic>.from(e)))
-          .toList();
+      return PagedResponse<UserReview>.fromJson(raw, UserReview.fromJson);
     }
-
     if (raw is Map) {
-      final map = Map<String, dynamic>.from(raw);
-      final items = map['items'];
-      final data = items is List ? items : const <dynamic>[];
-
-      return data
-          .whereType<Map>()
-          .map((e) => UserReview.fromJson(Map<String, dynamic>.from(e)))
-          .toList();
+      return PagedResponse<UserReview>.fromJson(
+        Map<String, dynamic>.from(raw),
+        UserReview.fromJson,
+      );
     }
 
-    return const [];
+    throw Exception('Paged reviews response was invalid.');
   }
 
   Future<void> rateUser({
@@ -127,15 +161,46 @@ class PublicProfileApi {
     await _dio.delete<void>(ApiEndpoints.rateUser(userId));
   }
 
-  Future<PublicProfileBundle> getProfileBundle(int userId) async {
-    final user = await getUser(userId);
-    final events = await getUserEvents(userId);
-    final reviews = await getUserReviews(userId);
+  Future<PublicProfileBundle> getProfileBundle(
+    int userId, {
+    int eventsPage = 1,
+    int eventsPageSize = 20,
+    PublicProfileEventFilter eventFilter = PublicProfileEventFilter.all,
+    int reviewsPage = 1,
+    int reviewsPageSize = 20,
+  }) async {
+    final userFuture = getUser(userId);
+    final eventsFuture = getUserEvents(
+      userId: userId,
+      filter: eventFilter,
+      page: eventsPage,
+      pageSize: eventsPageSize,
+    );
+    final reviewsFuture = getUserReviews(
+      userId: userId,
+      page: reviewsPage,
+      pageSize: reviewsPageSize,
+    );
+
+    final results = await Future.wait([
+      userFuture,
+      eventsFuture,
+      reviewsFuture,
+    ]);
+
+    final user = results[0] as PublicProfileUser;
+    final events = results[1] as PagedResponse<PublicProfileEvent>;
+    final reviews = results[2] as PagedResponse<UserReview>;
 
     return PublicProfileBundle(
       user: user,
-      events: events,
-      reviews: reviews,
+      events: events.items,
+      eventsPage: events.page,
+      eventsHasNextPage: events.hasNextPage,
+      selectedEventFilter: eventFilter,
+      reviews: reviews.items,
+      reviewsPage: reviews.page,
+      reviewsHasNextPage: reviews.hasNextPage,
     );
   }
 }

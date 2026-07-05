@@ -108,6 +108,34 @@ class ImagePreviewTile extends StatelessWidget {
     this.onRemove,
   });
 
+  Future<void> _confirmRemove(BuildContext context) async {
+    if (onRemove == null) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Remove image?'),
+        content: const Text(
+          'This image will be removed from the event draft.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      onRemove!();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -145,7 +173,7 @@ class ImagePreviewTile extends StatelessWidget {
             ),
           ),
           IconButton(
-            onPressed: onRemove,
+            onPressed: onRemove == null ? null : () => _confirmRemove(context),
             icon: const Icon(Icons.delete_outline_rounded),
           ),
         ],
@@ -164,6 +192,34 @@ class GalleryImageCard extends StatelessWidget {
     this.onRemove,
   });
 
+  Future<void> _confirmRemove(BuildContext context) async {
+    if (onRemove == null) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Remove image?'),
+        content: const Text(
+          'This image will be removed from the event draft.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      onRemove!();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return SizedBox(
@@ -180,7 +236,7 @@ class GalleryImageCard extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           TextButton(
-            onPressed: onRemove,
+            onPressed: onRemove == null ? null : () => _confirmRemove(context),
             child: const Text('Remove'),
           ),
         ],

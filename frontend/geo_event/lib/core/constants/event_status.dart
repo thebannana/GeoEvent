@@ -5,42 +5,35 @@ class EventStatus {
   static const confirmed = 'Confirmed';
   static const cancelled = 'Cancelled';
   static const completed = 'Completed';
-  static const postponed = 'Postponed';
 
   static String displayLabel(String rawStatus) {
     final status = rawStatus.trim().toLowerCase();
+
     switch (status) {
       case 'pending':
         return pending;
-      case 'published':
-      case 'active':
       case 'confirmed':
         return confirmed;
       case 'cancelled':
       case 'canceled':
         return cancelled;
       case 'completed':
-      case 'finished':
         return completed;
-      case 'postponed':
-        return postponed;
       default:
         return pending;
     }
   }
 
   static Color displayColor(String displayStatus) {
-    switch (displayStatus) {
+    switch (displayStatus.trim()) {
       case pending:
         return Colors.orange;
       case confirmed:
-        return const Color(0xFF43A047); // Green
+        return const Color(0xFF43A047);
       case cancelled:
         return Colors.red;
       case completed:
         return Colors.blue;
-      case postponed:
-        return Colors.purple;
       default:
         return Colors.grey;
     }
@@ -48,10 +41,26 @@ class EventStatus {
 
   static bool canViewReservations(String rawStatus) {
     final normalized = rawStatus.trim().toLowerCase();
-    return normalized == 'published' ||
-        normalized == 'active' ||
+
+    return normalized == 'pending' ||
         normalized == 'confirmed' ||
-        normalized == 'completed' ||
-        normalized == 'pending';
+        normalized == 'completed';
+  }
+
+  static bool isPending(String rawStatus) {
+    return rawStatus.trim().toLowerCase() == 'pending';
+  }
+
+  static bool isConfirmed(String rawStatus) {
+    return rawStatus.trim().toLowerCase() == 'confirmed';
+  }
+
+  static bool isCancelled(String rawStatus) {
+    final normalized = rawStatus.trim().toLowerCase();
+    return normalized == 'cancelled' || normalized == 'canceled';
+  }
+
+  static bool isCompleted(String rawStatus) {
+    return rawStatus.trim().toLowerCase() == 'completed';
   }
 }

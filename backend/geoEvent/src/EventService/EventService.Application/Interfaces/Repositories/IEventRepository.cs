@@ -7,12 +7,13 @@ namespace EventService.Application.Interfaces.Repositories;
 public interface IEventRepository
 {
     Task IncrementViewCountAsync(int eventId);
-    Task<List<Event>> GetPublicCandidatesAsync(EventFilterDto filter, int take = 200);
+    Task<List<Event>> GetPublicCandidatesAsync(EventFilterDto filter);
 
     Task<Event?> GetByIdAsync(int eventId);
     Task<Event?> GetByIdWithDetailsAsync(int eventId);
     Task<PagedResult<Event>> GetAllAsync(EventFilterDto filter);
     Task<List<Event>> GetNearbyAsync(NearbyEventSearchDto dto);
+
     Task<Event> CreateAsync(Event entity);
     Task UpdateAsync(Event entity);
     Task DeleteAsync(int eventId);
@@ -21,7 +22,7 @@ public interface IEventRepository
     Task<bool> IsLikedByUserAsync(int eventId, int userId);
     Task LikeAsync(int eventId, int userId);
     Task UnlikeAsync(int eventId, int userId);
-    Task<List<EventLike>> GetLikedEventsByUserAsync(int userId);
+    Task<PagedResult<EventLike>> GetLikedEventsByUserAsync(int userId, int page, int pageSize);
 
     Task AddImageAsync(EventImage image);
     Task DeleteImageAsync(int imageId);
@@ -46,16 +47,16 @@ public interface IEventRepository
 
     Task<Bookmark?> GetBookmarkByIdAsync(int bookmarkId);
     Task<Bookmark?> GetBookmarkByUserAndEventAsync(int userId, int eventId);
-    Task<List<Bookmark>> GetUserBookmarksAsync(int userId);
+    Task<PagedResult<Bookmark>> GetUserBookmarksAsync(int userId, int page, int pageSize);
     Task<Bookmark> CreateBookmarkAsync(Bookmark bookmark);
     Task UpdateBookmarkAsync(Bookmark bookmark);
     Task DeleteBookmarkAsync(Bookmark bookmark);
 
     Task<Comment?> GetCommentByIdAsync(int commentId);
-    Task<List<Comment>> GetEventCommentsAsync(int eventId);
+    Task<PagedResult<Comment>> GetEventCommentsAsync(int eventId, int page, int pageSize);
     Task<Comment> CreateCommentAsync(Comment comment);
     Task UpdateCommentAsync(Comment comment);
-    Task<List<Comment>> GetRepliesAsync(int parentCommentId);
+    Task<PagedResult<Comment>> GetRepliesAsync(int parentCommentId, int page, int pageSize);
     Task<bool> IsCommentLikedByUserAsync(int commentId, int userId);
     Task LikeCommentAsync(int commentId, int userId);
     Task UnlikeCommentAsync(int commentId, int userId);

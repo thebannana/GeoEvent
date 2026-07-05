@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using UserService.API.Extensions;
+using UserService.Application.DTOs;
 using UserService.Application.Interfaces.Services;
 
 namespace UserService.API.Controllers;
@@ -18,9 +19,12 @@ public class PreferencesController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetMine()
+    public async Task<IActionResult> GetMine([FromQuery] PreferencesFilterDto filter)
     {
-        var result = await _userService.GetUserPreferencesAsync(User.GetUserId());
+        var result = await _userService.GetUserPreferencesAsync(
+            User.GetUserId(),
+            filter);
+
         return result.Success
             ? Ok(result.Data)
             : StatusCode(result.StatusCode, new { error = result.Error });
@@ -28,9 +32,12 @@ public class PreferencesController : ControllerBase
 
     [HttpGet("users/{userId:int}")]
     [Authorize(Roles = "Admin")]
-    public async Task<IActionResult> GetByUserId(int userId)
+    public async Task<IActionResult> GetByUserId(
+        int userId,
+        [FromQuery] PreferencesFilterDto filter)
     {
-        var result = await _userService.GetUserPreferencesAsync(userId);
+        var result = await _userService.GetUserPreferencesAsync(userId, filter);
+
         return result.Success
             ? Ok(result.Data)
             : StatusCode(result.StatusCode, new { error = result.Error });

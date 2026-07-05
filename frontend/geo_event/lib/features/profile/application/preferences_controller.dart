@@ -2,124 +2,112 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../features/auth/application/auth_controller.dart';
 import '../../../shared/profile/data/preferences_repository.dart';
+import '../../../shared/profile/models/preferences_list_state.dart';
+import '../../../shared/profile/models/preferences_query.dart';
 import '../../../shared/profile/models/user_preference.dart';
 import '../../../shared/profile/providers/profile_providers.dart';
 
-final preferencesControllerProvider =
-    AsyncNotifierProvider<PreferencesController, List<UserPreference>>(
+final preferencesControllerProvider = AsyncNotifierProvider<
+    PreferencesController, PreferencesListState>(
   PreferencesController.new,
 );
 
-class PreferencesController extends AsyncNotifier<List<UserPreference>> {
+class PreferencesController extends AsyncNotifier<PreferencesListState> {
   PreferencesRepository get _repository =>
       ref.read(preferencesRepositoryProvider);
 
   @override
-  Future<List<UserPreference>> build() async {
+  Future<PreferencesListState> build() async {
     final authState = ref.watch(authStateProvider);
 
     if (!authState.isAuthenticated) {
-      return const <UserPreference>[];
+      return PreferencesListState.initial();
     }
 
-    return _load();
+    return _load(const PreferencesQuery());
   }
 
   Future<void> refresh() async {
-    final authState = ref.read(authStateProvider);
+    final current = state.valueOrNull ?? PreferencesListState.initial();
+    state = AsyncLoading<PreferencesListState>().copyWithPrevious(
+      AsyncData(current),
+    );
 
-    if (!authState.isAuthenticated) {
-      state = const AsyncData(<UserPreference>[]);
-      return;
-    }
-
-    final previous = state.valueOrNull;
-    if (previous != null) {
-      state =
-          AsyncLoading<List<UserPreference>>().copyWithPrevious(AsyncData(previous));
-    } else {
-      state = const AsyncLoading();
-    }
-
-    state = await AsyncValue.guard(_load);
+    state = await AsyncValue.guard(() => _load(current.query));
   }
 
-  Future<bool> upsertPreference({
-    int? segmentId,
-    int? genreId,
-    int? subGenreId,
-    required double score,
+  Future<void> applyFilters({
+    String? type,
+    double? minScore,
+    double? maxScore,
+    String? search,
+    bool clearType = false,
+    bool clearMinScore = false,
+    bool clearMaxScore = false,
+    bool clearSearch = false,
   }) async {
+    final current = state.valueOrNull ?? PreferencesListState.initial();
+
+    final nextQuery = current.query.copyWith(
+      page: 1,
+      type: type,
+      minScore: minScore,
+      maxScore: maxScore,
+      search: search,
+      clearType: clearType,
+      clearMinScore: clearMinScore,
+      clearMaxScore: clearMaxScore,
+      clearSearch: clearSearch,
+    );
+
+    state = AsyncLoading<PreferencesListState>().copyWithPrevious(
+      AsyncData(current),
+    );
+
+    state = await AsyncValue.guard(() => _load(nextQuery));
+  }
+
+  Future<void> goToPage(int page) async {
+    final current = state.valueOrNull ?? PreferencesListState.initial();
+    final nextQuery = current.query.copyWith(page: page);
+
+    state = AsyncLoading<PreferencesListState>().copyWithPrevious(
+      AsyncData(current),
+    );
+
+    state = await AsyncValue.guard(() => _load(nextQuery));
+  }
+
+  Future<void> nextPage() async {
+    final current = state.valueOrNull;
+    if (current == null || !current.result.hasNextPage) return;
+    await goToPage(current.result.page + 1);
+  }
+
+  Future<void> previousPage() async {
+    final current = state.valueOrNull;
+    if (current == null || !current.result.hasPreviousPage) return;
+    await goToPage(current.result.page - 1);
+  }
+
+  Future<List<UserPreference>> currentItems() async {
+    final current = state.valueOrNull;
+    if (current != null) return current.result.items;
+    return const <UserPreference>[];
+  }
+
+  Future<PreferencesListState> _load(PreferencesQuery query) async {
     final authState = ref.read(authStateProvider);
+
     if (!authState.isAuthenticated) {
-      state = const AsyncData(<UserPreference>[]);
-      return false;
+      return PreferencesListState.initial();
     }
 
-    try {
-      await _repository.upsertPreference(
-        segmentId: segmentId,
-        genreId: genreId,
-        subGenreId: subGenreId,
-        score: score,
-      );
+    final result = await _repository.getPreferences(query: query);
 
-      state = await AsyncValue.guard(_load);
-      return true;
-    } catch (error, stackTrace) {
-      state = AsyncError(error, stackTrace);
-      return false;
-    }
-  }
-
-  Future<bool> deletePreference(int prefId) async {
-    final authState = ref.read(authStateProvider);
-    if (!authState.isAuthenticated) {
-      state = const AsyncData(<UserPreference>[]);
-      return false;
-    }
-
-    try {
-      await _repository.deletePreference(prefId);
-      state = await AsyncValue.guard(_load);
-      return true;
-    } catch (error, stackTrace) {
-      state = AsyncError(error, stackTrace);
-      return false;
-    }
-  }
-
-  Future<List<UserPreference>> _load() async {
-    final items = await _repository.getPreferences();
-    return _sort(items);
-  }
-
-  List<UserPreference> _sort(List<UserPreference> items) {
-    final sorted = [...items];
-
-    sorted.sort((a, b) {
-      final byScore = b.score.compareTo(a.score);
-      if (byScore != 0) return byScore;
-
-      final aDepth = _depth(a);
-      final bDepth = _depth(b);
-      if (aDepth != bDepth) return aDepth.compareTo(bDepth);
-
-      final bySegment = (a.segmentId ?? 0).compareTo(b.segmentId ?? 0);
-      if (bySegment != 0) return bySegment;
-
-      final byGenre = (a.genreId ?? 0).compareTo(b.genreId ?? 0);
-      if (byGenre != 0) return byGenre;
-
-      return (a.subGenreId ?? 0).compareTo(b.subGenreId ?? 0);
-    });
-
-    return sorted;
-  }
-
-  int _depth(UserPreference preference) {
-    if (preference.subGenreId != null) return 2;
-    if (preference.genreId != null) return 1;
-    return 0;
+    return PreferencesListState(
+      query: query,
+      result: result,
+    );
   }
 }

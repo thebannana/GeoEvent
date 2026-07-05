@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/utils/date_time_extensions.dart';
+import '../../../../core/widgets/feedback/app_confirm_dialog.dart';
+import '../../../../core/widgets/layout/app_bottom_sheet_container.dart';
 import '../../../../shared/chat/models/chat_thread_type.dart';
 import '../../../../shared/chat/models/message_item.dart';
 import 'chat_avatar.dart';
@@ -40,20 +43,19 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble>
     final colorScheme = theme.colorScheme;
     final textMuted = theme.textTheme.bodySmall?.color;
 
-    final senderName =
-        (widget.message.senderDisplayName?.trim().isNotEmpty ?? false)
-            ? widget.message.senderDisplayName!.trim()
-            : 'User ${widget.message.senderId}';
+    final senderName = _safeSenderName(
+      widget.message.senderDisplayName,
+    );
 
     final avatarUrl =
         (widget.message.senderAvatarUrl?.trim().isNotEmpty ?? false)
             ? widget.message.senderAvatarUrl!.trim()
             : null;
 
-    final replySender =
-        (widget.message.replySenderName?.trim().isNotEmpty ?? false)
-            ? widget.message.replySenderName!.trim()
-            : 'Reply';
+    final replySender = _safeReplySenderName(
+      widget.message.replySenderName,
+      widget.message.senderDisplayName,
+    );
 
     final bubbleColor = widget.isMine
         ? colorScheme.primary.withValues(alpha: 0.14)
@@ -149,8 +151,9 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble>
                           onLongPress: () async {
                             await showModalBottomSheet<void>(
                               context: context,
-                              builder: (_) => SafeArea(
-                                child: Wrap(
+                              builder: (_) => AppBottomSheetContainer(
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
                                   children: [
                                     ListTile(
                                       leading: const Icon(Icons.reply_rounded),
@@ -162,8 +165,7 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble>
                                     ),
                                     if (widget.onEdit != null)
                                       ListTile(
-                                        leading:
-                                            const Icon(Icons.edit_rounded),
+                                        leading: const Icon(Icons.edit_rounded),
                                         title: const Text('Edit'),
                                         onTap: () {
                                           Navigator.pop(context);
@@ -193,9 +195,22 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble>
                                           Icons.delete_outline_rounded,
                                         ),
                                         title: const Text('Delete'),
-                                        onTap: () {
+                                        subtitle: const Text(
+                                          'This action cannot be undone.',
+                                        ),
+                                        onTap: () async {
                                           Navigator.pop(context);
-                                          widget.onDelete?.call();
+                                          final confirmed =
+                                              await AppConfirmDialog.show(
+                                            context,
+                                            title: 'Delete message?',
+                                            message:
+                                                'This message will be permanently deleted. This action cannot be undone.',
+                                            confirmLabel: 'Delete',
+                                          );
+                                          if (confirmed == true) {
+                                            widget.onDelete?.call();
+                                          }
                                         },
                                       ),
                                   ],
@@ -213,8 +228,7 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble>
                                   color: bubbleBorderColor,
                                 ),
                               ),
-                              padding:
-                                  const EdgeInsets.fromLTRB(14, 12, 14, 10),
+                              padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
                               child: Column(
                                 crossAxisAlignment: widget.isMine
                                     ? CrossAxisAlignment.end
@@ -226,8 +240,7 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble>
                                       false)
                                     Container(
                                       width: double.infinity,
-                                      margin:
-                                          const EdgeInsets.only(bottom: 8),
+                                      margin: const EdgeInsets.only(bottom: 8),
                                       padding: const EdgeInsets.all(10),
                                       decoration: BoxDecoration(
                                         color: colorScheme.primary
@@ -279,16 +292,14 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble>
                                         ),
                                         const SizedBox(width: 4),
                                         Text(
-                                          widget.message.likesCount
-                                              .toString(),
-                                          style:
-                                              const TextStyle(fontSize: 11),
+                                          widget.message.likesCount.toString(),
+                                          style: const TextStyle(fontSize: 11),
                                         ),
                                         const SizedBox(width: 8),
                                       ],
                                       if (widget.message.editedAt != null) ...[
                                         Text(
-                                          'edited',
+                                          'Edited',
                                           style: TextStyle(
                                             fontSize: 11,
                                             color: textMuted,
@@ -297,7 +308,7 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble>
                                         const SizedBox(width: 8),
                                       ],
                                       Text(
-                                        _formatTime(widget.message.sentAt),
+                                        widget.message.sentAt.formatTime(),
                                         style: TextStyle(
                                           fontSize: 11,
                                           color: textMuted,
@@ -322,10 +333,24 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble>
     );
   }
 
-  static String _formatTime(DateTime value) {
-    final local = value.toLocal();
-    final h = local.hour.toString().padLeft(2, '0');
-    final m = local.minute.toString().padLeft(2, '0');
-    return '$h:$m';
+  static String _safeSenderName(String? displayName) {
+    final cleanedDisplayName = displayName?.trim();
+    if (cleanedDisplayName != null && cleanedDisplayName.isNotEmpty) {
+      return cleanedDisplayName;
+    }
+
+    return 'User';
+  }
+
+  static String _safeReplySenderName(
+    String? replySenderName,
+    String? senderDisplayName,
+  ) {
+    final cleanedReplySender = replySenderName?.trim();
+    if (cleanedReplySender != null && cleanedReplySender.isNotEmpty) {
+      return cleanedReplySender;
+    }
+
+    return _safeSenderName(senderDisplayName);
   }
 }

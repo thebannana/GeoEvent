@@ -40,14 +40,31 @@ class ChatThreadController extends StateNotifier<ChatThreadState> {
     state = state.copyWith(
       details: const AsyncLoading(),
       messages: const AsyncLoading(),
+      messagesPage: 1,
+      messagesTotalCount: 0,
+      hasMoreMessages: false,
+      loadingOlderMessages: false,
     );
 
     final detailsResult =
         await AsyncValue.guard(() => _repo.getThreadDetails(args.threadId));
 
     final messagesResult = await AsyncValue.guard(() async {
-      final items = await _repo.getThreadMessages(args.threadId);
-      final sorted = [...items]..sort((a, b) => a.sentAt.compareTo(b.sentAt));
+      final paged = await _repo.getThreadMessages(
+        threadId: args.threadId,
+        page: 1,
+        pageSize: state.messagesPageSize,
+      );
+
+      final sorted = [...paged.items]..sort((a, b) => a.sentAt.compareTo(b.sentAt));
+
+      state = state.copyWith(
+        messagesPage: paged.page,
+        messagesPageSize: paged.pageSize,
+        messagesTotalCount: paged.totalCount,
+        hasMoreMessages: paged.hasNextPage,
+      );
+
       return List<MessageItem>.unmodifiable(sorted);
     });
 
@@ -67,6 +84,43 @@ class ChatThreadController extends StateNotifier<ChatThreadState> {
         .markThreadLocallyRead(args.threadId);
 
     await _connectRealtime();
+  }
+
+  Future<void> loadOlderMessages() async {
+    if (state.loadingOlderMessages || !state.hasMoreMessages) return;
+
+    final current = state.messages.valueOrNull ?? const <MessageItem>[];
+
+    state = state.copyWith(loadingOlderMessages: true);
+
+    try {
+      final paged = await _repo.getThreadMessages(
+        threadId: args.threadId,
+        page: state.messagesPage + 1,
+        pageSize: state.messagesPageSize,
+      );
+
+      final merged = <MessageItem>[
+        ...paged.items,
+        ...current,
+      ]..sort((a, b) => a.sentAt.compareTo(b.sentAt));
+
+      state = state.copyWith(
+        messages: AsyncData(List<MessageItem>.unmodifiable(merged)),
+        messagesPage: paged.page,
+        messagesPageSize: paged.pageSize,
+        messagesTotalCount: paged.totalCount,
+        hasMoreMessages: paged.hasNextPage,
+        loadingOlderMessages: false,
+      );
+    } catch (error, stackTrace) {
+      if (!mounted) return;
+
+      state = state.copyWith(
+        messages: AsyncError(error, stackTrace),
+        loadingOlderMessages: false,
+      );
+    }
   }
 
   void setReplyingTo(MessageItem item) {
@@ -201,8 +255,22 @@ class ChatThreadController extends StateNotifier<ChatThreadState> {
 
     try {
       final result = await AsyncValue.guard(() async {
-        final items = await _repo.getThreadMessages(args.threadId);
-        final sorted = [...items]..sort((a, b) => a.sentAt.compareTo(b.sentAt));
+        final paged = await _repo.getThreadMessages(
+          threadId: args.threadId,
+          page: 1,
+          pageSize: state.messagesPageSize,
+        );
+
+        final sorted = [...paged.items]..sort((a, b) => a.sentAt.compareTo(b.sentAt));
+
+        state = state.copyWith(
+          messagesPage: paged.page,
+          messagesPageSize: paged.pageSize,
+          messagesTotalCount: paged.totalCount,
+          hasMoreMessages: paged.hasNextPage,
+          loadingOlderMessages: false,
+        );
+
         return List<MessageItem>.unmodifiable(sorted);
       });
 
@@ -224,7 +292,7 @@ class ChatThreadController extends StateNotifier<ChatThreadState> {
 
     final hub = HubConnectionBuilder()
         .withUrl(
-          '${ApiEndpoints.chatBase}/hubs/chat',
+          ApiEndpoints.chatHub,
           options: HttpConnectionOptions(
             accessTokenFactory: () async {
               return ref.read(authStateProvider).accessToken ?? '';
@@ -342,10 +410,12 @@ class ChatThreadController extends StateNotifier<ChatThreadState> {
       details: AsyncData(
         current.copyWith(
           participants: List<ChatParticipant>.unmodifiable(updatedParticipants),
-          otherUserIsOnline:
-              current.otherUserId == userId ? isOnline : current.otherUserIsOnline,
-          otherUserLastActiveAt:
-              current.otherUserId == userId ? lastActiveAt : current.otherUserLastActiveAt,
+          otherUserIsOnline: current.otherUserId == userId
+              ? isOnline
+              : current.otherUserIsOnline,
+          otherUserLastActiveAt: current.otherUserId == userId
+              ? lastActiveAt
+              : current.otherUserLastActiveAt,
         ),
       ),
     );

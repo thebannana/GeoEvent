@@ -1,21 +1,52 @@
 import 'package:dio/dio.dart';
 
-import '../../../core/network/api_endpoints.dart';
+import '../../events/models/paged_result.dart';
+import '../../../../core/network/api_endpoints.dart';
 import '../models/bookmark.dart';
 
 class BookmarkApi {
-  const BookmarkApi(this._dio);
+  const BookmarkApi(this.dio);
 
-  final Dio _dio;
+  final Dio dio;
 
-  Future<List<Bookmark>> getBookmarks() async {
-    final raw = (await _dio.get(ApiEndpoints.bookmarks)).data;
-    final items = _extractList(raw);
+  Future<PagedResult<Bookmark>> getBookmarksPaged({
+    String? searchTerm,
+    int page = 1,
+    int pageSize = 20,
+  }) async {
+    final response = await dio.get(
+      ApiEndpoints.bookmarks,
+      queryParameters: {
+        if (searchTerm != null && searchTerm.trim().isNotEmpty)
+          'searchTerm': searchTerm.trim(),
+        'page': page,
+        'pageSize': pageSize.clamp(1, 50),
+      },
+    );
 
-    return items
+    final raw = response.data;
+
+    if (raw is Map) {
+      return PagedResult<Bookmark>.fromJson(
+        Map<String, dynamic>.from(raw),
+        Bookmark.fromJson,
+      );
+    }
+
+    final items = extractList(raw)
         .whereType<Map>()
         .map((e) => Bookmark.fromJson(Map<String, dynamic>.from(e)))
         .toList();
+
+    return PagedResult<Bookmark>(
+      items: items,
+      totalCount: items.length,
+      page: page,
+      pageSize: pageSize,
+      totalPages: 1,
+      hasNextPage: false,
+      hasPreviousPage: page > 1,
+    );
   }
 
   Future<Bookmark> createBookmark({
@@ -24,7 +55,7 @@ class BookmarkApi {
   }) async {
     final normalizedMemo = memo?.trim();
 
-    final response = await _dio.post(
+    final response = await dio.post(
       ApiEndpoints.bookmarks,
       data: {
         'eventId': eventId,
@@ -33,7 +64,7 @@ class BookmarkApi {
       },
     );
 
-    return _parseBookmark(response.data, 'Invalid bookmark create response.');
+    return parseBookmark(response.data, 'Invalid bookmark create response.');
   }
 
   Future<Bookmark> updateBookmark({
@@ -42,43 +73,33 @@ class BookmarkApi {
   }) async {
     final trimmedMemo = memo?.trim();
 
-    final response = await _dio.patch(
+    final response = await dio.patch(
       ApiEndpoints.bookmarkById(bookmarkId),
-      data: {
-        'memo': trimmedMemo,
-      },
+      data: {'memo': trimmedMemo},
     );
 
-    return _parseBookmark(response.data, 'Invalid bookmark update response.');
+    return parseBookmark(response.data, 'Invalid bookmark update response.');
   }
 
   Future<void> deleteBookmark(int bookmarkId) async {
-    await _dio.delete(ApiEndpoints.bookmarkById(bookmarkId));
+    await dio.delete(ApiEndpoints.bookmarkById(bookmarkId));
   }
 
-List<dynamic> _extractList(dynamic raw) {
-  if (raw is List) return raw;
-
-  if (raw is Map) {
-    final map = Map<String, dynamic>.from(raw);
-    for (final key in ['items', 'Items', 'data', 'Data', 'results', 'Results']) {
-      final value = map[key];
-      if (value is List) return value;
-    }
-  }
-
-  throw const FormatException('Invalid bookmarks response format.');
-}
-
-  Bookmark _parseBookmark(dynamic raw, String message) {
-    if (raw is Map<String, dynamic>) {
-      return Bookmark.fromJson(raw);
-    }
-
+  List<dynamic> extractList(dynamic raw) {
+    if (raw is List) return raw;
     if (raw is Map) {
-      return Bookmark.fromJson(Map<String, dynamic>.from(raw));
+      final map = Map<String, dynamic>.from(raw);
+      for (final key in ['items', 'Items', 'data', 'Data', 'results', 'Results']) {
+        final value = map[key];
+        if (value is List) return value;
+      }
     }
+    throw const FormatException('Invalid bookmarks response format.');
+  }
 
+  Bookmark parseBookmark(dynamic raw, String message) {
+    if (raw is Map<String, dynamic>) return Bookmark.fromJson(raw);
+    if (raw is Map) return Bookmark.fromJson(Map<String, dynamic>.from(raw));
     throw FormatException(message);
   }
 }

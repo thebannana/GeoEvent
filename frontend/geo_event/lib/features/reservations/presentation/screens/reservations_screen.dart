@@ -5,7 +5,9 @@ import '../../../../core/widgets/feedback/app_confirm_dialog.dart';
 import '../../../../core/widgets/feedback/app_empty_state.dart';
 import '../../../../core/widgets/feedback/app_error_state.dart';
 import '../../../../core/widgets/feedback/app_loading_indicator.dart';
+import '../../../../core/widgets/feedback/app_spinner.dart';
 import '../../../../core/widgets/inputs/app_chip.dart';
+import '../../../../core/widgets/layout/app_scaffold.dart';
 import '../../../../shared/reservations/models/reservation.dart';
 import '../../../../shared/reservations/models/reservation_status.dart';
 import '../../application/reservations_controller.dart';
@@ -45,23 +47,24 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
     super.dispose();
   }
 
-  void _onScroll() {
-    if (!_scrollController.hasClients) return;
-
-    final position = _scrollController.position;
-    if (position.pixels >= position.maxScrollExtent - 240) {
-      ref.read(reservationsControllerProvider.notifier).loadMore();
-    }
+void _onScroll() {
+  if (!_scrollController.hasClients) return;
+  final position = _scrollController.position;
+  if (position.pixels >= position.maxScrollExtent - 240) {
+    final state = ref.read(reservationsControllerProvider).valueOrNull;
+    if (state?.isFetchingMore == true) return;
+    ref.read(reservationsControllerProvider.notifier).loadMore();
   }
+}
 
   @override
   Widget build(BuildContext context) {
     final asyncState = ref.watch(reservationsControllerProvider);
     final ctrl = ref.read(reservationsControllerProvider.notifier);
 
-    return Scaffold(
+    return AppScaffold(
       backgroundColor: Colors.transparent,
-      body: RefreshIndicator(
+      child: RefreshIndicator(
         onRefresh: ctrl.refresh,
         child: CustomScrollView(
           controller: _scrollController,
@@ -165,7 +168,7 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
                       child: Padding(
                         padding: EdgeInsets.only(bottom: 24),
                         child: Center(
-                          child: CircularProgressIndicator(),
+                          child: AppSpinner(size: 22, strokeWidth: 2),
                         ),
                       ),
                     ),

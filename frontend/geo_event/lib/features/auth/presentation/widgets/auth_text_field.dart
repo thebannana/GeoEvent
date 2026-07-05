@@ -17,6 +17,7 @@ class AuthTextField extends StatelessWidget {
     this.autocorrect = true,
     this.enableSuggestions = true,
     this.enabled = true,
+    this.helperText,
   });
 
   final TextEditingController controller;
@@ -33,6 +34,7 @@ class AuthTextField extends StatelessWidget {
   final bool autocorrect;
   final bool enableSuggestions;
   final bool enabled;
+  final String? helperText;
 
   @override
   Widget build(BuildContext context) {
@@ -51,6 +53,7 @@ class AuthTextField extends StatelessWidget {
       decoration: InputDecoration(
         labelText: labelText,
         suffixIcon: suffixIcon,
+        helperText: helperText ?? ' ',
       ),
       validator: validator,
     );

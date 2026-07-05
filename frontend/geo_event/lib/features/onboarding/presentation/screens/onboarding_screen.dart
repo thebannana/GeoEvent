@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/network/api_endpoints.dart';
 import '../../../../core/widgets/layout/app_scaffold.dart';
 import '../widgets/onboarding_page_content.dart';
 
@@ -73,6 +74,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     context.go(_loginRoute);
   }
 
+  void _goToRegister() {
+    context.go(ApiEndpoints.register);
+  }
+
   void _openPrivacyPolicy() {
     context.push(_privacyRoute);
   }
@@ -89,20 +94,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   Future<void> _nextPage() async {
     if (_isLastPage) {
-      _goToLogin();
+      _goToRegister();
       return;
     }
 
     await _goToPage(_currentPage + 1);
-  }
-
-  Future<void> _skipToLast() async {
-    if (_isLastPage) {
-      _goToLogin();
-      return;
-    }
-
-    await _goToPage(_pageCount - 1);
   }
 
   void _onPageChanged(int index) {
@@ -133,11 +129,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                           fontWeight: FontWeight.w800,
                         ),
                       ),
-                      const Spacer(),
-                      TextButton(
-                        onPressed: _skipToLast,
-                        child: Text(_isLastPage ? 'Continue' : 'Skip'),
-                      ),
                     ],
                   ),
                   const SizedBox(height: 8),
@@ -166,11 +157,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   SizedBox(
                     width: double.infinity,
                     child: FilledButton(
-                      onPressed: _isLastPage ? _goToLogin : _nextPage,
+                      onPressed: _nextPage,
                       style: FilledButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 16),
                       ),
-                      child: Text(_isLastPage ? 'Get Started' : 'Next'),
+                      child: Text(_isLastPage ? 'Sign up' : 'Next'),
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -181,7 +172,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       style: OutlinedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 16),
                       ),
-                      child: const Text('Skip for now'),
+                      child: const Text('Sign in'),
                     ),
                   ),
                   const SizedBox(height: 8),

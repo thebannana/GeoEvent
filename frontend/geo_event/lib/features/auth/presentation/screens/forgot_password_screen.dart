@@ -50,7 +50,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen>
 
       showAuthSuccess(
         context,
-        'If that email exists, a reset link has been sent.',
+        'If an account exists for this email, a reset link has been sent. Check your inbox and spam folder.',
       );
     } catch (error) {
       if (!mounted) return;
@@ -62,7 +62,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen>
       showAuthError(
         context,
         error,
-        fallbackMessage: 'Failed to send reset link.',
+        fallbackMessage: 'Failed to send the reset link. Please try again.',
       );
     }
   }
@@ -105,11 +105,15 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen>
                   onFieldSubmitted: (_) => _submit(),
                   validator: Validators.email,
                   enabled: !authState.isLoading,
+                  helperText: authState.isLoading
+                      ? 'Sending reset instructions...'
+                      : 'Enter the email address linked to your account.',
                 ),
                 const SizedBox(height: 20),
                 AuthSubmitButton(
                   label: 'Send Reset Link',
                   isLoading: authState.isLoading,
+                  disabledReason: 'Please wait while the reset link is being sent.',
                   onPressed: _submit,
                 ),
               ],

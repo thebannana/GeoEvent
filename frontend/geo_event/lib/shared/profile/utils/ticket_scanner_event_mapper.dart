@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../events/models/my_event_response_dto.dart';
+import '../../my_events/models/my_event_response_dto.dart';
 import '../models/ticket_scanner_event_vm.dart';
 
 class TicketScannerEventMapper {

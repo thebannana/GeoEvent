@@ -17,7 +17,132 @@ public class EventRepository : IEventRepository
         _context = context;
     }
 
-    public async Task<List<Event>> GetPublicCandidatesAsync(EventFilterDto filter, int take = 200)
+    public async Task<Comment?> GetCommentByIdAsync(int commentId)
+    {
+        return await _context.Comments
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.CommentId == commentId && !c.IsDeleted);
+    }
+
+    public async Task<PagedResult<Comment>> GetEventCommentsAsync(int eventId, int page, int pageSize)
+    {
+        page = page <= 0 ? 1 : page;
+        pageSize = pageSize <= 0 ? 20 : Math.Min(pageSize, 50);
+
+        var query = _context.Comments
+            .AsNoTracking()
+            .Where(c => c.EventId == eventId && c.ParentCommentId == null && !c.IsDeleted);
+
+        var totalCount = await query.CountAsync();
+
+        var items = await query
+            .OrderByDescending(c => c.CreatedAt)
+            .ThenByDescending(c => c.CommentId)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        return new PagedResult<Comment>
+        {
+            Items = items,
+            TotalCount = totalCount,
+            Page = page,
+            PageSize = pageSize
+        };
+    }
+
+    public async Task<PagedResult<Comment>> GetRepliesAsync(int parentCommentId, int page, int pageSize)
+    {
+        page = page <= 0 ? 1 : page;
+        pageSize = pageSize <= 0 ? 20 : Math.Min(pageSize, 50);
+
+        var query = _context.Comments
+            .AsNoTracking()
+            .Where(c => c.ParentCommentId == parentCommentId && !c.IsDeleted);
+
+        var totalCount = await query.CountAsync();
+
+        var items = await query
+            .OrderBy(c => c.CreatedAt)
+            .ThenBy(c => c.CommentId)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        return new PagedResult<Comment>
+        {
+            Items = items,
+            TotalCount = totalCount,
+            Page = page,
+            PageSize = pageSize
+        };
+    }
+
+    public async Task<Bookmark?> GetBookmarkByIdAsync(int bookmarkId)
+    {
+        return await _context.Bookmarks
+            .AsNoTracking()
+            .Include(b => b.Event)
+            .ThenInclude(e => e!.Images)
+            .FirstOrDefaultAsync(b => b.BookmarkId == bookmarkId);
+    }
+
+    public async Task<Bookmark?> GetBookmarkByUserAndEventAsync(int userId, int eventId)
+    {
+        return await _context.Bookmarks
+            .AsNoTracking()
+            .FirstOrDefaultAsync(b => b.UserId == userId && b.EventId == eventId);
+    }
+
+    public async Task<PagedResult<Bookmark>> GetUserBookmarksAsync(int userId, int page, int pageSize)
+    {
+        page = page <= 0 ? 1 : page;
+        pageSize = pageSize <= 0 ? 20 : Math.Min(pageSize, 50);
+
+        var query = _context.Bookmarks
+            .AsNoTracking()
+            .Include(b => b.Event)
+            .ThenInclude(e => e!.Images)
+            .Where(b => b.UserId == userId);
+
+        var totalCount = await query.CountAsync();
+
+        var items = await query
+            .OrderByDescending(b => b.SavedAt)
+            .ThenByDescending(b => b.BookmarkId)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        return new PagedResult<Bookmark>
+        {
+            Items = items,
+            TotalCount = totalCount,
+            Page = page,
+            PageSize = pageSize
+        };
+    }
+
+    public async Task<Bookmark> CreateBookmarkAsync(Bookmark bookmark)
+    {
+        _context.Bookmarks.Add(bookmark);
+        await _context.SaveChangesAsync();
+        return bookmark;
+    }
+
+    public async Task UpdateBookmarkAsync(Bookmark bookmark)
+    {
+        _context.Bookmarks.Update(bookmark);
+        await _context.SaveChangesAsync();
+    }
+
+    public async Task DeleteBookmarkAsync(Bookmark bookmark)
+    {
+        _context.Bookmarks.Remove(bookmark);
+        await _context.SaveChangesAsync();
+    }
+
+    public async Task<List<Event>> GetPublicCandidatesAsync(EventFilterDto filter)
     {
         filter ??= new EventFilterDto();
 
@@ -51,9 +176,6 @@ public class EventRepository : IEventRepository
         if (filter.ToDate.HasValue)
             query = query.Where(e => e.StartDateTime <= filter.ToDate.Value);
 
-        if (filter.IsOnline.HasValue)
-            query = query.Where(e => e.IsOnline == filter.IsOnline.Value);
-
         if (filter.IsFeatured.HasValue)
             query = query.Where(e => e.IsFeatured == filter.IsFeatured.Value);
 
@@ -70,33 +192,6 @@ public class EventRepository : IEventRepository
         return await query
             .OrderBy(e => e.StartDateTime)
             .ThenBy(e => e.EventId)
-            .Take(Math.Min(Math.Max(take, 20), 500))
-            .ToListAsync();
-    }
-
-    public async Task<Comment?> GetCommentByIdAsync(int commentId)
-    {
-        return await _context.Comments
-            .Include(c => c.Replies.Where(r => !r.IsDeleted))
-            .FirstOrDefaultAsync(c => c.CommentId == commentId);
-    }
-
-    public async Task<List<Comment>> GetEventCommentsAsync(int eventId)
-    {
-        return await _context.Comments
-            .AsNoTracking()
-            .Include(c => c.Replies.Where(r => !r.IsDeleted))
-            .Where(c => c.EventId == eventId && c.ParentCommentId == null && !c.IsDeleted)
-            .OrderByDescending(c => c.CreatedAt)
-            .ToListAsync();
-    }
-
-    public async Task<List<Comment>> GetRepliesAsync(int parentCommentId)
-    {
-        return await _context.Comments
-            .AsNoTracking()
-            .Where(c => c.ParentCommentId == parentCommentId && !c.IsDeleted)
-            .OrderBy(c => c.CreatedAt)
             .ToListAsync();
     }
 
@@ -200,11 +295,27 @@ public class EventRepository : IEventRepository
         if (filter.ToDate.HasValue)
             query = query.Where(e => e.StartDateTime <= filter.ToDate.Value);
 
-        if (filter.IsOnline.HasValue)
-            query = query.Where(e => e.IsOnline == filter.IsOnline.Value);
-
         if (filter.IsFeatured.HasValue)
             query = query.Where(e => e.IsFeatured == filter.IsFeatured.Value);
+
+        if (filter.CanViewReservations.HasValue)
+        {
+            var reservationStatuses = new[]
+            {
+            EventStatus.Pending,
+            EventStatus.Confirmed,
+            EventStatus.Completed
+        };
+
+            if (filter.CanViewReservations.Value)
+            {
+                query = query.Where(e => reservationStatuses.Contains(e.Status));
+            }
+            else
+            {
+                query = query.Where(e => !reservationStatuses.Contains(e.Status));
+            }
+        }
 
         if (!string.IsNullOrWhiteSpace(filter.SearchTerm))
         {
@@ -221,15 +332,15 @@ public class EventRepository : IEventRepository
         query = sortBy switch
         {
             "price" => filter.SortDescending
-                ? query.OrderByDescending(e => e.Price).ThenBy(e => e.EventId)
+                ? query.OrderByDescending(e => e.Price).ThenByDescending(e => e.EventId)
                 : query.OrderBy(e => e.Price).ThenBy(e => e.EventId),
 
             "likescount" => filter.SortDescending
-                ? query.OrderByDescending(e => e.LikesCount).ThenBy(e => e.EventId)
+                ? query.OrderByDescending(e => e.LikesCount).ThenByDescending(e => e.EventId)
                 : query.OrderBy(e => e.LikesCount).ThenBy(e => e.EventId),
 
             "viewcount" => filter.SortDescending
-                ? query.OrderByDescending(e => e.ViewCount).ThenBy(e => e.EventId)
+                ? query.OrderByDescending(e => e.ViewCount).ThenByDescending(e => e.EventId)
                 : query.OrderBy(e => e.ViewCount).ThenBy(e => e.EventId),
 
             _ => filter.SortDescending
@@ -238,7 +349,7 @@ public class EventRepository : IEventRepository
         };
 
         var page = filter.Page <= 0 ? 1 : filter.Page;
-        var pageSize = filter.Page <= 0 ? 20 : Math.Min(filter.PageSize <= 0 ? 20 : filter.PageSize, 100);
+        var pageSize = filter.PageSize <= 0 ? 20 : Math.Min(filter.PageSize, 50);
 
         var totalCount = await query.CountAsync();
 
@@ -380,6 +491,35 @@ public class EventRepository : IEventRepository
         }
     }
 
+    public async Task<PagedResult<EventLike>> GetLikedEventsByUserAsync(int userId, int page, int pageSize)
+    {
+        page = page <= 0 ? 1 : page;
+        pageSize = pageSize <= 0 ? 20 : Math.Min(pageSize, 50);
+
+        var query = _context.EventLikes
+            .AsNoTracking()
+            .Include(x => x.Event)
+            .ThenInclude(e => e!.Images)
+            .Where(x => x.UserId == userId);
+
+        var totalCount = await query.CountAsync();
+
+        var items = await query
+            .OrderByDescending(x => x.LikedAt)
+            .ThenByDescending(x => x.EventId)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        return new PagedResult<EventLike>
+        {
+            Items = items,
+            TotalCount = totalCount,
+            Page = page,
+            PageSize = pageSize
+        };
+    }
+
     public async Task AddImageAsync(EventImage image)
     {
         await _context.EventImages.AddAsync(image);
@@ -496,55 +636,6 @@ public class EventRepository : IEventRepository
     public async Task UpdateSubGenreAsync(SubGenre subGenre)
     {
         _context.SubGenres.Update(subGenre);
-        await _context.SaveChangesAsync();
-    }
-
-    public async Task<Bookmark?> GetBookmarkByIdAsync(int bookmarkId) =>
-        await _context.Bookmarks
-            .AsNoTracking()
-            .Include(b => b.Event)
-                .ThenInclude(e => e!.Images)
-            .FirstOrDefaultAsync(b => b.BookmarkId == bookmarkId);
-
-    public async Task<Bookmark?> GetBookmarkByUserAndEventAsync(int userId, int eventId) =>
-        await _context.Bookmarks
-            .AsNoTracking()
-            .FirstOrDefaultAsync(b => b.UserId == userId && b.EventId == eventId);
-
-    public async Task<List<Bookmark>> GetUserBookmarksAsync(int userId) =>
-        await _context.Bookmarks
-            .AsNoTracking()
-            .Include(b => b.Event)
-                .ThenInclude(e => e!.Images)
-            .Where(b => b.UserId == userId)
-            .OrderByDescending(b => b.SavedAt)
-            .ToListAsync();
-
-    public async Task<List<EventLike>> GetLikedEventsByUserAsync(int userId) =>
-        await _context.EventLikes
-            .AsNoTracking()
-            .Include(x => x.Event)
-                .ThenInclude(e => e!.Images)
-            .Where(x => x.UserId == userId)
-            .OrderByDescending(x => x.LikedAt)
-            .ToListAsync();
-
-    public async Task<Bookmark> CreateBookmarkAsync(Bookmark bookmark)
-    {
-        _context.Bookmarks.Add(bookmark);
-        await _context.SaveChangesAsync();
-        return bookmark;
-    }
-
-    public async Task UpdateBookmarkAsync(Bookmark bookmark)
-    {
-        _context.Bookmarks.Update(bookmark);
-        await _context.SaveChangesAsync();
-    }
-
-    public async Task DeleteBookmarkAsync(Bookmark bookmark)
-    {
-        _context.Bookmarks.Remove(bookmark);
         await _context.SaveChangesAsync();
     }
 }

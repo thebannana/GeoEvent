@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/widgets/inputs/app_chip.dart';
 import '../../../../core/widgets/feedback/app_empty_state.dart';
 import '../../../../core/widgets/feedback/app_error_state.dart';
 import '../../../../core/widgets/feedback/app_loading_indicator.dart';
+import '../../../../core/widgets/feedback/app_spinner.dart';
+import '../../../../core/widgets/inputs/app_chip.dart';
 import '../../../../core/widgets/layout/app_scaffold.dart';
 import '../../../../shared/notifications/models/inbox_state.dart';
 import '../../application/inbox_controller.dart';
@@ -42,6 +43,7 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
     final allItems = state.notifications;
     final items = state.displayed;
     final hasUnread = allItems.any((n) => n.isUnread);
+    final usingServerPagingView = state.isUsingServerPagingView;
 
     return AppScaffold(
       child: RefreshIndicator(
@@ -122,18 +124,30 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
                 child: Wrap(
                   spacing: 8,
                   runSpacing: 8,
-                  alignment: WrapAlignment.end,
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    if (hasUnread)
-                      TextButton(
-                        onPressed: ctrl.markAllAsRead,
-                        child: const Text('Mark all read'),
+                    if (usingServerPagingView && state.totalCount > 0)
+                      Text(
+                        '${allItems.length} of ${state.totalCount} notifications',
+                        style: Theme.of(context).textTheme.bodySmall,
                       ),
-                    if (allItems.isNotEmpty)
-                      TextButton(
-                        onPressed: ctrl.deleteAll,
-                        child: const Text('Delete all'),
-                      ),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        if (hasUnread)
+                          TextButton(
+                            onPressed: ctrl.markAllAsRead,
+                            child: const Text('Mark all read'),
+                          ),
+                        if (allItems.isNotEmpty)
+                          TextButton(
+                            onPressed: ctrl.deleteAll,
+                            child: const Text('Delete all'),
+                          ),
+                      ],
+                    ),
                   ],
                 ),
               ),
@@ -185,16 +199,14 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
                       return const Padding(
                         padding: EdgeInsets.symmetric(vertical: 12),
                         child: Center(
-                          child: CircularProgressIndicator(strokeWidth: 2),
+                          child: AppSpinner(size: 22, strokeWidth: 2),
                         ),
                       );
                     }
 
                     final item = items[index];
 
-                    if (state.searchQuery.isEmpty &&
-                        state.filter == NotificationFilter.all &&
-                        state.sort == NotificationSort.newest &&
+                    if (usingServerPagingView &&
                         state.hasMore &&
                         !state.isLoadingMore &&
                         index >= items.length - 3) {
@@ -213,6 +225,21 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
                           item.isRead ? null : () => ctrl.markAsRead(item.id),
                     );
                   },
+                ),
+              ),
+            if (!state.isLoading &&
+                usingServerPagingView &&
+                state.hasMore &&
+                !state.isLoadingMore)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 0, 18, 12),
+                  child: Center(
+                    child: OutlinedButton(
+                      onPressed: ctrl.loadMore,
+                      child: const Text('Load more'),
+                    ),
+                  ),
                 ),
               ),
             const SliverToBoxAdapter(

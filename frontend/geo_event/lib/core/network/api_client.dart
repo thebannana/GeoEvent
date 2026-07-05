@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/auth/application/auth_controller.dart';
@@ -102,6 +103,22 @@ void _addCommonInterceptors(Dio dio) {
   );
 }
 
+const _redacted = '***REDACTED***';
+
+const _sensitiveKeys = {
+  'authorization',
+  'password',
+  'currentpassword',
+  'newpassword',
+  'confirmpassword',
+  'refreshtoken',
+  'accesstoken',
+  'token',
+  'secret',
+  'apikey',
+  'api_key',
+};
+
 String _ansi(String code, String text, {bool enabled = false}) {
   if (!enabled) return text;
   return '$code$text\x1B[0m';
@@ -123,21 +140,68 @@ String _statusBadge(int? status, {bool color = false}) {
   return _ansi('\x1B[32m', '$status OK', enabled: color);
 }
 
+dynamic _sanitizeValue(dynamic value) {
+  if (value == null) {
+    return null;
+  }
+
+  if (value is FormData) {
+    return {
+      'fields': value.fields.map((e) {
+        final key = e.key;
+        final normalized = key.toLowerCase();
+        final sanitized =
+            _sensitiveKeys.contains(normalized) ? _redacted : e.value;
+        return MapEntry(key, sanitized);
+      }).toList(),
+      'files': value.files.map((e) => e.key).toList(),
+    };
+  }
+
+  if (value is Map) {
+    return value.map((key, val) {
+      final normalizedKey = key.toString().toLowerCase();
+      if (_sensitiveKeys.contains(normalizedKey)) {
+        return MapEntry(key, _redacted);
+      }
+      return MapEntry(key, _sanitizeValue(val));
+    });
+  }
+
+  if (value is List) {
+    return value.map(_sanitizeValue).toList();
+  }
+
+  return value;
+}
+
+Map<String, dynamic> _sanitizeHeaders(Map<String, dynamic> headers) {
+  return headers.map((key, value) {
+    final normalizedKey = key.toLowerCase();
+    if (_sensitiveKeys.contains(normalizedKey)) {
+      return MapEntry(key, _redacted);
+    }
+    return MapEntry(key, value);
+  });
+}
+
 void _logRequest(RequestOptions options) {
+  if (!kDebugMode) return;
   const useAnsi = false;
 
   AppLogger.debug(
     '${_ansi('\x1B[36m', 'REQUEST', enabled: useAnsi)}\n'
     'Method : ${options.method}\n'
     'URL    : ${options.baseUrl}${options.path}\n'
-    'Query  : ${options.queryParameters.isEmpty ? '{}' : options.queryParameters}\n'
-    'Headers: ${options.headers}\n'
-    'Body   : ${options.data}',
+    'Query  : ${options.queryParameters.isEmpty ? '{}' : _sanitizeValue(options.queryParameters)}\n'
+    'Headers: ${_sanitizeHeaders(Map<String, dynamic>.from(options.headers))}\n'
+    'Body   : ${_sanitizeValue(options.data)}',
     tag: 'HTTP',
   );
 }
 
 void _logResponse(Response response) {
+  if (!kDebugMode) return;
   const useAnsi = false;
   final req = response.requestOptions;
 
@@ -145,12 +209,13 @@ void _logResponse(Response response) {
     '${_statusBadge(response.statusCode, color: useAnsi)}\n'
     'Method : ${req.method}\n'
     'URL    : ${req.baseUrl}${req.path}\n'
-    'Body   : ${response.data}',
+    'Body   : ${_sanitizeValue(response.data)}',
     tag: 'HTTP',
   );
 }
 
 void _logError(DioException error) {
+  if (!kDebugMode) return;
   const useAnsi = false;
   final req = error.requestOptions;
   final status = error.response?.statusCode;
@@ -161,9 +226,9 @@ void _logError(DioException error) {
     'URL      : ${req.baseUrl}${req.path}\n'
     'Type     : ${error.type}\n'
     'Message  : ${error.message}\n'
-    'Query    : ${req.queryParameters.isEmpty ? '{}' : req.queryParameters}\n'
-    'Request  : ${req.data}\n'
-    'Response : ${error.response?.data}',
+    'Query    : ${req.queryParameters.isEmpty ? '{}' : _sanitizeValue(req.queryParameters)}\n'
+    'Request  : ${_sanitizeValue(req.data)}\n'
+    'Response : ${_sanitizeValue(error.response?.data)}',
     tag: 'HTTP',
     error: error.error,
     stackTrace: error.stackTrace,

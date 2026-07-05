@@ -36,14 +36,20 @@ class InboxController extends StateNotifier<InboxState> {
     );
 
     try {
-      final notifications = await _repository.getNotifications(page: 1);
+      final pageResult = await _repository.getNotifications(
+        page: 1,
+        pageSize: NotificationApi.defaultPageSize,
+      );
       if (!mounted) return;
 
       state = state.copyWith(
-        notifications: notifications,
+        notifications: pageResult.items,
         status: InboxStatus.loaded,
-        hasMore: notifications.length >= NotificationApi.pageSize,
-        page: 1,
+        hasMore: pageResult.hasNextPage,
+        page: pageResult.page,
+        pageSize: pageResult.pageSize,
+        totalCount: pageResult.totalCount,
+        totalPages: pageResult.totalPages,
       );
     } catch (e, st) {
       if (!mounted) return;
@@ -59,6 +65,11 @@ class InboxController extends StateNotifier<InboxState> {
     if (state.isRefreshing) return;
 
     final previous = state.notifications;
+    final previousPage = state.page;
+    final previousPageSize = state.pageSize;
+    final previousTotalCount = state.totalCount;
+    final previousTotalPages = state.totalPages;
+    final previousHasMore = state.hasMore;
 
     state = state.copyWith(
       status: InboxStatus.refreshing,
@@ -66,14 +77,20 @@ class InboxController extends StateNotifier<InboxState> {
     );
 
     try {
-      final notifications = await _repository.getNotifications(page: 1);
+      final pageResult = await _repository.getNotifications(
+        page: 1,
+        pageSize: state.pageSize,
+      );
       if (!mounted) return;
 
       state = state.copyWith(
-        notifications: notifications,
+        notifications: pageResult.items,
         status: InboxStatus.loaded,
-        hasMore: notifications.length >= NotificationApi.pageSize,
-        page: 1,
+        hasMore: pageResult.hasNextPage,
+        page: pageResult.page,
+        pageSize: pageResult.pageSize,
+        totalCount: pageResult.totalCount,
+        totalPages: pageResult.totalPages,
       );
     } catch (e, st) {
       if (!mounted) return;
@@ -81,6 +98,11 @@ class InboxController extends StateNotifier<InboxState> {
       state = state.copyWith(
         notifications: previous,
         status: previous.isEmpty ? InboxStatus.error : InboxStatus.loaded,
+        page: previousPage,
+        pageSize: previousPageSize,
+        totalCount: previousTotalCount,
+        totalPages: previousTotalPages,
+        hasMore: previousHasMore,
         errorMessage: ErrorMapper.toMessage(e, stackTrace: st),
       );
     }
@@ -88,8 +110,15 @@ class InboxController extends StateNotifier<InboxState> {
 
   Future<void> loadMore() async {
     if (!state.hasMore || state.isLoadingMore || state.isLoading) return;
+    if (!state.isUsingServerPagingView) return;
 
     final previous = state.notifications;
+    final previousPage = state.page;
+    final previousPageSize = state.pageSize;
+    final previousTotalCount = state.totalCount;
+    final previousTotalPages = state.totalPages;
+    final previousHasMore = state.hasMore;
+
     final nextPage = state.page + 1;
 
     state = state.copyWith(
@@ -98,16 +127,22 @@ class InboxController extends StateNotifier<InboxState> {
     );
 
     try {
-      final more = await _repository.getNotifications(page: nextPage);
+      final pageResult = await _repository.getNotifications(
+        page: nextPage,
+        pageSize: state.pageSize,
+      );
       if (!mounted) return;
 
-      final merged = _mergeById([...state.notifications, ...more]);
+      final merged = _mergeById([...state.notifications, ...pageResult.items]);
 
       state = state.copyWith(
         notifications: merged,
         status: InboxStatus.loaded,
-        hasMore: more.length >= NotificationApi.pageSize,
-        page: nextPage,
+        hasMore: pageResult.hasNextPage,
+        page: pageResult.page,
+        pageSize: pageResult.pageSize,
+        totalCount: pageResult.totalCount,
+        totalPages: pageResult.totalPages,
       );
     } catch (e, st) {
       if (!mounted) return;
@@ -115,6 +150,11 @@ class InboxController extends StateNotifier<InboxState> {
       state = state.copyWith(
         notifications: previous,
         status: InboxStatus.loaded,
+        hasMore: previousHasMore,
+        page: previousPage,
+        pageSize: previousPageSize,
+        totalCount: previousTotalCount,
+        totalPages: previousTotalPages,
         errorMessage: ErrorMapper.toMessage(e, stackTrace: st),
       );
     }
@@ -186,11 +226,13 @@ class InboxController extends StateNotifier<InboxState> {
 
   Future<void> deleteNotification(int notificationId) async {
     final previous = state.notifications;
+    final updated = previous
+        .where((n) => n.id != notificationId)
+        .toList(growable: false);
 
     state = state.copyWith(
-      notifications: previous
-          .where((n) => n.id != notificationId)
-          .toList(growable: false),
+      notifications: updated,
+      totalCount: state.totalCount > 0 ? state.totalCount - 1 : 0,
       clearError: true,
     );
 
@@ -201,6 +243,7 @@ class InboxController extends StateNotifier<InboxState> {
 
       state = state.copyWith(
         notifications: previous,
+        totalCount: state.totalCount + 1,
         errorMessage: ErrorMapper.toMessage(e, stackTrace: st),
       );
     }
@@ -208,9 +251,17 @@ class InboxController extends StateNotifier<InboxState> {
 
   Future<void> deleteAll() async {
     final previous = state.notifications;
+    final previousTotalCount = state.totalCount;
+    final previousTotalPages = state.totalPages;
+    final previousHasMore = state.hasMore;
+    final previousPage = state.page;
 
     state = state.copyWith(
       notifications: const [],
+      totalCount: 0,
+      totalPages: 0,
+      hasMore: false,
+      page: 1,
       clearError: true,
     );
 
@@ -221,6 +272,10 @@ class InboxController extends StateNotifier<InboxState> {
 
       state = state.copyWith(
         notifications: previous,
+        totalCount: previousTotalCount,
+        totalPages: previousTotalPages,
+        hasMore: previousHasMore,
+        page: previousPage,
         errorMessage: ErrorMapper.toMessage(e, stackTrace: st),
       );
     }
@@ -241,6 +296,7 @@ class InboxController extends StateNotifier<InboxState> {
 
     state = state.copyWith(
       notifications: next,
+      totalCount: state.totalCount + (state.notifications.any((n) => n.id == notification.id) ? 0 : 1),
       status: state.status == InboxStatus.initial ? InboxStatus.loaded : null,
     );
   }

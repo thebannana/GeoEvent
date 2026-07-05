@@ -1,85 +1,204 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/widgets/async/app_async_view.dart';
 import '../../../../core/widgets/feedback/app_empty_state.dart';
+import '../../../../core/widgets/feedback/app_error_state.dart';
+import '../../../../core/widgets/feedback/app_loading_indicator.dart';
+import '../../../../core/widgets/feedback/app_spinner.dart';
 import '../../../../core/widgets/layout/app_scaffold.dart';
-import '../../../../shared/events/models/my_event_response_dto.dart';
+import '../../../../shared/my_events/models/my_event_response_dto.dart';
 import '../../application/my_events_controller.dart';
 import '../widgets/ticket_scanner_event_card.dart';
 import 'ticket_scanner_screen.dart';
 
-class TicketScannerEntryScreen extends ConsumerWidget {
+class TicketScannerEntryScreen extends ConsumerStatefulWidget {
   const TicketScannerEntryScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<TicketScannerEntryScreen> createState() =>
+      _TicketScannerEntryScreenState();
+}
+
+class _TicketScannerEntryScreenState
+    extends ConsumerState<TicketScannerEntryScreen> {
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scrollController
+      ..removeListener(_onScroll)
+      ..dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+
+    final position = _scrollController.position;
+    if (position.pixels >= position.maxScrollExtent - 240) {
+      ref.read(myEventsProvider.notifier).loadMore();
+    }
+  }
+
+  Future<void> _onRefresh() {
+    return ref.read(myEventsProvider.notifier).refresh();
+  }
+
+  void _openScanner(BuildContext context, MyEventResponseDto event) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => TicketScannerScreen(
+          eventId: event.eventId,
+          eventTitle: event.title,
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final myEventsAsync = ref.watch(myEventsProvider);
 
-    Future<void> onRefresh() {
-      return ref.read(myEventsProvider.notifier).refresh();
-    }
+    final isInitialLoading = myEventsAsync.isLoading && !myEventsAsync.hasValue;
+    final hasInitialError = myEventsAsync.hasError && !myEventsAsync.hasValue;
 
-    void openScanner(MyEventResponseDto event) {
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => TicketScannerScreen(
-            eventId: event.eventId,
-            eventTitle: event.title,
-          ),
-        ),
-      );
-    }
-
-    final manageableEvents =
-        myEventsAsync.valueOrNull?.where((event) => event.canViewReservations).toList() ??
-            const <MyEventResponseDto>[];
+    final state = myEventsAsync.valueOrNull;
+    final events = state?.items ?? const <MyEventResponseDto>[];
 
     return AppScaffold(
       appBar: AppBar(
         title: const Text('Ticket scanner'),
       ),
       child: RefreshIndicator(
-        onRefresh: onRefresh,
-        child: AppAsyncView<List<MyEventResponseDto>>(
-          value: myEventsAsync,
-          onRetry: onRefresh,
-          isEmpty: (_) => manageableEvents.isEmpty,
-          empty: const _TicketScannerEmptyView(),
-          data: (_) => _TicketScannerEntryContent(
-            events: manageableEvents,
-            onOpenScanner: openScanner,
-          ),
+        onRefresh: _onRefresh,
+        child: Builder(
+          builder: (context) {
+            if (isInitialLoading) {
+              return ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                children: const [
+                  SizedBox(height: 120),
+                  AppLoadingIndicator(
+                    title: 'Loading events',
+                    message: 'Please wait while we load your scannable events.',
+                  ),
+                ],
+              );
+            }
+
+            if (hasInitialError) {
+              return ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(16),
+                children: [
+                  AppErrorState(
+                    title: 'Failed to load events',
+                    message: 'Pull to refresh or try again.',
+                    onRetry: _onRefresh,
+                  ),
+                ],
+              );
+            }
+
+            if (state == null || events.isEmpty) {
+              return const _TicketScannerEmptyView();
+            }
+
+            return ListView.separated(
+              controller: _scrollController,
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 20),
+              itemCount: events.length + 1,
+              separatorBuilder: (_, index) {
+                if (index >= events.length - 1) {
+                  return const SizedBox(height: 0);
+                }
+                return const SizedBox(height: 12);
+              },
+              itemBuilder: (context, index) {
+                if (index == events.length) {
+                  return _TicketScannerListFooter(
+                    isLoadingMore: state.isLoadingMore,
+                    hasMore: state.hasMore,
+                    loadedCount: state.items.length,
+                    totalCount: state.totalCount,
+                    onLoadMore: () =>
+                        ref.read(myEventsProvider.notifier).loadMore(),
+                  );
+                }
+
+                final event = events[index];
+
+                return TicketScannerEventCard(
+                  event: event,
+                  onTap: () => _openScanner(context, event),
+                );
+              },
+            );
+          },
         ),
       ),
     );
   }
 }
 
-class _TicketScannerEntryContent extends StatelessWidget {
-  const _TicketScannerEntryContent({
-    required this.events,
-    required this.onOpenScanner,
+class _TicketScannerListFooter extends StatelessWidget {
+  const _TicketScannerListFooter({
+    required this.isLoadingMore,
+    required this.hasMore,
+    required this.loadedCount,
+    required this.totalCount,
+    required this.onLoadMore,
   });
 
-  final List<MyEventResponseDto> events;
-  final ValueChanged<MyEventResponseDto> onOpenScanner;
+  final bool isLoadingMore;
+  final bool hasMore;
+  final int loadedCount;
+  final int totalCount;
+  final VoidCallback onLoadMore;
 
   @override
   Widget build(BuildContext context) {
-    return ListView.separated(
-      physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 20),
-      itemCount: events.length,
-      separatorBuilder: (_, _) => const SizedBox(height: 12),
-      itemBuilder: (context, index) {
-        final event = events[index];
+    if (isLoadingMore) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 16),
+        child: Center(
+          child: AppSpinner(size: 22, strokeWidth: 2),
+        ),
+      );
+    }
 
-        return TicketScannerEventCard(
-          event: event,
-          onTap: () => onOpenScanner(event),
-        );
-      },
+    if (hasMore) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        child: Center(
+          child: OutlinedButton.icon(
+            onPressed: onLoadMore,
+            icon: const Icon(Icons.expand_more_rounded),
+            label: Text(
+              totalCount > 0
+                  ? 'Load more ($loadedCount/$totalCount)'
+                  : 'Load more',
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      child: Center(
+        child: Text(
+          'Showing all $loadedCount events',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+      ),
     );
   }
 }

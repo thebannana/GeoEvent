@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_theme_metrics.dart';
+import '../../../../core/widgets/layout/app_scaffold.dart';
 
 class AuthScaffold extends StatelessWidget {
   const AuthScaffold({
@@ -18,18 +19,14 @@ class AuthScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Scaffold(
-      backgroundColor: theme.scaffoldBackgroundColor,
+    return AppScaffold(
       appBar: AppBar(
         automaticallyImplyLeading: showBackButton,
         title: Text(title),
       ),
-      body: SafeArea(
+      child: SafeArea(
         child: ListView(
-          padding:
-              padding ?? const EdgeInsets.all(AppThemeMetrics.spaceXl),
+          padding: padding ?? const EdgeInsets.all(AppThemeMetrics.spaceXl),
           children: [child],
         ),
       ),

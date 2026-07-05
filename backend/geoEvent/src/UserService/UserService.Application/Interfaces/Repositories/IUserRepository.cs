@@ -7,10 +7,15 @@ namespace UserService.Application.Interfaces.Repositories;
 
 public interface IUserRepository
 {
-    Task<UserPreference?> GetPreferenceAsync(int userId, int? segmentId, int? genreId, int? subGenreId);
+    Task<List<UserPreference>> GetUserPreferencesAsync(int userId);
+
+    Task<UserPreference?> GetPreferenceAsync(
+        int userId,
+        int? segmentId,
+        int? genreId,
+        int? subGenreId);
     Task<UserPreference> CreatePreferenceAsync(UserPreference preference);
     Task UpdatePreferenceAsync(UserPreference preference);
-    Task<List<UserPreference>> GetUserPreferencesAsync(int userId);
     Task DeletePreferenceAsync(UserPreference preference);
 
     Task<User?> GetByIdAsync(int userId);
@@ -19,7 +24,7 @@ public interface IUserRepository
 
     Task<Report?> GetReportByIdAsync(int reportId);
     Task<PagedResult<Report>> GetReportsAsync(ReportStatus? status, int page, int pageSize);
-    Task<List<Report>> GetUserReportsAsync(int userId);
+    Task<PagedResult<Report>> GetUserReportsAsync(int userId, int page, int pageSize);
     Task<Report> CreateReportAsync(Report report);
     Task UpdateReportAsync(Report report);
     Task<bool> HasOpenReportAsync(int reporterId, ReportTargetType targetType, int targetId);

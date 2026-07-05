@@ -10,6 +10,11 @@ class MessagesInboxState {
   final bool unreadOnly;
   final int unreadCount;
   final bool initialized;
+  final int page;
+  final int pageSize;
+  final int totalCount;
+  final bool hasNextPage;
+  final bool isLoadingMore;
 
   const MessagesInboxState({
     this.conversations = const AsyncValue.loading(),
@@ -17,21 +22,12 @@ class MessagesInboxState {
     this.unreadOnly = false,
     this.unreadCount = 0,
     this.initialized = false,
+    this.page = 1,
+    this.pageSize = 20,
+    this.totalCount = 0,
+    this.hasNextPage = false,
+    this.isLoadingMore = false,
   });
-
-  List<ConversationSummary> get filteredConversations {
-    final items = conversations.valueOrNull ?? const <ConversationSummary>[];
-    final query = searchQuery.trim().toLowerCase();
-
-    return items.where((conversation) {
-      final matchesUnread = !unreadOnly || conversation.unreadCount > 0;
-      final matchesQuery = query.isEmpty ||
-          conversation.title.toLowerCase().contains(query) ||
-          conversation.lastMessageContent.toLowerCase().contains(query);
-
-      return matchesUnread && matchesQuery;
-    }).toList(growable: false);
-  }
 
   MessagesInboxState copyWith({
     AsyncValue<List<ConversationSummary>>? conversations,
@@ -39,6 +35,11 @@ class MessagesInboxState {
     bool? unreadOnly,
     int? unreadCount,
     bool? initialized,
+    int? page,
+    int? pageSize,
+    int? totalCount,
+    bool? hasNextPage,
+    bool? isLoadingMore,
   }) {
     return MessagesInboxState(
       conversations: conversations ?? this.conversations,
@@ -46,6 +47,11 @@ class MessagesInboxState {
       unreadOnly: unreadOnly ?? this.unreadOnly,
       unreadCount: unreadCount ?? this.unreadCount,
       initialized: initialized ?? this.initialized,
+      page: page ?? this.page,
+      pageSize: pageSize ?? this.pageSize,
+      totalCount: totalCount ?? this.totalCount,
+      hasNextPage: hasNextPage ?? this.hasNextPage,
+      isLoadingMore: isLoadingMore ?? this.isLoadingMore,
     );
   }
 }
@@ -72,30 +78,106 @@ class MessagesInboxController extends Notifier<MessagesInboxState> {
           ? const AsyncValue.loading()
           : AsyncData<List<ConversationSummary>>(previous),
       initialized: true,
+      page: 1,
+      totalCount: 0,
+      hasNextPage: false,
+      isLoadingMore: false,
     );
 
-    final conversationsResult =
-        await AsyncValue.guard<List<ConversationSummary>>(_repo.getThreads);
+    final conversationsResult = await AsyncValue.guard(() async {
+      return _repo.getThreads(
+        page: 1,
+        pageSize: state.pageSize,
+        searchTerm: state.searchQuery.trim().isEmpty
+            ? null
+            : state.searchQuery.trim(),
+        unreadOnly: state.unreadOnly,
+      );
+    });
 
     int unreadCount = state.unreadCount;
     try {
       unreadCount = await _repo.getUnreadCount();
     } catch (_) {}
 
+    if (conversationsResult.hasError) {
+      state = state.copyWith(
+        conversations: AsyncValue.error(
+          conversationsResult.error!,
+          conversationsResult.stackTrace!,
+        ),
+        unreadCount: unreadCount,
+      );
+      return;
+    }
+
+    final paged = conversationsResult.requireValue;
+
     state = state.copyWith(
-      conversations: conversationsResult,
+      conversations: AsyncData<List<ConversationSummary>>(
+        List<ConversationSummary>.unmodifiable(paged.items),
+      ),
       unreadCount: unreadCount,
+      page: paged.page,
+      pageSize: paged.pageSize,
+      totalCount: paged.totalCount,
+      hasNextPage: paged.hasNextPage,
+      isLoadingMore: false,
     );
   }
 
   Future<void> refresh() => load();
 
-  void setSearchQuery(String value) {
-    state = state.copyWith(searchQuery: value);
+  Future<void> loadNextPage() async {
+    if (state.isLoadingMore || !state.hasNextPage) return;
+
+    final current = state.conversations.valueOrNull ?? const <ConversationSummary>[];
+
+    state = state.copyWith(isLoadingMore: true);
+
+    try {
+      final paged = await _repo.getThreads(
+        page: state.page + 1,
+        pageSize: state.pageSize,
+        searchTerm: state.searchQuery.trim().isEmpty
+            ? null
+            : state.searchQuery.trim(),
+        unreadOnly: state.unreadOnly,
+      );
+
+      final merged = <ConversationSummary>[
+        ...current,
+        ...paged.items.where(
+          (item) => current.every((existing) => existing.threadId != item.threadId),
+        ),
+      ];
+
+      state = state.copyWith(
+        conversations: AsyncData<List<ConversationSummary>>(
+          List<ConversationSummary>.unmodifiable(merged),
+        ),
+        page: paged.page,
+        pageSize: paged.pageSize,
+        totalCount: paged.totalCount,
+        hasNextPage: paged.hasNextPage,
+        isLoadingMore: false,
+      );
+    } catch (error, stackTrace) {
+      state = state.copyWith(
+        conversations: AsyncValue.error(error, stackTrace),
+        isLoadingMore: false,
+      );
+    }
   }
 
-  void setUnreadOnly(bool value) {
+  Future<void> setSearchQuery(String value) async {
+    state = state.copyWith(searchQuery: value);
+    await load();
+  }
+
+  Future<void> setUnreadOnly(bool value) async {
     state = state.copyWith(unreadOnly: value);
+    await load();
   }
 
   void removeThreadLocally(int threadId) {
@@ -104,13 +186,16 @@ class MessagesInboxController extends Notifier<MessagesInboxState> {
     int removedUnread = 0;
     final updated = current.where((c) {
       final keep = c.threadId != threadId;
-      if (!keep) removedUnread = c.unreadCount;
+      if (!keep) {
+        removedUnread += c.unreadCount;
+      }
       return keep;
     }).toList(growable: false);
 
     state = state.copyWith(
-      conversations: AsyncData(updated),
+      conversations: AsyncData<List<ConversationSummary>>(updated),
       unreadCount: (state.unreadCount - removedUnread).clamp(0, 1 << 30),
+      totalCount: state.totalCount > 0 ? state.totalCount - 1 : 0,
     );
   }
 
@@ -125,7 +210,7 @@ class MessagesInboxController extends Notifier<MessagesInboxState> {
     }).toList(growable: false);
 
     state = state.copyWith(
-      conversations: AsyncData(updated),
+      conversations: AsyncData<List<ConversationSummary>>(updated),
       unreadCount: (state.unreadCount - removedUnread).clamp(0, 1 << 30),
     );
   }
@@ -140,6 +225,7 @@ class MessagesInboxController extends Notifier<MessagesInboxState> {
 
     final updated = current.map((conversation) {
       if (conversation.threadId != threadId) return conversation;
+
       return conversation.copyWith(
         lastMessageContent: preview,
         lastMessageSentAt: sentAt,
@@ -149,6 +235,8 @@ class MessagesInboxController extends Notifier<MessagesInboxState> {
 
     updated.sort((a, b) => b.lastMessageSentAt.compareTo(a.lastMessageSentAt));
 
-    state = state.copyWith(conversations: AsyncData(updated));
+    state = state.copyWith(
+      conversations: AsyncData<List<ConversationSummary>>(updated),
+    );
   }
 }

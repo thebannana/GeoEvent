@@ -5,33 +5,32 @@ namespace TicketService.Application.Interfaces.Services;
 
 public interface ITicketService
 {
+    Task<ServiceResult<PagedResult<EventAttendeePreviewDto>>> GetPublicEventAttendeesAsync(
+        int eventId,
+        PublicEventAttendeesFilterDto filter);
+
     Task<ServiceResult<bool>> RemoveAttendeeReservationAsync(
         int eventId,
         int reservationId,
         int requesterId,
         string requesterRole);
 
-    Task<ServiceResult<ReservationResponseDto>> CreateReservationAsync(
-        CreateReservationDto dto, int userId);
+    Task<ServiceResult<ReservationResponseDto>> CreateReservationAsync(CreateReservationDto dto, int userId);
+    Task<ServiceResult<ReservationResponseDto>> ConfirmReservationAsync(int reservationId, ConfirmReservationDto dto, int userId);
 
-    Task<ServiceResult<ReservationResponseDto>> ConfirmReservationAsync(
-        int reservationId, ConfirmReservationDto dto, int userId);
-
-    Task<ServiceResult<List<EventAttendeePreviewDto>>> GetPublicEventAttendeesAsync(int eventId);
     Task<ServiceResult<bool>> CancelReservationAsync(int reservationId, int userId);
     Task<ServiceResult<ReservationResponseDto>> GetReservationAsync(int reservationId, int userId);
 
-    Task<ServiceResult<PagedResult<ReservationResponseDto>>> GetUserReservationsAsync(
-        int userId, ReservationFilterDto filter);
+    Task<ServiceResult<PagedResult<ReservationResponseDto>>> GetUserReservationsAsync(int userId, ReservationFilterDto filter);
 
     Task<ServiceResult<bool>> AttachPendingPayPalOrderAsync(int reservationId, int userId, string providerOrderId);
     Task<ServiceResult<bool>> ExpireReservationsAsync();
 
     Task<ServiceResult<ReservationResponseDto>> MarkCashCollectedAsync(
-    int eventId,
-    int reservationId,
-    int organizerUserId,
-    string organizerRole);
+        int eventId,
+        int reservationId,
+        int organizerUserId,
+        string organizerRole);
 
     Task<ServiceResult<PagedResult<OrganizerReservationResponseDto>>> GetEventReservationsAsync(
         int eventId,
@@ -44,16 +43,14 @@ public interface ITicketService
         int requesterId,
         string requesterRole);
 
-    Task<ServiceResult<List<EventTicketResponseDto>>> GetEventTicketsAsync(int eventId);
+    Task<ServiceResult<PagedResult<EventTicketResponseDto>>> GetEventTicketsAsync(int eventId, int page, int pageSize);
     Task<ServiceResult<EventTicketResponseDto>> GetEventTicketAsync(int eventId, int eventTicketId);
 
     Task<ServiceResult<TicketResponseDto>> GetTicketAsync(int ticketId, int userId);
 
-    Task<ServiceResult<PagedResult<TicketResponseDto>>> GetUserTicketsAsync(
-        int userId, TicketFilterDto filter);
+    Task<ServiceResult<PagedResult<TicketResponseDto>>> GetUserTicketsAsync(int userId, TicketFilterDto filter);
 
-    Task<ServiceResult<List<TicketResponseDto>>> GetTicketsByReservationAsync(
-        int reservationId, int userId);
+    Task<ServiceResult<PagedResult<TicketResponseDto>>> GetTicketsByReservationAsync(int reservationId, int userId, int page, int pageSize);
 
     Task<ServiceResult<TicketScanResultDto>> ValidateTicketScanAsync(
         ValidateTicketScanDto dto,
@@ -62,8 +59,7 @@ public interface ITicketService
 
     Task<ServiceResult<bool>> CancelTicketAsync(int ticketId, int userId);
 
-    Task<ServiceResult<List<PaymentDetailResponseDto>>> GetReservationPaymentsAsync(
-        int reservationId, int userId);
+    Task<ServiceResult<PagedResult<PaymentDetailResponseDto>>> GetReservationPaymentsAsync(int reservationId, int userId, int page, int pageSize);
 
     Task CancelUserReservationsAsync(int userId);
     Task CancelTicketsByEventAsync(int eventId);

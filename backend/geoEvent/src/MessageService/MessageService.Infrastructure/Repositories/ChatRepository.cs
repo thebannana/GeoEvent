@@ -1,4 +1,5 @@
 ﻿using MessageService.Application.Common;
+using MessageService.Application.DTOs;
 using MessageService.Application.Interfaces.Repositories;
 using MessageService.Domain.Entities;
 using MessageService.Domain.Enums;
@@ -79,8 +80,10 @@ public class ChatRepository : IChatRepository
 
     public async Task<List<ChatThreadParticipant>> GetParticipantsAsync(long threadId) =>
         await _context.ChatThreadParticipants
+            .AsNoTracking()
             .Where(x => x.ThreadId == threadId && x.LeftAt == null)
             .OrderBy(x => x.JoinedAt)
+            .ThenBy(x => x.UserId)
             .ToListAsync();
 
     public async Task<ChatMessage?> GetMessageByIdAsync(long messageId) =>
@@ -90,13 +93,19 @@ public class ChatRepository : IChatRepository
 
     public async Task<PagedResult<ChatMessage>> GetMessagesAsync(long threadId, int page, int pageSize)
     {
-        var query = _context.ChatMessages
-            .Include(x => x.ReplyToMessage)
-            .Where(x => x.ThreadId == threadId && x.DeletedAt == null)
-            .OrderByDescending(x => x.SentAt);
+        page = page <= 0 ? 1 : page;
+        pageSize = pageSize <= 0 ? 30 : Math.Min(pageSize, 100);
 
-        var total = await query.CountAsync();
+        var query = _context.ChatMessages
+            .AsNoTracking()
+            .Include(x => x.ReplyToMessage)
+            .Where(x => x.ThreadId == threadId && x.DeletedAt == null);
+
+        var totalCount = await query.CountAsync();
+
         var items = await query
+            .OrderByDescending(x => x.SentAt)
+            .ThenByDescending(x => x.Id)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync();
@@ -104,7 +113,7 @@ public class ChatRepository : IChatRepository
         return new PagedResult<ChatMessage>
         {
             Items = items,
-            TotalCount = total,
+            TotalCount = totalCount,
             Page = page,
             PageSize = pageSize
         };
@@ -143,21 +152,71 @@ public class ChatRepository : IChatRepository
 
     public async Task<List<ChatThreadParticipant>> GetUserParticipationsAsync(int userId) =>
         await _context.ChatThreadParticipants
+            .AsNoTracking()
             .Where(x => x.UserId == userId)
             .ToListAsync();
 
     public async Task<List<ChatMessage>> GetMessagesBySenderAsync(int userId) =>
         await _context.ChatMessages
+            .AsNoTracking()
             .Include(x => x.ReplyToMessage)
             .Where(x => x.SenderId == userId)
             .ToListAsync();
 
-    public async Task<List<ChatThread>> GetUserThreadsAsync(int userId) =>
-        await _context.ChatThreads
+    public async Task<PagedResult<ChatThread>> GetUserThreadsAsync(
+        int userId,
+        int page,
+        int pageSize,
+        string? searchTerm,
+        bool unreadOnly)
+    {
+        page = page <= 0 ? 1 : page;
+        pageSize = pageSize <= 0 ? 20 : Math.Min(pageSize, 50);
+        searchTerm = string.IsNullOrWhiteSpace(searchTerm) ? null : searchTerm.Trim();
+
+        var query = _context.ChatThreads
+            .AsNoTracking()
             .Include(x => x.Participants)
-            .Where(x => x.Participants.Any(p => p.UserId == userId && p.LeftAt == null))
+            .Where(x => x.Participants.Any(p => p.UserId == userId && p.LeftAt == null));
+
+        if (unreadOnly)
+        {
+            query = query.Where(thread =>
+                thread.Participants.Any(p =>
+                    p.UserId == userId &&
+                    p.LeftAt == null &&
+                    thread.Messages.Any(m =>
+                        m.DeletedAt == null &&
+                        m.SenderId != userId &&
+                        (p.LastReadAt == null || m.SentAt > p.LastReadAt.Value))));
+        }
+
+        if (!string.IsNullOrWhiteSpace(searchTerm))
+        {
+            query = query.Where(thread =>
+                (thread.Title != null && thread.Title.Contains(searchTerm)) ||
+                thread.Messages.Any(m =>
+                    m.DeletedAt == null &&
+                    m.Content.Contains(searchTerm)));
+        }
+
+        var totalCount = await query.CountAsync();
+
+        var items = await query
             .OrderByDescending(x => x.LastMessageAt ?? x.CreatedAt)
+            .ThenByDescending(x => x.Id)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
             .ToListAsync();
+
+        return new PagedResult<ChatThread>
+        {
+            Items = items,
+            TotalCount = totalCount,
+            Page = page,
+            PageSize = pageSize
+        };
+    }
 
     public async Task<int> GetUnreadCountAsync(int userId) =>
         await _context.ChatThreadParticipants

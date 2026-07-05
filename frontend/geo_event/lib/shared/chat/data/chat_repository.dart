@@ -2,6 +2,7 @@ import '../models/chat_participant.dart';
 import '../models/chat_thread_details.dart';
 import '../models/conversation_summary.dart';
 import '../models/message_item.dart';
+import '../models/message_paged_result.dart';
 import 'chat_api.dart';
 
 class ChatRepository {
@@ -9,7 +10,19 @@ class ChatRepository {
 
   final ChatApi api;
 
-  Future<List<ConversationSummary>> getThreads() => api.getThreads();
+  Future<MessagePagedResult<ConversationSummary>> getThreads({
+    int page = 1,
+    int pageSize = 20,
+    String? searchTerm,
+    bool unreadOnly = false,
+  }) {
+    return api.getThreads(
+      page: page,
+      pageSize: pageSize,
+      searchTerm: searchTerm,
+      unreadOnly: unreadOnly,
+    );
+  }
 
   Future<void> leaveThread(int threadId) => api.leaveThread(threadId);
 
@@ -25,8 +38,16 @@ class ChatRepository {
     return api.getThreadDetails(threadId);
   }
 
-  Future<List<MessageItem>> getThreadMessages(int threadId) {
-    return api.getThreadMessages(threadId);
+  Future<MessagePagedResult<MessageItem>> getThreadMessages({
+    required int threadId,
+    int page = 1,
+    int pageSize = 30,
+  }) {
+    return api.getThreadMessages(
+      threadId: threadId,
+      page: page,
+      pageSize: pageSize,
+    );
   }
 
   Future<MessageItem> sendThreadMessage({

@@ -37,7 +37,6 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
 
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
-  bool _consentGiven = false;
   DateTime? _selectedBirthDate;
 
   @override
@@ -78,49 +77,37 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
   Future<void> _submit() async {
     FocusScope.of(context).unfocus();
 
-    if (!_formKey.currentState!.validate()) return;
-
-    final birthDateError = Validators.birthDate(
-      _selectedBirthDate,
-      minimumAge: 13,
-    );
-
-    if (birthDateError != null) {
-      showAuthErrorMessage(context, birthDateError);
-      return;
-    }
-
-    if (!_consentGiven) {
-      showAuthErrorMessage(
-        context,
-        'You must accept consent to continue.',
-      );
-      return;
-    }
+    final isValid = _formKey.currentState!.validate();
+    if (!isValid) return;
 
     try {
       await ref.read(authStateProvider.notifier).register(
-      username: _usernameController.text.trim(),
-      email: _emailController.text.trim(),
-      birthDate: _selectedBirthDate!,
-      phoneNumber: _phoneController.text.trim(),
-      password: _passwordController.text,
-      confirmPassword: _confirmPasswordController.text,
-      firstName: _firstNameController.text.trim(),
-      lastName: _lastNameController.text.trim(),
-      consentGiven: _consentGiven,
-    );
+            username: _usernameController.text.trim(),
+            email: _emailController.text.trim(),
+            birthDate: _selectedBirthDate!,
+            phoneNumber: _phoneController.text.trim(),
+            password: _passwordController.text,
+            confirmPassword: _confirmPasswordController.text,
+            firstName: _firstNameController.text.trim(),
+            lastName: _lastNameController.text.trim(),
+            consentGiven: true,
+          );
 
-    TextInput.finishAutofillContext();
+      TextInput.finishAutofillContext();
 
-    if (!mounted) return;
-    } catch (error) {
       if (!mounted) return;
 
+      showAuthSuccess(
+        context,
+        'Account created successfully. Welcome to GeoEvent!',
+      );
+      context.go('/app');
+    } catch (error) {
+      if (!mounted) return;
       showAuthError(
         context,
         error,
-        fallbackMessage: 'Registration failed.',
+        fallbackMessage: 'Registration failed. Please review your details and try again.',
       );
     }
   }
@@ -205,6 +192,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
                       minimumAge: 13,
                     ),
                     enabled: !authState.isLoading,
+                    helperText: authState.isLoading
+                        ? 'Please wait while registration is in progress.'
+                        : 'Select your date of birth from the calendar.',
                   ),
                   const SizedBox(height: 16),
                   AuthPasswordField(
@@ -221,6 +211,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
                     },
                     validator: Validators.password,
                     enabled: !authState.isLoading,
+                    helperText: authState.isLoading
+                        ? 'Password editing is disabled during submission.'
+                        : 'Use at least 8 characters, including uppercase, lowercase, a number, and a special character.',
                   ),
                   const SizedBox(height: 16),
                   AuthPasswordField(
@@ -233,8 +226,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
                     onToggleVisibility: () {
                       if (authState.isLoading) return;
                       setState(() {
-                        _obscureConfirmPassword =
-                            !_obscureConfirmPassword;
+                        _obscureConfirmPassword = !_obscureConfirmPassword;
                       });
                     },
                     validator: (value) => Validators.confirmPassword(
@@ -245,15 +237,14 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
                   ),
                   const SizedBox(height: 12),
                   AuthConsentTile(
-                    value: _consentGiven,
-                    onChanged: authState.isLoading
-                        ? null
-                        : (value) {
-                            setState(() {
-                              _consentGiven = value ?? false;
-                            });
-                          },
-                    title: 'I agree to the app consent and data usage',
+                    enabled: !authState.isLoading,
+                    title: 'I agree to the app consent and data usage.',
+                    validator: (value) {
+                      if (value != true) {
+                        return 'You must accept consent to continue.';
+                      }
+                      return null;
+                    },
                   ),
                   Align(
                     alignment: Alignment.centerLeft,
@@ -262,13 +253,18 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
                           ? null
                           : () => context.push('/privacy'),
                       icon: const Icon(Icons.privacy_tip_outlined),
-                      label: const Text('Read privacy policy'),
+                      label: Text(
+                        authState.isLoading
+                            ? 'Privacy policy unavailable during registration'
+                            : 'Read privacy policy',
+                      ),
                     ),
                   ),
                   const SizedBox(height: 20),
                   AuthSubmitButton(
                     label: 'Create Account',
                     isLoading: authState.isLoading,
+                    disabledReason: 'Please wait while your account is being created.',
                     onPressed: _submit,
                   ),
                   const SizedBox(height: 8),
@@ -276,7 +272,11 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
                     onPressed: authState.isLoading
                         ? null
                         : () => context.go('/login'),
-                    child: const Text('Already have an account? Login'),
+                    child: Text(
+                      authState.isLoading
+                          ? 'Login unavailable during registration'
+                          : 'Already have an account? Login',
+                    ),
                   ),
                 ],
               ),

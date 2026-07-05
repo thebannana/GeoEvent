@@ -11,24 +11,80 @@ import '../../../../shared/profile/models/preferences_screen_state.dart';
 import '../../application/preferences_controller.dart';
 import '../../application/preferences_screen_controller.dart';
 
-class PreferencesScreen extends ConsumerWidget {
+class PreferencesScreen extends ConsumerStatefulWidget {
   const PreferencesScreen({super.key});
 
-  Future<void> _refreshAll(WidgetRef ref) async {
+  @override
+  ConsumerState<PreferencesScreen> createState() => _PreferencesScreenState();
+}
+
+class _PreferencesScreenState extends ConsumerState<PreferencesScreen> {
+  final _searchController = TextEditingController();
+  final _minScoreController = TextEditingController();
+  final _maxScoreController = TextEditingController();
+
+  String? _selectedType;
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _minScoreController.dispose();
+    _maxScoreController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _refreshAll() async {
     ref.invalidate(eventTaxonomyProvider);
-    ref.invalidate(preferencesControllerProvider);
+    await ref.read(preferencesControllerProvider.notifier).refresh();
     ref.invalidate(preferencesScreenControllerProvider);
 
     await Future.wait([
       ref.read(eventTaxonomyProvider.future),
-      ref.read(preferencesControllerProvider.future),
       ref.read(preferencesScreenControllerProvider.future),
     ]);
   }
 
+  Future<void> _applyFilters() async {
+    final minScore = double.tryParse(_minScoreController.text.trim());
+    final maxScore = double.tryParse(_maxScoreController.text.trim());
+
+    await ref.read(preferencesControllerProvider.notifier).applyFilters(
+          type: _selectedType,
+          search: _searchController.text,
+          minScore: minScore,
+          maxScore: maxScore,
+          clearType: _selectedType == null,
+          clearSearch: _searchController.text.trim().isEmpty,
+          clearMinScore: _minScoreController.text.trim().isEmpty,
+          clearMaxScore: _maxScoreController.text.trim().isEmpty,
+        );
+
+    ref.invalidate(preferencesScreenControllerProvider);
+  }
+
+  Future<void> _clearFilters() async {
+    _searchController.clear();
+    _minScoreController.clear();
+    _maxScoreController.clear();
+
+    setState(() {
+      _selectedType = null;
+    });
+
+    await ref.read(preferencesControllerProvider.notifier).applyFilters(
+          clearType: true,
+          clearSearch: true,
+          clearMinScore: true,
+          clearMaxScore: true,
+        );
+
+    ref.invalidate(preferencesScreenControllerProvider);
+  }
+
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final state = ref.watch(preferencesScreenControllerProvider);
+    final listState = ref.watch(preferencesControllerProvider);
 
     return AppScaffold(
       appBar: AppBar(
@@ -36,40 +92,84 @@ class PreferencesScreen extends ConsumerWidget {
         backgroundColor: Colors.transparent,
       ),
       child: RefreshIndicator(
-        onRefresh: () => _refreshAll(ref),
+        onRefresh: _refreshAll,
         child: AppAsyncView<PreferencesScreenState>(
           value: state,
           loading: const _PreferencesLoadingView(),
           errorTitle: 'Failed to load affinity data',
           errorMessageBuilder: (_) => 'Pull to refresh or try again.',
-          onRetry: () => _refreshAll(ref),
+          onRetry: _refreshAll,
           data: (data) {
+            final isPageLoading = listState.isLoading && listState.hasValue;
+
             return ListView(
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
               children: [
                 const _AffinityExplainerCard(),
                 const SizedBox(height: 16),
-                _PreferenceSection(
-                  title: 'Segments',
-                  icon: Icons.category_rounded,
-                  items: data.segmentItems,
-                  emptyMessage: 'No segment affinities have been recorded yet.',
+                _PreferencesFilters(
+                  searchController: _searchController,
+                  minScoreController: _minScoreController,
+                  maxScoreController: _maxScoreController,
+                  selectedType: _selectedType,
+                  onTypeChanged: (value) => setState(() => _selectedType = value),
+                  onApply: _applyFilters,
+                  onClear: _clearFilters,
                 ),
                 const SizedBox(height: 16),
-                _PreferenceSection(
-                  title: 'Genres',
-                  icon: Icons.local_offer_rounded,
-                  items: data.genreItems,
-                  emptyMessage: 'No genre affinities have been recorded yet.',
-                ),
-                const SizedBox(height: 16),
-                _PreferenceSection(
-                  title: 'Subgenres',
-                  icon: Icons.interests_rounded,
-                  items: data.subGenreItems,
-                  emptyMessage:
-                      'No subgenre affinities have been recorded yet.',
+                if (isPageLoading) ...[
+                  const LinearProgressIndicator(),
+                  const SizedBox(height: 16),
+                ],
+                if (data.isEmpty)
+                  const AppEmptyState(
+                    icon: Icons.auto_awesome_rounded,
+                    title: 'Nothing here yet',
+                    message:
+                        'No affinity preferences found for the current filters.',
+                  )
+                else ...[
+                  _PreferenceSection(
+                    title: 'Segments',
+                    icon: Icons.category_rounded,
+                    items: data.segmentItems,
+                    emptyMessage: 'No segment affinities on this page.',
+                  ),
+                  const SizedBox(height: 16),
+                  _PreferenceSection(
+                    title: 'Genres',
+                    icon: Icons.local_offer_rounded,
+                    items: data.genreItems,
+                    emptyMessage: 'No genre affinities on this page.',
+                  ),
+                  const SizedBox(height: 16),
+                  _PreferenceSection(
+                    title: 'Subgenres',
+                    icon: Icons.interests_rounded,
+                    items: data.subGenreItems,
+                    emptyMessage: 'No subgenre affinities on this page.',
+                  ),
+                ],
+                const SizedBox(height: 20),
+                _PaginationBar(
+                  page: data.page,
+                  totalPages: data.totalPages,
+                  totalCount: data.totalCount,
+                  hasNextPage: data.hasNextPage,
+                  hasPreviousPage: data.hasPreviousPage,
+                  onPrevious: () async {
+                    await ref
+                        .read(preferencesControllerProvider.notifier)
+                        .previousPage();
+                    ref.invalidate(preferencesScreenControllerProvider);
+                  },
+                  onNext: () async {
+                    await ref
+                        .read(preferencesControllerProvider.notifier)
+                        .nextPage();
+                    ref.invalidate(preferencesScreenControllerProvider);
+                  },
                 ),
               ],
             );
@@ -131,6 +231,169 @@ class _AffinityExplainerCard extends StatelessWidget {
           Text(
             'Higher scores indicate stronger interest and help personalize recommendations, search results, and discovery flows.',
             style: theme.textTheme.bodySmall?.copyWith(height: 1.45),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PreferencesFilters extends StatelessWidget {
+  const _PreferencesFilters({
+    required this.searchController,
+    required this.minScoreController,
+    required this.maxScoreController,
+    required this.selectedType,
+    required this.onTypeChanged,
+    required this.onApply,
+    required this.onClear,
+  });
+
+  final TextEditingController searchController;
+  final TextEditingController minScoreController;
+  final TextEditingController maxScoreController;
+  final String? selectedType;
+  final ValueChanged<String?> onTypeChanged;
+  final VoidCallback onApply;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppSurfaceCard(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          TextField(
+            controller: searchController,
+            decoration: const InputDecoration(
+              labelText: 'Search',
+              hintText: 'Search by preference ids',
+              prefixIcon: Icon(Icons.search_rounded),
+            ),
+            textInputAction: TextInputAction.search,
+            onSubmitted: (_) => onApply(),
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String>(
+            initialValue: selectedType,
+            decoration: const InputDecoration(
+              labelText: 'Type',
+            ),
+            items: const [
+              DropdownMenuItem<String>(
+                value: 'segment',
+                child: Text('Segment'),
+              ),
+              DropdownMenuItem<String>(
+                value: 'genre',
+                child: Text('Genre'),
+              ),
+              DropdownMenuItem<String>(
+                value: 'subgenre',
+                child: Text('Subgenre'),
+              ),
+            ],
+            onChanged: onTypeChanged,
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: minScoreController,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  decoration: const InputDecoration(
+                    labelText: 'Min score',
+                    hintText: '0',
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: TextField(
+                  controller: maxScoreController,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  decoration: const InputDecoration(
+                    labelText: 'Max score',
+                    hintText: '100',
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: onClear,
+                  icon: const Icon(Icons.restart_alt_rounded),
+                  label: const Text('Clear'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: onApply,
+                  icon: const Icon(Icons.filter_alt_rounded),
+                  label: const Text('Apply filters'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PaginationBar extends StatelessWidget {
+  const _PaginationBar({
+    required this.page,
+    required this.totalPages,
+    required this.totalCount,
+    required this.hasNextPage,
+    required this.hasPreviousPage,
+    required this.onPrevious,
+    required this.onNext,
+  });
+
+  final int page;
+  final int totalPages;
+  final int totalCount;
+  final bool hasNextPage;
+  final bool hasPreviousPage;
+  final VoidCallback onPrevious;
+  final VoidCallback onNext;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppSurfaceCard(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          Text('Page $page of $totalPages • $totalCount total items'),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: hasPreviousPage ? onPrevious : null,
+                  child: const Text('Previous'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: FilledButton(
+                  onPressed: hasNextPage ? onNext : null,
+                  child: const Text('Next'),
+                ),
+              ),
+            ],
           ),
         ],
       ),

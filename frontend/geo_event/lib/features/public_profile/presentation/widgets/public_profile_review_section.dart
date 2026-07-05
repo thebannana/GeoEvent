@@ -5,10 +5,16 @@ import '../../../../shared/public_profile/models/user_review.dart';
 
 class PublicProfileReviewsSection extends StatelessWidget {
   final List<UserReview> reviews;
+  final bool hasNextPage;
+  final bool isLoadingMore;
+  final VoidCallback onLoadMore;
 
   const PublicProfileReviewsSection({
     super.key,
     required this.reviews,
+    required this.hasNextPage,
+    required this.isLoadingMore,
+    required this.onLoadMore,
   });
 
   String _formatDate(DateTime value) {
@@ -94,6 +100,17 @@ class PublicProfileReviewsSection extends StatelessWidget {
                 ),
               );
             }),
+          if (hasNextPage || isLoadingMore) ...[
+            const SizedBox(height: 8),
+            Center(
+              child: isLoadingMore
+                  ? const CircularProgressIndicator()
+                  : OutlinedButton(
+                      onPressed: onLoadMore,
+                      child: const Text('Load more reviews'),
+                    ),
+            ),
+          ],
         ],
       ),
     );

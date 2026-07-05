@@ -86,9 +86,11 @@ class OnboardingPageContent extends StatelessWidget {
                                   Expanded(
                                     child: Text(
                                       bullet,
-                                      style: theme.textTheme.bodyMedium?.copyWith(
+                                      style:
+                                          theme.textTheme.bodyMedium?.copyWith(
                                         height: 1.45,
-                                        color: theme.colorScheme.onSurfaceVariant,
+                                        color:
+                                            theme.colorScheme.onSurfaceVariant,
                                       ),
                                     ),
                                   ),

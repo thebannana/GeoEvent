@@ -82,29 +82,36 @@ public class TicketServiceImpl : ITicketService
         }
     }
 
-    public async Task<ServiceResult<List<EventAttendeePreviewDto>>> GetPublicEventAttendeesAsync(int eventId)
+    public async Task<ServiceResult<PagedResult<EventAttendeePreviewDto>>> GetPublicEventAttendeesAsync(
+    int eventId,
+    PublicEventAttendeesFilterDto? filter)
     {
-        var reservations = await _repository.GetReservationsForEventAsync(eventId);
+        filter ??= new PublicEventAttendeesFilterDto();
 
-        var attendees = reservations
-            .Where(r => r.Status == ReservationStatus.Confirmed)
-            .GroupBy(r => r.UserId)
-            .Select(g => new EventAttendeePreviewDto
-            {
-                UserId = g.Key,
-                Quantity = g.Sum(x => x.Quantity)
-            })
-            .ToList();
+        var page = filter.Page <= 0 ? 1 : filter.Page;
+        var pageSize = filter.PageSize <= 0 ? 20 : Math.Min(filter.PageSize, 50);
 
-        if (attendees.Count == 0)
-            return ServiceResult<List<EventAttendeePreviewDto>>.Ok(attendees);
+        var pagedAttendees = await _repository.GetPublicEventAttendeesAsync(eventId, page, pageSize);
+        var items = pagedAttendees.Items.ToList();
+
+        if (!items.Any())
+        {
+            return ServiceResult<PagedResult<EventAttendeePreviewDto>>.Ok(
+                new PagedResult<EventAttendeePreviewDto>
+                {
+                    Items = items,
+                    TotalCount = 0,
+                    Page = page,
+                    PageSize = pageSize
+                });
+        }
 
         var profiles = await _userDirectoryService.GetPublicProfilesAsync(
-            attendees.Select(a => a.UserId).Distinct().ToList());
+            items.Select(a => a.UserId).Distinct().ToList());
 
         var profilesById = profiles.ToDictionary(x => x.UserId);
 
-        foreach (var attendee in attendees)
+        foreach (var attendee in items)
         {
             if (!profilesById.TryGetValue(attendee.UserId, out var profile))
                 continue;
@@ -113,7 +120,14 @@ public class TicketServiceImpl : ITicketService
             attendee.AvatarUrl = profile.ImageUrl;
         }
 
-        return ServiceResult<List<EventAttendeePreviewDto>>.Ok(attendees);
+        return ServiceResult<PagedResult<EventAttendeePreviewDto>>.Ok(
+            new PagedResult<EventAttendeePreviewDto>
+            {
+                Items = items,
+                TotalCount = pagedAttendees.TotalCount,
+                Page = pagedAttendees.Page,
+                PageSize = pagedAttendees.PageSize
+            });
     }
 
     public async Task CancelTicketsByEventAsync(int eventId)
@@ -184,6 +198,15 @@ public class TicketServiceImpl : ITicketService
 
         eventTicket.Reserve(dto.Quantity);
         await _repository.UpdateEventTicketAsync(eventTicket);
+
+        const string businessCurrency = "BAM";
+
+        if (!string.Equals(dto.Currency, businessCurrency, StringComparison.OrdinalIgnoreCase))
+        {
+            return ServiceResult<ReservationResponseDto>.Fail(
+                $"Currency mismatch. Expected {businessCurrency}.",
+                StatusCodes.Status400BadRequest);
+        }
 
         var reservation = new Reservation
         {
@@ -996,11 +1019,21 @@ public class TicketServiceImpl : ITicketService
         return ServiceResult<bool>.Ok(true);
     }
 
-    public async Task<ServiceResult<List<EventTicketResponseDto>>> GetEventTicketsAsync(int eventId)
+    public async Task<ServiceResult<PagedResult<EventTicketResponseDto>>> GetEventTicketsAsync(int eventId, int page, int pageSize)
     {
-        var tickets = await _repository.GetEventTicketsByEventAsync(eventId);
-        return ServiceResult<List<EventTicketResponseDto>>.Ok(
-            tickets.Select(MapToEventTicketResponse).ToList());
+        page = page <= 0 ? 1 : page;
+        pageSize = pageSize <= 0 ? 20 : Math.Min(pageSize, 50);
+
+        var paged = await _repository.GetEventTicketsByEventAsync(eventId, page, pageSize);
+
+        return ServiceResult<PagedResult<EventTicketResponseDto>>.Ok(
+            new PagedResult<EventTicketResponseDto>
+            {
+                Items = paged.Items.Select(MapToEventTicketResponse).ToList(),
+                TotalCount = paged.TotalCount,
+                Page = paged.Page,
+                PageSize = paged.PageSize
+            });
     }
 
     public async Task<ServiceResult<EventTicketResponseDto>> GetEventTicketAsync(int eventId, int eventTicketId)
@@ -1018,34 +1051,60 @@ public class TicketServiceImpl : ITicketService
         return ServiceResult<EventTicketResponseDto>.Ok(MapToEventTicketResponse(ticket));
     }
 
-    public async Task<ServiceResult<List<TicketResponseDto>>> GetTicketsByReservationAsync(
-        int reservationId, int userId)
+    public async Task<ServiceResult<PagedResult<TicketResponseDto>>> GetTicketsByReservationAsync(
+    int reservationId,
+    int userId,
+    int page,
+    int pageSize)
     {
+        page = page <= 0 ? 1 : page;
+        pageSize = pageSize <= 0 ? 20 : Math.Min(pageSize, 50);
+
         var reservation = await _repository.GetReservationByIdAsync(reservationId);
         if (reservation is null)
-            return ServiceResult<List<TicketResponseDto>>.NotFound("Reservation not found.");
+            return ServiceResult<PagedResult<TicketResponseDto>>.NotFound("Reservation not found.");
 
         if (reservation.UserId != userId)
-            return ServiceResult<List<TicketResponseDto>>.Forbidden("Not your reservation.");
+            return ServiceResult<PagedResult<TicketResponseDto>>.Forbidden("Not your reservation.");
 
-        var tickets = await _repository.GetTicketsByReservationAsync(reservationId);
-        return ServiceResult<List<TicketResponseDto>>.Ok(
-            tickets.Select(MapToTicketResponse).ToList());
+        var paged = await _repository.GetTicketsByReservationAsync(reservationId, page, pageSize);
+
+        return ServiceResult<PagedResult<TicketResponseDto>>.Ok(
+            new PagedResult<TicketResponseDto>
+            {
+                Items = paged.Items.Select(MapToTicketResponse).ToList(),
+                TotalCount = paged.TotalCount,
+                Page = paged.Page,
+                PageSize = paged.PageSize
+            });
     }
 
-    public async Task<ServiceResult<List<PaymentDetailResponseDto>>> GetReservationPaymentsAsync(
-        int reservationId, int userId)
+    public async Task<ServiceResult<PagedResult<PaymentDetailResponseDto>>> GetReservationPaymentsAsync(
+    int reservationId,
+    int userId,
+    int page,
+    int pageSize)
     {
+        page = page <= 0 ? 1 : page;
+        pageSize = pageSize <= 0 ? 20 : Math.Min(pageSize, 50);
+
         var reservation = await _repository.GetReservationByIdAsync(reservationId);
         if (reservation is null)
-            return ServiceResult<List<PaymentDetailResponseDto>>.NotFound("Reservation not found.");
+            return ServiceResult<PagedResult<PaymentDetailResponseDto>>.NotFound("Reservation not found.");
 
         if (reservation.UserId != userId)
-            return ServiceResult<List<PaymentDetailResponseDto>>.Forbidden("Not your reservation.");
+            return ServiceResult<PagedResult<PaymentDetailResponseDto>>.Forbidden("Not your reservation.");
 
-        var payments = await _repository.GetPaymentsByReservationAsync(reservationId);
-        return ServiceResult<List<PaymentDetailResponseDto>>.Ok(
-            payments.Select(MapToPaymentResponse).ToList());
+        var paged = await _repository.GetPaymentsByReservationAsync(reservationId, page, pageSize);
+
+        return ServiceResult<PagedResult<PaymentDetailResponseDto>>.Ok(
+            new PagedResult<PaymentDetailResponseDto>
+            {
+                Items = paged.Items.Select(MapToPaymentResponse).ToList(),
+                TotalCount = paged.TotalCount,
+                Page = paged.Page,
+                PageSize = paged.PageSize
+            });
     }
 
     public async Task<ServiceResult<bool>> CancelTicketAsync(int ticketId, int userId)

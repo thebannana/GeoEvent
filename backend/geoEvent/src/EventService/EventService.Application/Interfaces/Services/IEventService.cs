@@ -41,14 +41,14 @@ public interface IEventService
     Task<ServiceResult<SubGenreResponseDto>> CreateSubGenreAsync(CreateSubGenreDto dto);
     Task<ServiceResult<SubGenreResponseDto>> UpdateSubGenreAsync(int subGenreId, UpdateSubGenreDto dto);
 
-    Task<ServiceResult<List<BookmarkResponseDto>>> GetUserBookmarksAsync(int userId);
+    Task<ServiceResult<PagedResult<BookmarkResponseDto>>> GetUserBookmarksAsync(int userId, BookmarkFilterDto filter);
     Task<ServiceResult<BookmarkResponseDto>> CreateBookmarkAsync(CreateBookmarkDto dto, int userId);
     Task<ServiceResult<BookmarkResponseDto>> UpdateBookmarkAsync(int bookmarkId, UpdateBookmarkDto dto, int userId);
     Task<ServiceResult<bool>> DeleteBookmarkAsync(int bookmarkId, int userId);
 
     Task<ServiceResult<CommentResponseDto>> GetCommentByIdAsync(int commentId, int? requesterId = null);
-    Task<ServiceResult<List<CommentResponseDto>>> GetEventCommentsAsync(int eventId, int? requesterId = null);
-    Task<ServiceResult<List<CommentResponseDto>>> GetRepliesAsync(int commentId, int? requesterId = null);
+    Task<ServiceResult<PagedResult<CommentResponseDto>>> GetEventCommentsAsync(int eventId, int page, int pageSize, int? requesterId = null);
+    Task<ServiceResult<PagedResult<CommentResponseDto>>> GetRepliesAsync(int commentId, int page, int pageSize, int? requesterId = null);
     Task<ServiceResult<CommentResponseDto>> CreateCommentAsync(CreateCommentDto dto, int userId);
     Task<ServiceResult<CommentResponseDto>> UpdateCommentAsync(int commentId, UpdateCommentDto dto, int userId);
     Task<ServiceResult<bool>> DeleteCommentAsync(int commentId, int userId);

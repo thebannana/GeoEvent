@@ -19,6 +19,7 @@ public class NotificationRepository : INotificationRepository
     public async Task<Notification?> GetByIdAsync(int notificationId)
     {
         return await context.Notifications
+            .AsNoTracking()
             .FirstOrDefaultAsync(n => n.NotificationId == notificationId);
     }
 
@@ -26,22 +27,23 @@ public class NotificationRepository : INotificationRepository
         int userId,
         NotificationFilterDto filter)
     {
+        filter ??= new NotificationFilterDto();
+
         var page = filter.Page <= 0 ? 1 : filter.Page;
         var pageSize = filter.PageSize <= 0 ? 20 : Math.Min(filter.PageSize, 100);
 
         var query = context.Notifications
+            .AsNoTracking()
             .Where(n => n.UserId == userId);
 
         if (filter.IsRead.HasValue)
-        {
             query = query.Where(n => n.IsRead == filter.IsRead.Value);
-        }
-
-        query = query.OrderByDescending(n => n.CreatedAt);
 
         var total = await query.CountAsync();
 
         var items = await query
+            .OrderByDescending(n => n.CreatedAt)
+            .ThenByDescending(n => n.NotificationId)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync();
@@ -58,6 +60,7 @@ public class NotificationRepository : INotificationRepository
     public async Task<int> GetUnreadCountAsync(int userId)
     {
         return await context.Notifications
+            .AsNoTracking()
             .CountAsync(n => n.UserId == userId && !n.IsRead);
     }
 

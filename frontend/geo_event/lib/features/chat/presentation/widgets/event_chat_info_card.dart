@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/utils/date_time_extensions.dart';
 import '../../../../shared/chat/models/chat_event_info.dart';
 
 class EventChatInfoCard extends StatelessWidget {
@@ -20,9 +21,9 @@ class EventChatInfoCard extends StatelessWidget {
     final colorScheme = theme.colorScheme;
 
     final subtitleParts = <String>[
-      if (info.startsAt != null) _formatDate(info.startsAt!),
+      if (info.startsAt != null) info.startsAt!.formatEventDateTime(),
     ];
-
+    
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 12, 16, 8),
       padding: const EdgeInsets.all(14),
@@ -80,13 +81,6 @@ class EventChatInfoCard extends StatelessWidget {
         ],
       ),
     );
-  }
-
-  static String _formatDate(DateTime value) {
-    final local = value.toLocal();
-    final h = local.hour.toString().padLeft(2, '0');
-    final m = local.minute.toString().padLeft(2, '0');
-    return '${local.day.toString().padLeft(2, '0')}.${local.month.toString().padLeft(2, '0')} $h:$m';
   }
 }
 

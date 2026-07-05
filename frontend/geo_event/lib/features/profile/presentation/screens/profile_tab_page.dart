@@ -5,7 +5,7 @@ import '../../../../core/widgets/async/app_async_view.dart';
 import '../../../../core/widgets/feedback/app_confirm_dialog.dart';
 import '../../../../core/widgets/feedback/app_error_state.dart';
 import '../../../../core/widgets/feedback/app_loading_indicator.dart';
-import '../../../../shared/bookmarks/providers/bookmark_providers.dart';
+import '../../../../shared/bookmarks/application/bookmark_controller.dart';
 import '../../../../shared/likes/providers/liked_events_providers.dart';
 import '../../../../shared/profile/providers/profile_providers.dart';
 import '../../../auth/application/auth_controller.dart';

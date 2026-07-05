@@ -27,7 +27,7 @@ class Bookmark {
           : 'Saved event',
       imageUrl: json['imageUrl']?.toString() ?? '',
       savedAt: DateTime.tryParse(savedAtRaw?.toString() ?? '') ?? DateTime.now(),
-      memo: _normalizeNullableString(json['memo']),
+      memo: normalizeNullableString(json['memo']),
       eventId: (json['eventId'] as num?)?.toInt(),
       userId: (json['userId'] as num?)?.toInt(),
     );
@@ -60,13 +60,13 @@ class Bookmark {
       title: title ?? this.title,
       imageUrl: imageUrl ?? this.imageUrl,
       savedAt: savedAt ?? this.savedAt,
-      memo: clearMemo ? null : (memo ?? this.memo),
+      memo: clearMemo ? null : memo ?? this.memo,
       eventId: eventId ?? this.eventId,
       userId: userId ?? this.userId,
     );
   }
 
-  static String? _normalizeNullableString(dynamic value) {
+  static String? normalizeNullableString(dynamic value) {
     final text = value?.toString().trim();
     if (text == null || text.isEmpty) return null;
     return text;

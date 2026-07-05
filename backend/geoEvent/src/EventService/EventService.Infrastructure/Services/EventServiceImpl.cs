@@ -31,6 +31,54 @@ public class EventServiceImpl : IEventService
         _logger = logger;
     }
 
+    public async Task<ServiceResult<PagedResult<CommentResponseDto>>> GetEventCommentsAsync(
+    int eventId,
+    int page,
+    int pageSize,
+    int? requesterId = null)
+    {
+        page = page <= 0 ? 1 : page;
+        pageSize = pageSize <= 0 ? 20 : Math.Min(pageSize, 50);
+
+        var pagedComments = await _eventRepository.GetEventCommentsAsync(eventId, page, pageSize);
+        var mapped = pagedComments.Items.Select(c => MapComment(c, includeReplies: false)).ToList();
+
+        await EnrichCommentsAsync(mapped, requesterId);
+
+        return ServiceResult<PagedResult<CommentResponseDto>>.Ok(
+            new PagedResult<CommentResponseDto>
+            {
+                Items = mapped,
+                TotalCount = pagedComments.TotalCount,
+                Page = pagedComments.Page,
+                PageSize = pagedComments.PageSize
+            });
+    }
+
+    public async Task<ServiceResult<PagedResult<CommentResponseDto>>> GetRepliesAsync(
+        int commentId,
+        int page,
+        int pageSize,
+        int? requesterId = null)
+    {
+        page = page <= 0 ? 1 : page;
+        pageSize = pageSize <= 0 ? 20 : Math.Min(pageSize, 50);
+
+        var pagedReplies = await _eventRepository.GetRepliesAsync(commentId, page, pageSize);
+        var mapped = pagedReplies.Items.Select(c => MapComment(c, includeReplies: false)).ToList();
+
+        await EnrichCommentsAsync(mapped, requesterId);
+
+        return ServiceResult<PagedResult<CommentResponseDto>>.Ok(
+            new PagedResult<CommentResponseDto>
+            {
+                Items = mapped,
+                TotalCount = pagedReplies.TotalCount,
+                Page = pagedReplies.Page,
+                PageSize = pagedReplies.PageSize
+            });
+    }
+
     public async Task<ServiceResult<PagedResult<EventResponseDto>>> GetAllAsync(EventFilterDto filter)
     {
         filter ??= new EventFilterDto();
@@ -55,74 +103,85 @@ public class EventServiceImpl : IEventService
         filter.Status = EventStatus.Confirmed;
         filter.OrganizerId = null;
 
+        var page = filter.Page <= 0 ? 1 : filter.Page;
+        var pageSize = filter.PageSize <= 0 ? 20 : Math.Min(filter.PageSize, 50);
+        filter.Page = page;
+        filter.PageSize = pageSize;
+
         if (!requesterId.HasValue)
         {
-            var defaultResult = await _eventRepository.GetAllAsync(filter);
+            var result = await _eventRepository.GetAllAsync(filter);
 
-            return ServiceResult<PagedResult<EventResponseDto>>.Ok(new PagedResult<EventResponseDto>
-            {
-                Items = defaultResult.Items.Select(ev => MapToDto(ev, false)).ToList(),
-                TotalCount = defaultResult.TotalCount,
-                Page = defaultResult.Page,
-                PageSize = defaultResult.PageSize
-            });
+            return ServiceResult<PagedResult<EventResponseDto>>.Ok(
+                new PagedResult<EventResponseDto>
+                {
+                    Items = result.Items.Select(ev => MapToDto(ev, false)).ToList(),
+                    TotalCount = result.TotalCount,
+                    Page = result.Page,
+                    PageSize = result.PageSize
+                });
         }
 
         var preferences = await _userProfileService.GetUserPreferencesAsync(requesterId.Value);
 
         if (preferences.Count == 0)
         {
-            var defaultResult = await _eventRepository.GetAllAsync(filter);
+            var result = await _eventRepository.GetAllAsync(filter);
+            var mapped = new List<EventResponseDto>();
 
-            var itemsWithoutPrefs = new List<EventResponseDto>();
-            foreach (var ev in defaultResult.Items)
+            foreach (var ev in result.Items)
             {
                 var isLiked = await _eventRepository.IsLikedByUserAsync(ev.EventId, requesterId.Value);
-                itemsWithoutPrefs.Add(MapToDto(ev, isLiked));
+                mapped.Add(MapToDto(ev, isLiked));
             }
 
-            return ServiceResult<PagedResult<EventResponseDto>>.Ok(new PagedResult<EventResponseDto>
-            {
-                Items = itemsWithoutPrefs,
-                TotalCount = defaultResult.TotalCount,
-                Page = defaultResult.Page,
-                PageSize = defaultResult.PageSize
-            });
+            return ServiceResult<PagedResult<EventResponseDto>>.Ok(
+                new PagedResult<EventResponseDto>
+                {
+                    Items = mapped,
+                    TotalCount = result.TotalCount,
+                    Page = result.Page,
+                    PageSize = result.PageSize
+                });
         }
 
-        var candidates = await _eventRepository.GetPublicCandidatesAsync(filter, 200);
+        var personalizedCandidates = await _eventRepository.GetPublicCandidatesAsync(filter);
 
-        var ranked = candidates
-            .Select(ev => new { Event = ev, Score = CalculatePreferenceScore(ev, preferences) })
+        var ranked = personalizedCandidates
+            .Select(ev => new
+            {
+                Event = ev,
+                Score = CalculatePreferenceScore(ev, preferences)
+            })
             .OrderByDescending(x => x.Score)
             .ThenBy(x => x.Event.StartDateTime)
             .ThenByDescending(x => x.Event.LikesCount)
             .ThenBy(x => x.Event.EventId)
             .ToList();
 
-        var page = filter.Page <= 0 ? 1 : filter.Page;
-        var pageSize = filter.PageSize <= 0 ? 20 : Math.Min(filter.PageSize, 100);
+        var totalCount = ranked.Count;
 
-        var pagedItems = ranked
+        var paged = ranked
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToList();
 
-        var resultItems = new List<EventResponseDto>();
+        var personalizedItems = new List<EventResponseDto>(paged.Count);
 
-        foreach (var item in pagedItems)
+        foreach (var item in paged)
         {
             var isLiked = await _eventRepository.IsLikedByUserAsync(item.Event.EventId, requesterId.Value);
-            resultItems.Add(MapToDto(item.Event, isLiked));
+            personalizedItems.Add(MapToDto(item.Event, isLiked));
         }
 
-        return ServiceResult<PagedResult<EventResponseDto>>.Ok(new PagedResult<EventResponseDto>
-        {
-            Items = resultItems,
-            TotalCount = ranked.Count,
-            Page = page,
-            PageSize = pageSize
-        });
+        return ServiceResult<PagedResult<EventResponseDto>>.Ok(
+            new PagedResult<EventResponseDto>
+            {
+                Items = personalizedItems,
+                TotalCount = totalCount,
+                Page = page,
+                PageSize = pageSize
+            });
     }
 
     public async Task<ServiceResult<EventResponseDto>> GetPublicByIdAsync(int eventId, int? requesterId = null)
@@ -149,12 +208,12 @@ public class EventServiceImpl : IEventService
 
     public async Task<ServiceResult<PagedResult<LikedEventResponseDto>>> GetLikedEventsAsync(int userId, int page, int pageSize)
     {
-        var likes = await _eventRepository.GetLikedEventsByUserAsync(userId);
+        page = page <= 0 ? 1 : page;
+        pageSize = pageSize <= 0 ? 20 : Math.Min(pageSize, 50);
 
-        var totalCount = likes.Count;
-        var pagedLikes = likes.Skip((page - 1) * pageSize).Take(pageSize).ToList();
+        var pagedLikes = await _eventRepository.GetLikedEventsByUserAsync(userId, page, pageSize);
 
-        var items = pagedLikes
+        var items = pagedLikes.Items
             .Select(x => new LikedEventResponseDto
             {
                 EventId = x.EventId,
@@ -166,13 +225,14 @@ public class EventServiceImpl : IEventService
             })
             .ToList();
 
-        return ServiceResult<PagedResult<LikedEventResponseDto>>.Ok(new PagedResult<LikedEventResponseDto>
-        {
-            Items = items,
-            TotalCount = totalCount,
-            Page = page,
-            PageSize = pageSize
-        });
+        return ServiceResult<PagedResult<LikedEventResponseDto>>.Ok(
+            new PagedResult<LikedEventResponseDto>
+            {
+                Items = items,
+                TotalCount = pagedLikes.TotalCount,
+                Page = pagedLikes.Page,
+                PageSize = pagedLikes.PageSize
+            });
     }
 
     public async Task<ServiceResult<List<EventResponseDto>>> GetNearbyPublicAsync(NearbyEventSearchDto dto)
@@ -740,11 +800,27 @@ public class EventServiceImpl : IEventService
         }
     }
 
-    public async Task<ServiceResult<List<BookmarkResponseDto>>> GetUserBookmarksAsync(int userId)
+    public async Task<ServiceResult<PagedResult<BookmarkResponseDto>>> GetUserBookmarksAsync(
+        int userId,
+        BookmarkFilterDto filter)
     {
-        var bookmarks = await _eventRepository.GetUserBookmarksAsync(userId);
-        return ServiceResult<List<BookmarkResponseDto>>.Ok(bookmarks.Select(MapBookmark).ToList());
+        filter ??= new BookmarkFilterDto();
+
+        var page = filter.Page <= 0 ? 1 : filter.Page;
+        var pageSize = filter.PageSize <= 0 ? 20 : Math.Min(filter.PageSize, 50);
+
+        var pagedBookmarks = await _eventRepository.GetUserBookmarksAsync(userId, page, pageSize);
+
+        return ServiceResult<PagedResult<BookmarkResponseDto>>.Ok(
+            new PagedResult<BookmarkResponseDto>
+            {
+                Items = pagedBookmarks.Items.Select(MapBookmark).ToList(),
+                TotalCount = pagedBookmarks.TotalCount,
+                Page = pagedBookmarks.Page,
+                PageSize = pagedBookmarks.PageSize
+            });
     }
+
 
     public async Task<ServiceResult<BookmarkResponseDto>> CreateBookmarkAsync(CreateBookmarkDto dto, int userId)
     {
@@ -823,26 +899,6 @@ public class EventServiceImpl : IEventService
 
         await _eventRepository.DeleteBookmarkAsync(bookmark);
         return ServiceResult<bool>.Ok(true);
-    }
-
-    public async Task<ServiceResult<List<CommentResponseDto>>> GetEventCommentsAsync(int eventId, int? requesterId = null)
-    {
-        var comments = await _eventRepository.GetEventCommentsAsync(eventId);
-        var mapped = comments.Select(MapComment).ToList();
-
-        await EnrichCommentsAsync(mapped, requesterId);
-
-        return ServiceResult<List<CommentResponseDto>>.Ok(mapped);
-    }
-
-    public async Task<ServiceResult<List<CommentResponseDto>>> GetRepliesAsync(int commentId, int? requesterId = null)
-    {
-        var replies = await _eventRepository.GetRepliesAsync(commentId);
-        var mapped = replies.Select(MapComment).ToList();
-
-        await EnrichCommentsAsync(mapped, requesterId);
-
-        return ServiceResult<List<CommentResponseDto>>.Ok(mapped);
     }
 
     public async Task<ServiceResult<CommentResponseDto>> GetCommentByIdAsync(int commentId, int? requesterId = null)
@@ -1076,6 +1132,36 @@ public class EventServiceImpl : IEventService
         }
     }
 
+    private static CommentResponseDto MapComment(Comment c, bool includeReplies = false)
+    {
+        var visibleReplies = includeReplies
+            ? c.Replies
+                .Where(r => !r.IsDeleted)
+                .Select(r => MapComment(r, includeReplies: true))
+                .ToList()
+            : new List<CommentResponseDto>();
+
+        return new CommentResponseDto
+        {
+            CommentId = c.CommentId,
+            Content = c.IsDeleted ? "[deleted]" : c.Content,
+            LikesCount = c.LikesCount,
+            UserId = c.IsDeleted ? null : c.UserId,
+            EventId = c.EventId,
+            CreatedAt = c.CreatedAt,
+            UpdatedAt = c.UpdatedAt,
+            IsDeleted = c.IsDeleted,
+            IsReply = c.IsReply,
+            ParentCommentId = c.ParentCommentId,
+            ReplyCount = c.Replies?.Count(r => !r.IsDeleted) ?? 0,
+            Replies = visibleReplies,
+            Username = null,
+            DisplayName = null,
+            AvatarUrl = null,
+            IsLiked = false
+        };
+    }
+
     private static IEnumerable<CommentResponseDto> FlattenComments(IEnumerable<CommentResponseDto> comments)
     {
         foreach (var comment in comments)
@@ -1175,13 +1261,11 @@ public class EventServiceImpl : IEventService
         Capacity = ev.Capacity,
         Price = ev.Price,
         Status = ev.Status.ToString(),
-        IsOnline = ev.IsOnline,
         IsFeatured = ev.IsFeatured,
         ViewCount = ev.ViewCount,
         LikesCount = ev.LikesCount,
         IsLiked = isLiked,
         Tags = ev.Tags,
-        ExternalUrl = ev.ExternalUrl,
         AccessibilityInfo = ev.AccessibilityInfo,
         PromoterName = ev.PromoterName,
         Locale = ev.Locale,

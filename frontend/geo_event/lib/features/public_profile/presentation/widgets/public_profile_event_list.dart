@@ -5,11 +5,17 @@ import '../../../../shared/public_profile/models/public_profile_event.dart';
 class PublicProfileEventList extends StatelessWidget {
   final List<PublicProfileEvent> events;
   final ValueChanged<int> onEventTap;
+  final bool hasNextPage;
+  final bool isLoadingMore;
+  final VoidCallback onLoadMore;
 
   const PublicProfileEventList({
     super.key,
     required this.events,
     required this.onEventTap,
+    required this.hasNextPage,
+    required this.isLoadingMore,
+    required this.onLoadMore,
   });
 
   Color _segmentColor(BuildContext context, PublicProfileEvent item) {
@@ -48,161 +54,178 @@ class PublicProfileEventList extends StatelessWidget {
     final colorScheme = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
 
-    return SliverList.separated(
-      itemCount: events.length,
-      separatorBuilder: (_, _) => const SizedBox(height: 10),
-      itemBuilder: (context, index) {
-        final item = events[index];
+    return SliverList(
+      delegate: SliverChildListDelegate([
+        ...List.generate(events.length, (index) {
+          final item = events[index];
 
-        final subtitleParts = <String>[
-          if ((item.segmentName ?? '').trim().isNotEmpty) item.segmentName!.trim(),
-          if ((item.genreName ?? '').trim().isNotEmpty) item.genreName!.trim(),
-          if ((item.subGenreName ?? '').trim().isNotEmpty)
-            item.subGenreName!.trim(),
-        ];
-        final subtitle = subtitleParts.join(' · ');
+          final subtitleParts = <String>[
+            if ((item.segmentName ?? '').trim().isNotEmpty)
+              item.segmentName!.trim(),
+            if ((item.genreName ?? '').trim().isNotEmpty)
+              item.genreName!.trim(),
+            if ((item.subGenreName ?? '').trim().isNotEmpty)
+              item.subGenreName!.trim(),
+          ];
+          final subtitle = subtitleParts.join(' · ');
 
-        final accent = _segmentColor(context, item);
-        final imageUrl = (item.primaryImage ?? '').trim();
+          final accent = _segmentColor(context, item);
+          final imageUrl = (item.primaryImage ?? '').trim();
 
-        final infoParts = <String>[
-          if ((item.resolvedLocationName ?? '').trim().isNotEmpty)
-            item.resolvedLocationName!.trim(),
-          if (item.startDateTime != null) _formatDate(item.startDateTime),
-        ];
-        final infoText = infoParts.join(' · ');
+          final infoParts = <String>[
+            if ((item.resolvedLocationName ?? '').trim().isNotEmpty)
+              item.resolvedLocationName!.trim(),
+            if (item.startDateTime != null) _formatDate(item.startDateTime),
+          ];
+          final infoText = infoParts.join(' · ');
 
-        return Material(
-          color: Colors.transparent,
-          borderRadius: BorderRadius.circular(18),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(18),
-            onTap: () => onEventTap(item.eventId),
-            child: Ink(
-              decoration: BoxDecoration(
-                color: colorScheme.surface,
+          return Padding(
+            padding: EdgeInsets.only(bottom: index == events.length - 1 ? 0 : 10),
+            child: Material(
+              color: Colors.transparent,
+              borderRadius: BorderRadius.circular(18),
+              child: InkWell(
                 borderRadius: BorderRadius.circular(18),
-                border: Border.all(
-                  color: colorScheme.outlineVariant.withValues(alpha: 0.8),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: isDark ? 0.10 : 0.04),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(0, 0, 12, 0),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    ClipRRect(
-                      borderRadius: const BorderRadius.only(
-                        topLeft: Radius.circular(18),
-                        bottomLeft: Radius.circular(18),
-                      ),
-                      child: SizedBox(
-                        width: 82,
-                        height: 110,
-                        child: imageUrl.isNotEmpty
-                            ? Image.network(
-                                imageUrl,
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, _, _) {
-                                  return _FallbackImage(accent: accent);
-                                },
-                              )
-                            : _FallbackImage(accent: accent),
-                      ),
+                onTap: () => onEventTap(item.eventId),
+                child: Ink(
+                  decoration: BoxDecoration(
+                    color: colorScheme.surface,
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(
+                      color: colorScheme.outlineVariant.withValues(alpha: 0.8),
                     ),
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(12, 11, 12, 11),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              item.title,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.titleSmall?.copyWith(
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            if (subtitle.isNotEmpty) ...[
-                              const SizedBox(height: 4),
-                              Text(
-                                subtitle,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: colorScheme.onSurfaceVariant,
-                                ),
-                              ),
-                            ],
-                            if (infoText.isNotEmpty) ...[
-                              const SizedBox(height: 4),
-                              Text(
-                                infoText,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: colorScheme.onSurfaceVariant,
-                                ),
-                              ),
-                            ],
-                            const SizedBox(height: 8),
-                            Wrap(
-                              spacing: 10,
-                              runSpacing: 4,
-                              crossAxisAlignment: WrapCrossAlignment.center,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: isDark ? 0.10 : 0.04),
+                        blurRadius: 12,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(0, 0, 12, 0),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        ClipRRect(
+                          borderRadius: const BorderRadius.only(
+                            topLeft: Radius.circular(18),
+                            bottomLeft: Radius.circular(18),
+                          ),
+                          child: SizedBox(
+                            width: 82,
+                            height: 110,
+                            child: imageUrl.isNotEmpty
+                                ? Image.network(
+                                    imageUrl,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, _, _) {
+                                      return _FallbackImage(accent: accent);
+                                    },
+                                  )
+                                : _FallbackImage(accent: accent),
+                          ),
+                        ),
+                        Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(12, 11, 12, 11),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
                               children: [
-                                _InlineStat(
-                                  icon: Icons.favorite_border_rounded,
-                                  value: item.likesCount.toString(),
+                                Text(
+                                  item.title,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.titleSmall?.copyWith(
+                                    fontWeight: FontWeight.w700,
+                                  ),
                                 ),
-                                _InlineStat(
-                                  icon: Icons.remove_red_eye_outlined,
-                                  value: item.viewCount.toString(),
+                                if (subtitle.isNotEmpty) ...[
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    subtitle,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      color: colorScheme.onSurfaceVariant,
+                                    ),
+                                  ),
+                                ],
+                                if (infoText.isNotEmpty) ...[
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    infoText,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      color: colorScheme.onSurfaceVariant,
+                                    ),
+                                  ),
+                                ],
+                                const SizedBox(height: 8),
+                                Wrap(
+                                  spacing: 10,
+                                  runSpacing: 4,
+                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                  children: [
+                                    _InlineStat(
+                                      icon: Icons.favorite_border_rounded,
+                                      value: item.likesCount.toString(),
+                                    ),
+                                    _InlineStat(
+                                      icon: Icons.remove_red_eye_outlined,
+                                      value: item.viewCount.toString(),
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.only(top: 10),
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: colorScheme.surfaceContainerHighest,
-                          borderRadius: BorderRadius.circular(9),
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 5,
                           ),
-                          child: Text(
-                            _formatPrice(item.price),
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: colorScheme.onSurface,
-                              fontWeight: FontWeight.w700,
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.only(top: 10),
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: colorScheme.surfaceContainerHighest,
+                              borderRadius: BorderRadius.circular(9),
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 5,
+                              ),
+                              child: Text(
+                                _formatPrice(item.price),
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: colorScheme.onSurface,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
                             ),
                           ),
                         ),
-                      ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
               ),
             ),
+          );
+        }),
+        if (hasNextPage || isLoadingMore)
+          Padding(
+            padding: const EdgeInsets.only(top: 14, bottom: 4),
+            child: Center(
+              child: isLoadingMore
+                  ? const CircularProgressIndicator()
+                  : OutlinedButton(
+                      onPressed: onLoadMore,
+                      child: const Text('Load more events'),
+                    ),
+            ),
           ),
-        );
-      },
+      ]),
     );
   }
 }

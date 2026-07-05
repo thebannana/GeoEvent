@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../../../core/widgets/feedback/app_spinner.dart';
+import '../../../../core/widgets/layout/app_scaffold.dart';
 import '../../../../core/widgets/layout/app_bottom_sheet_container.dart';
 import '../../../../shared/profile/providers/profile_providers.dart';
 import '../widgets/ticket_scan_result_sheet.dart';
@@ -96,7 +97,7 @@ class _TicketScannerScreenState extends ConsumerState<TicketScannerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return AppScaffold(
       appBar: AppBar(
         title: Text(widget.eventTitle),
         actions: [
@@ -109,7 +110,7 @@ class _TicketScannerScreenState extends ConsumerState<TicketScannerScreen> {
           ),
         ],
       ),
-      body: Stack(
+      child: Stack(
         children: [
           Positioned.fill(
             child: MobileScanner(

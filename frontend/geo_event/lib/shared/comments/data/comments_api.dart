@@ -1,27 +1,68 @@
 import 'package:dio/dio.dart';
 
-import '../../../core/errors/error_mapper.dart';
-import '../../../core/network/api_endpoints.dart';
+import '../../../../core/errors/error_mapper.dart';
+import '../../../../core/network/api_endpoints.dart';
 import '../models/comment_item.dart';
+import '../models/paged_response.dart';
 
 class CommentsApi {
   const CommentsApi(this._dio);
 
   final Dio _dio;
+  static const int maxPageSize = 50;
+  static const int defaultPageSize = 20;
 
-  Future<List<CommentItem>> getEventComments(int eventId) async {
+  Future<PagedResponse<CommentItem>> getEventComments(
+    int eventId, {
+    int page = 1,
+    int pageSize = defaultPageSize,
+  }) async {
     try {
-      final response = await _dio.get(ApiEndpoints.commentsForEvent(eventId));
-      return _parseList(response.data);
+      final safePage = page <= 0 ? 1 : page;
+      final safePageSize = pageSize <= 0
+          ? defaultPageSize
+          : (pageSize > maxPageSize ? maxPageSize : pageSize);
+
+      final response = await _dio.get(
+        ApiEndpoints.commentsForEvent(eventId),
+        queryParameters: {
+          'page': safePage,
+          'pageSize': safePageSize,
+        },
+      );
+
+      return PagedResponse<CommentItem>.fromJson(
+        _asMap(response.data),
+        CommentItem.fromJson,
+      );
     } catch (e, st) {
       throw ErrorMapper.toAppException(e, stackTrace: st);
     }
   }
 
-  Future<List<CommentItem>> getReplies(int commentId) async {
+  Future<PagedResponse<CommentItem>> getReplies(
+    int commentId, {
+    int page = 1,
+    int pageSize = defaultPageSize,
+  }) async {
     try {
-      final response = await _dio.get(ApiEndpoints.commentReplies(commentId));
-      return _parseList(response.data);
+      final safePage = page <= 0 ? 1 : page;
+      final safePageSize = pageSize <= 0
+          ? defaultPageSize
+          : (pageSize > maxPageSize ? maxPageSize : pageSize);
+
+      final response = await _dio.get(
+        ApiEndpoints.commentReplies(commentId),
+        queryParameters: {
+          'page': safePage,
+          'pageSize': safePageSize,
+        },
+      );
+
+      return PagedResponse<CommentItem>.fromJson(
+        _asMap(response.data),
+        CommentItem.fromJson,
+      );
     } catch (e, st) {
       throw ErrorMapper.toAppException(e, stackTrace: st);
     }
@@ -41,6 +82,7 @@ class CommentsApi {
           'parentCommentId': ?parentCommentId,
         },
       );
+
       return CommentItem.fromJson(_asMap(response.data));
     } catch (e, st) {
       throw ErrorMapper.toAppException(e, stackTrace: st);
@@ -56,6 +98,7 @@ class CommentsApi {
         ApiEndpoints.commentById(commentId),
         data: {'content': content},
       );
+
       return CommentItem.fromJson(_asMap(response.data));
     } catch (e, st) {
       throw ErrorMapper.toAppException(e, stackTrace: st);
@@ -90,34 +133,5 @@ class CommentsApi {
     if (raw is Map<String, dynamic>) return raw;
     if (raw is Map) return Map<String, dynamic>.from(raw);
     throw const FormatException('Invalid response format.');
-  }
-
-  static List<CommentItem> _parseList(dynamic raw) {
-    final maps = _extractMaps(raw);
-    return maps.map(CommentItem.fromJson).toList(growable: false);
-  }
-
-  static List<Map<String, dynamic>> _extractMaps(dynamic raw) {
-    if (raw is List) {
-      return raw
-          .whereType<Map>()
-          .map((e) => Map<String, dynamic>.from(e))
-          .toList(growable: false);
-    }
-
-    if (raw is Map) {
-      final map = Map<String, dynamic>.from(raw);
-      for (final key in ['items', 'data', 'results', 'comments', 'replies']) {
-        final value = map[key];
-        if (value is List) {
-          return value
-              .whereType<Map>()
-              .map((e) => Map<String, dynamic>.from(e))
-              .toList(growable: false);
-        }
-      }
-    }
-
-    return const [];
   }
 }

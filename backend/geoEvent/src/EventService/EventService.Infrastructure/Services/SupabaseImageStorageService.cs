@@ -7,6 +7,15 @@ namespace EventService.Infrastructure.Services;
 
 public class SupabaseImageStorageService : IImageStorageService
 {
+    private static readonly HashSet<string> AllowedExtensions =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            ".jpg",
+            ".jpeg",
+            ".png",
+            ".webp"
+        };
+
     private readonly HttpClient _httpClient;
     private readonly SupabaseStorageSettings _settings;
 
@@ -48,7 +57,12 @@ public class SupabaseImageStorageService : IImageStorageService
         }
 
         var extension = Path.GetExtension(fileName);
-        var safeName = $"{Guid.NewGuid():N}{extension}";
+        if (string.IsNullOrWhiteSpace(extension) || !AllowedExtensions.Contains(extension))
+        {
+            throw new InvalidOperationException("Only JPG, PNG, and WEBP images are allowed.");
+        }
+
+        var safeName = $"{Guid.NewGuid():N}{extension.ToLowerInvariant()}";
         var objectPath = $"{folder.Trim('/')}/{safeName}";
 
         using var content = new StreamContent(stream);

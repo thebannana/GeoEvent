@@ -12,7 +12,7 @@ import '../../../../core/widgets/layout/app_scaffold.dart';
 import '../../../../core/widgets/surfaces/app_surface_card.dart';
 import '../../../../shared/events/models/create_event_models.dart';
 import '../../../../shared/events/models/create_event_state.dart';
-import '../../../../shared/events/models/my_event_response_dto.dart';
+import '../../../../shared/my_events/models/my_event_response_dto.dart';
 import '../../../../shared/events/providers/event_refresh_providers.dart';
 import '../../../../shared/location/providers/location_providers.dart';
 import '../../../create_event/application/create_event_controller.dart';
@@ -699,6 +699,32 @@ class _RemovableRemoteEventImage extends StatelessWidget {
   final bool submitting;
   final ValueChanged<int> onRemove;
 
+  Future<void> _confirmRemove(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Remove image?'),
+        content: const Text(
+          'This image will be removed from the event.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      onRemove(image.imageId);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -743,7 +769,7 @@ class _RemovableRemoteEventImage extends StatelessWidget {
             shape: const CircleBorder(),
             child: InkWell(
               customBorder: const CircleBorder(),
-              onTap: submitting ? null : () => onRemove(image.imageId),
+              onTap: submitting ? null : () => _confirmRemove(context),
               child: const Padding(
                 padding: EdgeInsets.all(6),
                 child: Icon(

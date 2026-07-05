@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../shared/events/data/events_repository.dart';
 import '../../../shared/events/models/create_event_models.dart';
 import '../../../shared/events/models/create_event_state.dart';
-import '../../../shared/events/models/my_event_response_dto.dart';
+import '../../../shared/my_events/models/my_event_response_dto.dart';
 import '../../../shared/events/providers/event_providers.dart';
 
 final createEventControllerProvider =

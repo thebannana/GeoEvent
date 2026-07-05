@@ -1,7 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../models/organizer_reservation.dart';
-import '../models/reservation_status.dart';
+import '../../reservations/models/reservation_status.dart';
 import 'organizer_reservations_api.dart';
 
 final organizerReservationsRepositoryProvider =
@@ -16,10 +15,10 @@ class OrganizerReservationsRepository {
 
   final OrganizerReservationsApi _api;
 
-  Future<List<OrganizerReservationDto>> getEventReservations(
+  Future<PagedOrganizerReservationsResponse> getEventReservations(
     int eventId, {
     int page = 1,
-    int pageSize = 100,
+    int pageSize = OrganizerReservationsApi.defaultPageSize,
     ReservationStatus? status,
   }) {
     return _api.getEventReservations(

@@ -8,6 +8,7 @@ import '../data/profile_api.dart';
 import '../data/profile_repository.dart';
 import '../data/ticket_scanner_api.dart';
 import '../data/ticket_scanner_repository.dart';
+import '../models/preferences_query.dart';
 import '../models/user_preference.dart';
 
 final profileApiProvider = Provider<ProfileApi>((ref) {
@@ -42,7 +43,14 @@ final myPreferencesProvider = FutureProvider<List<UserPreference>>((ref) async {
     return const <UserPreference>[];
   }
 
-  return ref.read(preferencesRepositoryProvider).getPreferences();
+  final result = await ref.read(preferencesRepositoryProvider).getPreferences(
+        query: const PreferencesQuery(
+          page: 1,
+          pageSize: 50,
+        ),
+      );
+
+  return result.items;
 });
 
 final preferredSegmentIdsProvider = Provider<Set<int>>((ref) {

@@ -72,28 +72,51 @@ class _WriteReviewScreenState extends State<WriteReviewScreen> {
   }
 
   Future<void> deleteReview() async {
-    if (widget.onDelete == null || isBusy) return;
+  if (widget.onDelete == null || isBusy) return;
 
-    setState(() => isBusy = true);
-    try {
-      await widget.onDelete!();
-
-      if (!mounted) return;
-      Navigator.pop(context, true);
-    } catch (_) {
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Could not delete review. Please try again.'),
+  final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Delete review?'),
+          content: const Text(
+            'Your review will be permanently removed.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Delete'),
+            ),
+          ],
         ),
-      );
-    } finally {
-      if (mounted) {
-        setState(() => isBusy = false);
-      }
+      ) ??
+      false;
+
+  if (!confirmed || !mounted) return;
+
+  setState(() => isBusy = true);
+  try {
+    await widget.onDelete!();
+
+    if (!mounted) return;
+    Navigator.pop(context, true);
+  } catch (_) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Could not delete review. Please try again.'),
+      ),
+    );
+  } finally {
+    if (mounted) {
+      setState(() => isBusy = false);
     }
   }
+}
 
   @override
   Widget build(BuildContext context) {

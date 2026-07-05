@@ -12,6 +12,9 @@ class InboxState {
   final String? errorMessage;
   final bool hasMore;
   final int page;
+  final int pageSize;
+  final int totalCount;
+  final int totalPages;
   final String searchQuery;
   final NotificationFilter filter;
   final NotificationSort sort;
@@ -21,6 +24,9 @@ class InboxState {
     required this.status,
     required this.hasMore,
     required this.page,
+    required this.pageSize,
+    required this.totalCount,
+    required this.totalPages,
     required this.searchQuery,
     required this.filter,
     required this.sort,
@@ -33,6 +39,9 @@ class InboxState {
         errorMessage = null,
         hasMore = true,
         page = 1,
+        pageSize = 20,
+        totalCount = 0,
+        totalPages = 0,
         searchQuery = '',
         filter = NotificationFilter.all,
         sort = NotificationSort.newest;
@@ -43,6 +52,11 @@ class InboxState {
   bool get isRefreshing => status == InboxStatus.refreshing;
   bool get isLoadingMore => status == InboxStatus.loadingMore;
   bool get hasError => status == InboxStatus.error;
+
+  bool get isUsingServerPagingView =>
+      searchQuery.isEmpty &&
+      filter == NotificationFilter.all &&
+      sort == NotificationSort.newest;
 
   List<NotificationModel> get displayed {
     Iterable<NotificationModel> items = notifications;
@@ -80,6 +94,9 @@ class InboxState {
     String? errorMessage,
     bool? hasMore,
     int? page,
+    int? pageSize,
+    int? totalCount,
+    int? totalPages,
     String? searchQuery,
     NotificationFilter? filter,
     NotificationSort? sort,
@@ -91,6 +108,9 @@ class InboxState {
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
       hasMore: hasMore ?? this.hasMore,
       page: page ?? this.page,
+      pageSize: pageSize ?? this.pageSize,
+      totalCount: totalCount ?? this.totalCount,
+      totalPages: totalPages ?? this.totalPages,
       searchQuery: searchQuery ?? this.searchQuery,
       filter: filter ?? this.filter,
       sort: sort ?? this.sort,

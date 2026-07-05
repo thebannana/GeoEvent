@@ -19,9 +19,14 @@ public class BookmarksController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetMyBookmarks()
+    public async Task<IActionResult> GetMyBookmarks([FromQuery] BookmarkFilterDto filter)
     {
-        var result = await _eventService.GetUserBookmarksAsync(User.GetUserId());
+        filter ??= new BookmarkFilterDto();
+
+        var result = await _eventService.GetUserBookmarksAsync(
+            User.GetUserId(),
+            filter);
+
         return result.Success
             ? Ok(result.Data)
             : StatusCode(result.StatusCode, new { error = result.Error });
@@ -31,6 +36,7 @@ public class BookmarksController : ControllerBase
     public async Task<IActionResult> Create([FromBody] CreateBookmarkDto dto)
     {
         var result = await _eventService.CreateBookmarkAsync(dto, User.GetUserId());
+
         return result.Success
             ? CreatedAtAction(nameof(GetMyBookmarks), result.Data)
             : StatusCode(result.StatusCode, new { error = result.Error });
@@ -40,6 +46,7 @@ public class BookmarksController : ControllerBase
     public async Task<IActionResult> Delete(int bookmarkId)
     {
         var result = await _eventService.DeleteBookmarkAsync(bookmarkId, User.GetUserId());
+
         return result.Success
             ? Ok(new { message = "Bookmark removed." })
             : StatusCode(result.StatusCode, new { error = result.Error });
@@ -49,6 +56,7 @@ public class BookmarksController : ControllerBase
     public async Task<IActionResult> Update(int bookmarkId, [FromBody] UpdateBookmarkDto dto)
     {
         var result = await _eventService.UpdateBookmarkAsync(bookmarkId, dto, User.GetUserId());
+
         return result.Success
             ? Ok(result.Data)
             : StatusCode(result.StatusCode, new { error = result.Error });

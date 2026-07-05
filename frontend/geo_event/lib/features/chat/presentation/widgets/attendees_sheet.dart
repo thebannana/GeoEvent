@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/utils/date_time_extensions.dart';
+import '../../../../core/widgets/feedback/app_empty_state.dart';
+import '../../../../core/widgets/layout/app_bottom_sheet_container.dart';
 import '../../../../shared/chat/models/chat_participant.dart';
 import '../../../../shared/chat/models/chat_thread_type.dart';
 import 'chat_avatar.dart';
@@ -17,7 +20,17 @@ class AttendeesSheet extends StatelessWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    return SafeArea(
+    if (participants.isEmpty) {
+      return const AppBottomSheetContainer(
+        child: AppEmptyState(
+          title: 'No attendees yet',
+          message: 'Attendees will appear here once they join.',
+          icon: Icons.group_outlined,
+        ),
+      );
+    }
+
+    return AppBottomSheetContainer(
       child: ListView.separated(
         shrinkWrap: true,
         padding: const EdgeInsets.all(16),
@@ -26,10 +39,12 @@ class AttendeesSheet extends StatelessWidget {
         itemBuilder: (context, index) {
           final item = participants[index];
           final username = _cleanUsername(item.username);
+          final displayName = _displayName(item.displayName, username);
 
           final subtitleParts = <String>[
             ?username,
-            if (item.joinedAt != null) 'Joined ${_format(item.joinedAt!)}',
+            if (item.joinedAt != null)
+              'Joined ${item.joinedAt!.formatDate(pattern: 'dd.MM')}',
           ];
 
           final subtitle =
@@ -38,16 +53,14 @@ class AttendeesSheet extends StatelessWidget {
           return ListTile(
             contentPadding: EdgeInsets.zero,
             leading: ChatAvatar(
-              title: item.displayName,
+              title: displayName,
               imageUrl: item.avatarUrl,
               size: 40,
               type: ChatThreadType.direct,
               showPresence: true,
               isOnline: item.isOnline,
             ),
-            title: Text(item.displayName.trim().isNotEmpty
-                ? item.displayName.trim()
-                : (username ?? 'User ${item.userId}')),
+            title: Text(displayName),
             subtitle: Text(subtitle),
             trailing: Icon(
               Icons.circle,
@@ -62,14 +75,20 @@ class AttendeesSheet extends StatelessWidget {
     );
   }
 
+  static String _displayName(String? displayName, String? username) {
+    final cleanedDisplayName = displayName?.trim();
+    if (cleanedDisplayName != null && cleanedDisplayName.isNotEmpty) {
+      return cleanedDisplayName;
+    }
+    if (username != null) {
+      return username;
+    }
+    return 'Attendee';
+  }
+
   static String? _cleanUsername(String? value) {
     final cleaned = (value ?? '').trim().replaceFirst(RegExp(r'^@+'), '');
     if (cleaned.isEmpty) return null;
     return '@$cleaned';
-  }
-
-  static String _format(DateTime value) {
-    final local = value.toLocal();
-    return '${local.day.toString().padLeft(2, '0')}.${local.month.toString().padLeft(2, '0')}';
   }
 }

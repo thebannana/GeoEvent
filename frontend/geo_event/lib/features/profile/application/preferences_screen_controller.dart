@@ -1,23 +1,24 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../shared/profile/models/event_taxonomy_models.dart';
+import '../../../shared/profile/models/preferences_list_state.dart';
 import '../../../shared/profile/models/preferences_screen_state.dart';
 import '../../../shared/profile/models/user_preference.dart';
 import '../../../shared/profile/providers/event_taxonomy_providers.dart';
 import '../../profile/application/preferences_controller.dart';
 
-final eventTaxonomyProvider =
-    FutureProvider<List<SegmentLookup>>((ref) async {
+final eventTaxonomyProvider = FutureProvider<List<SegmentLookup>>((ref) async {
   return ref.read(eventTaxonomyRepositoryProvider).getSegments();
 });
 
 final preferencesScreenControllerProvider =
     FutureProvider<PreferencesScreenState>((ref) async {
-  final preferences = await ref.watch(preferencesControllerProvider.future);
+  final preferenceState = await ref.watch(preferencesControllerProvider.future);
   final segments = await ref.watch(eventTaxonomyProvider.future);
 
   return _PreferencesScreenMapper.map(
-    preferences: preferences,
+    preferences: preferenceState.result.items,
+    paged: preferenceState,
     segments: segments,
   );
 });
@@ -25,6 +26,7 @@ final preferencesScreenControllerProvider =
 class _PreferencesScreenMapper {
   static PreferencesScreenState map({
     required List<UserPreference> preferences,
+    required PreferencesListState paged,
     required List<SegmentLookup> segments,
   }) {
     final genreById = <int, GenreLookup>{};
@@ -116,6 +118,12 @@ class _PreferencesScreenMapper {
       segmentItems: segmentItems,
       genreItems: genreItems,
       subGenreItems: subGenreItems,
+      page: paged.result.page,
+      pageSize: paged.result.pageSize,
+      totalCount: paged.result.totalCount,
+      totalPages: paged.result.totalPages,
+      hasNextPage: paged.result.hasNextPage,
+      hasPreviousPage: paged.result.hasPreviousPage,
     );
   }
 

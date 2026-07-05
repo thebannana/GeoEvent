@@ -5,12 +5,20 @@ using TicketService.Domain.Enums;
 
 public interface ITicketRepository
 {
+    Task<PagedResult<EventAttendeePreviewDto>> GetPublicEventAttendeesAsync(
+    int eventId,
+    int page,
+    int pageSize);
+    Task<PagedResult<Ticket>> GetTicketsByReservationAsync(int reservationId, int page, int pageSize);
+    Task<PagedResult<PaymentDetail>> GetPaymentsByReservationAsync(int reservationId, int page, int pageSize);
+    Task<PagedResult<EventTicket>> GetEventTicketsByEventAsync(int eventId, int page, int pageSize);
     Task<List<Reservation>> GetReservationsForEventAsync(int eventId);
     Task<int> GetEventCapacityAsync(int eventId);
     Task<int> GetEventReservedQuantityAsync(int eventId, params ReservationStatus[] statuses);
     Task<int> GetEventReservationCountAsync(int eventId, ReservationStatus? status = null);
 
     Task<Reservation?> GetReservationByIdAsync(int reservationId);
+    Task<Reservation?> GetReservationByPendingProviderOrderIdAsync(string providerOrderId);
     Task<PagedResult<Reservation>> GetUserReservationsAsync(int userId, ReservationFilterDto filter);
     Task<Reservation> CreateReservationAsync(Reservation reservation);
     Task UpdateReservationAsync(Reservation reservation);

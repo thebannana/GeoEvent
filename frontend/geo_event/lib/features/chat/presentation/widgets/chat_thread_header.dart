@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/utils/date_time_extensions.dart';
 import '../../../../shared/chat/models/chat_thread_details.dart';
 import '../../../../shared/chat/models/chat_thread_type.dart';
 import 'chat_avatar.dart';
@@ -120,11 +121,7 @@ class ChatThreadHeader extends StatelessWidget {
     final lastActive = details.otherUserLastActiveAt;
     if (lastActive == null) return null;
 
-    final diff = DateTime.now().difference(lastActive.toLocal());
-    if (diff.inMinutes < 1) return 'Active just now';
-    if (diff.inMinutes < 60) return 'Active ${diff.inMinutes}m ago';
-    if (diff.inHours < 24) return 'Active ${diff.inHours}h ago';
-    return 'Active ${diff.inDays}d ago';
+    return 'Active ${lastActive.toLocal().timeAgo(short: true)}';
   }
 
   static String? _buildImageUrl(

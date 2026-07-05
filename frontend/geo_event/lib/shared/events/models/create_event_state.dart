@@ -1,6 +1,6 @@
 import 'create_event_models.dart';
 import 'event_taxonomy_models.dart';
-import 'my_event_response_dto.dart';
+import '../../my_events/models/my_event_response_dto.dart';
 
 class CreateEventState {
   final bool loadingInitial;

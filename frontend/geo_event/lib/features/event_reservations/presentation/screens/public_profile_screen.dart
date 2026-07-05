@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/widgets/async/app_async_view.dart';
+import '../../../../core/widgets/feedback/app_error_state.dart';
+import '../../../../core/widgets/feedback/app_loading_indicator.dart';
+import '../../../../core/widgets/layout/app_scaffold.dart';
 import '../../../../core/widgets/surfaces/app_surface_card.dart';
 import '../../../../shared/profile/data/public_users_api.dart';
 import '../../../../shared/profile/models/public_user_profile.dart';
@@ -23,23 +26,18 @@ class PublicProfileScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final profileAsync = ref.watch(publicProfileProvider(userId));
 
-    return Scaffold(
+    return AppScaffold(
       appBar: AppBar(title: const Text('Profile')),
-      body: AppAsyncView<PublicUserProfileDto>(
+      child: AppAsyncView<PublicUserProfileDto>(
         value: profileAsync,
-        loading: const Center(child: CircularProgressIndicator()),
-        errorBuilder: (error, stackTrace) {
-          return Center(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Text(
-                'Could not load profile.',
-                style: Theme.of(context).textTheme.bodyMedium,
-                textAlign: TextAlign.center,
-              ),
-            ),
-          );
-        },
+        loading: const AppLoadingIndicator(
+          title: 'Loading profile',
+          message: 'Please wait while we fetch this profile.',
+        ),
+        errorBuilder: (_, _) => const AppErrorState(
+          title: 'Could not load profile',
+          message: 'Please try again later.',
+        ),
         data: (profile) {
           return ListView(
             padding: const EdgeInsets.all(16),

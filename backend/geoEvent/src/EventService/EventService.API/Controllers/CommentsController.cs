@@ -18,45 +18,56 @@ public class CommentsController : ControllerBase
     }
 
     [HttpGet("event/{eventId:int}")]
-    public async Task<IActionResult> GetByEvent(int eventId)
+    [AllowAnonymous]
+    public async Task<IActionResult> GetByEvent(
+        int eventId,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20)
     {
-        var result = await _eventService.GetEventCommentsAsync(eventId);
+        int? requesterId = User.Identity?.IsAuthenticated == true ? User.GetUserId() : null;
+
+        var result = await _eventService.GetEventCommentsAsync(
+            eventId,
+            page,
+            pageSize,
+            requesterId);
+
         return result.Success
             ? Ok(result.Data)
             : StatusCode(result.StatusCode, new { error = result.Error });
     }
 
     [HttpGet("{commentId:int}/replies")]
-    public async Task<IActionResult> GetReplies(int commentId)
+    [AllowAnonymous]
+    public async Task<IActionResult> GetReplies(
+        int commentId,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20)
     {
-        var result = await _eventService.GetRepliesAsync(commentId);
-        return result.Success
-            ? Ok(result.Data)
-            : StatusCode(result.StatusCode, new { error = result.Error });
-    }
+        int? requesterId = User.Identity?.IsAuthenticated == true ? User.GetUserId() : null;
 
-    [HttpGet("{commentId:int}")]
-    public async Task<IActionResult> GetById(int commentId)
-    {
-        var result = await _eventService.GetCommentByIdAsync(commentId);
+        var result = await _eventService.GetRepliesAsync(
+            commentId,
+            page,
+            pageSize,
+            requesterId);
+
         return result.Success
             ? Ok(result.Data)
             : StatusCode(result.StatusCode, new { error = result.Error });
     }
 
     [HttpPost]
-    [Authorize]
     public async Task<IActionResult> Create([FromBody] CreateCommentDto dto)
     {
         var result = await _eventService.CreateCommentAsync(dto, User.GetUserId());
 
         return result.Success
-            ? CreatedAtAction(nameof(GetById), new { commentId = result.Data!.CommentId }, result.Data)
+            ? Ok(result.Data)
             : StatusCode(result.StatusCode, new { error = result.Error });
     }
 
     [HttpPut("{commentId:int}")]
-    [Authorize]
     public async Task<IActionResult> Update(int commentId, [FromBody] UpdateCommentDto dto)
     {
         var result = await _eventService.UpdateCommentAsync(commentId, dto, User.GetUserId());
@@ -67,35 +78,41 @@ public class CommentsController : ControllerBase
     }
 
     [HttpDelete("{commentId:int}")]
-    [Authorize]
     public async Task<IActionResult> Delete(int commentId)
     {
         var result = await _eventService.DeleteCommentAsync(commentId, User.GetUserId());
 
         return result.Success
-            ? Ok(new { message = "Comment deleted." })
+            ? NoContent()
             : StatusCode(result.StatusCode, new { error = result.Error });
     }
 
     [HttpPost("{commentId:int}/like")]
-    [Authorize]
     public async Task<IActionResult> Like(int commentId)
     {
         var result = await _eventService.LikeCommentAsync(commentId, User.GetUserId());
 
         return result.Success
-            ? Ok(new { message = "Comment liked." })
+            ? Ok()
             : StatusCode(result.StatusCode, new { error = result.Error });
     }
 
     [HttpDelete("{commentId:int}/like")]
-    [Authorize]
     public async Task<IActionResult> Unlike(int commentId)
     {
         var result = await _eventService.UnlikeCommentAsync(commentId, User.GetUserId());
 
         return result.Success
-            ? Ok(new { message = "Comment unliked." })
+            ? NoContent()
+            : StatusCode(result.StatusCode, new { error = result.Error });
+    }
+
+    [HttpGet("{commentId:int}")]
+    public async Task<IActionResult> GetById(int commentId)
+    {
+        var result = await _eventService.GetCommentByIdAsync(commentId);
+        return result.Success
+            ? Ok(result.Data)
             : StatusCode(result.StatusCode, new { error = result.Error });
     }
 }

@@ -24,12 +24,14 @@ public interface IUserService
     Task<ServiceResult<bool>> ChangePasswordAsync(int userId, ChangePasswordDto dto);
     Task<ServiceResult<PagedResult<UserProfileDto>>> GetAllUsersAsync(UserFilterDto filter);
 
-    Task<ServiceResult<List<UserPreferenceResponseDto>>> GetUserPreferencesAsync(int userId);
+    Task<ServiceResult<PagedResult<UserPreferenceResponseDto>>> GetUserPreferencesAsync(
+        int userId,
+        PreferencesFilterDto filter);
     Task<ServiceResult<UserPreferenceResponseDto>> UpsertPreferenceAsync(int userId, UpdatePreferenceDto dto);
     Task<ServiceResult<bool>> DeletePreferenceAsync(int userId, int prefId);
 
     Task<ServiceResult<ReportResponseDto>> CreateReportAsync(CreateReportDto dto, int reporterId);
-    Task<ServiceResult<List<ReportResponseDto>>> GetUserReportsAsync(int userId);
+    Task<ServiceResult<PagedResult<ReportResponseDto>>> GetUserReportsAsync(int userId, int page, int pageSize);
     Task<ServiceResult<PagedResult<ReportResponseDto>>> GetAllReportsAsync(ReportStatus? status, int page, int pageSize);
     Task<ServiceResult<ReportResponseDto>> GetReportByIdAsync(int reportId);
     Task<ServiceResult<ReportResponseDto>> ResolveReportAsync(int reportId, ResolveReportDto dto, int resolvedById);

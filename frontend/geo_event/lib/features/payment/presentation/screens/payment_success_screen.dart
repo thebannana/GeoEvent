@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../../../core/widgets/layout/app_scaffold.dart';
+
 class PaymentSuccessScreen extends StatefulWidget {
   const PaymentSuccessScreen({
     super.key,
@@ -45,9 +47,9 @@ class _PaymentSuccessScreenState extends State<PaymentSuccessScreen> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    return Scaffold(
+    return AppScaffold(
       backgroundColor: colorScheme.surface,
-      body: SafeArea(
+      child: SafeArea(
         child: Center(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24),

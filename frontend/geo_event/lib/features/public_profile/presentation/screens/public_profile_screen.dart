@@ -9,7 +9,6 @@ import '../../../../core/widgets/layout/app_scaffold.dart';
 import '../../../../shared/chat/models/chat_thread_args.dart';
 import '../../../../shared/chat/models/chat_thread_type.dart';
 import '../../../../shared/chat/providers/chat_providers.dart';
-import '../../../../shared/public_profile/models/public_profile_event.dart';
 import '../../../../shared/public_profile/models/public_profile_user.dart';
 import '../../../../shared/reports/models/report_target_type.dart';
 import '../../../auth/application/auth_controller.dart';
@@ -26,8 +25,6 @@ import '../widgets/public_profile_review_section.dart';
 import '../widgets/public_profile_stats_row.dart';
 import 'write_review_screen.dart';
 
-enum PublicProfileEventFilter { all, upcoming, past, free, paid }
-
 class PublicProfileScreen extends ConsumerStatefulWidget {
   final int userId;
 
@@ -42,33 +39,6 @@ class PublicProfileScreen extends ConsumerStatefulWidget {
 }
 
 class _PublicProfileScreenState extends ConsumerState<PublicProfileScreen> {
-  PublicProfileEventFilter _selectedFilter = PublicProfileEventFilter.all;
-
-  List<PublicProfileEvent> _applyFilter(List<PublicProfileEvent> events) {
-    final now = DateTime.now();
-
-    switch (_selectedFilter) {
-      case PublicProfileEventFilter.all:
-        return events;
-      case PublicProfileEventFilter.upcoming:
-        return events
-            .where(
-              (e) => e.startDateTime != null && e.startDateTime!.isAfter(now),
-            )
-            .toList();
-      case PublicProfileEventFilter.past:
-        return events
-            .where(
-              (e) => e.startDateTime != null && e.startDateTime!.isBefore(now),
-            )
-            .toList();
-      case PublicProfileEventFilter.free:
-        return events.where((e) => e.price <= 0).toList();
-      case PublicProfileEventFilter.paid:
-        return events.where((e) => e.price > 0).toList();
-    }
-  }
-
   Future<void> openDirectChat({
     required BuildContext context,
     required WidgetRef ref,
@@ -215,7 +185,6 @@ class _PublicProfileScreenState extends ConsumerState<PublicProfileScreen> {
         data: (data) {
           final isOwnProfile =
               currentUserId != null && currentUserId == data.user.userId;
-          final filteredEvents = _applyFilter(data.events);
 
           return RefreshIndicator(
             onRefresh: controller.reload,
@@ -229,7 +198,7 @@ class _PublicProfileScreenState extends ConsumerState<PublicProfileScreen> {
                       const SizedBox(height: 18),
                       PublicProfileStatsRow(
                         user: data.user,
-                        eventsCount: data.events.length,
+                        eventsCount: data.user.eventsCount,
                       ),
                       const SizedBox(height: 18),
                       if (!isOwnProfile) ...[
@@ -255,16 +224,22 @@ class _PublicProfileScreenState extends ConsumerState<PublicProfileScreen> {
                         const SizedBox(height: 18),
                       ],
                       PublicProfileEventFilters(
-                        selected: _selectedFilter,
-                        onChanged: (value) {
-                          setState(() => _selectedFilter = value);
-                        },
+                        selected: data.selectedEventFilter,
+                        onChanged: controller.changeEventFilter,
+                        isBusy: controller.isChangingEventFilter,
                       ),
                       const SizedBox(height: 14),
                     ],
                   ),
                 ),
-                if (filteredEvents.isEmpty)
+                if (data.events.isEmpty && controller.isChangingEventFilter)
+                  const SliverToBoxAdapter(
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(vertical: 24),
+                      child: Center(child: CircularProgressIndicator()),
+                    ),
+                  )
+                else if (data.events.isEmpty)
                   const SliverFillRemaining(
                     hasScrollBody: false,
                     child: AppEmptyState(
@@ -278,8 +253,11 @@ class _PublicProfileScreenState extends ConsumerState<PublicProfileScreen> {
                   SliverPadding(
                     padding: const EdgeInsets.fromLTRB(18, 0, 18, 0),
                     sliver: PublicProfileEventList(
-                      events: filteredEvents,
+                      events: data.events,
                       onEventTap: _openEvent,
+                      hasNextPage: data.eventsHasNextPage,
+                      isLoadingMore: controller.isLoadingMoreEvents,
+                      onLoadMore: controller.loadMoreEvents,
                     ),
                   ),
                 SliverToBoxAdapter(
@@ -288,6 +266,9 @@ class _PublicProfileScreenState extends ConsumerState<PublicProfileScreen> {
                       const SizedBox(height: 18),
                       PublicProfileReviewsSection(
                         reviews: data.reviews,
+                        hasNextPage: data.reviewsHasNextPage,
+                        isLoadingMore: controller.isLoadingMoreReviews,
+                        onLoadMore: controller.loadMoreReviews,
                       ),
                       const SizedBox(height: 24),
                     ],

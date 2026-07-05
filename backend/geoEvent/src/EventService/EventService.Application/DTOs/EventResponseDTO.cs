@@ -20,13 +20,11 @@ public class EventResponseDto
     public int Capacity { get; set; }
     public decimal Price { get; set; }
     public string Status { get; set; } = string.Empty;
-    public bool IsOnline { get; set; }
     public bool IsFeatured { get; set; }
     public int ViewCount { get; set; }
     public int LikesCount { get; set; }
     public bool IsLiked { get; set; }
     public string? Tags { get; set; }
-    public string? ExternalUrl { get; set; }
     public string? AccessibilityInfo { get; set; }
     public string? PromoterName { get; set; }
     public string Locale { get; set; } = string.Empty;

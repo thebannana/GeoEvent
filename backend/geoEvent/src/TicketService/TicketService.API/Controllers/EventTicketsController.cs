@@ -17,9 +17,12 @@ public class EventTicketsController : ControllerBase
 
     [HttpGet]
     [AllowAnonymous]
-    public async Task<IActionResult> GetAll(int eventId)
+    public async Task<IActionResult> GetAll(
+        int eventId,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20)
     {
-        var result = await _ticketService.GetEventTicketsAsync(eventId);
+        var result = await _ticketService.GetEventTicketsAsync(eventId, page, pageSize);
 
         return result.Success
             ? Ok(result.Data)

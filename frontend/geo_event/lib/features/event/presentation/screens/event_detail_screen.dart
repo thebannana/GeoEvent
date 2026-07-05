@@ -12,7 +12,7 @@ import '../../../../core/widgets/inputs/app_icon_circle_button.dart';
 import '../../../../core/widgets/feedback/app_loading_indicator.dart';
 import '../../../../core/widgets/feedback/app_spinner.dart';
 import '../../../../core/widgets/surfaces/app_surface_card.dart';
-import '../../../../shared/bookmarks/providers/bookmark_providers.dart';
+import '../../../../shared/bookmarks/application/bookmark_controller.dart';
 import '../../../../shared/chat/models/chat_thread_args.dart';
 import '../../../../shared/chat/models/chat_thread_type.dart';
 import '../../../../shared/chat/providers/chat_providers.dart';
@@ -815,8 +815,7 @@ class _EventDetailsScreenState extends ConsumerState<EventDetailsScreen> {
         item.organizerId != null &&
         currentUserId == item.organizerId;
     final isLiked = item.isLiked;
-    final isBookmarked =
-        bookmarksState.valueOrNull?.any((b) => b.eventId == item.eventId) ?? false;
+    final isBookmarked = bookmarksState.items.any((b) => b.eventId == item.eventId);
     final gallery = buildGallery(item);
 
     final ownerProfileState = item.organizerId != null

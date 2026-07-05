@@ -1,18 +1,29 @@
+import '../../events/models/paged_result.dart';
 import '../models/bookmark.dart';
 import 'bookmark_api.dart';
 
 class BookmarkRepository {
-  const BookmarkRepository(this._api);
+  const BookmarkRepository(this.api);
 
-  final BookmarkApi _api;
+  final BookmarkApi api;
 
-  Future<List<Bookmark>> getBookmarks() => _api.getBookmarks();
+  Future<PagedResult<Bookmark>> getBookmarksPaged({
+    String? searchTerm,
+    int page = 1,
+    int pageSize = 20,
+  }) {
+    return api.getBookmarksPaged(
+      searchTerm: searchTerm,
+      page: page,
+      pageSize: pageSize,
+    );
+  }
 
   Future<Bookmark> createBookmark({
     required int eventId,
     String? memo,
   }) {
-    return _api.createBookmark(
+    return api.createBookmark(
       eventId: eventId,
       memo: memo,
     );
@@ -22,13 +33,13 @@ class BookmarkRepository {
     required int bookmarkId,
     String? memo,
   }) {
-    return _api.updateBookmark(
+    return api.updateBookmark(
       bookmarkId: bookmarkId,
       memo: memo,
     );
   }
 
   Future<void> deleteBookmark(int bookmarkId) {
-    return _api.deleteBookmark(bookmarkId);
+    return api.deleteBookmark(bookmarkId);
   }
 }

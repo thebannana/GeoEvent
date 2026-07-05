@@ -1,4 +1,4 @@
-
+import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http_parser/http_parser.dart';
@@ -51,20 +51,20 @@ class EventsApi {
     await dio.post(ApiEndpoints.publishEvent(eventId));
   }
 
-Future<void> deleteEventImage({
-  required int eventId,
-  required int imageId,
-}) {
-  return dio.delete(
-    '${ApiEndpoints.eventImages(eventId)}/$imageId',
-    options: Options(
-      contentType: Headers.jsonContentType,
-      headers: const {
-        'Accept': 'application/json',
-      },
-    ),
-  );
-}
+  Future<void> deleteEventImage({
+    required int eventId,
+    required int imageId,
+  }) {
+    return dio.delete(
+      '${ApiEndpoints.eventImages(eventId)}/$imageId',
+      options: Options(
+        contentType: Headers.jsonContentType,
+        headers: const {
+          'Accept': 'application/json',
+        },
+      ),
+    );
+  }
 
   Future<void> addEventImage({
     required int eventId,
@@ -85,29 +85,26 @@ Future<void> deleteEventImage({
     String? fileName,
     Uint8List? bytes,
   }) async {
-    final resolvedFileName = _resolveFileName(localPath, fileName);
-    final contentType = _contentTypeFromFileName(resolvedFileName);
+    final sourceBytes =
+        bytes ?? (kIsWeb ? null : await File(localPath).readAsBytes());
 
-    final MultipartFile multipartFile;
-    if (bytes != null) {
-      multipartFile = MultipartFile.fromBytes(
-        bytes,
-        filename: resolvedFileName,
-        contentType: contentType,
-      );
-    } else {
-      if (kIsWeb) {
-        throw Exception(
-          'Image bytes are required for web uploads. Re-pick the image and try again.',
-        );
-      }
-
-      multipartFile = await MultipartFile.fromFile(
-        localPath,
-        filename: resolvedFileName,
-        contentType: contentType,
+    if (sourceBytes == null) {
+      throw Exception(
+        'Image bytes are required for web uploads. Re-pick the image and try again.',
       );
     }
+
+    final detectedContentType = _contentTypeFromImageBytes(sourceBytes);
+    final resolvedFileName = _normalizedFileNameForContentType(
+      _resolveFileName(localPath, fileName),
+      detectedContentType,
+    );
+
+    final multipartFile = MultipartFile.fromBytes(
+      sourceBytes,
+      filename: resolvedFileName,
+      contentType: detectedContentType,
+    );
 
     final response = await dio.post(
       ApiEndpoints.uploadImage,
@@ -339,19 +336,69 @@ Future<void> deleteEventImage({
     return resolved.isEmpty ? 'image.jpg' : resolved;
   }
 
-  MediaType _contentTypeFromFileName(String fileName) {
-    final lower = fileName.toLowerCase();
-
-    if (lower.endsWith('.png')) {
-      return MediaType('image', 'png');
-    }
-    if (lower.endsWith('.webp')) {
-      return MediaType('image', 'webp');
-    }
-    if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) {
+  MediaType _contentTypeFromImageBytes(Uint8List bytes) {
+    if (bytes.length >= 3 &&
+        bytes[0] == 0xFF &&
+        bytes[1] == 0xD8 &&
+        bytes[2] == 0xFF) {
       return MediaType('image', 'jpeg');
     }
 
+    if (bytes.length >= 4 &&
+        bytes[0] == 0x89 &&
+        bytes[1] == 0x50 &&
+        bytes[2] == 0x4E &&
+        bytes[3] == 0x47) {
+      return MediaType('image', 'png');
+    }
+
+    if (bytes.length >= 12 &&
+        bytes[0] == 0x52 &&
+        bytes[1] == 0x49 &&
+        bytes[2] == 0x46 &&
+        bytes[3] == 0x46 &&
+        bytes[8] == 0x57 &&
+        bytes[9] == 0x45 &&
+        bytes[10] == 0x42 &&
+        bytes[11] == 0x50) {
+      return MediaType('image', 'webp');
+    }
+
     throw Exception('Only JPG, PNG, and WEBP images are allowed.');
+  }
+
+  String _normalizedFileNameForContentType(
+    String fileName,
+    MediaType contentType,
+  ) {
+    final lower = fileName.toLowerCase();
+
+    if (contentType.subtype == 'jpeg' &&
+        (lower.endsWith('.jpg') || lower.endsWith('.jpeg'))) {
+      return fileName;
+    }
+
+    if (contentType.subtype == 'png' && lower.endsWith('.png')) {
+      return fileName;
+    }
+
+    if (contentType.subtype == 'webp' && lower.endsWith('.webp')) {
+      return fileName;
+    }
+
+    final baseName = fileName.contains('.')
+        ? fileName.substring(0, fileName.lastIndexOf('.'))
+        : fileName;
+
+    final safeBaseName = baseName.trim().isEmpty ? 'image' : baseName.trim();
+
+    final extension = switch (contentType.subtype) {
+      'jpeg' => '.jpg',
+      'png' => '.png',
+      'webp' => '.webp',
+      _ => throw Exception('Unsupported image type.'),
+    };
+
+    return '$safeBaseName$extension';
   }
 }

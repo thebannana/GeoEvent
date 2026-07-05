@@ -57,7 +57,7 @@ public class UploadsController : ControllerBase
             stream,
             file.FileName,
             file.ContentType,
-            $"profiles/{userId}",
+            $"users/{userId}/events",
             cancellationToken);
 
         return Ok(new ImageUploadResponseDto

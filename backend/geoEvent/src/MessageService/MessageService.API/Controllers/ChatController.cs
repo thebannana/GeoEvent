@@ -19,6 +19,44 @@ public class ChatController : ControllerBase
         _chatService = chatService;
     }
 
+    [HttpGet("threads")]
+    public async Task<IActionResult> GetThreads([FromQuery] ChatThreadsFilterDto filter)
+    {
+        var userId = User.GetUserId();
+        var result = await _chatService.GetThreadsAsync(userId, filter);
+
+        return result.Success
+            ? Ok(result.Data)
+            : StatusCode(result.StatusCode, new { error = result.Error });
+    }
+
+    [HttpGet("threads/{threadId:long}/messages")]
+    public async Task<IActionResult> GetMessages(
+        long threadId,
+        [FromQuery] ChatMessagesFilterDto filter)
+    {
+        var userId = User.GetUserId();
+        var result = await _chatService.GetMessagesAsync(threadId, userId, filter);
+
+        return result.Success
+            ? Ok(result.Data)
+            : StatusCode(result.StatusCode, new { error = result.Error });
+    }
+
+    [HttpGet("threads/{threadId:long}/participants")]
+    public async Task<IActionResult> GetParticipants(
+        long threadId,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20)
+    {
+        var userId = User.GetUserId();
+        var result = await _chatService.GetParticipantsAsync(threadId, userId, page, pageSize);
+
+        return result.Success
+            ? Ok(result.Data)
+            : StatusCode(result.StatusCode, new { error = result.Error });
+    }
+
     [HttpPost("threads/direct/open")]
     public async Task<IActionResult> OpenDirect([FromBody] OpenDirectThreadDto dto)
     {
@@ -30,33 +68,11 @@ public class ChatController : ControllerBase
             : StatusCode(result.StatusCode, new { error = result.Error });
     }
 
-    [HttpGet("threads")]
-    public async Task<IActionResult> GetThreads()
-    {
-        var userId = User.GetUserId();
-        var result = await _chatService.GetThreadsAsync(userId);
-
-        return result.Success
-            ? Ok(result.Data)
-            : StatusCode(result.StatusCode, new { error = result.Error });
-    }
-
     [HttpGet("threads/{threadId:long}")]
     public async Task<IActionResult> GetThread(long threadId)
     {
         var userId = User.GetUserId();
         var result = await _chatService.GetThreadDetailAsync(threadId, userId);
-
-        return result.Success
-            ? Ok(result.Data)
-            : StatusCode(result.StatusCode, new { error = result.Error });
-    }
-
-    [HttpGet("threads/{threadId:long}/messages")]
-    public async Task<IActionResult> GetMessages(long threadId, [FromQuery] int page = 1, [FromQuery] int pageSize = 30)
-    {
-        var userId = User.GetUserId();
-        var result = await _chatService.GetMessagesAsync(threadId, userId, page, pageSize);
 
         return result.Success
             ? Ok(result.Data)
@@ -135,17 +151,6 @@ public class ChatController : ControllerBase
     {
         var userId = User.GetUserId();
         var result = await _chatService.GetUnreadCountAsync(userId);
-
-        return result.Success
-            ? Ok(result.Data)
-            : StatusCode(result.StatusCode, new { error = result.Error });
-    }
-
-    [HttpGet("threads/{threadId:long}/participants")]
-    public async Task<IActionResult> GetParticipants(long threadId)
-    {
-        var userId = User.GetUserId();
-        var result = await _chatService.GetParticipantsAsync(threadId, userId);
 
         return result.Success
             ? Ok(result.Data)

@@ -14,10 +14,14 @@ class CommentItem {
   final String? username;
   final String? displayName;
   final String? avatarUrl;
-
   final bool isLiked;
   final bool areRepliesLoaded;
   final bool isReplyLoading;
+  final bool isLoadingMoreReplies;
+  final bool hasMoreReplies;
+  final int repliesPage;
+  final int repliesPageSize;
+  final int repliesTotalCount;
 
   const CommentItem({
     required this.commentId,
@@ -38,28 +42,12 @@ class CommentItem {
     this.isLiked = false,
     this.areRepliesLoaded = false,
     this.isReplyLoading = false,
+    this.isLoadingMoreReplies = false,
+    this.hasMoreReplies = false,
+    this.repliesPage = 0,
+    this.repliesPageSize = 20,
+    this.repliesTotalCount = 0,
   });
-
-  String get authorName {
-    final dn = displayName?.trim();
-    if (dn != null && dn.isNotEmpty) return dn;
-
-    final un = username?.trim();
-    if (un != null && un.isNotEmpty) {
-      return un.replaceFirst(RegExp(r'^@+'), '');
-    }
-
-    if (userId != null) return 'User #$userId';
-    return 'Unknown user';
-  }
-
-  String get authorHandle {
-    final un = username?.trim();
-    if (un == null || un.isEmpty) return '';
-
-    final cleaned = un.replaceFirst(RegExp(r'^@+'), '');
-    return cleaned.isEmpty ? '' : '@$cleaned';
-  }
 
   factory CommentItem.fromJson(Map<String, dynamic> json) {
     final hasRepliesField = json.containsKey('replies');
@@ -72,6 +60,9 @@ class CommentItem {
             .toList(growable: false)
         : const <CommentItem>[];
 
+    final parsedReplyCount = _asInt(json['replyCount']);
+    final parsedRepliesTotalCount = parsedReplyCount;
+
     return CommentItem(
       commentId: _asInt(json['commentId']),
       content: (json['content'] ?? '').toString(),
@@ -83,14 +74,19 @@ class CommentItem {
       isDeleted: _asBool(json['isDeleted']),
       isReply: _asBool(json['isReply']),
       parentCommentId: _asNullableInt(json['parentCommentId']),
-      replyCount: _asInt(json['replyCount']),
+      replyCount: parsedReplyCount,
       replies: replies,
       username: _asNullableString(json['username']),
       displayName: _asNullableString(json['displayName']),
       avatarUrl: _asNullableString(json['avatarUrl']),
       isLiked: _asBool(json['isLiked']),
-      areRepliesLoaded: hasRepliesField,
+      areRepliesLoaded: hasRepliesField && replies.isNotEmpty,
       isReplyLoading: false,
+      isLoadingMoreReplies: false,
+      hasMoreReplies: replies.length < parsedRepliesTotalCount,
+      repliesPage: replies.isEmpty ? 0 : 1,
+      repliesPageSize: replies.isEmpty ? 20 : replies.length,
+      repliesTotalCount: parsedRepliesTotalCount,
     );
   }
 
@@ -113,6 +109,11 @@ class CommentItem {
     bool? isLiked,
     bool? areRepliesLoaded,
     bool? isReplyLoading,
+    bool? isLoadingMoreReplies,
+    bool? hasMoreReplies,
+    int? repliesPage,
+    int? repliesPageSize,
+    int? repliesTotalCount,
   }) {
     return CommentItem(
       commentId: commentId ?? this.commentId,
@@ -133,41 +134,40 @@ class CommentItem {
       isLiked: isLiked ?? this.isLiked,
       areRepliesLoaded: areRepliesLoaded ?? this.areRepliesLoaded,
       isReplyLoading: isReplyLoading ?? this.isReplyLoading,
+      isLoadingMoreReplies: isLoadingMoreReplies ?? this.isLoadingMoreReplies,
+      hasMoreReplies: hasMoreReplies ?? this.hasMoreReplies,
+      repliesPage: repliesPage ?? this.repliesPage,
+      repliesPageSize: repliesPageSize ?? this.repliesPageSize,
+      repliesTotalCount: repliesTotalCount ?? this.repliesTotalCount,
     );
   }
 
   static int _asInt(dynamic v) {
     if (v is int) return v;
     if (v is num) return v.toInt();
-    return int.tryParse('$v') ?? 0;
+    return int.tryParse(v?.toString() ?? '') ?? 0;
   }
 
   static int? _asNullableInt(dynamic v) {
     if (v == null) return null;
     if (v is int) return v;
     if (v is num) return v.toInt();
-    return int.tryParse('$v');
+    return int.tryParse(v.toString());
   }
 
   static bool _asBool(dynamic v) {
     if (v is bool) return v;
-    final t = '$v'.toLowerCase().trim();
+    final t = (v ?? '').toString().toLowerCase().trim();
     return t == 'true' || t == '1';
   }
 
   static DateTime? _asDateTime(dynamic v) {
     if (v == null) return null;
-
     final raw = v.toString().trim();
     if (raw.isEmpty) return null;
-
     final parsed = DateTime.tryParse(raw);
     if (parsed == null) return null;
-
-    if (raw.endsWith('Z') || raw.contains('+')) {
-      return parsed.toLocal();
-    }
-
+    if (raw.endsWith('Z') || raw.contains('+')) return parsed.toLocal();
     return DateTime.utc(
       parsed.year,
       parsed.month,

@@ -1,3 +1,5 @@
+import '../models/paged_result.dart';
+import '../models/preferences_query.dart';
 import '../models/user_preference.dart';
 import 'preferences_api.dart';
 
@@ -6,12 +8,17 @@ class PreferencesRepository {
 
   final PreferencesApi api;
 
-  Future<List<UserPreference>> getPreferences() {
-    return api.getPreferences();
+  Future<PagedResult<UserPreference>> getPreferences({
+    PreferencesQuery query = const PreferencesQuery(),
+  }) {
+    return api.getPreferences(query: query);
   }
 
-  Future<List<UserPreference>> getPreferencesForUser(int userId) {
-    return api.getPreferencesForUser(userId);
+  Future<PagedResult<UserPreference>> getPreferencesForUser(
+    int userId, {
+    PreferencesQuery query = const PreferencesQuery(),
+  }) {
+    return api.getPreferencesForUser(userId, query: query);
   }
 
   Future<UserPreference> upsertPreference({

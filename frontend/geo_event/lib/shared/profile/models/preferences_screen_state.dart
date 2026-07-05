@@ -3,11 +3,24 @@ class PreferencesScreenState {
     required this.segmentItems,
     required this.genreItems,
     required this.subGenreItems,
+    required this.page,
+    required this.pageSize,
+    required this.totalCount,
+    required this.totalPages,
+    required this.hasNextPage,
+    required this.hasPreviousPage,
   });
 
   final List<PreferenceItemViewModel> segmentItems;
   final List<PreferenceItemViewModel> genreItems;
   final List<PreferenceItemViewModel> subGenreItems;
+
+  final int page;
+  final int pageSize;
+  final int totalCount;
+  final int totalPages;
+  final bool hasNextPage;
+  final bool hasPreviousPage;
 
   bool get isEmpty =>
       segmentItems.isEmpty && genreItems.isEmpty && subGenreItems.isEmpty;

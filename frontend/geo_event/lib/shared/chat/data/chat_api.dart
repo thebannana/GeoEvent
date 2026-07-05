@@ -12,18 +12,40 @@ class ChatApi {
 
   final Dio dio;
 
-  Future<List<ConversationSummary>> getThreads() async {
-    final response = await dio.get(ApiEndpoints.threads);
+  Future<MessagePagedResult<ConversationSummary>> getThreads({
+    int page = 1,
+    int pageSize = 20,
+    String? searchTerm,
+    bool unreadOnly = false,
+  }) async {
+    final response = await dio.get(
+      ApiEndpoints.threads,
+      queryParameters: {
+        'page': page <= 0 ? 1 : page,
+        'pageSize': pageSize <= 0 ? 20 : (pageSize > 50 ? 50 : pageSize),
+        if (searchTerm != null && searchTerm.trim().isNotEmpty)
+          'searchTerm': searchTerm.trim(),
+        'unreadOnly': unreadOnly,
+      },
+    );
+
     final raw = response.data;
 
-    if (raw is! List) {
-      throw const FormatException('Invalid threads response format.');
+    if (raw is Map<String, dynamic>) {
+      return MessagePagedResult<ConversationSummary>.fromJson(
+        raw,
+        ConversationSummary.fromJson,
+      );
     }
 
-    return raw
-        .whereType<Map>()
-        .map((e) => ConversationSummary.fromJson(Map<String, dynamic>.from(e)))
-        .toList(growable: false);
+    if (raw is Map) {
+      return MessagePagedResult<ConversationSummary>.fromJson(
+        Map<String, dynamic>.from(raw),
+        ConversationSummary.fromJson,
+      );
+    }
+
+    throw const FormatException('Invalid threads response format.');
   }
 
   Future<int> getUnreadCount() async {
@@ -62,31 +84,50 @@ class ChatApi {
     return _parseThreadDetails(response.data);
   }
 
-  Future<List<MessageItem>> getThreadMessages(int threadId) async {
-    final response = await dio.get(ApiEndpoints.threadMessages(threadId));
+  Future<MessagePagedResult<MessageItem>> getThreadMessages({
+    required int threadId,
+    int page = 1,
+    int pageSize = 30,
+  }) async {
+    final response = await dio.get(
+      ApiEndpoints.threadMessages(threadId),
+      queryParameters: {
+        'page': page <= 0 ? 1 : page,
+        'pageSize': pageSize <= 0 ? 30 : (pageSize > 100 ? 100 : pageSize),
+      },
+    );
+
     final raw = response.data;
 
-    if (raw is List) {
-      return raw
-          .whereType<Map>()
-          .map((e) => MessageItem.fromJson(Map<String, dynamic>.from(e)))
-          .toList(growable: false);
-    }
-
     if (raw is Map<String, dynamic>) {
-      final paged = MessagePagedResult<MessageItem>.fromJson(
+      return MessagePagedResult<MessageItem>.fromJson(
         raw,
         MessageItem.fromJson,
       );
-      return paged.items;
     }
 
     if (raw is Map) {
-      final paged = MessagePagedResult<MessageItem>.fromJson(
+      return MessagePagedResult<MessageItem>.fromJson(
         Map<String, dynamic>.from(raw),
         MessageItem.fromJson,
       );
-      return paged.items;
+    }
+
+    if (raw is List) {
+      final items = raw
+          .whereType<Map>()
+          .map((e) => MessageItem.fromJson(Map<String, dynamic>.from(e)))
+          .toList(growable: false);
+
+      return MessagePagedResult<MessageItem>(
+        items: items,
+        totalCount: items.length,
+        page: 1,
+        pageSize: items.length,
+        totalPages: 1,
+        hasNextPage: false,
+        hasPreviousPage: false,
+      );
     }
 
     throw const FormatException('Invalid thread messages response format.');

@@ -28,6 +28,18 @@ public class ReservationsController : ControllerBase
         _configuration = configuration;
     }
 
+    [AllowAnonymous]
+    [HttpGet("public/events/{eventId:int}/attendees")]
+    public async Task<IActionResult> GetPublicEventAttendees(
+    int eventId,
+    [FromQuery] PublicEventAttendeesFilterDto filter)
+    {
+        var result = await _ticketService.GetPublicEventAttendeesAsync(eventId, filter);
+        return result.Success
+            ? Ok(result.Data)
+            : StatusCode(result.StatusCode, new { error = result.Error });
+    }
+
     [HttpPost("{reservationId:int}/cash-confirm")]
     public async Task<IActionResult> ConfirmCash(int reservationId)
     {
@@ -57,6 +69,34 @@ public class ReservationsController : ControllerBase
             : StatusCode(result.StatusCode, new { error = result.Error });
     }
 
+    [HttpGet("{reservationId:int}/tickets")]
+    public async Task<IActionResult> GetTickets(
+        int reservationId,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20)
+    {
+        var userId = User.GetUserId();
+        var result = await _ticketService.GetTicketsByReservationAsync(reservationId, userId, page, pageSize);
+
+        return result.Success
+            ? Ok(result.Data)
+            : StatusCode(result.StatusCode, new { error = result.Error });
+    }
+
+    [HttpGet("{reservationId:int}/payments")]
+    public async Task<IActionResult> GetPayments(
+        int reservationId,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20)
+    {
+        var userId = User.GetUserId();
+        var result = await _ticketService.GetReservationPaymentsAsync(reservationId, userId, page, pageSize);
+
+        return result.Success
+            ? Ok(result.Data)
+            : StatusCode(result.StatusCode, new { error = result.Error });
+    }
+
     [HttpPatch("events/{eventId:int}/reservations/{reservationId:int}/collect-cash")]
     [Authorize]
     public async Task<IActionResult> CollectCash(int eventId, int reservationId)
@@ -70,16 +110,6 @@ public class ReservationsController : ControllerBase
             userId,
             role);
 
-        return result.Success
-            ? Ok(result.Data)
-            : StatusCode(result.StatusCode, new { error = result.Error });
-    }
-
-    [AllowAnonymous]
-    [HttpGet("public/events/{eventId:int}/attendees")]
-    public async Task<IActionResult> GetPublicEventAttendees(int eventId)
-    {
-        var result = await _ticketService.GetPublicEventAttendeesAsync(eventId);
         return result.Success
             ? Ok(result.Data)
             : StatusCode(result.StatusCode, new { error = result.Error });
@@ -317,28 +347,6 @@ public class ReservationsController : ControllerBase
     {
         var userId = User.GetUserId();
         var result = await _ticketService.GetUserReservationsAsync(userId, filter);
-
-        return result.Success
-            ? Ok(result.Data)
-            : StatusCode(result.StatusCode, new { error = result.Error });
-    }
-
-    [HttpGet("{reservationId:int}/tickets")]
-    public async Task<IActionResult> GetTickets(int reservationId)
-    {
-        var userId = User.GetUserId();
-        var result = await _ticketService.GetTicketsByReservationAsync(reservationId, userId);
-
-        return result.Success
-            ? Ok(result.Data)
-            : StatusCode(result.StatusCode, new { error = result.Error });
-    }
-
-    [HttpGet("{reservationId:int}/payments")]
-    public async Task<IActionResult> GetPayments(int reservationId)
-    {
-        var userId = User.GetUserId();
-        var result = await _ticketService.GetReservationPaymentsAsync(reservationId, userId);
 
         return result.Success
             ? Ok(result.Data)

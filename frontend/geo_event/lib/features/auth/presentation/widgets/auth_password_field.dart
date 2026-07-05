@@ -14,6 +14,7 @@ class AuthPasswordField extends StatelessWidget {
     this.autofillHints,
     this.onFieldSubmitted,
     this.enabled = true,
+    this.helperText,
   });
 
   final TextEditingController controller;
@@ -25,6 +26,7 @@ class AuthPasswordField extends StatelessWidget {
   final List<String>? autofillHints;
   final ValueChanged<String>? onFieldSubmitted;
   final bool enabled;
+  final String? helperText;
 
   @override
   Widget build(BuildContext context) {
@@ -39,6 +41,7 @@ class AuthPasswordField extends StatelessWidget {
       enabled: enabled,
       autocorrect: false,
       enableSuggestions: false,
+      helperText: helperText,
       suffixIcon: IconButton(
         onPressed: enabled ? onToggleVisibility : null,
         tooltip: obscureText ? 'Show password' : 'Hide password',

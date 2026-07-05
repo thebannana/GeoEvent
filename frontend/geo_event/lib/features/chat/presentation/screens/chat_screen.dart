@@ -1,9 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/utils/date_time_extensions.dart';
+import '../../../../core/widgets/feedback/app_spinner.dart';
 import '../../../../core/widgets/inputs/app_chip.dart';
 import '../../../../core/widgets/feedback/app_empty_state.dart';
 import '../../../../core/widgets/feedback/app_error_state.dart';
+import '../../../../core/widgets/layout/app_scaffold.dart';
 import '../../../../core/widgets/surfaces/app_surface_card.dart';
 import '../../../../shared/chat/models/chat_thread_args.dart';
 import '../../../../shared/chat/models/chat_thread_type.dart';
@@ -11,6 +16,7 @@ import '../../../../shared/chat/models/conversation_summary.dart';
 import '../../application/messages_controller.dart';
 import '../widgets/chat_avatar.dart';
 import 'chat_thread_screen.dart';
+import '../../../../core/utils/debounce.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   const ChatScreen({super.key});
@@ -21,10 +27,35 @@ class ChatScreen extends ConsumerStatefulWidget {
 
 class _ChatScreenState extends ConsumerState<ChatScreen> {
   final _searchController = TextEditingController();
+  final _scrollController = ScrollController();
+  final _searchDebouncer = Debouncer(delay: const Duration(milliseconds: 350));
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_onScroll);
+  }
+
+  void _onSearchChanged(String value) {
+    _searchDebouncer.run(() {
+      ref.read(messagesInboxControllerProvider.notifier).setSearchQuery(value);
+    });
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+
+    final position = _scrollController.position;
+    if (position.pixels >= position.maxScrollExtent - 200) {
+      ref.read(messagesInboxControllerProvider.notifier).loadNextPage();
+    }
+  }
 
   @override
   void dispose() {
+    _searchDebouncer.dispose();
     _searchController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -32,13 +63,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(messagesInboxControllerProvider);
     final controller = ref.read(messagesInboxControllerProvider.notifier);
-    final filtered = state.filteredConversations;
+    final conversations =
+        state.conversations.valueOrNull ?? const <ConversationSummary>[];
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
 
-    return Scaffold(
+    return AppScaffold(
       backgroundColor: Colors.transparent,
       resizeToAvoidBottomInset: false,
-      body: SafeArea(
+      child: SafeArea(
         top: false,
         bottom: false,
         maintainBottomViewPadding: true,
@@ -49,6 +81,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           child: RefreshIndicator(
             onRefresh: controller.refresh,
             child: CustomScrollView(
+              controller: _scrollController,
               physics: const AlwaysScrollableScrollPhysics(),
               keyboardDismissBehavior:
                   ScrollViewKeyboardDismissBehavior.onDrag,
@@ -58,18 +91,23 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     padding: const EdgeInsets.fromLTRB(18, 14, 18, 0),
                     child: TextField(
                       controller: _searchController,
-                      onChanged: controller.setSearchQuery,
+                      onChanged: _onSearchChanged,
                       textInputAction: TextInputAction.search,
                       style: const TextStyle(fontSize: 15),
                       decoration: InputDecoration(
                         hintText: 'Search chats',
+                        helperText: state.searchQuery.isNotEmpty
+                            ? 'Showing filtered chat results.'
+                            : 'Search by person, username, or chat title.',
                         prefixIcon: const Icon(Icons.search_rounded, size: 20),
                         suffixIcon: state.searchQuery.isNotEmpty
                             ? IconButton(
                                 onPressed: () {
+                                  _searchDebouncer.cancel();
                                   _searchController.clear();
                                   controller.setSearchQuery('');
                                 },
+                                tooltip: 'Clear search',
                                 icon: const Icon(
                                   Icons.close_rounded,
                                   size: 18,
@@ -105,21 +143,21 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     ),
                   ),
                 ),
-                if (state.conversations.isLoading)
+                if (state.conversations.isLoading && conversations.isEmpty)
                   const SliverPadding(
                     padding: EdgeInsets.fromLTRB(18, 10, 18, 24),
                     sliver: SliverToBoxAdapter(
                       child: _ChatLoadingState(),
                     ),
                   )
-                else if (state.conversations.hasError)
+                else if (state.conversations.hasError && conversations.isEmpty)
                   SliverPadding(
                     padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
                     sliver: SliverToBoxAdapter(
                       child: _ChatErrorState(onRetry: controller.refresh),
                     ),
                   )
-                else if (filtered.isEmpty)
+                else if (conversations.isEmpty)
                   SliverPadding(
                     padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
                     sliver: SliverFillRemaining(
@@ -135,40 +173,53 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   )
                 else
                   SliverPadding(
-                    padding: EdgeInsets.fromLTRB(
-                      18,
-                      8,
-                      18,
-                      24 + bottomInset,
-                    ),
+                    padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
                     sliver: SliverList.separated(
-                      itemCount: filtered.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 10),
+                      itemCount:
+                          conversations.length + (state.isLoadingMore ? 1 : 0),
+                      separatorBuilder: (_, index) {
+                        if (index >= conversations.length - 1) {
+                          return const SizedBox.shrink();
+                        }
+                        return const SizedBox(height: 10);
+                      },
                       itemBuilder: (context, index) {
-                        final item = filtered[index];
-                        return _ConversationCard(
-                          item: item,
-                          onTap: () async {
-                            controller.markThreadLocallyRead(item.threadId);
+                        if (index >= conversations.length) {
+                          return const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 12),
+                            child: Center(
+                              child: AppSpinner(size: 22, strokeWidth: 2.4),
+                            ),
+                          );
+                        }
 
-                            await Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => ChatThreadScreen(
-                                  args: ChatThreadArgs(
-                                    threadId: item.threadId,
-                                    type: item.type,
-                                    title: item.title,
-                                    otherUserId: item.otherUserId,
-                                    eventId: item.eventId,
+                        final item = conversations[index];
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: _ConversationCard(
+                            item: item,
+                            onTap: () async {
+                              controller.markThreadLocallyRead(item.threadId);
+
+                              await Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => ChatThreadScreen(
+                                    args: ChatThreadArgs(
+                                      threadId: item.threadId,
+                                      type: item.type,
+                                      title: item.title,
+                                      otherUserId: item.otherUserId,
+                                      eventId: item.eventId,
+                                    ),
                                   ),
                                 ),
-                              ),
-                            );
+                              );
 
-                            if (mounted) {
-                              await controller.refresh();
-                            }
-                          },
+                              if (mounted) {
+                                await controller.refresh();
+                              }
+                            },
+                          ),
                         );
                       },
                     ),
@@ -252,10 +303,10 @@ class _ConversationCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
-                _formatTime(item.lastMessageSentAt),
-                style: theme.textTheme.bodySmall?.copyWith(
-                  fontSize: 11,
-                ),
+                item.lastMessageSentAt.isToday
+                    ? item.lastMessageSentAt.formatTime()
+                    : item.lastMessageSentAt.formatDate(pattern: 'dd.MM'),
+                style: theme.textTheme.bodySmall?.copyWith(fontSize: 11),
               ),
               const SizedBox(height: 8),
               if (item.unreadCount > 0)
@@ -292,45 +343,33 @@ class _ConversationCard extends StatelessWidget {
     );
   }
 
-static String _displayTitle(ConversationSummary item) {
-  final title = item.title.trim();
-  if (title.isNotEmpty && title.toLowerCase() != 'direct chat') {
-    return title;
-  }
-
-  final displayName = item.otherUserDisplayName?.trim();
-  if (displayName != null && displayName.isNotEmpty) {
-    return displayName;
-  }
-
-  final username = cleanUsername(item.otherUserUsername);
-  if (username != null) {
-    return username;
-  }
-
-  if (item.type == ChatThreadType.direct && item.otherUserId != null) {
-    return 'User ${item.otherUserId}';
-  }
-
-  return 'Chat';
-}
-
-static String? cleanUsername(String? value) {
-  final cleaned = value?.trim().replaceFirst(RegExp(r'^@+'), '');
-  if (cleaned == null || cleaned.isEmpty) return null;
-  return '@$cleaned';
-}
-
-  static String _formatTime(DateTime value) {
-    final local = value.toLocal();
-    final now = DateTime.now();
-    final diff = now.difference(local);
-
-    if (diff.inDays >= 1) {
-      return '${local.day.toString().padLeft(2, '0')}.${local.month.toString().padLeft(2, '0')}';
+  static String _displayTitle(ConversationSummary item) {
+    final title = item.title.trim();
+    if (title.isNotEmpty && title.toLowerCase() != 'direct chat') {
+      return title;
     }
 
-    return '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
+    final displayName = item.otherUserDisplayName?.trim();
+    if (displayName != null && displayName.isNotEmpty) {
+      return displayName;
+    }
+
+    final username = cleanUsername(item.otherUserUsername);
+    if (username != null) {
+      return username;
+    }
+
+    if (item.type == ChatThreadType.direct) {
+      return 'Direct chat';
+    }
+
+    return 'Chat';
+  }
+
+  static String? cleanUsername(String? value) {
+    final cleaned = value?.trim().replaceFirst(RegExp(r'^@+'), '');
+    if (cleaned == null || cleaned.isEmpty) return null;
+    return '@$cleaned';
   }
 }
 

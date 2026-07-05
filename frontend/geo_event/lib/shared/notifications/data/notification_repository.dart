@@ -1,4 +1,4 @@
-import '../models/notification_model.dart';
+import '../models/notification_page_result.dart';
 import 'notification_api.dart';
 
 class NotificationRepository {
@@ -8,14 +8,18 @@ class NotificationRepository {
 
   final NotificationApi api;
 
-  Future<List<NotificationModel>> getNotifications({
+  Future<NotificationPageResult> getNotifications({
     int page = 1,
-    int pageSize = NotificationApi.pageSize,
+    int pageSize = NotificationApi.defaultPageSize,
   }) {
     return api.getNotifications(
       page: page,
       pageSize: pageSize,
     );
+  }
+
+  Future<int> getUnreadCount() {
+    return api.getUnreadCount();
   }
 
   Future<void> markAsRead(int notificationId) {

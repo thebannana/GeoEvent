@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 
+import '../../../../core/utils/date_time_extensions.dart';
+import '../../../../core/widgets/feedback/app_confirm_dialog.dart';
 import '../../../../core/widgets/feedback/app_empty_state.dart';
+import '../../../../core/widgets/layout/app_scaffold.dart';
 import '../../../../core/widgets/surfaces/app_surface_card.dart';
 import '../../../../shared/chat/models/chat_participant.dart';
 import '../../../../shared/chat/models/chat_thread_details.dart';
@@ -41,11 +43,11 @@ class ChatDetailsScreen extends StatelessWidget {
     final resolvedAvatarSeed =
         avatarSeed(details, effectiveType, otherParticipant);
 
-    return Scaffold(
+    return AppScaffold(
       appBar: AppBar(
         title: const Text('Chat details'),
       ),
-      body: ListView(
+      child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           AppSurfaceCard(
@@ -128,7 +130,7 @@ class ChatDetailsScreen extends StatelessWidget {
                             if (details.eventInfo!.startsAt != null) ...[
                               const SizedBox(height: 6),
                               Text(
-                                formatEventStart(details.eventInfo!.startsAt!),
+                                'Starts ${details.eventInfo!.startsAt!.formatEventDateTime()}',
                                 style: theme.textTheme.bodyMedium?.copyWith(
                                   color: colorScheme.onSurface,
                                   fontWeight: FontWeight.w600,
@@ -199,7 +201,7 @@ class ChatDetailsScreen extends StatelessWidget {
                 Text(
                   isDirect
                       ? 'If you remove this direct chat, it will disappear from your inbox. It can appear again later if a direct conversation is opened again.'
-                      : 'If you leave this event chat, you will lose access and won\'t be able to rejoin it manually later.',
+                      : 'If you leave this event chat, you will lose access and will not be able to rejoin it manually later.',
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: colorScheme.onSurface,
                     height: 1.35,
@@ -227,6 +229,15 @@ class ChatDetailsScreen extends StatelessWidget {
                     label: Text(isDirect ? 'Remove chat' : 'Leave group'),
                   ),
                 ),
+                if (onLeaveThread == null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'This action is currently unavailable.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -239,36 +250,22 @@ class ChatDetailsScreen extends StatelessWidget {
     final action = onLeaveThread;
     if (action == null) return;
 
+    final navigator = Navigator.of(context);
     final isDirect = effectiveThreadType(details) == ChatThreadType.direct;
 
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(isDirect ? 'Remove chat?' : 'Leave group?'),
-        content: Text(
-          isDirect
-              ? 'This chat will be removed from your inbox. You can see it again if a direct conversation is opened later.'
-              : 'You will lose access to this event chat and won\'t be able to rejoin it manually later. This group is automatically removed when the event finishes.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text(isDirect ? 'Remove chat' : 'Leave group'),
-          ),
-        ],
-      ),
+    final confirmed = await AppConfirmDialog.show(
+      context,
+      title: isDirect ? 'Remove chat?' : 'Leave group?',
+      message: isDirect
+          ? 'This chat will be removed from your inbox. You can see it again if a direct conversation is opened later.'
+          : 'You will lose access to this event chat and will not be able to rejoin it manually later. This group is automatically removed when the event finishes.',
+      confirmLabel: isDirect ? 'Remove chat' : 'Leave group',
     );
 
     if (confirmed != true) return;
 
     await action();
-    if (context.mounted) {
-      Navigator.of(context).pop();
-    }
+    navigator.pop();
   }
 
   static ChatThreadType effectiveThreadType(ChatThreadDetails details) {
@@ -352,13 +349,13 @@ class ChatDetailsScreen extends StatelessWidget {
 
     final directLastActive = details.otherUserLastActiveAt;
     if (directLastActive != null) {
-      return 'Active ${relativeTime(directLastActive)}';
+      return 'Active ${directLastActive.timeAgo(short: false)}';
     }
 
     if (otherParticipant != null) {
       if (otherParticipant.isOnline) return 'Online';
       if (otherParticipant.lastActiveAt != null) {
-        return 'Active ${relativeTime(otherParticipant.lastActiveAt!)}';
+        return 'Active ${otherParticipant.lastActiveAt!.timeAgo(short: false)}';
       }
     }
 
@@ -429,19 +426,6 @@ class ChatDetailsScreen extends StatelessWidget {
     final cleaned = value?.trim().replaceFirst(RegExp(r'^@+'), '');
     if (cleaned == null || cleaned.isEmpty) return null;
     return '@$cleaned';
-  }
-
-  static String relativeTime(DateTime value) {
-    final diff = DateTime.now().difference(value.toLocal());
-    if (diff.inMinutes < 1) return 'just now';
-    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-    if (diff.inHours < 24) return '${diff.inHours}h ago';
-    return '${diff.inDays}d ago';
-  }
-
-  static String formatEventStart(DateTime value) {
-    final local = value.toLocal();
-    return 'Starts ${DateFormat('EEE, d MMM • HH:mm').format(local)}';
   }
 }
 
@@ -522,7 +506,7 @@ class ParticipantTile extends StatelessWidget {
     final username = ChatDetailsScreen.cleanUsername(participant.username);
     if (username != null) return username;
 
-    return 'User ${participant.userId}';
+    return 'Participant';
   }
 
   static String? participantSubtitle(ChatParticipant participant) {

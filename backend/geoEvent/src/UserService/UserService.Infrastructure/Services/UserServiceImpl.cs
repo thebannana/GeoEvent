@@ -275,10 +275,99 @@ public class UserServiceImpl : IUserService
         return ServiceResult<PagedResult<UserProfileDto>>.Ok(mapped);
     }
 
-    public async Task<ServiceResult<List<UserPreferenceResponseDto>>> GetUserPreferencesAsync(int userId)
+    public async Task<ServiceResult<PagedResult<UserPreferenceResponseDto>>> GetUserPreferencesAsync(
+        int userId,
+        PreferencesFilterDto filter)
     {
-        var prefs = await _userRepository.GetUserPreferencesAsync(userId);
-        return ServiceResult<List<UserPreferenceResponseDto>>.Ok(prefs.Select(MapPreference).ToList());
+        filter ??= new PreferencesFilterDto();
+
+        var page = filter.Page < 1 ? 1 : filter.Page;
+        var pageSize = filter.PageSize < 1 ? 20 : Math.Min(filter.PageSize, 100);
+
+        var pagedPrefs = await _userRepository.GetUserPreferencesAsync(userId);
+
+        var filtered = pagedPrefs.AsEnumerable();
+
+        if (!string.IsNullOrWhiteSpace(filter.Type))
+        {
+            var type = filter.Type.Trim().ToLowerInvariant();
+
+            filtered = type switch
+            {
+                "segment" => filtered.Where(p =>
+                    p.SegmentId != null &&
+                    p.GenreId == null &&
+                    p.SubGenreId == null),
+
+                "genre" => filtered.Where(p =>
+                    p.GenreId != null &&
+                    p.SubGenreId == null),
+
+                "subgenre" => filtered.Where(p =>
+                    p.SubGenreId != null),
+
+                _ => filtered
+            };
+        }
+
+        if (filter.MinScore.HasValue)
+        {
+            filtered = filtered.Where(p => p.Score >= filter.MinScore.Value);
+        }
+
+        if (filter.MaxScore.HasValue)
+        {
+            filtered = filtered.Where(p => p.Score <= filter.MaxScore.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.Search))
+        {
+            var search = filter.Search.Trim().ToLowerInvariant();
+
+            filtered = filtered.Where(p =>
+                (p.SegmentId?.ToString().Contains(search) ?? false) ||
+                (p.GenreId?.ToString().Contains(search) ?? false) ||
+                (p.SubGenreId?.ToString().Contains(search) ?? false));
+        }
+
+        var ordered = filtered
+            .OrderByDescending(p => p.Score)
+            .ThenBy(p => p.SegmentId ?? 0)
+            .ThenBy(p => p.GenreId ?? 0)
+            .ThenBy(p => p.SubGenreId ?? 0)
+            .ToList();
+
+        var totalCount = ordered.Count;
+
+        var items = ordered
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(MapPreference)
+            .ToList();
+
+        var result = new PagedResult<UserPreferenceResponseDto>
+        {
+            Items = items,
+            TotalCount = totalCount,
+            Page = page,
+            PageSize = pageSize
+        };
+
+        return ServiceResult<PagedResult<UserPreferenceResponseDto>>.Ok(result);
+    }
+
+    private static UserPreferenceResponseDto MapPreference(UserPreference preference)
+    {
+        return new UserPreferenceResponseDto
+        {
+            PrefId = preference.PrefId,
+            UserId = preference.UserId,
+            SegmentId = preference.SegmentId,
+            GenreId = preference.GenreId,
+            SubGenreId = preference.SubGenreId,
+            Score = preference.Score,
+            LastUpdated = preference.LastUpdated
+        };
     }
 
     public async Task<ServiceResult<UserPreferenceResponseDto>> UpsertPreferenceAsync(int userId, UpdatePreferenceDto dto)
@@ -355,10 +444,21 @@ public class UserServiceImpl : IUserService
         return ServiceResult<ReportResponseDto>.Ok(MapReport(created));
     }
 
-    public async Task<ServiceResult<List<ReportResponseDto>>> GetUserReportsAsync(int userId)
+    public async Task<ServiceResult<PagedResult<ReportResponseDto>>> GetUserReportsAsync(int userId, int page, int pageSize)
     {
-        var reports = await _userRepository.GetUserReportsAsync(userId);
-        return ServiceResult<List<ReportResponseDto>>.Ok(reports.Select(MapReport).ToList());
+        page = page <= 0 ? 1 : page;
+        pageSize = pageSize <= 0 ? 10 : Math.Min(pageSize, 50);
+
+        var result = await _userRepository.GetUserReportsAsync(userId, page, pageSize);
+
+        return ServiceResult<PagedResult<ReportResponseDto>>.Ok(
+            new PagedResult<ReportResponseDto>
+            {
+                Items = result.Items.Select(MapReport).ToList(),
+                TotalCount = result.TotalCount,
+                Page = result.Page,
+                PageSize = result.PageSize
+            });
     }
 
     public async Task<ServiceResult<PagedResult<ReportResponseDto>>> GetAllReportsAsync(
@@ -637,15 +737,5 @@ public class UserServiceImpl : IUserService
         RatingsCount = 0,
         MyRating = null,
         MyReviewComment = null
-    };
-    private static UserPreferenceResponseDto MapPreference(UserPreference p) => new()
-    {
-        PrefId = p.PrefId,
-        UserId = p.UserId,
-        SegmentId = p.SegmentId,
-        GenreId = p.GenreId,
-        SubGenreId = p.SubGenreId,
-        Score = p.Score,
-        LastUpdated = p.LastUpdated
     };
 }

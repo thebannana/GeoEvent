@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/widgets/feedback/app_confirm_dialog.dart';
 import '../../../../core/widgets/feedback/app_empty_state.dart';
 import '../../../../core/widgets/feedback/app_error_state.dart';
 import '../../../../core/widgets/feedback/app_spinner.dart';
+import '../../../../core/widgets/layout/app_scaffold.dart';
 import '../../../../core/widgets/surfaces/app_surface_card.dart';
 import '../../../../shared/chat/models/chat_participant.dart';
 import '../../../../shared/chat/models/chat_thread_args.dart';
@@ -35,11 +37,17 @@ class ChatThreadScreen extends ConsumerStatefulWidget {
 class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
   final messageController = TextEditingController();
   final scrollController = ScrollController();
+
   bool eventCardDismissed = false;
+  bool _loadingOlderTriggerActive = false;
+  bool _hasText = false;
 
   @override
   void initState() {
     super.initState();
+
+    messageController.addListener(_onTextChanged);
+    scrollController.addListener(_onScroll);
 
     ref.listenManual<ChatThreadState>(
       chatThreadControllerProvider(widget.args),
@@ -47,7 +55,11 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
         final previousCount = previous?.messages.valueOrNull?.length ?? 0;
         final nextCount = next.messages.valueOrNull?.length ?? 0;
 
-        if (nextCount > previousCount) {
+        final appendedNewMessage = nextCount > previousCount &&
+            !(next.loadingOlderMessages &&
+                !(previous?.loadingOlderMessages ?? false));
+
+        if (appendedNewMessage) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (!scrollController.hasClients) return;
             scrollController.animateTo(
@@ -57,12 +69,36 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
             );
           });
         }
+
+        if (!next.loadingOlderMessages) {
+          _loadingOlderTriggerActive = false;
+        }
       },
     );
   }
 
+  void _onTextChanged() {
+    final hasText = messageController.text.trim().isNotEmpty;
+    if (hasText != _hasText) {
+      setState(() => _hasText = hasText);
+    }
+  }
+
+  void _onScroll() {
+    if (!scrollController.hasClients) return;
+
+    final position = scrollController.position;
+    if (position.pixels <= 120 && !_loadingOlderTriggerActive) {
+      _loadingOlderTriggerActive = true;
+      ref
+          .read(chatThreadControllerProvider(widget.args).notifier)
+          .loadOlderMessages();
+    }
+  }
+
   @override
   void dispose() {
+    messageController.removeListener(_onTextChanged);
     messageController.dispose();
     scrollController.dispose();
     super.dispose();
@@ -76,7 +112,13 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
         ref.read(chatThreadControllerProvider(widget.args).notifier);
     final myUserId = ref.watch(sessionUserIdProvider);
 
-    return Scaffold(
+    final sendDisabledReason = state.sending
+        ? 'Message is being sent.'
+        : !_hasText
+            ? 'Enter a message to enable sending.'
+            : null;
+
+    return AppScaffold(
       appBar: AppBar(
         titleSpacing: 0,
         title: state.details.when(
@@ -134,7 +176,7 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
           ),
         ],
       ),
-      body: Column(
+      child: Column(
         children: [
           state.details.maybeWhen(
             data: (details) {
@@ -185,10 +227,20 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
                 return ListView.separated(
                   controller: scrollController,
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-                  itemCount: items.length,
+                  itemCount: items.length + (state.loadingOlderMessages ? 1 : 0),
                   separatorBuilder: (_, _) => const SizedBox(height: 10),
                   itemBuilder: (context, index) {
-                    final message = items[index];
+                    if (state.loadingOlderMessages && index == 0) {
+                      return const Center(
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(vertical: 8),
+                          child: AppSpinner(size: 20, strokeWidth: 2.2),
+                        ),
+                      );
+                    }
+
+                    final message =
+                        state.loadingOlderMessages ? items[index - 1] : items[index];
                     final isMine =
                         myUserId != null && message.senderId == myUserId;
 
@@ -199,7 +251,9 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
                           ? ChatThreadType.eventGroup
                           : widget.args.type,
                       onReply: () => controller.setReplyingTo(message),
-                      onDelete: isMine ? () => controller.deleteMessage(message.id) : null,
+                      onDelete: isMine
+                          ? () => confirmDeleteMessage(context, controller, message)
+                          : null,
                       onLike: () => controller.toggleLike(message),
                       onEdit: isMine
                           ? () => showEditDialog(context, controller, message)
@@ -241,6 +295,7 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   if (state.replyingTo != null)
                     Padding(
@@ -268,7 +323,7 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
                             minLines: 1,
                             maxLines: 5,
                             textInputAction: TextInputAction.send,
-                            onSubmitted: state.sending
+                            onSubmitted: (!_hasText || state.sending)
                                 ? null
                                 : (_) async {
                                     final ok = await controller.sendMessage(
@@ -291,39 +346,54 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
                         ),
                       ),
                       const SizedBox(width: 10),
-                      SizedBox(
-                        width: 48,
-                        height: 48,
-                        child: FilledButton(
-                          onPressed: state.sending
-                              ? null
-                              : () async {
-                                  final ok = await controller.sendMessage(
-                                    messageController.text,
-                                  );
-                                  if (ok) {
-                                    messageController.clear();
-                                    jumpToBottom();
-                                  }
-                                },
-                          style: FilledButton.styleFrom(
-                            shape: const CircleBorder(),
-                            padding: EdgeInsets.zero,
+                      Tooltip(
+                        message: sendDisabledReason ?? 'Send message',
+                        child: SizedBox(
+                          width: 48,
+                          height: 48,
+                          child: FilledButton(
+                            onPressed: (!_hasText || state.sending)
+                                ? null
+                                : () async {
+                                    final ok = await controller.sendMessage(
+                                      messageController.text,
+                                    );
+                                    if (ok) {
+                                      messageController.clear();
+                                      jumpToBottom();
+                                    }
+                                  },
+                            style: FilledButton.styleFrom(
+                              shape: const CircleBorder(),
+                              padding: EdgeInsets.zero,
+                            ),
+                            child: state.sending
+                                ? AppSpinner(
+                                    size: 18,
+                                    strokeWidth: 2,
+                                    color: theme.colorScheme.onPrimary,
+                                  )
+                                : Icon(
+                                    Icons.send_rounded,
+                                    color: theme.colorScheme.onPrimary,
+                                  ),
                           ),
-                          child: state.sending
-                              ? AppSpinner(
-                                  size: 18,
-                                  strokeWidth: 2,
-                                  color: theme.colorScheme.onPrimary,
-                                )
-                              : Icon(
-                                  Icons.send_rounded,
-                                  color: theme.colorScheme.onPrimary,
-                                ),
                         ),
                       ),
                     ],
                   ),
+                  if (sendDisabledReason != null) ...[
+                    const SizedBox(height: 8),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: Text(
+                        sendDisabledReason,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -344,39 +414,112 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
     });
   }
 
+  Future<void> confirmDeleteMessage(
+    BuildContext context,
+    ChatThreadController controller,
+    MessageItem message,
+  ) async {
+    final confirmed = await AppConfirmDialog.show(
+      context,
+      title: 'Delete message?',
+      message:
+          'This action cannot be undone. The message will be permanently removed.',
+      confirmLabel: 'Delete',
+    );
+
+    if (confirmed != true) return;
+    await controller.deleteMessage(message.id);
+  }
+
   Future<void> showEditDialog(
     BuildContext context,
     ChatThreadController controller,
     MessageItem message,
   ) async {
-    final textController = TextEditingController(text: message.content);
-
     final result = await showDialog<String>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Edit message'),
-        content: TextField(
-          controller: textController,
-          minLines: 2,
-          maxLines: 6,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, textController.text.trim()),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
+      builder: (ctx) => _EditMessageDialog(initialText: message.content),
     );
-
-    textController.dispose();
 
     if (result == null || result.isEmpty) return;
     await controller.editMessage(messageId: message.id, content: result);
+  }
+}
+
+class _EditMessageDialog extends StatefulWidget {
+  final String initialText;
+
+  const _EditMessageDialog({
+    required this.initialText,
+  });
+
+  @override
+  State<_EditMessageDialog> createState() => _EditMessageDialogState();
+}
+
+class _EditMessageDialogState extends State<_EditMessageDialog> {
+  late final TextEditingController _textController;
+  String? _errorText;
+
+  @override
+  void initState() {
+    super.initState();
+    _textController = TextEditingController(text: widget.initialText);
+  }
+
+  @override
+  void dispose() {
+    _textController.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final value = _textController.text.trim();
+
+    if (value.isEmpty) {
+      setState(() {
+        _errorText = 'Message cannot be empty.';
+      });
+      return;
+    }
+
+    Navigator.of(context).pop(value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Edit message'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: _textController,
+            minLines: 2,
+            maxLines: 6,
+            onChanged: (_) {
+              if (_errorText != null) {
+                setState(() => _errorText = null);
+              }
+            },
+            decoration: InputDecoration(
+              hintText: 'Update your message',
+              errorText: _errorText,
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _submit,
+          child: const Text('Save'),
+        ),
+      ],
+    );
   }
 }
 

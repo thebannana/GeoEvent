@@ -55,7 +55,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with AuthFeedback {
       showAuthError(
         context,
         error,
-        fallbackMessage: 'Login failed.',
+        fallbackMessage: 'Login failed. Please check your credentials and try again.',
       );
     }
   }
@@ -99,6 +99,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with AuthFeedback {
                       fieldName: 'Email or username',
                     ),
                     enabled: !authState.isLoading,
+                    helperText: authState.isLoading
+                        ? 'Login is in progress...'
+                        : 'Use the email or username you registered with.',
                   ),
                   const SizedBox(height: 16),
                   AuthPasswordField(
@@ -119,11 +122,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with AuthFeedback {
                       fieldName: 'Password',
                     ),
                     enabled: !authState.isLoading,
+                    helperText: authState.isLoading
+                        ? 'Please wait while we verify your account.'
+                        : 'Enter your account password.',
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 20),
                   AuthSubmitButton(
                     label: 'Login',
                     isLoading: authState.isLoading,
+                    disabledReason: 'Please wait while your login request is being processed.',
                     onPressed: _submit,
                   ),
                   const SizedBox(height: 8),
@@ -131,13 +138,21 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with AuthFeedback {
                     onPressed: authState.isLoading
                         ? null
                         : () => context.push('/register'),
-                    child: const Text('Create account'),
+                    child: Text(
+                      authState.isLoading
+                          ? 'Create account unavailable while logging in'
+                          : 'Create account',
+                    ),
                   ),
                   TextButton(
                     onPressed: authState.isLoading
                         ? null
                         : () => context.push('/forgot-password'),
-                    child: const Text('Forgot password?'),
+                    child: Text(
+                      authState.isLoading
+                          ? 'Forgot password unavailable while logging in'
+                          : 'Forgot password?',
+                    ),
                   ),
                 ],
               ),

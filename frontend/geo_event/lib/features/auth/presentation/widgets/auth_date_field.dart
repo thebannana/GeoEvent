@@ -10,6 +10,7 @@ class AuthDateField extends StatelessWidget {
     required this.validator,
     this.onTap,
     this.enabled = true,
+    this.helperText,
   });
 
   final TextEditingController controller;
@@ -17,6 +18,7 @@ class AuthDateField extends StatelessWidget {
   final VoidCallback? onTap;
   final String? Function(String?)? validator;
   final bool enabled;
+  final String? helperText;
 
   @override
   Widget build(BuildContext context) {
@@ -27,6 +29,8 @@ class AuthDateField extends StatelessWidget {
       onTap: enabled ? onTap : null,
       validator: validator,
       suffixIcon: const Icon(Icons.calendar_today),
+      helperText: helperText,
+      enabled: enabled,
     );
   }
 }

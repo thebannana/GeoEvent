@@ -3,27 +3,33 @@ import 'package:dio/dio.dart';
 import '../../../core/network/api_endpoints.dart';
 import '../../events/models/paged_result.dart';
 import '../models/reservation.dart';
+import '../models/reservation_query.dart';
 import '../models/reservation_status.dart';
 
 class ReservationsApi {
   final Dio _dio;
 
+  static const int maxPageSize = 50;
+  static const int defaultPageSize = 20;
+
   const ReservationsApi(this._dio);
 
   Future<PagedResult<Reservation>> getMyReservations({
     int page = 1,
-    int pageSize = 20,
+    int pageSize = defaultPageSize,
     ReservationStatus? status,
+    int? eventId,
   }) async {
-    final queryParameters = <String, dynamic>{
-      'page': page,
-      'pageSize': pageSize,
-      if (status != null) 'status': status.apiValue,
-    };
+    final query = ReservationsQuery(
+      page: page,
+      pageSize: pageSize,
+      status: status,
+      eventId: eventId,
+    );
 
     final response = await _dio.get<Map<String, dynamic>>(
       ApiEndpoints.myReservations,
-      queryParameters: queryParameters,
+      queryParameters: query.toQueryParameters(),
     );
 
     final data = response.data;
@@ -31,7 +37,7 @@ class ReservationsApi {
       throw Exception('Reservations response was empty.');
     }
 
-    return PagedResult.fromJson(data, Reservation.fromJson);
+    return PagedResult<Reservation>.fromJson(data, Reservation.fromJson);
   }
 
   Future<void> cancelReservation(int reservationId) async {

@@ -10,5 +10,5 @@ public class PaymentDetailResponseDto
     public decimal Amount { get; set; }
     public string Currency { get; set; } = string.Empty;
     public string? TransactionId { get; set; }
-    public DateTime PaidAt { get; set; }
+    public DateTime? PaidAt { get; set; }
 }

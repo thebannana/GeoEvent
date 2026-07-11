@@ -1,10 +1,10 @@
-﻿using System.Net.Http.Headers;
-using Microsoft.Extensions.Configuration;
+﻿using Microsoft.Extensions.Configuration;
 
 namespace EventService.Infrastructure.Services;
 
 public class ServiceAuthHandler : DelegatingHandler
 {
+    private const string HeaderName = "X-Api-Key";
     private readonly IConfiguration _configuration;
 
     public ServiceAuthHandler(IConfiguration configuration)
@@ -16,12 +16,12 @@ public class ServiceAuthHandler : DelegatingHandler
         HttpRequestMessage request,
         CancellationToken cancellationToken)
     {
-        var token = _configuration["ServiceAuth:UserServiceToken"];
+        var apiKey = _configuration["InternalApi:Key"];
 
-        if (!string.IsNullOrWhiteSpace(token))
+        if (!string.IsNullOrWhiteSpace(apiKey) &&
+            !request.Headers.Contains(HeaderName))
         {
-            request.Headers.Authorization =
-                new AuthenticationHeaderValue("Bearer", token);
+            request.Headers.Add(HeaderName, apiKey);
         }
 
         return base.SendAsync(request, cancellationToken);

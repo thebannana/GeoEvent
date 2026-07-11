@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/utils/logger.dart';
 import '../../../../core/widgets/async/app_async_view.dart';
 import '../../../../core/widgets/feedback/app_error_state.dart';
 import '../../../../core/widgets/feedback/app_loading_indicator.dart';
@@ -8,6 +9,7 @@ import '../../../../core/widgets/layout/app_scaffold.dart';
 import '../../../../core/widgets/surfaces/app_surface_card.dart';
 import '../../../../shared/profile/data/public_users_api.dart';
 import '../../../../shared/profile/models/public_user_profile.dart';
+import '../../../event/presentation/widgets/user_initials.dart';
 
 final publicProfileProvider =
     FutureProvider.family<PublicUserProfileDto, int>((ref, userId) {
@@ -34,11 +36,24 @@ class PublicProfileScreen extends ConsumerWidget {
           title: 'Loading profile',
           message: 'Please wait while we fetch this profile.',
         ),
-        errorBuilder: (_, _) => const AppErrorState(
-          title: 'Could not load profile',
-          message: 'Please try again later.',
-        ),
+        errorBuilder: (error, stackTrace) {
+          AppLogger.error(
+            'Failed to load public profile.',
+            tag: 'PublicProfileScreen',
+            error: error,
+            stackTrace: stackTrace,
+          );
+
+          return const AppErrorState(
+            title: 'Could not load profile',
+            message: 'Please try again later.',
+          );
+        },
         data: (profile) {
+          final imageUrl = profile.imageUrl?.trim();
+          final fullName = profile.fullName.trim();
+          final username = profile.username.trim();
+
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
@@ -52,14 +67,16 @@ class PublicProfileScreen extends ConsumerWidget {
                           .colorScheme
                           .primary
                           .withValues(alpha: 0.12),
-                      backgroundImage:
-                          (profile.imageUrl?.trim().isNotEmpty ?? false)
-                              ? NetworkImage(profile.imageUrl!.trim())
-                              : null,
-                      child: (profile.imageUrl?.trim().isNotEmpty ?? false)
+                      backgroundImage: (imageUrl != null && imageUrl.isNotEmpty)
+                          ? NetworkImage(imageUrl)
+                          : null,
+                      child: (imageUrl != null && imageUrl.isNotEmpty)
                           ? null
                           : Text(
-                              _firstLetter(profile.fullName),
+                              UserInitials.from(
+                                fullName.isNotEmpty ? fullName : username,
+                                fallback: '?',
+                              ),
                               style: const TextStyle(
                                 fontSize: 24,
                                 fontWeight: FontWeight.w700,
@@ -68,9 +85,7 @@ class PublicProfileScreen extends ConsumerWidget {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      profile.fullName.isNotEmpty
-                          ? profile.fullName
-                          : 'Unknown user',
+                      fullName.isNotEmpty ? fullName : 'Unknown user',
                       textAlign: TextAlign.center,
                       style: const TextStyle(
                         fontSize: 20,
@@ -79,9 +94,7 @@ class PublicProfileScreen extends ConsumerWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      profile.username.trim().isNotEmpty
-                          ? '@${profile.username}'
-                          : 'No username',
+                      username.isNotEmpty ? '@$username' : 'No username',
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
                     if (profile.isVerified) ...[
@@ -113,11 +126,5 @@ class PublicProfileScreen extends ConsumerWidget {
         },
       ),
     );
-  }
-
-  static String _firstLetter(String value) {
-    final trimmed = value.trim();
-    if (trimmed.isEmpty) return '?';
-    return trimmed[0].toUpperCase();
   }
 }

@@ -7,6 +7,10 @@ class AuthConsentTile extends FormField<bool> {
     super.validator,
     bool enabled = true,
     super.initialValue = false,
+    ValueChanged<bool?>? onChanged,
+    String requiredSubtitle = 'Required to create your account.',
+    String disabledSubtitle =
+        'Consent cannot be changed while registration is in progress.',
   }) : super(
           builder: (state) {
             final theme = Theme.of(state.context);
@@ -18,12 +22,15 @@ class AuthConsentTile extends FormField<bool> {
                 CheckboxListTile(
                   contentPadding: EdgeInsets.zero,
                   value: state.value ?? false,
-                  onChanged: enabled ? state.didChange : null,
+                  onChanged: enabled
+                      ? (value) {
+                          state.didChange(value);
+                          onChanged?.call(value);
+                        }
+                      : null,
                   title: Text(title),
                   subtitle: Text(
-                    enabled
-                        ? 'Required to create your account.'
-                        : 'Consent cannot be changed while registration is in progress.',
+                    enabled ? requiredSubtitle : disabledSubtitle,
                   ),
                   controlAffinity: ListTileControlAffinity.leading,
                 ),

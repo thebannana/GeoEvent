@@ -29,14 +29,8 @@ public class UpdateEventDto
     [Range(0, 100_000)]
     public decimal? Price { get; set; }
 
-    public bool? IsOnline { get; set; }
-
     [StringLength(500)]
     public string? Tags { get; set; }
-
-    [StringLength(1000)]
-    [Url]
-    public string? ExternalUrl { get; set; }
 
     [StringLength(1000)]
     public string? AccessibilityInfo { get; set; }

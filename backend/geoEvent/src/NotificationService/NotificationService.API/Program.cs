@@ -1,42 +1,17 @@
-﻿using DotNetEnv;
-using System.Text;
-using System.Text.Json.Serialization;
-using System.Threading.RateLimiting;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
+﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using NotificationService.API.Extensions;
+using NotificationService.API.Filters;
 using NotificationService.API.Middleware;
 using NotificationService.Infrastructure;
 using NotificationService.Infrastructure.Persistence;
-
-static string? FindSharedEnvFile(string startDirectory)
-{
-    var directory = new DirectoryInfo(startDirectory);
-
-    while (directory is not null)
-    {
-        var candidate = Path.Combine(directory.FullName, ".env");
-        if (File.Exists(candidate))
-            return candidate;
-
-        directory = directory.Parent;
-    }
-
-    return null;
-}
+using System.Text;
+using System.Text.Json.Serialization;
+using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
-
-if (builder.Environment.IsDevelopment())
-{
-    var sharedEnvPath = FindSharedEnvFile(builder.Environment.ContentRootPath);
-    if (!string.IsNullOrWhiteSpace(sharedEnvPath))
-    {
-        Env.Load(sharedEnvPath);
-    }
-}
 
 builder.Configuration.AddEnvironmentVariables();
 builder.Services.AddInfrastructure(builder.Configuration);
@@ -49,13 +24,15 @@ var allowedOrigins = builder.Configuration
     .ToArray()
     ?? Array.Empty<string>();
 
+if (allowedOrigins.Length == 0)
+{
+    throw new InvalidOperationException("At least one CORS origin must be configured.");
+}
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
-        if (allowedOrigins.Length == 0)
-            throw new InvalidOperationException("At least one CORS origin must be configured.");
-
         policy
             .WithOrigins(allowedOrigins)
             .AllowAnyHeader()
@@ -92,15 +69,21 @@ builder.Services.AddRateLimiter(options =>
 
 var jwtSecret = builder.Configuration["Jwt:Secret"];
 if (string.IsNullOrWhiteSpace(jwtSecret))
+{
     throw new InvalidOperationException("Jwt:Secret is not configured.");
+}
 
 var jwtIssuer = builder.Configuration["Jwt:Issuer"];
 if (string.IsNullOrWhiteSpace(jwtIssuer))
+{
     throw new InvalidOperationException("Jwt:Issuer is not configured.");
+}
 
 var jwtAudience = builder.Configuration["Jwt:Audience"];
 if (string.IsNullOrWhiteSpace(jwtAudience))
+{
     throw new InvalidOperationException("Jwt:Audience is not configured.");
+}
 
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -123,9 +106,13 @@ builder.Services
     });
 
 builder.Services.AddAuthorization();
+builder.Services.AddScoped<InternalApiKeyAuthFilter>();
 
 builder.Services.AddControllers()
-    .AddJsonOptions(o => o.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+    .AddJsonOptions(o =>
+    {
+        o.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+    });
 
 builder.Services.AddEndpointsApiExplorer();
 

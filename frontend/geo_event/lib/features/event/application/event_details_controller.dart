@@ -92,7 +92,6 @@ class EventDetailsController extends StateNotifier<EventDetailsState> {
 
     try {
       await ref.read(likedEventsProvider.notifier).likeEvent(current.eventId);
-      await ref.read(likedEventsProvider.notifier).refresh();
 
       if (!mounted) return;
       state = state.copyWith(isTogglingLike: false);
@@ -121,7 +120,6 @@ class EventDetailsController extends StateNotifier<EventDetailsState> {
 
     try {
       await ref.read(likedEventsProvider.notifier).unlikeEvent(current.eventId);
-      await ref.read(likedEventsProvider.notifier).refresh();
 
       if (!mounted) return;
       state = state.copyWith(isTogglingLike: false);

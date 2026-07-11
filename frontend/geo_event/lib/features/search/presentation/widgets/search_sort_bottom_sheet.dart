@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/widgets/layout/app_bottom_sheet_container.dart';
-import '../../domain/sort_option.dart';
+import '../../../../shared/search/models/sort_option.dart';
 
 class SearchSortBottomSheet extends StatelessWidget {
   final SortOption selected;
@@ -11,11 +11,15 @@ class SearchSortBottomSheet extends StatelessWidget {
     required this.selected,
   });
 
+  bool _isSelected(SortOption value) {
+    return selected.sortBy == value.sortBy &&
+        selected.sortDescending == value.sortDescending;
+  }
+
   @override
   Widget build(BuildContext context) {
     Widget tile(SortOption value) {
-      final active = selected.sortBy == value.sortBy &&
-          selected.sortDescending == value.sortDescending;
+      final active = _isSelected(value);
 
       return ListTile(
         onTap: () => Navigator.of(context).pop(value),

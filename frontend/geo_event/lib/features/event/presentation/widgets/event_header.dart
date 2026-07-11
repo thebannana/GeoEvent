@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/utils/logger.dart';
 import '../../../../core/widgets/inputs/app_icon_circle_button.dart';
 import '../../../../core/widgets/surfaces/app_surface_card.dart';
 import 'event_price_badge.dart';
+import 'user_initials.dart';
 
 class EventHeader extends StatelessWidget {
   final String title;
@@ -257,7 +259,12 @@ class _OwnerAvatar extends StatelessWidget {
         radius: 22,
         backgroundColor: scheme.surfaceContainerHighest,
         backgroundImage: NetworkImage(trimmed),
-        onBackgroundImageError: (_, _) {},
+        onBackgroundImageError: (error, stackTrace) {
+          AppLogger.warning(
+            'Failed to load owner avatar: $trimmed',
+            tag: 'EventHeader',
+          );
+        },
       );
     }
 
@@ -265,25 +272,12 @@ class _OwnerAvatar extends StatelessWidget {
       radius: 22,
       backgroundColor: scheme.surfaceContainerHighest,
       child: Text(
-        _initials(fallbackText),
+        UserInitials.from(fallbackText),
         style: theme.textTheme.labelLarge?.copyWith(
           color: scheme.onSurface,
           fontWeight: FontWeight.w700,
         ),
       ),
     );
-  }
-
-  String _initials(String text) {
-    final parts = text
-        .trim()
-        .split(RegExp(r'\s+'))
-        .where((e) => e.isNotEmpty)
-        .toList();
-
-    if (parts.isEmpty) return 'U';
-    if (parts.length == 1) return parts.first.substring(0, 1).toUpperCase();
-    return '${parts.first.substring(0, 1)}${parts.last.substring(0, 1)}'
-        .toUpperCase();
   }
 }

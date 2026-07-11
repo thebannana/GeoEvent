@@ -1,5 +1,5 @@
-﻿using DotNetEnv;
-using EventService.API.Extensions;
+﻿using EventService.API.Extensions;
+using EventService.API.Filters;
 using EventService.API.Middleware;
 using EventService.Infrastructure;
 using EventService.Infrastructure.Persistence;
@@ -11,53 +11,46 @@ using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
-if (builder.Environment.IsDevelopment())
-{
-    var envFilePath = Path.Combine(builder.Environment.ContentRootPath, ".env");
-    if (File.Exists(envFilePath))
-    {
-        Env.Load(envFilePath);
-    }
-}
-
 builder.Configuration.AddEnvironmentVariables();
 
 var jwtSecret = builder.Configuration["Jwt:Secret"];
 if (string.IsNullOrWhiteSpace(jwtSecret))
 {
-    throw new InvalidOperationException("Missing configuration: Jwt:Secret");
+    throw new InvalidOperationException("Jwt:Secret is not configured.");
 }
 
 var jwtIssuer = builder.Configuration["Jwt:Issuer"];
 if (string.IsNullOrWhiteSpace(jwtIssuer))
 {
-    throw new InvalidOperationException("Missing configuration: Jwt:Issuer");
+    throw new InvalidOperationException("Jwt:Issuer is not configured.");
 }
 
 var jwtAudience = builder.Configuration["Jwt:Audience"];
 if (string.IsNullOrWhiteSpace(jwtAudience))
 {
-    throw new InvalidOperationException("Missing configuration: Jwt:Audience");
+    throw new InvalidOperationException("Jwt:Audience is not configured.");
 }
 
 var allowedOrigins = builder.Configuration
     .GetSection("Cors:AllowedOrigins")
-    .Get<string[]>()
-    ?.Where(origin => !string.IsNullOrWhiteSpace(origin))
+    .Get<string[]>()?
+    .Where(origin => !string.IsNullOrWhiteSpace(origin))
     .Distinct(StringComparer.OrdinalIgnoreCase)
-    .ToArray() ?? Array.Empty<string>();
+    .ToArray()
+    ?? Array.Empty<string>();
+
+if (allowedOrigins.Length == 0)
+{
+    throw new InvalidOperationException("At least one CORS origin must be configured.");
+}
 
 builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddMemoryCache();
 
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
-        if (allowedOrigins.Length == 0)
-        {
-            throw new InvalidOperationException("At least one CORS origin must be configured in Cors:AllowedOrigins.");
-        }
-
         policy
             .WithOrigins(allowedOrigins)
             .AllowAnyHeader()
@@ -83,6 +76,7 @@ builder.Services.AddRateLimiter(options =>
 
     options.OnRejected = async (context, token) =>
     {
+        context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
         context.HttpContext.Response.ContentType = "application/json";
         await context.HttpContext.Response.WriteAsync(
             "{\"error\":\"Too many requests. Please slow down.\"}",
@@ -96,10 +90,12 @@ builder.Services
     {
         options.RequireHttpsMetadata = false;
         options.SaveToken = false;
+
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuerSigningKey = true,
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret)),
+            IssuerSigningKey = new SymmetricSecurityKey(
+                Encoding.UTF8.GetBytes(jwtSecret)),
             ValidateIssuer = true,
             ValidIssuer = jwtIssuer,
             ValidateAudience = true,
@@ -112,6 +108,7 @@ builder.Services
 builder.Services.AddAuthorization();
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddScoped<InternalApiKeyAuthFilter>();
 
 builder.Services.AddSwaggerGen(options =>
 {
@@ -119,7 +116,7 @@ builder.Services.AddSwaggerGen(options =>
     {
         Title = "EventService API",
         Version = "v1",
-        Description = "Event management for GeoEvent"
+        Description = "Event management API for geoEvent."
     });
 
     options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
@@ -129,7 +126,7 @@ builder.Services.AddSwaggerGen(options =>
         Scheme = "bearer",
         BearerFormat = "JWT",
         In = ParameterLocation.Header,
-        Description = "Enter your JWT bearer token."
+        Description = "Enter JWT Bearer token."
     });
 
     options.AddSecurityRequirement(new OpenApiSecurityRequirement
@@ -153,6 +150,9 @@ var app = builder.Build();
 app.UseMiddleware<SecurityHeadersMiddleware>();
 app.UseMiddleware<ExceptionMiddleware>();
 
+app.UseCors("AllowFrontend");
+app.UseRateLimiter();
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -163,8 +163,6 @@ if (app.Environment.IsDevelopment())
     });
 }
 
-app.UseCors("AllowFrontend");
-app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 

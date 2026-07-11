@@ -1,5 +1,4 @@
 ﻿using MessageService.Application.Common;
-using MessageService.Application.DTOs;
 using MessageService.Application.Interfaces.Repositories;
 using MessageService.Domain.Entities;
 using MessageService.Domain.Enums;
@@ -60,6 +59,7 @@ public class ChatRepository : IChatRepository
 
     public async Task<bool> IsParticipantAsync(long threadId, int userId) =>
         await _context.ChatThreadParticipants
+            .AsNoTracking()
             .AnyAsync(x => x.ThreadId == threadId && x.UserId == userId && x.LeftAt == null);
 
     public async Task<ChatThreadParticipant?> GetParticipantAsync(long threadId, int userId) =>
@@ -133,10 +133,13 @@ public class ChatRepository : IChatRepository
     }
 
     public async Task<bool> HasMessageLikeAsync(long messageId, int userId) =>
-        await _context.ChatMessageLikes.AnyAsync(x => x.MessageId == messageId && x.UserId == userId);
+        await _context.ChatMessageLikes
+            .AsNoTracking()
+            .AnyAsync(x => x.MessageId == messageId && x.UserId == userId);
 
     public async Task<ChatMessageLike?> GetMessageLikeAsync(long messageId, int userId) =>
-        await _context.ChatMessageLikes.FirstOrDefaultAsync(x => x.MessageId == messageId && x.UserId == userId);
+        await _context.ChatMessageLikes
+            .FirstOrDefaultAsync(x => x.MessageId == messageId && x.UserId == userId);
 
     public async Task AddMessageLikeAsync(ChatMessageLike like)
     {
@@ -160,7 +163,12 @@ public class ChatRepository : IChatRepository
         await _context.ChatMessages
             .AsNoTracking()
             .Include(x => x.ReplyToMessage)
-            .Where(x => x.SenderId == userId)
+            .Where(x => x.SenderId == userId && x.DeletedAt == null)
+            .ToListAsync();
+
+    public async Task<List<ChatMessage>> GetMessagesByThreadAndSenderAsync(long threadId, int userId) =>
+        await _context.ChatMessages
+            .Where(x => x.ThreadId == threadId && x.SenderId == userId && x.DeletedAt == null)
             .ToListAsync();
 
     public async Task<PagedResult<ChatThread>> GetUserThreadsAsync(
@@ -193,11 +201,13 @@ public class ChatRepository : IChatRepository
 
         if (!string.IsNullOrWhiteSpace(searchTerm))
         {
+            var pattern = $"%{searchTerm}%";
+
             query = query.Where(thread =>
-                (thread.Title != null && thread.Title.Contains(searchTerm)) ||
+                EF.Functions.Like(thread.Title, pattern) ||
                 thread.Messages.Any(m =>
                     m.DeletedAt == null &&
-                    m.Content.Contains(searchTerm)));
+                    EF.Functions.Like(m.Content, pattern)));
         }
 
         var totalCount = await query.CountAsync();
@@ -220,9 +230,10 @@ public class ChatRepository : IChatRepository
 
     public async Task<int> GetUnreadCountAsync(int userId) =>
         await _context.ChatThreadParticipants
+            .AsNoTracking()
             .Where(p => p.UserId == userId && p.LeftAt == null)
             .Join(
-                _context.ChatMessages,
+                _context.ChatMessages.AsNoTracking(),
                 p => p.ThreadId,
                 m => m.ThreadId,
                 (p, m) => new { p, m })

@@ -18,12 +18,13 @@ class CommentAvatar extends StatelessWidget {
   Widget build(BuildContext context) {
     final initials = _buildInitials(fallbackText);
     final colorScheme = Theme.of(context).colorScheme;
+    final cleanedAvatarUrl = avatarUrl?.trim();
 
-    if (avatarUrl != null && avatarUrl!.trim().isNotEmpty) {
+    if (cleanedAvatarUrl != null && cleanedAvatarUrl.isNotEmpty) {
       return CircleAvatar(
         radius: size / 2,
         backgroundColor: colorScheme.surfaceContainerHighest,
-        backgroundImage: NetworkImage(avatarUrl!),
+        backgroundImage: NetworkImage(cleanedAvatarUrl),
         onBackgroundImageError: (_, _) {},
       );
     }

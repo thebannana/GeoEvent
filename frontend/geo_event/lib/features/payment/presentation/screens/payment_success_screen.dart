@@ -1,7 +1,6 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 
+import '../../../../core/utils/debounce.dart';
 import '../../../../core/widgets/layout/app_scaffold.dart';
 
 class PaymentSuccessScreen extends StatefulWidget {
@@ -21,18 +20,20 @@ class PaymentSuccessScreen extends StatefulWidget {
 }
 
 class _PaymentSuccessScreenState extends State<PaymentSuccessScreen> {
-  Timer? _timer;
+  Debouncer? _autoCloseDebouncer;
   bool _closing = false;
 
   @override
   void initState() {
     super.initState();
-    _timer = Timer(widget.autoCloseDelay, _close);
+
+    _autoCloseDebouncer = Debouncer(delay: widget.autoCloseDelay)
+      ..run(_close);
   }
 
   @override
   void dispose() {
-    _timer?.cancel();
+    _autoCloseDebouncer?.dispose();
     super.dispose();
   }
 

@@ -6,6 +6,19 @@ namespace EventService.Application.Interfaces.Repositories;
 
 public interface IEventRepository
 {
+    Task<int> CountPublicByOrganizerAsync(int userId);
+    Task<Event?> GetTrackedByIdAsync(int eventId);
+    Task<Comment?> GetCommentTreeByIdAsync(int commentId);
+    Task<HashSet<int>> GetLikedEventIdsAsync(int userId, IEnumerable<int> eventIds);
+    Task<HashSet<int>> GetLikedCommentIdsAsync(int userId, IEnumerable<int> commentIds);
+
+    Task<Segment?> GetTrackedSegmentByIdAsync(int segmentId);
+    Task<Genre?> GetTrackedGenreByIdAsync(int genreId);
+    Task<SubGenre?> GetTrackedSubGenreByIdAsync(int subGenreId);
+
+    Task<Bookmark?> GetTrackedBookmarkByIdAsync(int bookmarkId);
+    Task<Comment?> GetTrackedCommentByIdAsync(int commentId);
+
     Task IncrementViewCountAsync(int eventId);
     Task<List<Event>> GetPublicCandidatesAsync(EventFilterDto filter);
 
@@ -16,7 +29,6 @@ public interface IEventRepository
 
     Task<Event> CreateAsync(Event entity);
     Task UpdateAsync(Event entity);
-    Task DeleteAsync(int eventId);
     Task<bool> ExistsAsync(int eventId);
 
     Task<bool> IsLikedByUserAsync(int eventId, int userId);

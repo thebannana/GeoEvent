@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/utils/date_time_extensions.dart';
+import '../../../../core/widgets/layout/app_bottom_sheet_container.dart';
 import '../../../../shared/notifications/models/notification_model.dart';
 
 class InboxNotificationTile extends StatelessWidget {
@@ -16,6 +17,9 @@ class InboxNotificationTile extends StatelessWidget {
     this.onMarkAsRead,
     this.onDelete,
   });
+
+  static const String _actionRead = 'read';
+  static const String _actionDelete = 'delete';
 
   Color _accentColor(BuildContext context) {
     switch (item.type) {
@@ -76,6 +80,114 @@ class InboxNotificationTile extends StatelessWidget {
     );
   }
 
+  void _openPreviewSheet(BuildContext context) {
+  showModalBottomSheet<void>(
+    context: context,
+    useRootNavigator: true,
+    backgroundColor: Colors.transparent,
+    elevation: 0,
+    isScrollControlled: true,
+    builder: (sheetContext) {
+      final theme = Theme.of(sheetContext);
+      final colorScheme = theme.colorScheme;
+      final accent = _accentColor(sheetContext);
+
+      return AppBottomSheetContainer(
+        child: SafeArea(
+          top: false,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(sheetContext).size.height * 0.72,
+            ),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _leadingVisual(sheetContext, accent),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              item.title,
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              item.createdAt.timeAgo(),
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    item.body,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      height: 1.5,
+                      color: colorScheme.onSurface,
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          Navigator.of(sheetContext).pop();
+                        },
+                        icon: const Icon(Icons.close_rounded),
+                        label: const Text('Close'),
+                      ),
+                    ),
+                    if (onDelete != null) const SizedBox(width: 10),
+                    if (onDelete != null)
+                      Expanded(
+                        child: TextButton.icon(
+                          onPressed: () {
+                            Navigator.of(sheetContext).pop();
+                            onDelete?.call();
+                          },
+                          icon: Icon(
+                            Icons.delete_outline_rounded,
+                            color: colorScheme.error,
+                          ),
+                          label: Text(
+                            'Delete',
+                            style: TextStyle(color: colorScheme.error),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    },
+  );
+
+  if (!item.isRead) {
+    onMarkAsRead?.call();
+  }
+
+  onTap?.call();
+}
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -110,7 +222,7 @@ class InboxNotificationTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         child: InkWell(
           borderRadius: BorderRadius.circular(20),
-          onTap: onTap,
+          onTap: () => _openPreviewSheet(context),
           child: Ink(
             decoration: BoxDecoration(
               color: colorScheme.surface,
@@ -206,10 +318,10 @@ class InboxNotificationTile extends StatelessWidget {
                     ),
                     onSelected: (value) {
                       switch (value) {
-                        case 'read':
+                        case _actionRead:
                           onMarkAsRead?.call();
                           break;
-                        case 'delete':
+                        case _actionDelete:
                           onDelete?.call();
                           break;
                       }
@@ -217,11 +329,11 @@ class InboxNotificationTile extends StatelessWidget {
                     itemBuilder: (context) => [
                       if (!item.isRead)
                         const PopupMenuItem<String>(
-                          value: 'read',
+                          value: _actionRead,
                           child: Text('Mark as read'),
                         ),
                       const PopupMenuItem<String>(
-                        value: 'delete',
+                        value: _actionDelete,
                         child: Text('Delete'),
                       ),
                     ],
@@ -235,3 +347,4 @@ class InboxNotificationTile extends StatelessWidget {
     );
   }
 }
+

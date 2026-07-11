@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -15,13 +17,16 @@ class OnboardingScreen extends StatefulWidget {
 class _OnboardingScreenState extends State<OnboardingScreen> {
   static const String _loginRoute = '/login';
   static const String _privacyRoute = '/privacy';
+  static const Duration _pageAnimationDuration = Duration(milliseconds: 420);
+  static const Duration _autoSlideInterval = Duration(seconds: 5);
+  static const String _logoAssetPath = 'assets/images/geoevent.png';
 
   late final PageController _pageController;
+  Timer? _autoSlideTimer;
   int _currentPage = 0;
 
   static const List<_OnboardingPageData> _pages = [
     _OnboardingPageData(
-      icon: Icons.public_rounded,
       title: 'Discover events around you',
       description:
           'Explore what is happening nearby with a live event map built for quick discovery.',
@@ -30,9 +35,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         'See events visually on the map instead of digging through long lists.',
         'Open details fast and decide what is worth your time.',
       ],
+      lottieAssetPath: 'assets/lotties/Globe.json',
+      cardBackgroundColor: Color(0xFFF2C94C), // yellow
     ),
     _OnboardingPageData(
-      icon: Icons.people_alt_rounded,
       title: 'Connect, reserve, and plan',
       description:
           'Keep your social plans in one place with reservations, reminders, and event updates.',
@@ -41,9 +47,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         'Track updates and changes without losing the thread.',
         'Use notifications to stay on top of your plans.',
       ],
+      lottieAssetPath: 'assets/lotties/Chat.json',
+      cardBackgroundColor: Color(0xFFEB5757), // red
     ),
     _OnboardingPageData(
-      icon: Icons.route_rounded,
       title: 'Your event flow, simplified',
       description:
           'GeoEvent helps you move from discovery to attendance with less friction and better context.',
@@ -52,30 +59,47 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         'Manage tickets, reservations, and notifications in one app.',
         'Jump in now and start exploring your city.',
       ],
+      lottieAssetPath: 'assets/lotties/Walk.json',
+      cardBackgroundColor: Color(0xFF2F80ED), // blue
     ),
   ];
 
   int get _pageCount => _pages.length;
-  bool get _isLastPage => _currentPage == _pageCount - 1;
 
   @override
   void initState() {
     super.initState();
-    _pageController = PageController();
+    _pageController = PageController(viewportFraction: 0.90);
+    _startAutoSlide();
   }
 
   @override
   void dispose() {
+    _autoSlideTimer?.cancel();
     _pageController.dispose();
     super.dispose();
   }
 
+  void _startAutoSlide() {
+    _autoSlideTimer?.cancel();
+    _autoSlideTimer = Timer.periodic(_autoSlideInterval, (_) async {
+      if (!mounted || !_pageController.hasClients) return;
+      final nextPage = (_currentPage + 1) % _pageCount;
+      await _goToPage(nextPage);
+    });
+  }
+
+  void _resetAutoSlide() {
+    _autoSlideTimer?.cancel();
+    _startAutoSlide();
+  }
+
   void _goToLogin() {
-    context.go(_loginRoute);
+    context.push(_loginRoute);
   }
 
   void _goToRegister() {
-    context.go(ApiEndpoints.register);
+    context.push(ApiEndpoints.register);
   }
 
   void _openPrivacyPolicy() {
@@ -87,18 +111,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
     await _pageController.animateToPage(
       pageIndex,
-      duration: const Duration(milliseconds: 260),
+      duration: _pageAnimationDuration,
       curve: Curves.easeOutCubic,
     );
-  }
-
-  Future<void> _nextPage() async {
-    if (_isLastPage) {
-      _goToRegister();
-      return;
-    }
-
-    await _goToPage(_currentPage + 1);
   }
 
   void _onPageChanged(int index) {
@@ -111,76 +126,135 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+
+    final backgroundColor =
+        isDark ? scheme.surface : scheme.surfaceContainerLowest;
+    final strokeColor = scheme.outline.withValues(alpha: isDark ? 0.22 : 0.14);
 
     return AppScaffold(
-      child: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 460),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      Text(
-                        'GeoEvent',
-                        style: theme.textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w800,
+      child: Container(
+        color: backgroundColor,
+        child: SafeArea(
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 620),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 18),
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        SizedBox(
+                          width: 165,
+                          height: 30,
+                          child: Image.asset(
+                            _logoAssetPath,
+                            fit: BoxFit.contain,
+                            alignment: Alignment.centerLeft,
+                            errorBuilder: (_, __, ___) {
+                              return Align(
+                                alignment: Alignment.centerLeft,
+                                child: Icon(
+                                  Icons.image_outlined,
+                                  size: 24,
+                                  color: scheme.primary,
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                        const Spacer(),
+                        TextButton(
+                          onPressed: _openPrivacyPolicy,
+                          child: Text(
+                            'Privacy',
+                            style: TextStyle(
+                              color: scheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Expanded(
+                      child: Center(
+                        child: SizedBox(
+                          height: 620,
+                          child: GestureDetector(
+                            onPanDown: (_) => _resetAutoSlide(),
+                            child: PageView.builder(
+                              controller: _pageController,
+                              onPageChanged: _onPageChanged,
+                              itemCount: _pageCount,
+                              itemBuilder: (context, index) {
+                                final item = _pages[index];
+                                final isActive = index == _currentPage;
+
+                                return AnimatedPadding(
+                                  duration: const Duration(milliseconds: 260),
+                                  curve: Curves.easeOut,
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: isActive ? 6 : 20,
+                                  ),
+                                  child: OnboardingPageContent(
+                                    title: item.title,
+                                    description: item.description,
+                                    bullets: item.bullets,
+                                    lottieAssetPath: item.lottieAssetPath,
+                                    cardBackgroundColor: item.cardBackgroundColor,
+                                    isActive: isActive,
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
                         ),
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Expanded(
-                    child: PageView.builder(
-                      controller: _pageController,
-                      onPageChanged: _onPageChanged,
-                      itemCount: _pageCount,
-                      itemBuilder: (context, index) {
-                        final page = _pages[index];
-                        return OnboardingPageContent(
-                          icon: page.icon,
-                          title: page.title,
-                          description: page.description,
-                          bullets: page.bullets,
-                        );
-                      },
                     ),
-                  ),
-                  const SizedBox(height: 18),
-                  _OnboardingPageIndicator(
-                    pageCount: _pageCount,
-                    currentPage: _currentPage,
-                  ),
-                  const SizedBox(height: 22),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton(
-                      onPressed: _nextPage,
-                      style: FilledButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                      ),
-                      child: Text(_isLastPage ? 'Sign up' : 'Next'),
+                    const SizedBox(height: 16),
+                    _OnboardingPageIndicator(
+                      pageCount: _pageCount,
+                      currentPage: _currentPage,
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton(
-                      onPressed: _goToLogin,
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                      ),
-                      child: const Text('Sign in'),
+                    const SizedBox(height: 18),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: _goToLogin,
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              side: BorderSide(color: strokeColor),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(18),
+                              ),
+                            ),
+                            child: const Text('Sign in'),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: FilledButton(
+                            onPressed: _goToRegister,
+                            style: FilledButton.styleFrom(
+                              backgroundColor: scheme.primary,
+                              foregroundColor: scheme.onPrimary,
+                              elevation: 0,
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(18),
+                              ),
+                            ),
+                            child: const Text('Sign up'),
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  TextButton(
-                    onPressed: _openPrivacyPolicy,
-                    child: const Text('Privacy Policy'),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -191,17 +265,17 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 }
 
 class _OnboardingPageIndicator extends StatelessWidget {
-  final int pageCount;
-  final int currentPage;
-
   const _OnboardingPageIndicator({
     required this.pageCount,
     required this.currentPage,
   });
 
+  final int pageCount;
+  final int currentPage;
+
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final scheme = Theme.of(context).colorScheme;
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
@@ -209,14 +283,14 @@ class _OnboardingPageIndicator extends StatelessWidget {
         final selected = index == currentPage;
 
         return AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
+          duration: const Duration(milliseconds: 220),
           margin: const EdgeInsets.symmetric(horizontal: 4),
-          width: selected ? 24 : 8,
+          width: selected ? 22 : 8,
           height: 8,
           decoration: BoxDecoration(
             color: selected
-                ? theme.colorScheme.primary
-                : theme.colorScheme.primary.withValues(alpha: 0.22),
+                ? scheme.primary
+                : scheme.outline.withValues(alpha: 0.22),
             borderRadius: BorderRadius.circular(999),
           ),
         );
@@ -226,15 +300,17 @@ class _OnboardingPageIndicator extends StatelessWidget {
 }
 
 class _OnboardingPageData {
-  final IconData icon;
   final String title;
   final String description;
   final List<String> bullets;
+  final String lottieAssetPath;
+  final Color cardBackgroundColor;
 
   const _OnboardingPageData({
-    required this.icon,
     required this.title,
     required this.description,
     required this.bullets,
+    required this.lottieAssetPath,
+    required this.cardBackgroundColor,
   });
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
+import '../../../../core/errors/error_mapper.dart';
+import '../../../../core/utils/logger.dart';
 import '../../../../core/utils/validators.dart';
 import '../../application/auth_controller.dart';
 import '../widgets/auth_feedback.dart';
@@ -52,17 +53,29 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen>
         context,
         'If an account exists for this email, a reset link has been sent. Check your inbox and spam folder.',
       );
-    } catch (error) {
+    } catch (error, stackTrace) {
       if (!mounted) return;
 
       setState(() {
         _emailSent = false;
       });
 
+      AppLogger.error(
+        'Forgot password failed.',
+        tag: 'ForgotPasswordScreen',
+        error: error,
+        stackTrace: stackTrace,
+      );
+
       showAuthError(
         context,
         error,
-        fallbackMessage: 'Failed to send the reset link. Please try again.',
+        fallbackMessage: ErrorMapper.toMessage(
+          error,
+          stackTrace: stackTrace,
+          fallbackMessage:
+              'Failed to send the reset link. Please try again.',
+        ),
       );
     }
   }
@@ -113,7 +126,8 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen>
                 AuthSubmitButton(
                   label: 'Send Reset Link',
                   isLoading: authState.isLoading,
-                  disabledReason: 'Please wait while the reset link is being sent.',
+                  disabledReason:
+                      'Please wait while the reset link is being sent.',
                   onPressed: _submit,
                 ),
               ],

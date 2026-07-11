@@ -15,22 +15,14 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
 
         builder.Property(u => u.Username).IsRequired().HasMaxLength(50);
         builder.Property(u => u.Email).IsRequired().HasMaxLength(255);
-        builder.Property(u => u.Role).HasConversion<string>().HasMaxLength(20);
+        builder.Property(u => u.Role).HasConversion<string>().HasMaxLength(20).IsRequired();
         builder.Property(u => u.LastLoginIp).HasMaxLength(45);
         builder.Property(u => u.ConsentVersion).HasMaxLength(20);
         builder.Property(u => u.FailedLoginAttempts).HasDefaultValue(0);
 
-        builder.Property(u => u.HasPayPalConnected).HasDefaultValue(false);
-        builder.Property(u => u.PayPalMerchantId).HasMaxLength(128);
-        builder.Property(u => u.PayPalEmail).HasMaxLength(255);
-        builder.Property(u => u.PayPalConnectionStatus).HasMaxLength(50);
-        builder.Property(u => u.PayPalTrackingId).HasMaxLength(128);
-
         builder.HasIndex(u => u.Email).IsUnique();
         builder.HasIndex(u => u.Username).IsUnique();
         builder.HasIndex(u => u.LockoutUntil);
-        builder.HasIndex(u => u.PayPalMerchantId);
-        builder.HasIndex(u => u.PayPalTrackingId);
 
         builder.HasOne(u => u.Person)
             .WithOne(p => p.User)

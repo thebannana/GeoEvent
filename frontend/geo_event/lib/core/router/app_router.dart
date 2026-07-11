@@ -176,7 +176,6 @@ final deepLinkControllerProvider = Provider<DeepLinkController>((ref) {
 
 final appRouterProvider = Provider<GoRouter>((ref) {
   ref.watch(deepLinkControllerProvider);
-  ref.watch(authStateProvider);
   final refreshNotifier = ref.watch(routerRefreshProvider);
 
   return GoRouter(

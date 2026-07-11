@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/errors/error_mapper.dart';
+import '../../../../core/utils/logger.dart';
 import '../../../../core/widgets/layout/app_scaffold.dart';
 import '../../../../shared/reports/models/report_state.dart';
 import '../../../../shared/reports/models/report_target_type.dart';
@@ -59,17 +61,40 @@ class _ReportScreenState extends ConsumerState<ReportScreen> {
     super.dispose();
   }
 
-  Future<void> _submitReport(ReportController controller) async {
-    final success = await controller.submit();
+  void _showMessage(String message) {
     if (!mounted) return;
 
-    if (success) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(_successMessage),
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(content: Text(message)),
+      );
+  }
+
+  Future<void> _submitReport(ReportController controller) async {
+    try {
+      final success = await controller.submit();
+      if (!mounted) return;
+
+      if (success) {
+        _showMessage(_successMessage);
+        Navigator.of(context).pop(true);
+      }
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'Failed to submit report.',
+        tag: 'ReportScreen',
+        error: error,
+        stackTrace: stackTrace,
+      );
+
+      _showMessage(
+        ErrorMapper.toMessage(
+          error,
+          stackTrace: stackTrace,
+          fallbackMessage: 'Could not submit report. Please try again.',
         ),
       );
-      Navigator.of(context).pop(true);
     }
   }
 

@@ -17,6 +17,7 @@ public class CreateEventDto
 
     [Required]
     public int GenreId { get; set; }
+
     public int? SubGenreId { get; set; }
 
     [Required]
@@ -39,14 +40,8 @@ public class CreateEventDto
     [Range(0, 100_000)]
     public decimal Price { get; set; } = 0;
 
-    public bool IsOnline { get; set; }
-
     [StringLength(500)]
     public string? Tags { get; set; }
-
-    [StringLength(1000)]
-    [Url]
-    public string? ExternalUrl { get; set; }
 
     [StringLength(1000)]
     public string? AccessibilityInfo { get; set; }

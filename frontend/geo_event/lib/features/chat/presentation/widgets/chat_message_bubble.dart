@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/utils/date_time_extensions.dart';
-import '../../../../core/widgets/feedback/app_confirm_dialog.dart';
 import '../../../../core/widgets/layout/app_bottom_sheet_container.dart';
 import '../../../../shared/chat/models/chat_thread_type.dart';
 import '../../../../shared/chat/models/message_item.dart';
@@ -13,6 +12,7 @@ class ChatMessageBubble extends StatefulWidget {
   final VoidCallback? onDelete;
   final VoidCallback? onLike;
   final VoidCallback? onEdit;
+  final VoidCallback? onResend;
   final VoidCallback onReply;
   final ChatThreadType threadType;
 
@@ -23,6 +23,7 @@ class ChatMessageBubble extends StatefulWidget {
     this.onDelete,
     this.onLike,
     this.onEdit,
+    this.onResend,
     required this.onReply,
     this.threadType = ChatThreadType.direct,
   });
@@ -43,9 +44,7 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble>
     final colorScheme = theme.colorScheme;
     final textMuted = theme.textTheme.bodySmall?.color;
 
-    final senderName = _safeSenderName(
-      widget.message.senderDisplayName,
-    );
+    final senderName = _safeSenderName(widget.message.senderDisplayName);
 
     final avatarUrl =
         (widget.message.senderAvatarUrl?.trim().isNotEmpty ?? false)
@@ -57,13 +56,18 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble>
       widget.message.senderDisplayName,
     );
 
+    final isPending = widget.message.isPending;
+    final isFailed = widget.message.isFailed;
+
     final bubbleColor = widget.isMine
-        ? colorScheme.primary.withValues(alpha: 0.14)
+        ? colorScheme.primary.withValues(alpha: isPending ? 0.10 : 0.14)
         : colorScheme.surface;
 
-    final bubbleBorderColor = widget.isMine
-        ? colorScheme.primary.withValues(alpha: 0.18)
-        : colorScheme.outline.withValues(alpha: 0.28);
+    final bubbleBorderColor = isFailed
+        ? colorScheme.error.withValues(alpha: 0.45)
+        : widget.isMine
+            ? colorScheme.primary.withValues(alpha: 0.18)
+            : colorScheme.outline.withValues(alpha: 0.28);
 
     return Align(
       alignment:
@@ -79,7 +83,7 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble>
                 title: senderName,
                 imageUrl: avatarUrl,
                 size: 32,
-                type: widget.threadType,
+                type: ChatThreadType.direct,
                 showPresence: false,
               ),
               const SizedBox(width: 8),
@@ -125,7 +129,7 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble>
                         curve: Curves.easeOut,
                         transform: Matrix4.translationValues(_dragDx, 0, 0),
                         child: GestureDetector(
-                          onDoubleTap: widget.onLike,
+                          onDoubleTap: isPending ? null : widget.onLike,
                           onHorizontalDragUpdate: (details) {
                             setState(() {
                               if (widget.isMine) {
@@ -151,69 +155,77 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble>
                           onLongPress: () async {
                             await showModalBottomSheet<void>(
                               context: context,
-                              builder: (_) => AppBottomSheetContainer(
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    ListTile(
-                                      leading: const Icon(Icons.reply_rounded),
-                                      title: const Text('Reply'),
-                                      onTap: () {
-                                        Navigator.pop(context);
-                                        widget.onReply();
-                                      },
-                                    ),
-                                    if (widget.onEdit != null)
+                              useRootNavigator: true,
+                              backgroundColor: Colors.transparent,
+                              elevation: 0,
+                              isScrollControlled: false,
+                              builder: (sheetContext) => AppBottomSheetContainer(
+                                child: SafeArea(
+                                  top: false,
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
                                       ListTile(
-                                        leading: const Icon(Icons.edit_rounded),
-                                        title: const Text('Edit'),
+                                        leading: const Icon(Icons.reply_rounded),
+                                        title: const Text('Reply'),
                                         onTap: () {
-                                          Navigator.pop(context);
-                                          widget.onEdit?.call();
+                                          Navigator.of(sheetContext).pop();
+                                          widget.onReply();
                                         },
                                       ),
-                                    if (widget.onLike != null)
-                                      ListTile(
-                                        leading: Icon(
-                                          widget.message.isLikedByMe
-                                              ? Icons.favorite_rounded
-                                              : Icons.favorite_border_rounded,
+                                      if (widget.onEdit != null && !isPending)
+                                        ListTile(
+                                          leading: const Icon(Icons.edit_rounded),
+                                          title: const Text('Edit'),
+                                          onTap: () {
+                                            Navigator.of(sheetContext).pop();
+                                            widget.onEdit?.call();
+                                          },
                                         ),
-                                        title: Text(
-                                          widget.message.isLikedByMe
-                                              ? 'Unlike'
-                                              : 'Like',
+                                      if (widget.onLike != null && !isPending)
+                                        ListTile(
+                                          leading: Icon(
+                                            widget.message.isLikedByMe
+                                                ? Icons.favorite_rounded
+                                                : Icons.favorite_border_rounded,
+                                          ),
+                                          title: Text(
+                                            widget.message.isLikedByMe ? 'Unlike' : 'Like',
+                                          ),
+                                          onTap: () {
+                                            Navigator.of(sheetContext).pop();
+                                            widget.onLike?.call();
+                                          },
                                         ),
-                                        onTap: () {
-                                          Navigator.pop(context);
-                                          widget.onLike?.call();
-                                        },
-                                      ),
-                                    if (widget.onDelete != null)
-                                      ListTile(
-                                        leading: const Icon(
-                                          Icons.delete_outline_rounded,
+                                      if (isFailed && widget.onResend != null)
+                                        ListTile(
+                                          leading: const Icon(Icons.refresh_rounded),
+                                          title: const Text('Resend'),
+                                          onTap: () {
+                                            Navigator.of(sheetContext).pop();
+                                            widget.onResend?.call();
+                                          },
                                         ),
-                                        title: const Text('Delete'),
-                                        subtitle: const Text(
-                                          'This action cannot be undone.',
-                                        ),
-                                        onTap: () async {
-                                          Navigator.pop(context);
-                                          final confirmed =
-                                              await AppConfirmDialog.show(
-                                            context,
-                                            title: 'Delete message?',
-                                            message:
-                                                'This message will be permanently deleted. This action cannot be undone.',
-                                            confirmLabel: 'Delete',
-                                          );
-                                          if (confirmed == true) {
+                                      if (widget.onDelete != null && !isPending)
+                                        ListTile(
+                                          leading: Icon(
+                                            Icons.delete_outline_rounded,
+                                            color: Theme.of(sheetContext).colorScheme.error,
+                                          ),
+                                          title: Text(
+                                            'Delete',
+                                            style: TextStyle(
+                                              color: Theme.of(sheetContext).colorScheme.error,
+                                            ),
+                                          ),
+                                          subtitle: const Text('This action cannot be undone.'),
+                                          onTap: () {
+                                            Navigator.of(sheetContext).pop();
                                             widget.onDelete?.call();
-                                          }
-                                        },
-                                      ),
-                                  ],
+                                          },
+                                        ),
+                                    ],
+                                  ),
                                 ),
                               ),
                             );
@@ -224,9 +236,7 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble>
                             child: Container(
                               decoration: BoxDecoration(
                                 borderRadius: BorderRadius.circular(22),
-                                border: Border.all(
-                                  color: bubbleBorderColor,
-                                ),
+                                border: Border.all(color: bubbleBorderColor),
                               ),
                               padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
                               child: Column(
@@ -262,7 +272,7 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble>
                                           ),
                                           const SizedBox(height: 4),
                                           Text(
-                                            widget.message.replyPreview!,
+                                            widget.message.replyPreview!.trim(),
                                             maxLines: 2,
                                             overflow: TextOverflow.ellipsis,
                                             style: const TextStyle(
@@ -274,15 +284,20 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble>
                                       ),
                                     ),
                                   Text(
-                                    widget.message.content,
-                                    style: const TextStyle(
+                                    widget.message.content.trim(),
+                                    style: TextStyle(
                                       fontSize: 14,
                                       height: 1.3,
+                                      color: isPending
+                                          ? colorScheme.onSurface.withValues(alpha: 0.78)
+                                          : null,
                                     ),
                                   ),
                                   const SizedBox(height: 8),
-                                  Row(
-                                    mainAxisSize: MainAxisSize.min,
+                                  Wrap(
+                                    spacing: 8,
+                                    runSpacing: 4,
+                                    crossAxisAlignment: WrapCrossAlignment.center,
                                     children: [
                                       if (widget.message.likesCount > 0) ...[
                                         Icon(
@@ -290,14 +305,12 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble>
                                           size: 13,
                                           color: colorScheme.primary,
                                         ),
-                                        const SizedBox(width: 4),
                                         Text(
                                           widget.message.likesCount.toString(),
                                           style: const TextStyle(fontSize: 11),
                                         ),
-                                        const SizedBox(width: 8),
                                       ],
-                                      if (widget.message.editedAt != null) ...[
+                                      if (widget.message.editedAt != null)
                                         Text(
                                           'Edited',
                                           style: TextStyle(
@@ -305,15 +318,74 @@ class _ChatMessageBubbleState extends State<ChatMessageBubble>
                                             color: textMuted,
                                           ),
                                         ),
-                                        const SizedBox(width: 8),
-                                      ],
-                                      Text(
-                                        widget.message.sentAt.formatTime(),
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          color: textMuted,
+                                      if (isPending)
+                                        Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            SizedBox(
+                                              width: 11,
+                                              height: 11,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 1.7,
+                                                color: colorScheme.primary,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 5),
+                                            Text(
+                                              'Sending...',
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                color: textMuted,
+                                              ),
+                                            ),
+                                          ],
                                         ),
-                                      ),
+                                      if (isFailed)
+                                        InkWell(
+                                          borderRadius: BorderRadius.circular(999),
+                                          onTap: widget.onResend,
+                                          child: Padding(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 2,
+                                              vertical: 1,
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(
+                                                  Icons.error_outline_rounded,
+                                                  size: 13,
+                                                  color: colorScheme.error,
+                                                ),
+                                                const SizedBox(width: 4),
+                                                Text(
+                                                  'Failed • Tap to resend',
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                    color: colorScheme.error,
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      if (!isPending && !isFailed)
+                                        Text(
+                                          widget.message.sentAt.formatTime(),
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: textMuted,
+                                          ),
+                                        ),
+                                      if (isPending || isFailed)
+                                        Text(
+                                          widget.message.sentAt.formatTime(),
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: textMuted,
+                                          ),
+                                        ),
                                     ],
                                   ),
                                 ],

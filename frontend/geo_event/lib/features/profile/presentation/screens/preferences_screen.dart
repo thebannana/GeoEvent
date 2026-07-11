@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/utils/date_time_extensions.dart';
@@ -26,6 +27,16 @@ class _PreferencesScreenState extends ConsumerState<PreferencesScreen> {
   String? _selectedType;
 
   @override
+  void initState() {
+    super.initState();
+
+    Future.microtask(() async {
+      await ref.read(preferencesControllerProvider.notifier).refresh();
+      ref.invalidate(preferencesScreenControllerProvider);
+    });
+  }
+
+  @override
   void dispose() {
     _searchController.dispose();
     _minScoreController.dispose();
@@ -45,8 +56,26 @@ class _PreferencesScreenState extends ConsumerState<PreferencesScreen> {
   }
 
   Future<void> _applyFilters() async {
-    final minScore = double.tryParse(_minScoreController.text.trim());
-    final maxScore = double.tryParse(_maxScoreController.text.trim());
+    final minText = _minScoreController.text.trim();
+    final maxText = _maxScoreController.text.trim();
+
+    final minScore = double.tryParse(minText);
+    final maxScore = double.tryParse(maxText);
+
+    if (minText.isNotEmpty && minScore == null) {
+      _showMessage('Enter a valid minimum score.');
+      return;
+    }
+
+    if (maxText.isNotEmpty && maxScore == null) {
+      _showMessage('Enter a valid maximum score.');
+      return;
+    }
+
+    if (minScore != null && maxScore != null && minScore > maxScore) {
+      _showMessage('Minimum score cannot be greater than maximum score.');
+      return;
+    }
 
     await ref.read(preferencesControllerProvider.notifier).applyFilters(
           type: _selectedType,
@@ -55,8 +84,8 @@ class _PreferencesScreenState extends ConsumerState<PreferencesScreen> {
           maxScore: maxScore,
           clearType: _selectedType == null,
           clearSearch: _searchController.text.trim().isEmpty,
-          clearMinScore: _minScoreController.text.trim().isEmpty,
-          clearMaxScore: _maxScoreController.text.trim().isEmpty,
+          clearMinScore: minText.isEmpty,
+          clearMaxScore: maxText.isEmpty,
         );
 
     ref.invalidate(preferencesScreenControllerProvider);
@@ -79,6 +108,14 @@ class _PreferencesScreenState extends ConsumerState<PreferencesScreen> {
         );
 
     ref.invalidate(preferencesScreenControllerProvider);
+  }
+
+  void _showMessage(String message) {
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    messenger?.hideCurrentSnackBar();
+    messenger?.showSnackBar(
+      SnackBar(content: Text(message)),
+    );
   }
 
   @override
@@ -259,6 +296,10 @@ class _PreferencesFilters extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final decimalInputFormatter = FilteringTextInputFormatter.allow(
+      RegExp(r'^\d*\.?\d{0,2}$'),
+    );
+
     return AppSurfaceCard(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -304,6 +345,7 @@ class _PreferencesFilters extends StatelessWidget {
                   keyboardType: const TextInputType.numberWithOptions(
                     decimal: true,
                   ),
+                  inputFormatters: [decimalInputFormatter],
                   decoration: const InputDecoration(
                     labelText: 'Min score',
                     hintText: '0',
@@ -317,6 +359,7 @@ class _PreferencesFilters extends StatelessWidget {
                   keyboardType: const TextInputType.numberWithOptions(
                     decimal: true,
                   ),
+                  inputFormatters: [decimalInputFormatter],
                   decoration: const InputDecoration(
                     labelText: 'Max score',
                     hintText: '100',

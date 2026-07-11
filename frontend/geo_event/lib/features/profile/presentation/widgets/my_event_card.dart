@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/constants/event_status.dart';
 import '../../../../core/utils/date_time_extensions.dart';
+import '../../../../core/utils/price_formatter.dart';
 import '../../../../core/widgets/feedback/app_spinner.dart';
 import '../../../../core/widgets/inputs/app_chip.dart';
 import '../../../../core/widgets/surfaces/app_surface_card.dart';
@@ -90,58 +91,45 @@ class MyEventCard extends StatelessWidget {
                             break;
                         }
                       },
-                      itemBuilder: (context) => [
-                        PopupMenuItem(
-                          value: MyEventMenuAction.edit,
-                          enabled: !actionsDisabled,
-                          child: const ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            leading: Icon(Icons.edit_rounded),
-                            title: Text('Edit'),
-                          ),
-                        ),
-                        PopupMenuItem(
-                          value: MyEventMenuAction.reservations,
-                          enabled: !actionsDisabled && event.canViewReservations,
-                          child: ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            leading: Icon(
-                              Icons.groups_rounded,
-                              color: (!actionsDisabled &&
-                                      event.canViewReservations)
-                                  ? null
-                                  : Theme.of(context)
-                                      .colorScheme
-                                      .onSurfaceVariant
-                                      .withValues(alpha: 0.5),
+                      itemBuilder: (context) {
+                        final disabledColor = Theme.of(context)
+                            .colorScheme
+                            .onSurfaceVariant
+                            .withValues(alpha: 0.5);
+
+                        return [
+                          PopupMenuItem(
+                            value: MyEventMenuAction.edit,
+                            enabled: !actionsDisabled,
+                            child: const _MyEventMenuRow(
+                              icon: Icons.edit_rounded,
+                              label: 'Edit',
                             ),
-                            title: Text(
-                              event.canViewReservations
+                          ),
+                          PopupMenuItem(
+                            value: MyEventMenuAction.reservations,
+                            enabled: !actionsDisabled && event.canViewReservations,
+                            child: _MyEventMenuRow(
+                              icon: Icons.groups_rounded,
+                              label: event.canViewReservations
                                   ? 'View reservations'
                                   : 'View reservations unavailable',
-                              style: (!actionsDisabled &&
-                                      event.canViewReservations)
+                              color: (!actionsDisabled && event.canViewReservations)
                                   ? null
-                                  : TextStyle(
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .onSurfaceVariant
-                                          .withValues(alpha: 0.5),
-                                    ),
+                                  : disabledColor,
                             ),
                           ),
-                        ),
-                        const PopupMenuDivider(),
-                        PopupMenuItem(
-                          value: MyEventMenuAction.delete,
-                          enabled: !actionsDisabled,
-                          child: const ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            leading: Icon(Icons.delete_outline_rounded),
-                            title: Text('Delete'),
+                          const PopupMenuDivider(),
+                          PopupMenuItem(
+                            value: MyEventMenuAction.delete,
+                            enabled: !actionsDisabled,
+                            child: const _MyEventMenuRow(
+                              icon: Icons.delete_outline_rounded,
+                              label: 'Delete',
+                            ),
                           ),
-                        ),
-                      ],
+                        ];
+                      },
                       icon: Icon(
                         Icons.more_vert_rounded,
                         color: theme.colorScheme.onSurfaceVariant,
@@ -192,6 +180,30 @@ class MyEventCard extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 12,
                           color: theme.textTheme.bodySmall?.color,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.payments_rounded,
+                      size: 16,
+                      color: theme.colorScheme.primary,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        PriceFormatter.formatPriceWithBam(event.price),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: theme.textTheme.bodySmall?.color,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ),
@@ -264,6 +276,34 @@ class MyEventCardImage extends StatelessWidget {
               size: 34,
               color: theme.colorScheme.onSurfaceVariant,
             ),
+    );
+  }
+}
+
+class _MyEventMenuRow extends StatelessWidget {
+  const _MyEventMenuRow({
+    required this.icon,
+    required this.label,
+    this.color,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 18, color: color),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            label,
+            style: color == null ? null : TextStyle(color: color),
+          ),
+        ),
+      ],
     );
   }
 }

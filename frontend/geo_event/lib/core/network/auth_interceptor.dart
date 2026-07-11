@@ -36,6 +36,8 @@ class AuthInterceptor extends QueuedInterceptor {
     ApiEndpoints.register,
     ApiEndpoints.forgotPassword,
     ApiEndpoints.refresh,
+    ApiEndpoints.logout,
+    ApiEndpoints.resetPassword,
   };
 
   @override
@@ -70,7 +72,7 @@ class AuthInterceptor extends QueuedInterceptor {
     final alreadyRetried =
         (requestOptions.extra[retriedKey] as bool?) ?? false;
     final allowRefresh =
-        (requestOptions.extra[allowRefreshKey] as bool?) ?? false;
+        (requestOptions.extra[allowRefreshKey] as bool?) ?? true;
 
     final shouldHandleRefresh = statusCode == 401 &&
         requiresAuth &&
@@ -91,9 +93,8 @@ class AuthInterceptor extends QueuedInterceptor {
     }
 
     try {
-      final currentRefreshFuture =
-          _refreshFuture ??= _refreshCall(refreshToken);
-      final refreshed = await currentRefreshFuture;
+      _refreshFuture ??= _refreshCall(refreshToken);
+      final refreshed = await _refreshFuture!;
 
       if (!refreshed.hasTokens || refreshed.accessToken.trim().isEmpty) {
         await _safeExpireSession();

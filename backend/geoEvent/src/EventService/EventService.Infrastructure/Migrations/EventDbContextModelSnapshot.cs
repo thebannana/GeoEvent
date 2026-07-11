@@ -167,27 +167,10 @@ namespace EventService.Infrastructure.Migrations
                     b.Property<DateTime>("EndDateTime")
                         .HasColumnType("datetime2");
 
-                    b.Property<string>("ExternalId")
-                        .HasMaxLength(255)
-                        .HasColumnType("nvarchar(255)");
-
-                    b.Property<string>("ExternalSource")
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<string>("ExternalUrl")
-                        .HasMaxLength(1000)
-                        .HasColumnType("nvarchar(1000)");
-
                     b.Property<int>("GenreId")
                         .HasColumnType("int");
 
                     b.Property<bool>("IsFeatured")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bit")
-                        .HasDefaultValue(false);
-
-                    b.Property<bool>("IsOnline")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("bit")
                         .HasDefaultValue(false);
@@ -269,10 +252,6 @@ namespace EventService.Infrastructure.Migrations
                     b.HasIndex("Status");
 
                     b.HasIndex("SubGenreId");
-
-                    b.HasIndex("ExternalSource", "ExternalId")
-                        .IsUnique()
-                        .HasFilter("[ExternalSource] IS NOT NULL AND [ExternalId] IS NOT NULL");
 
                     b.HasIndex("GenreId", "StartDateTime");
 

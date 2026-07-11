@@ -50,17 +50,19 @@ class ChatRepository {
     );
   }
 
-  Future<MessageItem> sendThreadMessage({
-    required int threadId,
-    required String content,
-    int? replyToMessageId,
-  }) {
-    return api.sendThreadMessage(
-      threadId: threadId,
-      content: content,
-      replyToMessageId: replyToMessageId,
-    );
-  }
+Future<MessageItem> sendThreadMessage({
+  required int threadId,
+  required String content,
+  int? replyToMessageId,
+  String? clientTag,
+}) {
+  return api.sendThreadMessage(
+    threadId: threadId,
+    content: content,
+    replyToMessageId: replyToMessageId,
+    clientTag: clientTag,
+  );
+}
 
   Future<MessageItem> editMessage({
     required int messageId,

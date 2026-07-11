@@ -8,6 +8,8 @@ import 'package:geolocator/geolocator.dart' as geo;
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 
 import '../../../../core/config/app_environment.dart';
+import '../../../../core/errors/error_mapper.dart';
+import '../../../../core/utils/logger.dart';
 import '../../../../core/widgets/feedback/app_loading_indicator.dart';
 import '../../../../shared/events/models/create_event_models.dart';
 import '../../../../shared/events/models/event_map_pin_data.dart';
@@ -23,8 +25,9 @@ import '../../../../shared/location/providers/location_providers.dart';
 import '../../../../shared/profile/providers/profile_providers.dart';
 import '../../../event/presentation/screens/event_detail_screen.dart';
 import '../../application/map_settings_controller.dart';
+import '../widgets/active_navigation_card.dart';
+import '../widgets/directions_action_card.dart';
 import '../widgets/event_pin_marker.dart';
-import '../widgets/map_navigation_cards.dart';
 
 extension PuckPositionX on StyleManager {
   Future<Position?> getPuckPositionSafe() async {
@@ -42,7 +45,17 @@ extension PuckPositionX on StyleManager {
         (location[1] ?? 0).toDouble(),
         (location[0] ?? 0).toDouble(),
       );
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppLogger.warning(
+        'Unable to read puck position.',
+        tag: 'MapHomeScreen',
+      );
+      AppLogger.error(
+        'Unable to read puck position.',
+        tag: 'MapHomeScreen',
+        error: error,
+        stackTrace: stackTrace,
+      );
       return null;
     }
   }
@@ -197,10 +210,6 @@ class MapHomeScreenState extends ConsumerState<MapHomeScreen>
           await animateCameraFor3D(next.map3D);
         }
 
-        if (previous.terrain != next.terrain) {
-          await applyTerrain(next.terrain);
-        }
-
         if (previous.dayNightCycle != next.dayNightCycle ||
             previous.mapPins != next.mapPins) {
           await applyStandardMapConfiguration(next);
@@ -299,7 +308,6 @@ class MapHomeScreenState extends ConsumerState<MapHomeScreen>
 
     final settings = ref.read(mapSettingsControllerProvider);
     await applyStandardMapConfiguration(settings);
-    await applyTerrain(settings.terrain);
     await applyEventPinsVisibility(settings.eventPins);
     await reloadMapPins(silent: true, forceResync: true);
     await consumeInitialPendingDirectionsIfNeeded();
@@ -376,91 +384,65 @@ class MapHomeScreenState extends ConsumerState<MapHomeScreen>
   }
 
   Future<void> applyStandardMapConfiguration(MapSettingsState settings) async {
-    final map = mapboxMap;
-    if (map == null || !styleLoaded) return;
+  final map = mapboxMap;
+  if (map == null || !styleLoaded) return;
 
-    final style = map.style;
+  final style = map.style;
 
-    try {
-      await style.setStyleImportConfigProperty(
-        'basemap',
-        'lightPreset',
-        settings.dayNightCycle ? resolveLightPreset() : 'day',
-      );
-    } catch (_) {}
+  await _runMapTask(
+    () => style.setStyleImportConfigProperty(
+      'basemap',
+      'lightPreset',
+      settings.dayNightCycle ? resolveLightPreset() : 'day',
+    ),
+    debugLabel: 'Failed to apply map light preset.',
+  );
 
-    try {
-      await style.setStyleImportConfigProperty(
-        'basemap',
-        'showPointOfInterestLabels',
-        settings.mapPins,
-      );
-    } catch (_) {}
+  await _runMapTask(
+    () => style.setStyleImportConfigProperty(
+      'basemap',
+      'showPointOfInterestLabels',
+      settings.mapPins,
+    ),
+    debugLabel: 'Failed to apply point-of-interest labels visibility.',
+  );
 
-    try {
-      await style.setStyleImportConfigProperty(
-        'basemap',
-        'showTransitLabels',
-        settings.mapPins,
-      );
-    } catch (_) {}
+  await _runMapTask(
+    () => style.setStyleImportConfigProperty(
+      'basemap',
+      'showTransitLabels',
+      settings.mapPins,
+    ),
+    debugLabel: 'Failed to apply transit labels visibility.',
+  );
 
-    try {
-      await style.setStyleImportConfigProperty(
-        'basemap',
-        'showPlaceLabels',
-        true,
-      );
-    } catch (_) {}
+  await _runMapTask(
+    () => style.setStyleImportConfigProperty(
+      'basemap',
+      'showPlaceLabels',
+      true,
+    ),
+    debugLabel: 'Failed to apply place labels visibility.',
+  );
 
-    try {
-      await style.setStyleImportConfigProperty(
-        'basemap',
-        'showRoadLabels',
-        true,
-      );
-    } catch (_) {}
+  await _runMapTask(
+    () => style.setStyleImportConfigProperty(
+      'basemap',
+      'showRoadLabels',
+      true,
+    ),
+    debugLabel: 'Failed to apply road labels visibility.',
+  );
 
-    try {
-      await style.setStyleImportConfigProperty(
-        'basemap',
-        'show3dObjects',
-        settings.map3D,
-      );
-    } catch (_) {}
-  }
-
-  Future<void> ensureTerrainSource() async {
-    final map = mapboxMap;
-    if (map == null || !styleLoaded || terrainSourceAdded) return;
-
-    try {
-      await map.style.addSource(
-        RasterDemSource(
-          id: terrainSourceId,
-          url: 'mapbox://mapbox.mapbox-terrain-dem-v1',
-          tileSize: 512,
-          maxzoom: 14,
-        ),
-      );
-    } catch (_) {}
-
-    terrainSourceAdded = true;
-  }
-
-  Future<void> applyTerrain(bool enabled) async {
-    final map = mapboxMap;
-    if (map == null || !styleLoaded) return;
-
-    await ensureTerrainSource();
-
-    try {
-      await map.style.setStyleTerrainProperty(
-        'exaggeration',
-        enabled ? terrainExaggeration : 0.0,
-      );
-    } catch (_) {}
-  }
+  await _runMapTask(
+    () => style.setStyleImportConfigProperty(
+      'basemap',
+      'show3dObjects',
+      settings.map3D,
+    ),
+    debugLabel: 'Failed to apply 3D objects visibility.',
+  );
+}
 
   Future<void> animateCameraFor3D(bool enabled) async {
     final map = mapboxMap;
@@ -476,25 +458,19 @@ class MapHomeScreenState extends ConsumerState<MapHomeScreen>
   }
 
   Future<void> focusOnEventLocation({
-    required double latitude,
-    required double longitude,
-  }) async {
-    final map = mapboxMap;
-    if (map == null) return;
+  required double latitude,
+  required double longitude,
+}) async {
+  final settings = ref.read(mapSettingsControllerProvider);
 
-    final settings = ref.read(mapSettingsControllerProvider);
-
-    await map.easeTo(
-      CameraOptions(
-        center: Point(coordinates: Position(longitude, latitude)),
-        zoom: settings.map3D ? cityZoom : 15.8,
-        pitch: settings.map3D ? cityPitch : 0.0,
-        bearing: 0.0,
-        padding: MbxEdgeInsets(top: 120, left: 40, right: 40, bottom: 260),
-      ),
-      MapAnimationOptions(duration: 900, startDelay: 0),
-    );
-  }
+  await _animateToPoint(
+    latitude: latitude,
+    longitude: longitude,
+    zoom: settings.map3D ? cityZoom : 15.8,
+    pitch: settings.map3D ? cityPitch : 0.0,
+    padding: MbxEdgeInsets(top: 120, left: 40, right: 40, bottom: 260),
+  );
+}
 
   Future<void> centerOnUserPuck() async {
     final map = mapboxMap;
@@ -790,119 +766,126 @@ class MapHomeScreenState extends ConsumerState<MapHomeScreen>
   }
 
   void startNavigationTracking(EventDirectionsRequest request) {
-    lastReroutePosition = null;
-    isRerouting = false;
+  lastReroutePosition = null;
+  isRerouting = false;
 
-    locationService.startNavigationTracking(
-      onPosition: (position) async {
-        currentLatitude = position.latitude;
-        currentLongitude = position.longitude;
+  locationService.startNavigationTracking(
+    onPosition: (position) async {
+      currentLatitude = position.latitude;
+      currentLongitude = position.longitude;
 
-        if (isRerouting) return;
+      if (isRerouting) return;
 
-        final last = lastReroutePosition;
-        final movedEnough = last == null ||
-            geo.Geolocator.distanceBetween(
-                  last.latitude,
-                  last.longitude,
-                  position.latitude,
-                  position.longitude,
-                ) >=
-                25;
+      final last = lastReroutePosition;
+      final movedEnough = last == null ||
+          geo.Geolocator.distanceBetween(
+                last.latitude,
+                last.longitude,
+                position.latitude,
+                position.longitude,
+              ) >=
+              25;
 
-        if (!movedEnough || mapboxMap == null) return;
+      if (!movedEnough || mapboxMap == null) return;
 
-        isRerouting = true;
-        lastReroutePosition = position;
+      isRerouting = true;
+      lastReroutePosition = position;
 
-        try {
-          final routeFeature = await _fetchRouteFeature(
-            originLng: position.longitude,
-            originLat: position.latitude,
-            destinationLng: request.longitude,
-            destinationLat: request.latitude,
-          );
+      try {
+        final routeFeature = await _fetchRouteFeature(
+          originLng: position.longitude,
+          originLat: position.latitude,
+          destinationLng: request.longitude,
+          destinationLat: request.latitude,
+        );
 
-          await MapRouteDrawer.draw(
-            mapboxMap: mapboxMap!,
-            styleLoaded: styleLoaded,
-            routeFeature: routeFeature,
-          );
-        } catch (_) {
-        } finally {
-          isRerouting = false;
-        }
-      },
-    );
-  }
+        await MapRouteDrawer.draw(
+          mapboxMap: mapboxMap!,
+          styleLoaded: styleLoaded,
+          routeFeature: routeFeature,
+        );
+      } catch (error, stackTrace) {
+        _logMapWarning(
+          'Failed to reroute active navigation.',
+          error: error,
+          stackTrace: stackTrace,
+        );
+      } finally {
+        isRerouting = false;
+      }
+    },
+  );
+}
 
   Future<void> startDirections(EventDirectionsRequest request) async {
-    final origin = await getCurrentDeviceLocation();
-    final map = mapboxMap;
-    if (origin == null || map == null) return;
+  final origin = await getCurrentDeviceLocation();
+  final map = mapboxMap;
+  if (origin == null || map == null) return;
 
+  await locationService.stopNavigationTracking();
+
+  lastReroutePosition = origin;
+  isRerouting = false;
+
+  if (mounted) {
+    setState(() {
+      isFetchingRoute = true;
+      activeNavigationRequest = request;
+      activeDirectionsRequest = null;
+      isNavigationUiOpen = true;
+    });
+  }
+  notifyNavigationIconVisibility();
+
+  try {
+    final routeFeature = await _fetchRouteFeature(
+      originLng: origin.longitude,
+      originLat: origin.latitude,
+      destinationLng: request.longitude,
+      destinationLat: request.latitude,
+    );
+
+    await MapRouteDrawer.draw(
+      mapboxMap: map,
+      styleLoaded: styleLoaded,
+      routeFeature: routeFeature,
+    );
+
+    await _animateToPoint(
+      latitude: request.latitude,
+      longitude: request.longitude,
+      zoom: 14.5,
+      pitch: 45.0,
+      padding: MbxEdgeInsets(top: 140, left: 60, right: 60, bottom: 260),
+    );
+
+    startNavigationTracking(request);
+
+    if (!mounted) return;
+    _setNavigationUiOpen(false);
+    notifyNavigationIconVisibility();
+  } catch (error, stackTrace) {
     await locationService.stopNavigationTracking();
+    activeNavigationRequest = null;
 
-    lastReroutePosition = origin;
-    isRerouting = false;
-
-    if (mounted) {
-      setState(() {
-        isFetchingRoute = true;
-        activeNavigationRequest = request;
-        activeDirectionsRequest = null;
-        isNavigationUiOpen = true;
-      });
-    }
+    if (!mounted) return;
+    _setNavigationUiOpen(false);
     notifyNavigationIconVisibility();
 
-    try {
-      final routeFeature = await _fetchRouteFeature(
-        originLng: origin.longitude,
-        originLat: origin.latitude,
-        destinationLng: request.longitude,
-        destinationLat: request.latitude,
-      );
-
-      await MapRouteDrawer.draw(
-        mapboxMap: map,
-        styleLoaded: styleLoaded,
-        routeFeature: routeFeature,
-      );
-
-      await map.easeTo(
-        CameraOptions(
-          center: Point(
-            coordinates: Position(request.longitude, request.latitude),
-          ),
-          zoom: 14.5,
-          pitch: 45.0,
-          bearing: 0.0,
-          padding: MbxEdgeInsets(top: 140, left: 60, right: 60, bottom: 260),
-        ),
-        MapAnimationOptions(duration: 900, startDelay: 0),
-      );
-
-      startNavigationTracking(request);
-
-      if (!mounted) return;
-      _setNavigationUiOpen(false);
-      notifyNavigationIconVisibility();
-    } catch (_) {
-      await locationService.stopNavigationTracking();
-      activeNavigationRequest = null;
-
-      if (!mounted) return;
-      _setNavigationUiOpen(false);
-
-      notifyNavigationIconVisibility();
-      _showMessage('Unable to load route right now.');
-    } finally {
-      if (mounted) {
-        setState(() => isFetchingRoute = false);
-      }
-    }
+    _logMapWarning(
+      'Unable to start directions.',
+      error: error,
+      stackTrace: stackTrace,
+    );
+    _showMappedError(
+      error,
+      stackTrace: stackTrace,
+      fallbackMessage: 'Unable to load route right now.',
+    );
+  } finally {
+    _setFetchingRoute(false);
   }
+}
 
   Future<void> stopNavigation() async {
     await locationService.stopNavigationTracking();
@@ -927,30 +910,25 @@ class MapHomeScreenState extends ConsumerState<MapHomeScreen>
   }
 
   Future<void> openActiveNavigationUi() async {
-    final request = activeNavigationRequest;
-    final map = mapboxMap;
-    if (request == null || map == null) return;
+  final request = activeNavigationRequest;
+  if (request == null || mapboxMap == null) return;
 
-    if (isNavigationUiOpen) {
-      _setNavigationUiOpen(false);
-      return;
-    }
-
-    await map.easeTo(
-      CameraOptions(
-        center: Point(
-          coordinates: Position(request.longitude, request.latitude),
-        ),
-        zoom: 14.5,
-        pitch: 45.0,
-        bearing: 0.0,
-        padding: MbxEdgeInsets(top: 140, left: 60, right: 60, bottom: 260),
-      ),
-      MapAnimationOptions(duration: 700, startDelay: 0),
-    );
-
-    _setNavigationUiOpen(true);
+  if (isNavigationUiOpen) {
+    _setNavigationUiOpen(false);
+    return;
   }
+
+  await _animateToPoint(
+    latitude: request.latitude,
+    longitude: request.longitude,
+    zoom: 14.5,
+    pitch: 45.0,
+    padding: MbxEdgeInsets(top: 140, left: 60, right: 60, bottom: 260),
+    durationMs: 700,
+  );
+
+  _setNavigationUiOpen(true);
+}
 
   void returnToEventDetails(EventDirectionsRequest request) {
     if (!mounted) return;
@@ -964,6 +942,86 @@ class MapHomeScreenState extends ConsumerState<MapHomeScreen>
       ),
     );
   }
+
+  void _logMapWarning(
+  String message, {
+  Object? error,
+  StackTrace? stackTrace,
+}) {
+  AppLogger.warning(
+    message,
+    tag: 'MapHomeScreen',
+  );
+
+  if (error != null) {
+    AppLogger.error(
+      message,
+      tag: 'MapHomeScreen',
+      error: error,
+      stackTrace: stackTrace,
+    );
+  }
+}
+
+void _showMappedError(
+  Object error, {
+  StackTrace? stackTrace,
+  String fallbackMessage = 'Something went wrong.',
+}) {
+  _showMessage(
+    ErrorMapper.toMessage(
+      error,
+      stackTrace: stackTrace,
+      fallbackMessage: fallbackMessage,
+    ),
+  );
+}
+
+Future<void> _runMapTask(
+  Future<void> Function() action, {
+  required String debugLabel,
+}) async {
+  try {
+    await action();
+  } catch (error, stackTrace) {
+    _logMapWarning(
+      debugLabel,
+      error: error,
+      stackTrace: stackTrace,
+    );
+  }
+}
+
+Future<void> _animateToPoint({
+  required double latitude,
+  required double longitude,
+  required double zoom,
+  required double pitch,
+  double bearing = 0.0,
+  required MbxEdgeInsets padding,
+  int durationMs = 900,
+}) async {
+  final map = mapboxMap;
+  if (map == null) return;
+
+  await map.easeTo(
+    CameraOptions(
+      center: Point(
+        coordinates: Position(longitude, latitude),
+      ),
+      zoom: zoom,
+      pitch: pitch,
+      bearing: bearing,
+      padding: padding,
+    ),
+    MapAnimationOptions(duration: durationMs, startDelay: 0),
+  );
+}
+
+void _setFetchingRoute(bool value) {
+  if (!mounted) return;
+  setState(() => isFetchingRoute = value);
+}
 
   void clearDirectionsCard() {
     if (!mounted) return;
@@ -1010,32 +1068,32 @@ class MapHomeScreenState extends ConsumerState<MapHomeScreen>
     );
   }
 
-  Widget _buildMap(BuildContext context, MapSettingsState settings) {
-    return Positioned.fill(
-      child: MapWidget(
-        key: const ValueKey('geo-event-map'),
-        textureView: true,
-        styleUri: baseStyleUri,
-        cameraOptions: CameraOptions(
-          center: Point(coordinates: Position(defaultLng, defaultLat)),
-          zoom: settings.map3D ? cityZoom : baseZoom,
-          bearing: 0.0,
-          pitch: settings.map3D ? cityPitch : 0.0,
-        ),
-        onMapCreated: onMapCreated,
-        onStyleLoadedListener: onStyleLoaded,
-        onCameraChangeListener: (event) async {
-          final zoom = event.cameraState.zoom;
-          final shouldResync = (zoom - _currentZoom).abs() >= 0.6;
-          _currentZoom = zoom;
-
-          if (shouldResync && mounted && !isSyncingPins) {
-            await syncEventPins();
-          }
-        },
+  Widget _buildMap(MapSettingsState settings) {
+  return Positioned.fill(
+    child: MapWidget(
+      key: const ValueKey('geo-event-map'),
+      textureView: true,
+      styleUri: baseStyleUri,
+      cameraOptions: CameraOptions(
+        center: Point(coordinates: Position(defaultLng, defaultLat)),
+        zoom: settings.map3D ? cityZoom : baseZoom,
+        bearing: 0.0,
+        pitch: settings.map3D ? cityPitch : 0.0,
       ),
-    );
-  }
+      onMapCreated: onMapCreated,
+      onStyleLoadedListener: onStyleLoaded,
+      onCameraChangeListener: (event) async {
+        final zoom = event.cameraState.zoom;
+        final shouldResync = (zoom - _currentZoom).abs() >= 0.6;
+        _currentZoom = zoom;
+
+        if (shouldResync && mounted && !isSyncingPins) {
+          await syncEventPins();
+        }
+      },
+    ),
+  );
+}
 
   Widget _buildLoadingOverlay(BuildContext context) {
     return Positioned.fill(
@@ -1102,7 +1160,7 @@ class MapHomeScreenState extends ConsumerState<MapHomeScreen>
 
     return Stack(
       children: [
-        _buildMap(context, settings),
+        _buildMap(settings),
         buildHiddenMarkerLayer(),
         if (_showMapLoadingOverlay) _buildLoadingOverlay(context),
         if (activeDirectionsRequest != null) _buildDirectionsCard(),

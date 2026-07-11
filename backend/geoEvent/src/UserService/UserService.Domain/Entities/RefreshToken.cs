@@ -7,7 +7,7 @@ public class RefreshToken
     public int? UserId { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime ExpiresAt { get; set; }
-    public DateTime? RevokedAt { get; set; }
+    public DateTime? RevokedAt { get; private set; }
     public string? DeviceInfo { get; set; }
     public string? IpAddress { get; set; }
 
@@ -17,5 +17,11 @@ public class RefreshToken
     public bool IsRevoked() => RevokedAt.HasValue;
     public bool IsActive() => !IsExpired() && !IsRevoked();
 
-    public void Revoke() => RevokedAt = DateTime.UtcNow;
+    public void Revoke()
+    {
+        if (IsRevoked())
+            throw new InvalidOperationException("Refresh token has already been revoked.");
+
+        RevokedAt = DateTime.UtcNow;
+    }
 }

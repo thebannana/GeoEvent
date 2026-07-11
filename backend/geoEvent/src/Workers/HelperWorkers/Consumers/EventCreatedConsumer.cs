@@ -1,21 +1,19 @@
-﻿using MassTransit;
-using Microsoft.Extensions.Logging;
+﻿using GeoEvent.HelperWorkers.Interfaces;
+using MassTransit;
 using Shared.Contracts.Events;
-using TicketService.Application.Interfaces.Services;
-using TicketService.Domain.Entities;
 
 namespace GeoEvent.HelperWorkers.Consumers.Tickets;
 
 public sealed class EventCreatedConsumer : IConsumer<EventCreatedMessage>
 {
-    private readonly ITicketRepository _repository;
+    private readonly ITicketInternalClient _ticketInternalClient;
     private readonly ILogger<EventCreatedConsumer> _logger;
 
     public EventCreatedConsumer(
-        ITicketRepository repository,
+        ITicketInternalClient ticketInternalClient,
         ILogger<EventCreatedConsumer> logger)
     {
-        _repository = repository;
+        _ticketInternalClient = ticketInternalClient;
         _logger = logger;
     }
 
@@ -27,49 +25,12 @@ public sealed class EventCreatedConsumer : IConsumer<EventCreatedMessage>
             "Consuming EventCreatedMessage for EventId {EventId}",
             msg.EventId);
 
-        var existingTickets = await _repository.GetEventTicketsByEventAsync(msg.EventId);
-        if (existingTickets.Any())
-        {
-            _logger.LogInformation(
-                "Event tickets already exist for EventId {EventId}. Skipping duplicate creation.",
-                msg.EventId);
-            return;
-        }
-
-        var saleStart = DateTime.UtcNow;
-        var saleEnd = msg.StartDateTime;
-
-        if (saleEnd <= saleStart)
-        {
-            _logger.LogWarning(
-                "Ticket creation skipped for EventId {EventId} because event start is not in the future. Start: {StartDateTime}, Now: {Now}",
-                msg.EventId,
-                msg.StartDateTime,
-                saleStart);
-            return;
-        }
-
-        var eventTicket = new EventTicket
-        {
-            EventId = msg.EventId,
-            TicketType = "General Admission",
-            Description = "Default ticket",
-            Price = msg.Price,
-            TotalQuantity = Math.Max(0, msg.Capacity),
-            SoldQuantity = 0,
-            IsActive = true,
-            SaleStartDate = saleStart,
-            SaleEndDate = saleEnd
-        };
-
-        await _repository.CreateEventTicketAsync(eventTicket);
+        await _ticketInternalClient.CreateDefaultTicketForEventAsync(
+            msg,
+            context.CancellationToken);
 
         _logger.LogInformation(
-            "Created default ticket for EventId {EventId}. Price: {Price}, Capacity: {Capacity}, SaleStart: {SaleStart}, SaleEnd: {SaleEnd}",
-            msg.EventId,
-            eventTicket.Price,
-            eventTicket.TotalQuantity,
-            eventTicket.SaleStartDate,
-            eventTicket.SaleEndDate);
+            "Requested default ticket creation for EventId {EventId}",
+            msg.EventId);
     }
 }

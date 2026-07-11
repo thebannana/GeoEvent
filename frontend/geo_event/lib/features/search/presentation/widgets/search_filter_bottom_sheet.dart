@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/errors/error_mapper.dart';
+import '../../../../core/utils/logger.dart';
 import '../../../../core/widgets/feedback/app_loading_indicator.dart';
 import '../../../../shared/events/models/event_taxonomy_models.dart';
 import '../../../../shared/events/providers/event_providers.dart';
-import '../../domain/filter_selection.dart';
+import '../../../../shared/search/models/filter_selection.dart';
 
 class SearchFilterBottomSheet extends ConsumerStatefulWidget {
   final List<SegmentItem> segments;
@@ -53,6 +55,16 @@ class _SearchFilterBottomSheetState
     });
   }
 
+  void _showMessage(String message) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(content: Text(message)),
+      );
+  }
+
   Future<void> _loadGenres(
     int segmentId, {
     bool preserveSelection = false,
@@ -85,12 +97,27 @@ class _SearchFilterBottomSheetState
           _subGenreId = null;
         }
       });
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'Failed to load genres for segment.',
+        tag: 'SearchFilterBottomSheet',
+        error: error,
+        stackTrace: stackTrace,
+      );
+
       if (!mounted) return;
 
       setState(() {
         _loadingGenres = false;
       });
+
+      _showMessage(
+        ErrorMapper.toMessage(
+          error,
+          stackTrace: stackTrace,
+          fallbackMessage: 'Could not load genres. Please try again.',
+        ),
+      );
     }
   }
 
@@ -123,12 +150,27 @@ class _SearchFilterBottomSheetState
           _subGenreId = null;
         }
       });
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'Failed to load subgenres for genre.',
+        tag: 'SearchFilterBottomSheet',
+        error: error,
+        stackTrace: stackTrace,
+      );
+
       if (!mounted) return;
 
       setState(() {
         _loadingSubGenres = false;
       });
+
+      _showMessage(
+        ErrorMapper.toMessage(
+          error,
+          stackTrace: stackTrace,
+          fallbackMessage: 'Could not load subgenres. Please try again.',
+        ),
+      );
     }
   }
 

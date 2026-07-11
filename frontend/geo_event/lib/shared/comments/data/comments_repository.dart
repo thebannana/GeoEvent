@@ -54,6 +54,9 @@ class CommentsRepository {
   }
 
   Future<void> deleteComment(int commentId) => _api.deleteComment(commentId);
-  Future<void> likeComment(int commentId) => _api.likeComment(commentId);
-  Future<void> unlikeComment(int commentId) => _api.unlikeComment(commentId);
+
+  Future<CommentItem> likeComment(int commentId) => _api.likeComment(commentId);
+
+  Future<CommentItem> unlikeComment(int commentId) =>
+      _api.unlikeComment(commentId);
 }

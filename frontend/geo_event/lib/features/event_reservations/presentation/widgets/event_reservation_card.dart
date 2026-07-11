@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/utils/date_time_extensions.dart';
+import '../../../../core/utils/logger.dart';
 import '../../../../core/utils/price_formatter.dart';
 import '../../../../core/widgets/feedback/app_spinner.dart';
 import '../../../../core/widgets/surfaces/app_surface_card.dart';
 import '../../../../shared/event_reservations/models/organizer_reservation.dart';
 import '../../../../shared/profile/models/public_user_profile.dart';
+import '../../../event/presentation/widgets/user_initials.dart';
 
 class EventReservationCard extends StatelessWidget {
   const EventReservationCard({
@@ -100,6 +102,12 @@ class EventReservationCard extends StatelessWidget {
                             const _ReservationStatusChip(
                               icon: Icons.schedule_rounded,
                               label: 'Cash due at entry',
+                              tone: _ReservationStatusTone.warning,
+                            ),
+                            if (reservation.hasPendingRefundRequest)
+                            const _ReservationStatusChip(
+                              icon: Icons.undo_rounded,
+                              label: 'Refund under admin review',
                               tone: _ReservationStatusTone.warning,
                             ),
                           if (reservation.isValidated)
@@ -201,6 +209,12 @@ class _AttendeeAvatar extends StatelessWidget {
       return CircleAvatar(
         radius: 24,
         backgroundImage: NetworkImage(normalizedUrl),
+        onBackgroundImageError: (error, stackTrace) {
+          AppLogger.warning(
+            'Failed to load attendee avatar: $normalizedUrl',
+            tag: 'EventReservationCard',
+          );
+        },
       );
     }
 
@@ -211,22 +225,10 @@ class _AttendeeAvatar extends StatelessWidget {
           .primary
           .withValues(alpha: 0.12),
       child: Text(
-        _initials(label),
+        UserInitials.from(label, fallback: '?'),
         style: const TextStyle(fontWeight: FontWeight.w700),
       ),
     );
-  }
-
-  static String _initials(String value) {
-    final parts = value
-        .trim()
-        .split(RegExp(r'\s+'))
-        .where((e) => e.isNotEmpty)
-        .toList();
-
-    if (parts.isEmpty) return '?';
-    if (parts.length == 1) return parts.first[0].toUpperCase();
-    return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
   }
 }
 

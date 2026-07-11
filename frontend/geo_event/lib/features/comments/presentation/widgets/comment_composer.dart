@@ -38,7 +38,6 @@ class CommentComposer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final canSubmit = !isSubmitting && controller.text.trim().isNotEmpty;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -50,104 +49,111 @@ class CommentComposer extends StatelessWidget {
           ),
         Form(
           key: formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
+          child: ValueListenableBuilder<TextEditingValue>(
+            valueListenable: controller,
+            builder: (context, value, _) {
+              final canSubmit = !isSubmitting && value.text.trim().isNotEmpty;
+
+              return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  CommentAvatar(
-                    size: 36,
-                    avatarUrl: currentUserAvatarUrl,
-                    fallbackText: currentUserDisplayName,
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: colorScheme.surfaceContainerHigh.withValues(alpha: 0.5),
-                        borderRadius: BorderRadius.circular(22),
-                        border: Border.all(
-                          color: colorScheme.outline.withValues(alpha: 0.22),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      CommentAvatar(
+                        size: 36,
+                        avatarUrl: currentUserAvatarUrl,
+                        fallbackText: currentUserDisplayName,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: colorScheme.surfaceContainerHigh.withValues(alpha: 0.5),
+                            borderRadius: BorderRadius.circular(22),
+                            border: Border.all(
+                              color: colorScheme.outline.withValues(alpha: 0.22),
+                            ),
+                          ),
+                          child: TextFormField(
+                            controller: controller,
+                            minLines: 1,
+                            maxLines: 5,
+                            enabled: !isSubmitting,
+                            textInputAction: TextInputAction.newline,
+                            autovalidateMode: autovalidateMode,
+                            validator: validator,
+                            onChanged: onChanged,
+                            style: TextStyle(
+                              color: colorScheme.onSurface,
+                              height: 1.3,
+                            ),
+                            decoration: InputDecoration(
+                              hintText: isEditing
+                                  ? 'Edit your comment...'
+                                  : isReplying
+                                      ? 'Write a reply...'
+                                      : 'Add a comment...',
+                              hintStyle: TextStyle(
+                                color: colorScheme.onSurfaceVariant,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                              ),
+                              filled: true,
+                              fillColor: Colors.transparent,
+                              isDense: true,
+                              border: InputBorder.none,
+                              enabledBorder: InputBorder.none,
+                              focusedBorder: InputBorder.none,
+                              disabledBorder: InputBorder.none,
+                              errorBorder: InputBorder.none,
+                              focusedErrorBorder: InputBorder.none,
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 13,
+                              ),
+                            ),
+                          ),
                         ),
                       ),
-                      child: TextFormField(
-                        controller: controller,
-                        minLines: 1,
-                        maxLines: 5,
-                        enabled: !isSubmitting,
-                        textInputAction: TextInputAction.newline,
-                        autovalidateMode: autovalidateMode,
-                        validator: validator,
-                        onChanged: onChanged,
+                      const SizedBox(width: 10),
+                      Tooltip(
+                        message: submitDisabledReason ??
+                            (isEditing ? 'Save comment' : 'Post comment'),
+                        child: FilledButton(
+                          onPressed: canSubmit ? onSubmit : null,
+                          style: FilledButton.styleFrom(
+                            minimumSize: const Size(0, 42),
+                            padding: const EdgeInsets.symmetric(horizontal: 14),
+                          ),
+                          child: isSubmitting
+                              ? const AppSpinner(
+                                  size: 16,
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                )
+                              : Text(isEditing ? 'Save' : 'Post'),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (submitDisabledReason != null) ...[
+                    const SizedBox(height: 6),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 46),
+                      child: Text(
+                        submitDisabledReason!,
                         style: TextStyle(
-                          color: colorScheme.onSurface,
-                          height: 1.3,
-                        ),
-                        decoration: InputDecoration(
-                          hintText: isEditing
-                              ? 'Edit your comment...'
-                              : isReplying
-                                  ? 'Write a reply...'
-                                  : 'Add a comment...',
-                          hintStyle: TextStyle(
-                            color: colorScheme.onSurfaceVariant,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                          ),
-                          filled: true,
-                          fillColor: Colors.transparent,
-                          isDense: true,
-                          border: InputBorder.none,
-                          enabledBorder: InputBorder.none,
-                          focusedBorder: InputBorder.none,
-                          disabledBorder: InputBorder.none,
-                          errorBorder: InputBorder.none,
-                          focusedErrorBorder: InputBorder.none,
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 13,
-                          ),
+                          color: colorScheme.onSurfaceVariant,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 10),
-                  Tooltip(
-                    message: submitDisabledReason ??
-                        (isEditing ? 'Save comment' : 'Post comment'),
-                    child: FilledButton(
-                      onPressed: canSubmit ? onSubmit : null,
-                      style: FilledButton.styleFrom(
-                        minimumSize: const Size(0, 42),
-                        padding: const EdgeInsets.symmetric(horizontal: 14),
-                      ),
-                      child: isSubmitting
-                          ? const AppSpinner(
-                              size: 16,
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            )
-                          : Text(isEditing ? 'Save' : 'Post'),
-                    ),
-                  ),
+                  ],
                 ],
-              ),
-              if (submitDisabledReason != null) ...[
-                const SizedBox(height: 6),
-                Padding(
-                  padding: const EdgeInsets.only(left: 46),
-                  child: Text(
-                    submitDisabledReason!,
-                    style: TextStyle(
-                      color: colorScheme.onSurfaceVariant,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-              ],
-            ],
+              );
+            },
           ),
         ),
       ],

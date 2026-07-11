@@ -56,7 +56,8 @@ class ChatThreadController extends StateNotifier<ChatThreadState> {
         pageSize: state.messagesPageSize,
       );
 
-      final sorted = [...paged.items]..sort((a, b) => a.sentAt.compareTo(b.sentAt));
+      final sorted = [...paged.items]
+        ..sort((a, b) => a.sentAt.compareTo(b.sentAt));
 
       state = state.copyWith(
         messagesPage: paged.page,
@@ -135,26 +136,118 @@ class ChatThreadController extends StateNotifier<ChatThreadState> {
 
   Future<bool> sendMessage(String text) async {
     final trimmed = text.trim();
-    if (trimmed.isEmpty || state.sending) return false;
+    if (trimmed.isEmpty) return false;
 
-    state = state.copyWith(sending: true);
+    final sessionUserId = ref.read(sessionUserIdProvider);
+    final replyingTo = state.replyingTo;
+    final now = DateTime.now();
+    final tempId = -now.microsecondsSinceEpoch;
+    final clientTag = 'temp_$tempId';
+
+    final optimistic = MessageItem(
+      id: tempId,
+      threadId: args.threadId,
+      senderId: sessionUserId ?? 0,
+      content: trimmed,
+      isRead: true,
+      likesCount: 0,
+      isLikedByMe: false,
+      sentAt: now,
+      readAt: null,
+      editedAt: null,
+      senderDisplayName: 'You',
+      senderAvatarUrl: null,
+      replyToMessageId: replyingTo?.id,
+      replyPreview: replyingTo?.content,
+      replySenderName: replyingTo?.senderDisplayName,
+      isPending: true,
+      isFailed: false,
+      clientTag: clientTag,
+    );
+
+    _upsertMessage(optimistic);
+
+    state = state.copyWith(
+      sending: true,
+      clearReplyingTo: true,
+    );
 
     try {
       final item = await _repo.sendThreadMessage(
         threadId: args.threadId,
         content: trimmed,
-        replyToMessageId: state.replyingTo?.id,
+        replyToMessageId: replyingTo?.id,
       );
 
       if (!mounted) return false;
 
-      _upsertMessage(item);
-      state = state.copyWith(clearReplyingTo: true);
+      _replaceOptimisticMessage(
+        tempId: tempId,
+        clientTag: clientTag,
+        serverItem: item.copyWith(
+          isPending: false,
+          isFailed: false,
+          clientTag: item.clientTag ?? clientTag,
+        ),
+      );
+
       return true;
+    } catch (_) {
+      if (!mounted) return false;
+      _markMessageFailed(tempId);
+      return false;
     } finally {
       if (mounted) {
         state = state.copyWith(sending: false);
       }
+    }
+  }
+
+  Future<void> resendMessage(MessageItem failedItem) async {
+    if (!failedItem.isFailed || failedItem.isPending) return;
+
+    final current = List<MessageItem>.from(
+      state.messages.valueOrNull ?? const <MessageItem>[],
+    );
+    final index = current.indexWhere((m) => m.id == failedItem.id);
+    if (index < 0) return;
+
+    final retryClientTag =
+        failedItem.clientTag?.trim().isNotEmpty == true
+            ? '${failedItem.clientTag}_retry_${DateTime.now().microsecondsSinceEpoch}'
+            : 'retry_${DateTime.now().microsecondsSinceEpoch}_${failedItem.id}';
+
+    current[index] = current[index].copyWith(
+      isPending: true,
+      isFailed: false,
+      clientTag: retryClientTag,
+    );
+
+    state = state.copyWith(
+      messages: AsyncData(List<MessageItem>.unmodifiable(current)),
+    );
+
+    try {
+      final sent = await _repo.sendThreadMessage(
+        threadId: failedItem.threadId,
+        content: failedItem.content,
+        replyToMessageId: failedItem.replyToMessageId,
+      );
+
+      if (!mounted) return;
+
+      _replaceOptimisticMessage(
+        tempId: failedItem.id,
+        clientTag: retryClientTag,
+        serverItem: sent.copyWith(
+          isPending: false,
+          isFailed: false,
+          clientTag: sent.clientTag ?? retryClientTag,
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      _markMessageFailed(failedItem.id);
     }
   }
 
@@ -168,37 +261,73 @@ class ChatThreadController extends StateNotifier<ChatThreadState> {
     );
 
     if (!mounted) return;
-    _upsertMessage(item);
+    _upsertMessage(item.copyWith(isPending: false, isFailed: false));
   }
 
   Future<void> deleteMessage(int messageId) async {
-    final current = state.messages.valueOrNull ?? const <MessageItem>[];
+    final current = List<MessageItem>.from(
+      state.messages.valueOrNull ?? const <MessageItem>[],
+    );
+    final removedIndex = current.indexWhere((m) => m.id == messageId);
+    if (removedIndex < 0) return;
+
+    final removedItem = current[removedIndex];
+    current.removeAt(removedIndex);
 
     state = state.copyWith(
-      messages: AsyncData(
-        List<MessageItem>.unmodifiable(
-          current.where((m) => m.id != messageId),
-        ),
-      ),
+      messages: AsyncData(List<MessageItem>.unmodifiable(current)),
     );
 
     try {
       await _repo.deleteMessage(messageId);
     } catch (_) {
       if (mounted) {
-        state = state.copyWith(messages: AsyncData(current));
+        final latest = List<MessageItem>.from(
+          state.messages.valueOrNull ?? const <MessageItem>[],
+        );
+        final alreadyExists = latest.any((m) => m.id == removedItem.id);
+        if (!alreadyExists) {
+          latest.insert(
+            removedIndex.clamp(0, latest.length),
+            removedItem,
+          );
+          latest.sort((a, b) => a.sentAt.compareTo(b.sentAt));
+          state = state.copyWith(
+            messages: AsyncData(List<MessageItem>.unmodifiable(latest)),
+          );
+        }
       }
       rethrow;
     }
   }
 
   Future<void> toggleLike(MessageItem item) async {
-    final updated = item.isLikedByMe
-        ? await _repo.unlikeMessage(item.id)
-        : await _repo.likeMessage(item.id);
+    final optimistic = item.copyWith(
+      isLikedByMe: !item.isLikedByMe,
+      likesCount: item.isLikedByMe
+          ? (item.likesCount > 0 ? item.likesCount - 1 : 0)
+          : item.likesCount + 1,
+    );
 
-    if (!mounted) return;
-    _upsertMessage(updated);
+    _upsertMessage(optimistic);
+
+    try {
+      final updated = item.isLikedByMe
+          ? await _repo.unlikeMessage(item.id)
+          : await _repo.likeMessage(item.id);
+
+      if (!mounted) return;
+      _upsertMessage(
+        updated.copyWith(
+          clientTag: item.clientTag,
+          isPending: false,
+          isFailed: false,
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      _upsertMessage(item);
+    }
   }
 
   Future<void> leaveThread() async {
@@ -214,6 +343,8 @@ class ChatThreadController extends StateNotifier<ChatThreadState> {
     ref
         .read(messagesInboxControllerProvider.notifier)
         .removeThreadLocally(args.threadId);
+
+    await ref.read(messagesInboxControllerProvider.notifier).refresh();
   }
 
   Future<void> _markThreadRead() async {
@@ -261,7 +392,15 @@ class ChatThreadController extends StateNotifier<ChatThreadState> {
           pageSize: state.messagesPageSize,
         );
 
-        final sorted = [...paged.items]..sort((a, b) => a.sentAt.compareTo(b.sentAt));
+        final existing = state.messages.valueOrNull ?? const <MessageItem>[];
+        final pendingOrFailed = existing.where((m) => m.isPending || m.isFailed);
+
+        final merged = <MessageItem>[
+          ...paged.items,
+          ...pendingOrFailed.where(
+            (local) => !_containsEquivalentServerMessage(paged.items, local),
+          ),
+        ]..sort((a, b) => a.sentAt.compareTo(b.sentAt));
 
         state = state.copyWith(
           messagesPage: paged.page,
@@ -271,7 +410,7 @@ class ChatThreadController extends StateNotifier<ChatThreadState> {
           loadingOlderMessages: false,
         );
 
-        return List<MessageItem>.unmodifiable(sorted);
+        return List<MessageItem>.unmodifiable(merged);
       });
 
       if (!mounted) return;
@@ -347,7 +486,8 @@ class ChatThreadController extends StateNotifier<ChatThreadState> {
     try {
       final item = MessageItem.fromJson(Map<String, dynamic>.from(raw));
       if (item.threadId != args.threadId) return;
-      _upsertMessage(item);
+
+      _upsertMessage(item.copyWith(isPending: false, isFailed: false));
     } catch (e, st) {
       debugPrint('SignalR payload parse error: $e');
       debugPrintStack(stackTrace: st);
@@ -366,14 +506,7 @@ class ChatThreadController extends StateNotifier<ChatThreadState> {
     final messageId = (raw['messageId'] as num?)?.toInt();
     if (messageId == null) return;
 
-    final current = state.messages.valueOrNull ?? const <MessageItem>[];
-    state = state.copyWith(
-      messages: AsyncData(
-        List<MessageItem>.unmodifiable(
-          current.where((m) => m.id != messageId),
-        ),
-      ),
-    );
+    _removeMessage(messageId);
   }
 
   void _handlePresencePayload(List<Object?>? argsList) {
@@ -467,15 +600,34 @@ class ChatThreadController extends StateNotifier<ChatThreadState> {
     });
   }
 
+  void _removeMessage(int messageId) {
+    if (!mounted) return;
+
+    final current = List<MessageItem>.from(
+      state.messages.valueOrNull ?? const <MessageItem>[],
+    );
+
+    final next = current.where((m) => m.id != messageId).toList(growable: false);
+
+    state = state.copyWith(
+      messages: AsyncData(List<MessageItem>.unmodifiable(next)),
+    );
+  }
+
   void _upsertMessage(MessageItem item) {
     if (!mounted) return;
 
-    final current =
-        List<MessageItem>.from(state.messages.valueOrNull ?? const <MessageItem>[]);
-    final index = current.indexWhere((m) => m.id == item.id);
+    final current = List<MessageItem>.from(
+      state.messages.valueOrNull ?? const <MessageItem>[],
+    );
+
+    final index = _findMessageIndexForMerge(current, item);
 
     if (index >= 0) {
-      current[index] = item;
+      final existing = current[index];
+      current[index] = item.copyWith(
+        clientTag: item.clientTag ?? existing.clientTag,
+      );
     } else {
       current.add(item);
     }
@@ -495,6 +647,135 @@ class ChatThreadController extends StateNotifier<ChatThreadState> {
         );
   }
 
+  void _replaceOptimisticMessage({
+    required int tempId,
+    required String? clientTag,
+    required MessageItem serverItem,
+  }) {
+    if (!mounted) return;
+
+    final current = List<MessageItem>.from(
+      state.messages.valueOrNull ?? const <MessageItem>[],
+    );
+
+    int index = current.indexWhere((m) => m.id == tempId);
+
+    if (index < 0 && clientTag != null && clientTag.trim().isNotEmpty) {
+      index = current.indexWhere((m) => m.clientTag == clientTag);
+    }
+
+    if (index < 0) {
+      index = _findMessageIndexForMerge(current, serverItem);
+    }
+
+    if (index >= 0) {
+      final existing = current[index];
+      current[index] = serverItem.copyWith(
+        clientTag: serverItem.clientTag ?? existing.clientTag ?? clientTag,
+        isPending: false,
+        isFailed: false,
+      );
+    } else {
+      current.add(
+        serverItem.copyWith(
+          clientTag: serverItem.clientTag ?? clientTag,
+          isPending: false,
+          isFailed: false,
+        ),
+      );
+    }
+
+    current.sort((a, b) => a.sentAt.compareTo(b.sentAt));
+
+    state = state.copyWith(
+      messages: AsyncData(List<MessageItem>.unmodifiable(current)),
+    );
+
+    final sessionUserId = ref.read(sessionUserIdProvider);
+    ref.read(messagesInboxControllerProvider.notifier).updateConversationFromMessage(
+          threadId: serverItem.threadId,
+          preview: serverItem.content,
+          sentAt: serverItem.sentAt,
+          isMine: sessionUserId != null && serverItem.senderId == sessionUserId,
+        );
+  }
+
+  int _findMessageIndexForMerge(List<MessageItem> items, MessageItem incoming) {
+    final directIdIndex = items.indexWhere((m) => m.id == incoming.id);
+    if (directIdIndex >= 0) return directIdIndex;
+
+    final incomingTag = incoming.clientTag?.trim();
+    if (incomingTag != null && incomingTag.isNotEmpty) {
+      final clientTagIndex = items.indexWhere((m) => m.clientTag == incomingTag);
+      if (clientTagIndex >= 0) return clientTagIndex;
+    }
+
+    final sessionUserId = ref.read(sessionUserIdProvider);
+    if (sessionUserId != null) {
+      final fallbackIndex = items.indexWhere((m) {
+        if (!m.isPending) return false;
+        if (m.senderId != sessionUserId) return false;
+        if (m.threadId != incoming.threadId) return false;
+        if (m.content.trim() != incoming.content.trim()) return false;
+        if (m.replyToMessageId != incoming.replyToMessageId) return false;
+
+        final sentDiff = m.sentAt.difference(incoming.sentAt).inSeconds.abs();
+        return sentDiff <= 10;
+      });
+
+      if (fallbackIndex >= 0) return fallbackIndex;
+    }
+
+    return -1;
+  }
+
+  bool _containsEquivalentServerMessage(
+    List<MessageItem> serverItems,
+    MessageItem localItem,
+  ) {
+    return serverItems.any((server) {
+      if (server.id == localItem.id) return true;
+
+      final localTag = localItem.clientTag?.trim();
+      final serverTag = server.clientTag?.trim();
+      if (localTag != null &&
+          localTag.isNotEmpty &&
+          serverTag != null &&
+          serverTag.isNotEmpty &&
+          localTag == serverTag) {
+        return true;
+      }
+
+      if (localItem.senderId != server.senderId) return false;
+      if (localItem.threadId != server.threadId) return false;
+      if (localItem.content.trim() != server.content.trim()) return false;
+      if (localItem.replyToMessageId != server.replyToMessageId) return false;
+
+      final diff = localItem.sentAt.difference(server.sentAt).inSeconds.abs();
+      return diff <= 10;
+    });
+  }
+
+  void _markMessageFailed(int tempId) {
+    if (!mounted) return;
+
+    final current = List<MessageItem>.from(
+      state.messages.valueOrNull ?? const <MessageItem>[],
+    );
+
+    final index = current.indexWhere((m) => m.id == tempId);
+    if (index < 0) return;
+
+    current[index] = current[index].copyWith(
+      isPending: false,
+      isFailed: true,
+    );
+
+    state = state.copyWith(
+      messages: AsyncData(List<MessageItem>.unmodifiable(current)),
+    );
+  }
+
   Future<void> _shutdownHub(HubConnection hub, {required bool joined}) async {
     if (joined) {
       try {
@@ -510,9 +791,12 @@ class ChatThreadController extends StateNotifier<ChatThreadState> {
   @override
   void dispose() {
     final hub = _hub;
+    _hub = null;
+
     if (hub != null) {
       Future.microtask(() => _shutdownHub(hub, joined: true));
     }
+
     super.dispose();
   }
 }

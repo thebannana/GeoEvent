@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/errors/error_mapper.dart';
+import '../../../../core/utils/logger.dart';
 import '../../../../core/widgets/feedback/app_confirm_dialog.dart';
 import '../../../../core/widgets/feedback/app_empty_state.dart';
 import '../../../../core/widgets/feedback/app_error_state.dart';
@@ -37,6 +39,7 @@ class ChatThreadScreen extends ConsumerStatefulWidget {
 class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
   final messageController = TextEditingController();
   final scrollController = ScrollController();
+  final inputFocusNode = FocusNode();
 
   bool eventCardDismissed = false;
   bool _loadingOlderTriggerActive = false;
@@ -48,6 +51,7 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
 
     messageController.addListener(_onTextChanged);
     scrollController.addListener(_onScroll);
+    inputFocusNode.addListener(_onInputFocusChanged);
 
     ref.listenManual<ChatThreadState>(
       chatThreadControllerProvider(widget.args),
@@ -59,7 +63,7 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
             !(next.loadingOlderMessages &&
                 !(previous?.loadingOlderMessages ?? false));
 
-        if (appendedNewMessage) {
+        if (appendedNewMessage && _shouldAutoScroll()) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (!scrollController.hasClients) return;
             scrollController.animateTo(
@@ -84,6 +88,18 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
     }
   }
 
+  void _onInputFocusChanged() {
+    if (inputFocusNode.hasFocus) {
+      jumpToBottom();
+    }
+  }
+
+  bool _shouldAutoScroll() {
+    if (!scrollController.hasClients) return true;
+    final position = scrollController.position;
+    return (position.maxScrollExtent - position.pixels) < 180;
+  }
+
   void _onScroll() {
     if (!scrollController.hasClients) return;
 
@@ -99,8 +115,11 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
   @override
   void dispose() {
     messageController.removeListener(_onTextChanged);
+    scrollController.removeListener(_onScroll);
+    inputFocusNode.removeListener(_onInputFocusChanged);
     messageController.dispose();
     scrollController.dispose();
+    inputFocusNode.dispose();
     super.dispose();
   }
 
@@ -137,12 +156,7 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
                       builder: (_) => ChatDetailsScreen(
                         details: details,
                         currentUserId: myUserId,
-                        onLeaveThread: () async {
-                          await controller.leaveThread();
-                          if (context.mounted) {
-                            Navigator.of(context).pop();
-                          }
-                        },
+                        onLeaveThread: () => controller.leaveThread(),
                         onOpenEventDetails: details.eventInfo == null
                             ? null
                             : () {
@@ -239,12 +253,14 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
                       );
                     }
 
-                    final message =
-                        state.loadingOlderMessages ? items[index - 1] : items[index];
+                    final message = state.loadingOlderMessages
+                        ? items[index - 1]
+                        : items[index];
                     final isMine =
                         myUserId != null && message.senderId == myUserId;
 
                     return ChatMessageBubble(
+                      key: ValueKey(message.id),
                       message: message,
                       isMine: isMine,
                       threadType: state.details.valueOrNull?.eventInfo != null
@@ -254,7 +270,23 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
                       onDelete: isMine
                           ? () => confirmDeleteMessage(context, controller, message)
                           : null,
-                      onLike: () => controller.toggleLike(message),
+                      onResend: message.isFailed
+                          ? () => controller.resendMessage(message)
+                          : null,
+                      onLike: () async {
+                        try {
+                          await controller.toggleLike(message);
+                        } catch (error, stackTrace) {
+                          if (!context.mounted) return;
+                          _showErrorSnackBar(
+                            ScaffoldMessenger.of(context),
+                            error,
+                            stackTrace,
+                            fallbackMessage:
+                                'Failed to update message like. Please try again.',
+                          );
+                        }
+                      },
                       onEdit: isMine
                           ? () => showEditDialog(context, controller, message)
                           : null,
@@ -276,9 +308,7 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
                   ),
                 ],
               ),
-              loading: () => const Center(
-                child: AppSpinner(size: 28, strokeWidth: 2.8),
-              ),
+              loading: () => const _ThreadLoadingState(),
             ),
           ),
           SafeArea(
@@ -320,17 +350,15 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
                           ),
                           child: TextField(
                             controller: messageController,
+                            focusNode: inputFocusNode,
                             minLines: 1,
                             maxLines: 5,
                             textInputAction: TextInputAction.send,
                             onSubmitted: (!_hasText || state.sending)
                                 ? null
                                 : (_) async {
-                                    final ok = await controller.sendMessage(
-                                      messageController.text,
-                                    );
+                                    final ok = await _sendCurrentMessage(controller);
                                     if (ok) {
-                                      messageController.clear();
                                       jumpToBottom();
                                     }
                                   },
@@ -355,11 +383,8 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
                             onPressed: (!_hasText || state.sending)
                                 ? null
                                 : () async {
-                                    final ok = await controller.sendMessage(
-                                      messageController.text,
-                                    );
+                                    final ok = await _sendCurrentMessage(controller);
                                     if (ok) {
-                                      messageController.clear();
                                       jumpToBottom();
                                     }
                                   },
@@ -403,6 +428,30 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
     );
   }
 
+  Future<bool> _sendCurrentMessage(ChatThreadController controller) async {
+    final text = messageController.text.trim();
+    if (text.isEmpty) return false;
+
+    messageController.clear();
+
+    try {
+      final ok = await controller.sendMessage(text);
+      if (!ok) {
+        messageController.text = text;
+        messageController.selection = TextSelection.collapsed(
+          offset: messageController.text.length,
+        );
+      }
+      return ok;
+    } catch (_) {
+      messageController.text = text;
+      messageController.selection = TextSelection.collapsed(
+        offset: messageController.text.length,
+      );
+      rethrow;
+    }
+  }
+
   void jumpToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!scrollController.hasClients) return;
@@ -419,6 +468,8 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
     ChatThreadController controller,
     MessageItem message,
   ) async {
+    final messenger = ScaffoldMessenger.of(context);
+
     final confirmed = await AppConfirmDialog.show(
       context,
       title: 'Delete message?',
@@ -428,7 +479,17 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
     );
 
     if (confirmed != true) return;
-    await controller.deleteMessage(message.id);
+
+    try {
+      await controller.deleteMessage(message.id);
+    } catch (error, stackTrace) {
+      _showErrorSnackBar(
+        messenger,
+        error,
+        stackTrace,
+        fallbackMessage: 'Failed to delete the message. Please try again.',
+      );
+    }
   }
 
   Future<void> showEditDialog(
@@ -436,13 +497,53 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
     ChatThreadController controller,
     MessageItem message,
   ) async {
+    final messenger = ScaffoldMessenger.of(context);
+
     final result = await showDialog<String>(
       context: context,
       builder: (ctx) => _EditMessageDialog(initialText: message.content),
     );
 
     if (result == null || result.isEmpty) return;
-    await controller.editMessage(messageId: message.id, content: result);
+
+    try {
+      await controller.editMessage(messageId: message.id, content: result);
+    } catch (error, stackTrace) {
+      _showErrorSnackBar(
+        messenger,
+        error,
+        stackTrace,
+        fallbackMessage: 'Failed to update the message. Please try again.',
+      );
+    }
+  }
+
+  void _showErrorSnackBar(
+    ScaffoldMessengerState messenger,
+    Object error,
+    StackTrace stackTrace, {
+    required String fallbackMessage,
+  }) {
+    AppLogger.error(
+      fallbackMessage,
+      tag: 'ChatThreadScreen',
+      error: error,
+      stackTrace: stackTrace,
+    );
+
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            ErrorMapper.toMessage(
+              error,
+              stackTrace: stackTrace,
+              fallbackMessage: fallbackMessage,
+            ),
+          ),
+        ),
+      );
   }
 }
 
@@ -536,6 +637,73 @@ class ThreadTopStateCard extends StatelessWidget {
     return AppSurfaceCard(
       padding: const EdgeInsets.all(18),
       child: child,
+    );
+  }
+}
+
+class _ThreadLoadingState extends StatelessWidget {
+  const _ThreadLoadingState();
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+      children: const [
+        _ThreadSkeletonBubble(isMine: false),
+        SizedBox(height: 10),
+        _ThreadSkeletonBubble(isMine: true),
+        SizedBox(height: 10),
+        _ThreadSkeletonBubble(isMine: false),
+        SizedBox(height: 10),
+        _ThreadSkeletonBubble(isMine: true),
+      ],
+    );
+  }
+}
+
+class _ThreadSkeletonBubble extends StatelessWidget {
+  final bool isMine;
+
+  const _ThreadSkeletonBubble({required this.isMine});
+
+  @override
+  Widget build(BuildContext context) {
+    final line = Theme.of(context).dividerColor;
+
+    return Align(
+      alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
+      child: Container(
+        width: 220,
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: line,
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: Column(
+          crossAxisAlignment:
+              isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 120,
+              height: 10,
+              decoration: BoxDecoration(
+                color: line.withValues(alpha: 0.9),
+                borderRadius: BorderRadius.circular(999),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              width: 170,
+              height: 10,
+              decoration: BoxDecoration(
+                color: line.withValues(alpha: 0.9),
+                borderRadius: BorderRadius.circular(999),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

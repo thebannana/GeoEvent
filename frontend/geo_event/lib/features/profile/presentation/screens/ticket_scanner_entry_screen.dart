@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/widgets/async/app_async_view.dart';
 import '../../../../core/widgets/feedback/app_empty_state.dart';
 import '../../../../core/widgets/feedback/app_error_state.dart';
 import '../../../../core/widgets/feedback/app_loading_indicator.dart';
@@ -27,6 +28,15 @@ class _TicketScannerEntryScreenState
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final state = ref.read(myEventsProvider);
+      state.whenData((data) {
+        if (data.items.isEmpty) {
+          ref.read(myEventsProvider.notifier).refresh();
+        }
+      });
+    });
   }
 
   @override
@@ -65,48 +75,41 @@ class _TicketScannerEntryScreenState
   Widget build(BuildContext context) {
     final myEventsAsync = ref.watch(myEventsProvider);
 
-    final isInitialLoading = myEventsAsync.isLoading && !myEventsAsync.hasValue;
-    final hasInitialError = myEventsAsync.hasError && !myEventsAsync.hasValue;
-
-    final state = myEventsAsync.valueOrNull;
-    final events = state?.items ?? const <MyEventResponseDto>[];
-
     return AppScaffold(
       appBar: AppBar(
         title: const Text('Ticket scanner'),
       ),
       child: RefreshIndicator(
         onRefresh: _onRefresh,
-        child: Builder(
-          builder: (context) {
-            if (isInitialLoading) {
-              return ListView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                children: const [
-                  SizedBox(height: 120),
-                  AppLoadingIndicator(
-                    title: 'Loading events',
-                    message: 'Please wait while we load your scannable events.',
-                  ),
-                ],
-              );
-            }
+        child: AppAsyncView(
+          value: myEventsAsync,
+          loading: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            children: const [
+              SizedBox(height: 120),
+              AppLoadingIndicator(
+                title: 'Loading events',
+                message: 'Please wait while we load your scannable events.',
+              ),
+            ],
+          ),
+          errorBuilder: (_, _) {
+            return ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.all(16),
+              children: [
+                AppErrorState(
+                  title: 'Failed to load events',
+                  message: 'Pull to refresh or try again.',
+                  onRetry: _onRefresh,
+                ),
+              ],
+            );
+          },
+          data: (state) {
+            final events = state.items;
 
-            if (hasInitialError) {
-              return ListView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(16),
-                children: [
-                  AppErrorState(
-                    title: 'Failed to load events',
-                    message: 'Pull to refresh or try again.',
-                    onRetry: _onRefresh,
-                  ),
-                ],
-              );
-            }
-
-            if (state == null || events.isEmpty) {
+            if (events.isEmpty) {
               return const _TicketScannerEmptyView();
             }
 

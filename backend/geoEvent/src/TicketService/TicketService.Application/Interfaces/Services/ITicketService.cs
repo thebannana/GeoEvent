@@ -5,6 +5,8 @@ namespace TicketService.Application.Interfaces.Services;
 
 public interface ITicketService
 {
+    Task<ServiceResult<EventTicketResponseDto>> CreateDefaultEventTicketAsync(
+    CreateDefaultEventTicketRequest request);
     Task<ServiceResult<PagedResult<EventAttendeePreviewDto>>> GetPublicEventAttendeesAsync(
         int eventId,
         PublicEventAttendeesFilterDto filter);
@@ -63,6 +65,13 @@ public interface ITicketService
 
     Task CancelUserReservationsAsync(int userId);
     Task CancelTicketsByEventAsync(int eventId);
+
+    Task<ServiceResult<PayPalOrderResponseDto>> CreateReservationPayPalOrderAsync(int reservationId, int userId);
+
+    Task<ServiceResult<ReservationResponseDto>> CaptureReservationPayPalOrderAsync(
+        int reservationId,
+        CapturePayPalOrderDto dto,
+        int userId);
 
     Task<ServiceResult<ReservationResponseDto>> RequestRefundAsync(
         int reservationId,

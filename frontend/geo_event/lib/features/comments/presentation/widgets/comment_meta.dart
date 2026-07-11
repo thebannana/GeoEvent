@@ -22,7 +22,7 @@ class InlineErrorBanner extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
       ),
       child: Text(
-        message,
+        message.trim(),
         style: TextStyle(
           color: colorScheme.onErrorContainer,
           fontWeight: FontWeight.w500,
@@ -50,8 +50,9 @@ class CommentActionTextButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final baseColor = color ?? colorScheme.onSurfaceVariant;
-    final effectiveColor =
-        onTap == null ? colorScheme.onSurface.withValues(alpha: 0.28) : baseColor;
+    final effectiveColor = onTap == null
+        ? colorScheme.onSurface.withValues(alpha: 0.28)
+        : baseColor;
 
     return Tooltip(
       message: onTap == null && disabledReason != null ? disabledReason! : label,

@@ -20,20 +20,23 @@ public static class DependencyInjection
         services.AddHttpContextAccessor();
         services.AddScoped<ICurrentUserService, CurrentUserService>();
 
-        services.Configure<SupabaseStorageSettings>(
-            configuration.GetSection(SupabaseStorageSettings.SectionName));
+        services.Configure<ImageKitSettings>(
+            configuration.GetSection(ImageKitSettings.SectionName));
 
-        services.AddHttpClient<IImageStorageService, SupabaseImageStorageService>();
+        services.AddHttpClient<IImageStorageService, ImageKitImageStorageService>();
+
+        var connectionString = configuration.GetConnectionString("EventDb")
+            ?? throw new InvalidOperationException("Connection string 'EventDb' is not configured.");
 
         services.AddDbContext<EventDbContext>(options =>
             options.UseSqlServer(
-                configuration.GetConnectionString("EventDb"),
+                connectionString,
                 sqlOptions => sqlOptions.EnableRetryOnFailure(
                     maxRetryCount: 10,
                     maxRetryDelay: TimeSpan.FromSeconds(15),
                     errorNumbersToAdd: null)));
 
-        services.AddScoped<ServiceAuthHandler>();
+        services.AddTransient<ServiceAuthHandler>();
 
         var userServiceBaseUrl = configuration["Services:UserServiceBaseUrl"]
             ?? throw new InvalidOperationException("Services:UserServiceBaseUrl is not configured.");
@@ -51,11 +54,14 @@ public static class DependencyInjection
         {
             x.UsingRabbitMq((ctx, cfg) =>
             {
-                cfg.Host(configuration["RabbitMq:Host"], configuration["RabbitMq:VirtualHost"], h =>
-                {
-                    h.Username(configuration["RabbitMq:Username"]!);
-                    h.Password(configuration["RabbitMq:Password"]!);
-                });
+                cfg.Host(
+                    configuration["RabbitMq:Host"],
+                    configuration["RabbitMq:VirtualHost"],
+                    h =>
+                    {
+                        h.Username(configuration["RabbitMq:Username"]!);
+                        h.Password(configuration["RabbitMq:Password"]!);
+                    });
 
                 cfg.ConfigureEndpoints(ctx);
             });

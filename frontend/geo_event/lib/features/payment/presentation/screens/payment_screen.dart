@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/errors/error_mapper.dart';
+import '../../../../core/utils/logger.dart';
+import '../../../../core/utils/price_formatter.dart';
 import '../../../../core/widgets/async/app_async_view.dart';
+import '../../../../core/widgets/feedback/app_confirm_dialog.dart';
 import '../../../../core/widgets/feedback/app_empty_state.dart';
 import '../../../../core/widgets/feedback/app_error_state.dart';
 import '../../../../core/widgets/feedback/app_loading_indicator.dart';
@@ -76,7 +80,10 @@ class PaymentScreen extends ConsumerWidget {
           ),
           errorBuilder: (context, error) => AppErrorState(
             title: 'Could not load ticket availability',
-            message: 'Please try again.',
+            message: ErrorMapper.toMessage(
+              error,
+              fallbackMessage: 'Please try again.',
+            ),
             onRetry: () => ref.refresh(eventTicketsProvider(eventId).future),
           ),
           data: (tickets) {
@@ -245,71 +252,93 @@ class PaymentScreen extends ConsumerWidget {
 
                     if (!confirmed || !context.mounted) return;
 
-                    final success = await ctrl.submit(
-                      onPayPalApproval: ({
-                        required approveUrl,
-                        required orderId,
-                        required reservationId,
-                      }) async {
-                        if (isFree) {
-                          return PayPalApprovalResult.cancelled(
-                            'No PayPal approval is needed for free reservations.',
-                          );
-                        }
-
-                        if (selectedMethod != PaymentMethod.paypal) {
-                          return PayPalApprovalResult.cancelled(
-                            'PayPal is not the selected payment method.',
-                          );
-                        }
-
-                        final result =
-                            await Navigator.of(context).push<PayPalApprovalResult>(
-                          MaterialPageRoute(
-                            builder: (_) => PayPalApprovalScreen(
-                              approveUrl: approveUrl,
-                              expectedOrderId: orderId,
-                              reservationId: reservationId,
-                            ),
-                          ),
-                        );
-
-                        return result ??
-                            PayPalApprovalResult.cancelled(
-                              'PayPal payment was cancelled.',
+                    try {
+                      final success = await ctrl.submit(
+                        onPayPalApproval: ({
+                          required approveUrl,
+                          required orderId,
+                          required reservationId,
+                        }) async {
+                          if (isFree) {
+                            return PayPalApprovalResult.cancelled(
+                              'No PayPal approval is needed for free reservations.',
                             );
-                      },
-                    );
+                          }
 
-                    if (!context.mounted) return;
+                          if (selectedMethod != PaymentMethod.paypal) {
+                            return PayPalApprovalResult.cancelled(
+                              'PayPal is not the selected payment method.',
+                            );
+                          }
 
-                    if (success) {
-                      final successTitle = isFree
-                          ? 'Reservation confirmed'
-                          : selectedMethod == PaymentMethod.paypal
-                              ? 'Payment successful'
-                              : 'Cash reservation confirmed';
+                          final result = await Navigator.of(context)
+                              .push<PayPalApprovalResult>(
+                            MaterialPageRoute(
+                              builder: (_) => PayPalApprovalScreen(
+                                approveUrl: approveUrl,
+                                expectedOrderId: orderId,
+                                reservationId: reservationId,
+                              ),
+                            ),
+                          );
 
-                      final successMessage = isFree
-                          ? 'Your free reservation has been confirmed successfully.'
-                          : selectedMethod == PaymentMethod.paypal
-                              ? 'Your PayPal payment was completed successfully and your reservation is now confirmed.'
-                              : 'Your cash reservation has been confirmed successfully.';
-
-                      final result = await Navigator.of(context).push<bool>(
-                        MaterialPageRoute(
-                          builder: (_) => PaymentSuccessScreen(
-                            title: successTitle,
-                            message: successMessage,
-                          ),
-                        ),
+                          return result ??
+                              PayPalApprovalResult.cancelled(
+                                'PayPal payment was cancelled.',
+                              );
+                        },
                       );
 
                       if (!context.mounted) return;
 
-                      if (result == true) {
-                        Navigator.of(context).pop(true);
+                      if (success) {
+                        final successTitle = isFree
+                            ? 'Reservation confirmed'
+                            : selectedMethod == PaymentMethod.paypal
+                                ? 'Payment successful'
+                                : 'Cash reservation confirmed';
+
+                        final successMessage = isFree
+                            ? 'Your free reservation has been confirmed successfully.'
+                            : selectedMethod == PaymentMethod.paypal
+                                ? 'Your PayPal payment was completed successfully and your reservation is now confirmed.'
+                                : 'Your cash reservation has been confirmed successfully.';
+
+                        final result = await Navigator.of(context).push<bool>(
+                          MaterialPageRoute(
+                            builder: (_) => PaymentSuccessScreen(
+                              title: successTitle,
+                              message: successMessage,
+                            ),
+                          ),
+                        );
+
+                        if (!context.mounted) return;
+
+                        if (result == true) {
+                          Navigator.of(context).pop(true);
+                        }
                       }
+                    } catch (error, stackTrace) {
+                      AppLogger.error(
+                        'Payment submission failed.',
+                        tag: 'PaymentScreen',
+                        error: error,
+                        stackTrace: stackTrace,
+                      );
+
+                      final message = ErrorMapper.toMessage(
+                        error,
+                        stackTrace: stackTrace,
+                        fallbackMessage:
+                            'Unable to complete your reservation right now.',
+                      );
+
+                      if (!context.mounted) return;
+
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(message)),
+                      );
                     }
                   },
                 ),
@@ -329,7 +358,7 @@ class PaymentScreen extends ConsumerWidget {
     required bool isFree,
     required double paypalAmount,
     required String paypalCurrency,
-  }) async {
+  }) {
     final actionLabel = isFree
         ? 'Confirm reservation'
         : (method == PaymentMethod.paypal
@@ -345,29 +374,23 @@ class PaymentScreen extends ConsumerWidget {
                 paypalAmount: paypalAmount,
                 paypalCurrency: paypalCurrency,
               )
-            : 'You are about to confirm this reservation with cash payment for ${total.toStringAsFixed(2)} $currency.';
+            : 'You are about to confirm this reservation with cash payment for ${_formatPrice(total, currency)}.';
 
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: Text(actionLabel),
-          content: Text(message),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: Text(actionLabel),
-            ),
-          ],
-        );
-      },
+    return AppConfirmDialog.show(
+      context,
+      title: actionLabel,
+      message: message,
+      confirmLabel: actionLabel,
     );
+  }
 
-    return result ?? false;
+  static String _formatPrice(double amount, String currency) {
+    return PriceFormatter.format(
+      amount,
+      currency: currency.trim().toUpperCase(),
+      decimalDigits: 2,
+      fallback: '-',
+    );
   }
 
   static String _paypalChargedCurrency(String originalCurrency) {
@@ -398,7 +421,7 @@ class PaymentScreen extends ConsumerWidget {
       return 'You will be redirected to PayPal for approval.';
     }
 
-    return 'You will be redirected to PayPal for approval. This ticket is priced in ${originalAmount.toStringAsFixed(2)} $normalizedOriginalCurrency, and PayPal will charge approximately ${paypalAmount.toStringAsFixed(2)} $paypalCurrency.';
+    return 'You will be redirected to PayPal for approval. This ticket is priced in ${_formatPrice(originalAmount, normalizedOriginalCurrency)}, and PayPal will charge approximately ${_formatPrice(paypalAmount, paypalCurrency)}.';
   }
 
   static String _paypalDialogMessage({
@@ -410,9 +433,9 @@ class PaymentScreen extends ConsumerWidget {
     final normalizedCurrency = currency.trim().toUpperCase();
 
     if (normalizedCurrency == paypalCurrency) {
-      return 'You are about to continue to PayPal for a payment of ${total.toStringAsFixed(2)} $normalizedCurrency.';
+      return 'You are about to continue to PayPal for a payment of ${_formatPrice(total, normalizedCurrency)}.';
     }
 
-    return 'You are about to continue to PayPal. The reservation total is ${total.toStringAsFixed(2)} $normalizedCurrency, and PayPal will charge approximately ${paypalAmount.toStringAsFixed(2)} $paypalCurrency.';
+    return 'You are about to continue to PayPal. The reservation total is ${_formatPrice(total, normalizedCurrency)}, and PayPal will charge approximately ${_formatPrice(paypalAmount, paypalCurrency)}.';
   }
 }

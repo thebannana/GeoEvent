@@ -1,18 +1,19 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/constants/event_status.dart';
+import '../../../../core/errors/error_mapper.dart';
+import '../../../../core/utils/debounce.dart';
+import '../../../../core/utils/logger.dart';
 import '../../../../core/widgets/feedback/app_confirm_dialog.dart';
 import '../../../../core/widgets/feedback/app_empty_state.dart';
 import '../../../../core/widgets/feedback/app_error_state.dart';
 import '../../../../core/widgets/feedback/app_loading_indicator.dart';
 import '../../../../core/widgets/inputs/app_chip.dart';
 import '../../../../core/widgets/layout/app_scaffold.dart';
-import '../../../../shared/my_events/models/my_event_response_dto.dart';
 import '../../../../shared/events/providers/event_refresh_providers.dart';
+import '../../../../shared/my_events/models/my_event_response_dto.dart';
 import '../../application/my_events_controller.dart';
 import '../../../event_reservations/presentation/screens/event_reservations_screen.dart';
 import '../widgets/list_paging_footer.dart';
@@ -27,9 +28,6 @@ class MyEventsScreen extends ConsumerStatefulWidget {
 }
 
 class _MyEventsScreenState extends ConsumerState<MyEventsScreen> {
-  final TextEditingController _searchController = TextEditingController();
-  final ScrollController _scrollController = ScrollController();
-
   static const List<String> _statuses = [
     'All',
     EventStatus.pending,
@@ -38,20 +36,29 @@ class _MyEventsScreenState extends ConsumerState<MyEventsScreen> {
     EventStatus.cancelled,
   ];
 
-  Timer? _searchDebounce;
+  final TextEditingController _searchController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
+  final Debouncer _searchDebouncer = Debouncer(
+    delay: const Duration(milliseconds: 400),
+  );
+
   String _query = '';
   String _selectedStatus = 'All';
   bool _busyDeleting = false;
 
-  @override
-  void initState() {
-    super.initState();
-    _scrollController.addListener(_onScroll);
-  }
+@override
+void initState() {
+  super.initState();
+  _scrollController.addListener(_onScroll);
+
+  Future.microtask(() {
+    ref.read(myEventsProvider.notifier).refresh();
+  });
+}
 
   @override
   void dispose() {
-    _searchDebounce?.cancel();
+    _searchDebouncer.dispose();
     _searchController.dispose();
     _scrollController
       ..removeListener(_onScroll)
@@ -75,13 +82,23 @@ class _MyEventsScreenState extends ConsumerState<MyEventsScreen> {
   void _onSearchChanged(String value) {
     setState(() => _query = value);
 
-    _searchDebounce?.cancel();
-    _searchDebounce = Timer(const Duration(milliseconds: 400), () {
+    _searchDebouncer.run(() {
       ref.read(myEventsProvider.notifier).applyFilters(
             searchTerm: _query,
             selectedStatus: _selectedStatus,
           );
     });
+  }
+
+  Future<void> _clearSearch() async {
+    _searchDebouncer.cancel();
+    _searchController.clear();
+    setState(() => _query = '');
+
+    await ref.read(myEventsProvider.notifier).applyFilters(
+          searchTerm: '',
+          selectedStatus: _selectedStatus,
+        );
   }
 
   Future<void> _onStatusChanged(String status) async {
@@ -169,10 +186,7 @@ class _MyEventsScreenState extends ConsumerState<MyEventsScreen> {
                               const Icon(Icons.search_rounded, size: 20),
                           suffixIcon: _query.isNotEmpty
                               ? IconButton(
-                                  onPressed: () {
-                                    _searchController.clear();
-                                    _onSearchChanged('');
-                                  },
+                                  onPressed: _clearSearch,
                                   icon: const Icon(
                                     Icons.close_rounded,
                                     size: 18,
@@ -317,6 +331,25 @@ class _MyEventsScreenState extends ConsumerState<MyEventsScreen> {
           ),
         ),
       );
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'Failed to delete event.',
+        tag: 'MyEventsScreen',
+        error: error,
+        stackTrace: stackTrace,
+      );
+
+      if (!mounted) return;
+
+      final message = ErrorMapper.toMessage(
+        error,
+        stackTrace: stackTrace,
+        fallbackMessage: 'Could not delete event.',
+      );
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message)),
+      );
     } finally {
       if (mounted) {
         setState(() => _busyDeleting = false);
@@ -333,5 +366,4 @@ class _MyEventsScreenState extends ConsumerState<MyEventsScreen> {
       ),
     );
   }
-
 }

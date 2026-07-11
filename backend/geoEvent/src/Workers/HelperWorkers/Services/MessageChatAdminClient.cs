@@ -3,7 +3,7 @@ using GeoEvent.HelperWorkers.Interfaces;
 
 namespace GeoEvent.HelperWorkers.Services;
 
-public class MessageChatAdminClient : IMessageChatAdminClient
+public sealed class MessageChatAdminClient : IMessageChatAdminClient
 {
     private readonly HttpClient _httpClient;
 
@@ -14,7 +14,7 @@ public class MessageChatAdminClient : IMessageChatAdminClient
 
     public async Task AddUserToEventThreadAsync(int eventId, int userId, int? addedByUserId = null)
     {
-        var response = await _httpClient.PostAsJsonAsync(
+        using var response = await _httpClient.PostAsJsonAsync(
             "/api/internal/chat/event-thread/add-user",
             new
             {
@@ -28,7 +28,7 @@ public class MessageChatAdminClient : IMessageChatAdminClient
 
     public async Task RemoveUserFromEventThreadAsync(int eventId, int userId)
     {
-        var response = await _httpClient.PostAsJsonAsync(
+        using var response = await _httpClient.PostAsJsonAsync(
             "/api/internal/chat/event-thread/remove-user",
             new
             {
@@ -41,7 +41,7 @@ public class MessageChatAdminClient : IMessageChatAdminClient
 
     public async Task HandleDeletedUserAsync(int userId)
     {
-        var response = await _httpClient.PostAsJsonAsync(
+        using var response = await _httpClient.PostAsJsonAsync(
             "/api/internal/chat/users/handle-deleted",
             new
             {

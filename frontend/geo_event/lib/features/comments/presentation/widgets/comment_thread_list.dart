@@ -64,7 +64,7 @@ class CommentThreadList extends StatelessWidget {
             child: CommentThreadTile(
               comment: comment,
               currentUserId: currentUserId,
-              onLikeTap: (c) => onLikeTap(c),
+              onLikeTap: onLikeTap,
               onReplyTap: onReplyTap,
               onEditTap: onEditTap,
               onDeleteTap: onDeleteTap,

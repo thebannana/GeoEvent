@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/errors/error_mapper.dart';
+import '../../../../core/utils/logger.dart';
 import '../../../../core/utils/validators.dart';
 import '../../application/auth_controller.dart';
 import '../widgets/auth_feedback.dart';
@@ -49,13 +51,25 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with AuthFeedback {
 
       if (!mounted) return;
       context.go('/app');
-    } catch (error) {
+    } catch (error, stackTrace) {
       if (!mounted) return;
+
+      AppLogger.error(
+        'Login failed.',
+        tag: 'LoginScreen',
+        error: error,
+        stackTrace: stackTrace,
+      );
 
       showAuthError(
         context,
         error,
-        fallbackMessage: 'Login failed. Please check your credentials and try again.',
+        fallbackMessage: ErrorMapper.toMessage(
+          error,
+          stackTrace: stackTrace,
+          fallbackMessage:
+              'Login failed. Please check your credentials and try again.',
+        ),
       );
     }
   }
@@ -130,7 +144,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with AuthFeedback {
                   AuthSubmitButton(
                     label: 'Login',
                     isLoading: authState.isLoading,
-                    disabledReason: 'Please wait while your login request is being processed.',
+                    disabledReason:
+                        'Please wait while your login request is being processed.',
                     onPressed: _submit,
                   ),
                   const SizedBox(height: 8),
@@ -139,9 +154,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with AuthFeedback {
                         ? null
                         : () => context.push('/register'),
                     child: Text(
-                      authState.isLoading
-                          ? 'Create account unavailable while logging in'
-                          : 'Create account',
+                      'Create account',
                     ),
                   ),
                   TextButton(
@@ -149,9 +162,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with AuthFeedback {
                         ? null
                         : () => context.push('/forgot-password'),
                     child: Text(
-                      authState.isLoading
-                          ? 'Forgot password unavailable while logging in'
-                          : 'Forgot password?',
+                      'Forgot password?',
                     ),
                   ),
                 ],

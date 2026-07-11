@@ -30,12 +30,11 @@ public static class DependencyInjection
                     maxRetryDelay: TimeSpan.FromSeconds(15),
                     errorNumbersToAdd: null)));
 
-        services.Configure<PayPalOptions>(configuration.GetSection("PayPal"));
+        services.Configure<JwtOptions>(configuration.GetSection(JwtOptions.SectionName));
 
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IUserService, UserServiceImpl>();
-        services.AddHttpClient<IPayPalService, PayPalService>();
         services.AddScoped<PasswordService>();
         services.AddScoped<TokenService>();
 
@@ -66,7 +65,7 @@ public static class DependencyInjection
         {
             x.SetKebabCaseEndpointNameFormatter();
 
-            x.UsingRabbitMq((ctx, cfg) =>
+            x.UsingRabbitMq((context, cfg) =>
             {
                 cfg.Host(rabbitMqHost, rabbitMqVirtualHost, h =>
                 {

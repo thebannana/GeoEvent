@@ -119,11 +119,18 @@ class BookmarksController extends StateNotifier<PagedListState<Bookmark>> {
       memo: memo?.trim().isEmpty == true ? null : memo?.trim(),
     );
 
-    final updated = _sort([created, ...state.items]);
+    final existingWithoutDuplicate = state.items
+        .where((b) => b.bookmarkId != created.bookmarkId && b.eventId != eventId)
+        .toList(growable: false);
+
+    final updated = _sort([created, ...existingWithoutDuplicate]);
 
     state = state.copyWith(
       items: updated,
-      totalCount: state.totalCount + 1,
+      totalCount: updated.length > state.totalCount
+          ? updated.length
+          : state.totalCount + 1,
+      loadedInitial: true,
     );
 
     return created;
@@ -181,12 +188,15 @@ class BookmarksController extends StateNotifier<PagedListState<Bookmark>> {
 
   Future<void> deleteBookmark(int bookmarkId) async {
     final snapshot = state.items;
+    final previousTotalCount = state.totalCount;
+
     final updated =
         snapshot.where((b) => b.bookmarkId != bookmarkId).toList(growable: false);
 
     state = state.copyWith(
       items: List.unmodifiable(updated),
-      totalCount: state.totalCount > 0 ? state.totalCount - 1 : 0,
+      totalCount: previousTotalCount > 0 ? previousTotalCount - 1 : 0,
+      loadedInitial: true,
     );
 
     try {
@@ -194,7 +204,7 @@ class BookmarksController extends StateNotifier<PagedListState<Bookmark>> {
     } catch (_) {
       state = state.copyWith(
         items: List.unmodifiable(snapshot),
-        totalCount: state.totalCount + 1,
+        totalCount: previousTotalCount,
       );
       rethrow;
     }
@@ -217,6 +227,18 @@ class BookmarksController extends StateNotifier<PagedListState<Bookmark>> {
       return;
     }
 
-    await addBookmark(eventId: eventId, memo: memo);
+    try {
+      await addBookmark(eventId: eventId, memo: memo);
+    } catch (e) {
+      final message = e.toString().toLowerCase();
+      if (message.contains('already bookmarked') || message.contains('409')) {
+        await refresh();
+        final resolved = bookmarkForEvent(eventId);
+        if (resolved != null) {
+          return;
+        }
+      }
+      rethrow;
+    }
   }
 }

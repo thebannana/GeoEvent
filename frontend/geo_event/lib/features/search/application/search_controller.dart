@@ -5,9 +5,9 @@ import '../../../../shared/events/models/paged_result.dart';
 import '../../../../shared/profile/models/user_preference.dart';
 import '../../../shared/events/providers/event_providers.dart';
 import '../../profile/application/preferences_controller.dart';
-import '../domain/filter_selection.dart';
-import '../domain/sort_option.dart';
-import 'search_state.dart';
+import '../../../shared/search/models/filter_selection.dart';
+import '../../../shared/search/models/sort_option.dart';
+import '../../../shared/search/data/search_state.dart';
 
 final searchControllerProvider =
     StateNotifierProvider.autoDispose<SearchController, SearchState>((ref) {

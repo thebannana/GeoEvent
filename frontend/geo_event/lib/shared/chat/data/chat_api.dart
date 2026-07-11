@@ -133,21 +133,24 @@ class ChatApi {
     throw const FormatException('Invalid thread messages response format.');
   }
 
-  Future<MessageItem> sendThreadMessage({
-    required int threadId,
-    required String content,
-    int? replyToMessageId,
-  }) async {
-    final response = await dio.post(
-      ApiEndpoints.threadMessages(threadId),
-      data: {
-        'content': content.trim(),
-        'replyToMessageId': ?replyToMessageId,
-      },
-    );
+Future<MessageItem> sendThreadMessage({
+  required int threadId,
+  required String content,
+  int? replyToMessageId,
+  String? clientTag,
+}) async {
+  final response = await dio.post(
+    ApiEndpoints.threadMessages(threadId),
+    data: {
+      'content': content.trim(),
+      if (replyToMessageId != null) 'replyToMessageId': replyToMessageId,
+      if (clientTag != null && clientTag.trim().isNotEmpty)
+        'clientTag': clientTag.trim(),
+    },
+  );
 
-    return _parseMessage(response.data);
-  }
+  return _parseMessage(response.data);
+}
 
   Future<void> leaveThread(int threadId) async {
     await dio.delete(ApiEndpoints.leaveThread(threadId));
@@ -184,17 +187,27 @@ class ChatApi {
   }
 
   Future<List<ChatParticipant>> getThreadParticipants(int threadId) async {
-    final response = await dio.get(ApiEndpoints.threadParticipants(threadId));
+    final response = await dio.get(
+      ApiEndpoints.threadParticipants(threadId),
+      queryParameters: {
+        'page': 1,
+        'pageSize': 100,
+      },
+    );
+
     final raw = response.data;
+    final map = raw is Map<String, dynamic>
+        ? raw
+        : raw is Map
+            ? Map<String, dynamic>.from(raw)
+            : throw const FormatException('Invalid participants response format.');
 
-    if (raw is! List) {
-      throw const FormatException('Invalid participants response format.');
-    }
-
-    return raw
+    final items = (map['items'] as List? ?? const [])
         .whereType<Map>()
         .map((e) => ChatParticipant.fromJson(Map<String, dynamic>.from(e)))
         .toList(growable: false);
+
+    return items;
   }
 
   ChatThreadDetails _parseThreadDetails(dynamic raw) {

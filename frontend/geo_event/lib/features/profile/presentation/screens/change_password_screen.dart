@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/errors/error_mapper.dart';
+import '../../../../core/utils/logger.dart';
 import '../../../../core/utils/validators.dart';
 import '../../../../core/widgets/feedback/app_spinner.dart';
 import '../../../../core/widgets/layout/app_scaffold.dart';
@@ -97,6 +98,13 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
 
       Navigator.of(context).pop(true);
     } catch (error, stackTrace) {
+      AppLogger.error(
+        'Failed to change password.',
+        tag: 'ChangePasswordScreen',
+        error: error,
+        stackTrace: stackTrace,
+      );
+
       if (!mounted) {
         return;
       }

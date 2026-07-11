@@ -1,8 +1,9 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/errors/error_mapper.dart';
+import '../../../../core/utils/debounce.dart';
+import '../../../../core/utils/logger.dart';
 import '../../../../core/widgets/feedback/app_empty_state.dart';
 import '../../../../core/widgets/feedback/app_error_state.dart';
 import '../../../../core/widgets/feedback/app_loading_indicator.dart';
@@ -12,9 +13,10 @@ import '../../../../shared/events/models/create_event_models.dart';
 import '../../../../shared/events/providers/event_providers.dart';
 import '../../../../shared/location/models/event_directions_request.dart';
 import '../../../../shared/location/providers/directions_providers.dart';
+import '../../../../shared/search/models/filter_selection.dart';
+import '../../../../shared/search/models/sort_option.dart';
 import '../../application/search_controller.dart';
-import '../../domain/filter_selection.dart';
-import '../../domain/sort_option.dart';
+import '../widgets/search_bar.dart';
 import '../widgets/search_filter_bottom_sheet.dart';
 import '../widgets/search_result_card.dart';
 import '../widgets/search_sort_bottom_sheet.dart';
@@ -34,7 +36,10 @@ class SearchSheet extends ConsumerStatefulWidget {
 class _SearchSheetState extends ConsumerState<SearchSheet> {
   final TextEditingController _textController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  Timer? _debounce;
+  final Debouncer _debouncer = Debouncer(
+    delay: const Duration(milliseconds: 350),
+  );
+
   bool _isDialogOpen = false;
 
   @override
@@ -50,12 +55,22 @@ class _SearchSheetState extends ConsumerState<SearchSheet> {
 
   @override
   void dispose() {
-    _debounce?.cancel();
+    _debouncer.dispose();
     _textController.dispose();
     _scrollController
       ..removeListener(_onScroll)
       ..dispose();
     super.dispose();
+  }
+
+  void _showMessage(String message) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(content: Text(message)),
+      );
   }
 
   void _onScroll() {
@@ -96,12 +111,7 @@ class _SearchSheetState extends ConsumerState<SearchSheet> {
   }
 
   void _onQueryChanged(String value) {
-    if (mounted) {
-      setState(() {});
-    }
-
-    _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 350), () {
+    _debouncer.run(() {
       ref.read(searchControllerProvider.notifier).search(value);
     });
   }
@@ -181,13 +191,19 @@ class _SearchSheetState extends ConsumerState<SearchSheet> {
 
       if (result == null || !mounted) return;
       await ref.read(searchControllerProvider.notifier).applyFilter(result);
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            e.toString().replaceFirst('Exception: ', ''),
-          ),
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'Failed to open search filters.',
+        tag: 'SearchSheet',
+        error: error,
+        stackTrace: stackTrace,
+      );
+
+      _showMessage(
+        ErrorMapper.toMessage(
+          error,
+          stackTrace: stackTrace,
+          fallbackMessage: 'Could not load filters. Please try again.',
         ),
       );
     }
@@ -236,6 +252,37 @@ class _SearchSheetState extends ConsumerState<SearchSheet> {
         child: Text(
           'Showing all $loadedCount events',
           style: Theme.of(context).textTheme.bodySmall,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInlineError(String message) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Material(
+      color: colorScheme.errorContainer.withValues(alpha: 0.65),
+      borderRadius: BorderRadius.circular(16),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          children: [
+            Icon(
+              Icons.error_outline_rounded,
+              color: colorScheme.error,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                message,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: colorScheme.onErrorContainer,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -324,39 +371,7 @@ class _SearchSheetState extends ConsumerState<SearchSheet> {
               if (state.error != null)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                  child: Material(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .errorContainer
-                        .withValues(alpha: 0.65),
-                    borderRadius: BorderRadius.circular(16),
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.error_outline_rounded,
-                            color: Theme.of(context).colorScheme.error,
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              state.error!,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodySmall
-                                  ?.copyWith(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onErrorContainer,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
+                  child: _buildInlineError(state.error!),
                 ),
               if (state.loading)
                 const Padding(
@@ -389,7 +404,6 @@ class _SearchSheetState extends ConsumerState<SearchSheet> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(searchControllerProvider);
-    final query = _textController.text.trim();
 
     if (_textController.text != state.query) {
       _textController.value = _textController.value.copyWith(
@@ -405,26 +419,13 @@ class _SearchSheetState extends ConsumerState<SearchSheet> {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-            child: TextField(
+            child: SearchBarWidget(
               controller: _textController,
-              autofocus: true,
               onChanged: _onQueryChanged,
-              textInputAction: TextInputAction.search,
-              decoration: InputDecoration(
-                hintText: 'Search events',
-                prefixIcon: const Icon(Icons.search_rounded),
-                contentPadding: const EdgeInsets.symmetric(vertical: 14),
-                suffixIcon: query.isNotEmpty
-                    ? IconButton(
-                        onPressed: () async {
-                          _debounce?.cancel();
-                          await ref.read(searchControllerProvider.notifier).clearQuery();
-                        },
-                        icon: const Icon(Icons.close_rounded),
-                        tooltip: 'Clear search',
-                      )
-                    : null,
-              ),
+              onClear: () async {
+                _debouncer.cancel();
+                await ref.read(searchControllerProvider.notifier).clearQuery();
+              },
             ),
           ),
           const SizedBox(height: 10),

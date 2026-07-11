@@ -24,9 +24,10 @@ public class PayPalService : IPayPalService
     private const decimal BamToEurRate = 0.51129m;
 
     private readonly HttpClient _httpClient;
-    private readonly IConfiguration _config;
     private readonly ILogger<PayPalService> _logger;
     private readonly string _baseUrl;
+    private readonly string _clientId;
+    private readonly string _clientSecret;
 
     public PayPalService(
         HttpClient httpClient,
@@ -34,26 +35,23 @@ public class PayPalService : IPayPalService
         ILogger<PayPalService> logger)
     {
         _httpClient = httpClient;
-        _config = config;
         _logger = logger;
 
-        var mode = _config["PayPal:Mode"] ?? "sandbox";
+        var mode = config["PayPal:Mode"] ?? "sandbox";
         _baseUrl = mode.Equals("live", StringComparison.OrdinalIgnoreCase)
             ? "https://api-m.paypal.com"
             : "https://api-m.sandbox.paypal.com";
+
+        _clientId = config["PayPal:ClientId"] ?? string.Empty;
+        _clientSecret = config["PayPal:ClientSecret"] ?? string.Empty;
     }
 
     private async Task<string> GetAccessTokenAsync()
     {
-        var clientId = _config["PayPal:ClientId"];
-        var clientSecret = _config["PayPal:ClientSecret"];
-
-        if (string.IsNullOrWhiteSpace(clientId) || string.IsNullOrWhiteSpace(clientSecret))
-        {
+        if (string.IsNullOrWhiteSpace(_clientId) || string.IsNullOrWhiteSpace(_clientSecret))
             throw new InvalidOperationException("PayPal credentials are not configured.");
-        }
 
-        var auth = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{clientId}:{clientSecret}"));
+        var auth = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{_clientId}:{_clientSecret}"));
 
         using var request = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/v1/oauth2/token");
         request.Headers.Authorization = new AuthenticationHeaderValue("Basic", auth);
@@ -110,9 +108,7 @@ public class PayPalService : IPayPalService
             return 0m;
 
         if (currency.Equals("BAM", StringComparison.OrdinalIgnoreCase))
-        {
             return Math.Round(amount * BamToEurRate, 2, MidpointRounding.AwayFromZero);
-        }
 
         return Math.Round(amount, 2, MidpointRounding.AwayFromZero);
     }
@@ -140,32 +136,16 @@ public class PayPalService : IPayPalService
         try
         {
             if (amount <= 0)
-            {
-                return ServiceResult<PayPalOrderResponseDto>.Fail(
-                    "PayPal order amount must be greater than zero.",
-                    StatusCodes.Status400BadRequest);
-            }
+                return ServiceResult<PayPalOrderResponseDto>.Fail("PayPal order amount must be greater than zero.", StatusCodes.Status400BadRequest);
 
             if (string.IsNullOrWhiteSpace(currency))
-            {
-                return ServiceResult<PayPalOrderResponseDto>.Fail(
-                    "Currency is required.",
-                    StatusCodes.Status400BadRequest);
-            }
+                return ServiceResult<PayPalOrderResponseDto>.Fail("Currency is required.", StatusCodes.Status400BadRequest);
 
             if (string.IsNullOrWhiteSpace(referenceId))
-            {
-                return ServiceResult<PayPalOrderResponseDto>.Fail(
-                    "Reference ID is required.",
-                    StatusCodes.Status400BadRequest);
-            }
+                return ServiceResult<PayPalOrderResponseDto>.Fail("Reference ID is required.", StatusCodes.Status400BadRequest);
 
             if (string.IsNullOrWhiteSpace(returnUrl) || string.IsNullOrWhiteSpace(cancelUrl))
-            {
-                return ServiceResult<PayPalOrderResponseDto>.Fail(
-                    "PayPal return and cancel URLs are required.",
-                    StatusCodes.Status500InternalServerError);
-            }
+                return ServiceResult<PayPalOrderResponseDto>.Fail("PayPal return and cancel URLs are required.", StatusCodes.Status500InternalServerError);
 
             currency = currency.Trim();
             referenceId = referenceId.Trim();
@@ -176,25 +156,14 @@ public class PayPalService : IPayPalService
             var paypalAmount = NormalizeAmountForPayPal(amount, currency);
 
             if (!SupportedPayPalCurrencies.Contains(paypalCurrency))
-            {
-                return ServiceResult<PayPalOrderResponseDto>.Fail(
-                    $"PayPal does not support currency '{currency}'.",
-                    StatusCodes.Status400BadRequest);
-            }
+                return ServiceResult<PayPalOrderResponseDto>.Fail($"PayPal does not support currency '{currency}'.", StatusCodes.Status400BadRequest);
 
             if (paypalAmount <= 0)
-            {
-                return ServiceResult<PayPalOrderResponseDto>.Fail(
-                    "Converted PayPal amount must be greater than zero.",
-                    StatusCodes.Status400BadRequest);
-            }
+                return ServiceResult<PayPalOrderResponseDto>.Fail("Converted PayPal amount must be greater than zero.", StatusCodes.Status400BadRequest);
 
             var token = await GetAccessTokenAsync();
 
-            using var request = new HttpRequestMessage(
-                HttpMethod.Post,
-                $"{_baseUrl}/v2/checkout/orders");
-
+            using var request = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/v2/checkout/orders");
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
             request.Headers.Add("PayPal-Request-Id", $"create-{referenceId}-{Guid.NewGuid():N}");
 
@@ -238,14 +207,8 @@ public class PayPalService : IPayPalService
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogError(
-                    "PayPal CreateOrder failed. ReservationRef={ReferenceId}, OriginalAmount={OriginalAmount}, OriginalCurrency={OriginalCurrency}, PayPalAmount={PayPalAmount}, PayPalCurrency={PayPalCurrency}, ReturnUrl={ReturnUrl}, CancelUrl={CancelUrl}, StatusCode={StatusCode}, Response={Content}",
+                    "PayPal CreateOrder failed. ReferenceId={ReferenceId}, StatusCode={StatusCode}, Response={Content}",
                     referenceId,
-                    amount,
-                    currency,
-                    paypalAmount,
-                    paypalCurrency,
-                    returnUrl,
-                    cancelUrl,
                     (int)response.StatusCode,
                     content);
 
@@ -266,7 +229,6 @@ public class PayPalService : IPayPalService
                 : string.Empty;
 
             string approveLink = string.Empty;
-            var discoveredRels = new List<string>();
 
             if (root.TryGetProperty("links", out var linksElement) &&
                 linksElement.ValueKind == JsonValueKind.Array)
@@ -276,11 +238,6 @@ public class PayPalService : IPayPalService
                     var rel = link.TryGetProperty("rel", out var relEl)
                         ? relEl.GetString()?.Trim() ?? string.Empty
                         : string.Empty;
-
-                    if (!string.IsNullOrWhiteSpace(rel))
-                    {
-                        discoveredRels.Add(rel);
-                    }
 
                     if (!string.Equals(rel, "approve", StringComparison.OrdinalIgnoreCase) &&
                         !string.Equals(rel, "payer-action", StringComparison.OrdinalIgnoreCase))
@@ -300,24 +257,13 @@ public class PayPalService : IPayPalService
             if (string.IsNullOrWhiteSpace(orderId) || string.IsNullOrWhiteSpace(approveLink))
             {
                 _logger.LogError(
-                    "PayPal order response missing required fields. OrderId={OrderId}, ApproveLink={ApproveLink}, LinkRels={LinkRels}, RawResponse={Content}",
-                    orderId,
-                    approveLink,
-                    string.Join(",", discoveredRels),
+                    "PayPal order response missing required fields. Response={Content}",
                     content);
 
                 return ServiceResult<PayPalOrderResponseDto>.Fail(
                     "PayPal approval response is invalid.",
                     StatusCodes.Status500InternalServerError);
             }
-
-            _logger.LogInformation(
-                "PayPal order created successfully. ReferenceId={ReferenceId}, OrderId={OrderId}, Status={Status}, PayPalAmount={PayPalAmount}, PayPalCurrency={PayPalCurrency}",
-                referenceId,
-                orderId,
-                status,
-                paypalAmount,
-                paypalCurrency);
 
             return ServiceResult<PayPalOrderResponseDto>.Ok(new PayPalOrderResponseDto
             {
@@ -381,16 +327,12 @@ public class PayPalService : IPayPalService
                 var purchaseUnit = purchaseUnits[0];
 
                 if (purchaseUnit.TryGetProperty("reference_id", out var refEl))
-                {
                     referenceId = refEl.GetString() ?? string.Empty;
-                }
 
                 if (purchaseUnit.TryGetProperty("amount", out var amountObj))
                 {
                     if (amountObj.TryGetProperty("currency_code", out var currencyEl))
-                    {
                         currencyCode = currencyEl.GetString() ?? string.Empty;
-                    }
 
                     if (amountObj.TryGetProperty("value", out var amountEl))
                     {
@@ -415,9 +357,7 @@ public class PayPalService : IPayPalService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to get PayPal order details. OrderId={OrderId}", orderId);
-            return ServiceResult<PayPalOrderDetailsDto>.Fail(
-                "Failed to get PayPal order details.",
-                500);
+            return ServiceResult<PayPalOrderDetailsDto>.Fail("Failed to get PayPal order details.", 500);
         }
     }
 
@@ -451,8 +391,7 @@ public class PayPalService : IPayPalService
                 {
                     amount = new
                     {
-                        value = NormalizeAmountForPayPal(amount.Value, currency)
-                            .ToString("0.00", CultureInfo.InvariantCulture),
+                        value = NormalizeAmountForPayPal(amount.Value, currency).ToString("0.00", CultureInfo.InvariantCulture),
                         currency_code = NormalizeCurrencyForPayPal(currency)
                     },
                     note_to_payer = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim()
@@ -499,11 +438,7 @@ public class PayPalService : IPayPalService
                 : string.Empty;
 
             if (string.IsNullOrWhiteSpace(refundId))
-            {
-                return ServiceResult<PayPalRefundResponseDto>.Fail(
-                    "PayPal refund response is invalid.",
-                    500);
-            }
+                return ServiceResult<PayPalRefundResponseDto>.Fail("PayPal refund response is invalid.", 500);
 
             return ServiceResult<PayPalRefundResponseDto>.Ok(new PayPalRefundResponseDto
             {
@@ -514,9 +449,7 @@ public class PayPalService : IPayPalService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to refund PayPal capture. CaptureId={CaptureId}", captureId);
-            return ServiceResult<PayPalRefundResponseDto>.Fail(
-                "Failed to refund PayPal capture.",
-                500);
+            return ServiceResult<PayPalRefundResponseDto>.Fail("Failed to refund PayPal capture.", 500);
         }
     }
 
@@ -538,7 +471,6 @@ public class PayPalService : IPayPalService
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
             request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
             request.Headers.Add("PayPal-Request-Id", $"capture-{orderId}-{Guid.NewGuid():N}");
-
             request.Content = new StringContent("{}", Encoding.UTF8, "application/json");
 
             using var response = await _httpClient.SendAsync(request);
@@ -553,7 +485,7 @@ public class PayPalService : IPayPalService
                     content);
 
                 return ServiceResult<PayPalCaptureResponseDto>.Fail(
-                    $"Failed to capture PayPal order. PayPal response: {content}",
+                    "Failed to capture PayPal order.",
                     (int)response.StatusCode);
             }
 
@@ -609,7 +541,7 @@ public class PayPalService : IPayPalService
                     content);
 
                 return ServiceResult<PayPalCaptureResponseDto>.Fail(
-                    $"PayPal capture response is invalid. Response: {content}",
+                    "PayPal capture response is invalid.",
                     500);
             }
 
@@ -622,9 +554,7 @@ public class PayPalService : IPayPalService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to capture PayPal order. OrderId={OrderId}", orderId);
-            return ServiceResult<PayPalCaptureResponseDto>.Fail(
-                "Failed to capture PayPal order.",
-                500);
+            return ServiceResult<PayPalCaptureResponseDto>.Fail("Failed to capture PayPal order.", 500);
         }
     }
 }

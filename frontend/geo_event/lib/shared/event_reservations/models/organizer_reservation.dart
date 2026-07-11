@@ -131,5 +131,5 @@ class OrganizerReservationDto {
       (paymentMethod ?? '').trim().toLowerCase() == 'paypal' &&
       (paymentStatus ?? '').trim().toLowerCase() == 'completed';
 
-  bool get isValidated => hasValidatedTicket;
+bool get isValidated => hasValidatedTicket || validatedAt != null;
 }

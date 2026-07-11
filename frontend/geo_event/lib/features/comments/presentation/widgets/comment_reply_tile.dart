@@ -58,7 +58,9 @@ class CommentReplyTile extends StatelessWidget {
                   CommentMetaText(reply.createdAt.timeAgo(short: true)),
                   CommentActionTextButton(
                     label: reply.isLiked ? 'Unlike' : 'Like',
-                    color: reply.isLiked ? likedColor : colorScheme.onSurfaceVariant,
+                    color: reply.isLiked
+                        ? likedColor
+                        : colorScheme.onSurfaceVariant,
                     onTap: reply.isDeleted ? null : () => onLikeTap(reply),
                     disabledReason: 'Deleted replies cannot be liked.',
                   ),
@@ -78,12 +80,14 @@ class CommentReplyTile extends StatelessWidget {
                     CommentActionTextButton(
                       label: 'Edit',
                       onTap: reply.isDeleted ? null : () => onEditTap(reply),
+                      disabledReason: 'Deleted replies cannot be edited.',
                     ),
                   if (canManage)
                     CommentActionTextButton(
                       label: 'Delete',
                       color: colorScheme.error,
                       onTap: reply.isDeleted ? null : () => onDeleteTap(reply),
+                      disabledReason: 'Deleted replies cannot be deleted again.',
                     ),
                   if (reply.likesCount > 0)
                     CommentMetaText(

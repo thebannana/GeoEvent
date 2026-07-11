@@ -1,13 +1,12 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/utils/debounce.dart';
 import '../../../../core/utils/date_time_extensions.dart';
-import '../../../../core/widgets/feedback/app_spinner.dart';
-import '../../../../core/widgets/inputs/app_chip.dart';
 import '../../../../core/widgets/feedback/app_empty_state.dart';
 import '../../../../core/widgets/feedback/app_error_state.dart';
+import '../../../../core/widgets/feedback/app_spinner.dart';
+import '../../../../core/widgets/inputs/app_chip.dart';
 import '../../../../core/widgets/layout/app_scaffold.dart';
 import '../../../../core/widgets/surfaces/app_surface_card.dart';
 import '../../../../shared/chat/models/chat_thread_args.dart';
@@ -16,7 +15,6 @@ import '../../../../shared/chat/models/conversation_summary.dart';
 import '../../application/messages_controller.dart';
 import '../widgets/chat_avatar.dart';
 import 'chat_thread_screen.dart';
-import '../../../../core/utils/debounce.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   const ChatScreen({super.key});
@@ -34,6 +32,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(messagesInboxControllerProvider.notifier).loadInitial();
+});
   }
 
   void _onSearchChanged(String value) {
@@ -53,6 +56,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   @override
   void dispose() {
+    _scrollController.removeListener(_onScroll);
     _searchDebouncer.dispose();
     _searchController.dispose();
     _scrollController.dispose();
@@ -66,6 +70,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final conversations =
         state.conversations.valueOrNull ?? const <ConversationSummary>[];
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+
+    final isInitialLoading =
+        state.conversations.isLoading && conversations.isEmpty;
+    final isInitialError =
+        state.conversations.hasError && conversations.isEmpty;
+    final isEmpty = conversations.isEmpty && !isInitialLoading && !isInitialError;
 
     return AppScaffold(
       backgroundColor: Colors.transparent,
@@ -143,21 +153,21 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     ),
                   ),
                 ),
-                if (state.conversations.isLoading && conversations.isEmpty)
+                if (isInitialLoading)
                   const SliverPadding(
                     padding: EdgeInsets.fromLTRB(18, 10, 18, 24),
                     sliver: SliverToBoxAdapter(
                       child: _ChatLoadingState(),
                     ),
                   )
-                else if (state.conversations.hasError && conversations.isEmpty)
+                else if (isInitialError)
                   SliverPadding(
                     padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
                     sliver: SliverToBoxAdapter(
                       child: _ChatErrorState(onRetry: controller.refresh),
                     ),
                   )
-                else if (conversations.isEmpty)
+                else if (isEmpty)
                   SliverPadding(
                     padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
                     sliver: SliverFillRemaining(
@@ -194,8 +204,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                         }
 
                         final item = conversations[index];
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 10),
+
+                        return KeyedSubtree(
+                          key: ValueKey(item.threadId),
                           child: _ConversationCard(
                             item: item,
                             onTap: () async {
@@ -250,6 +261,7 @@ class _ConversationCard extends StatelessWidget {
     final theme = Theme.of(context);
     final subtitlePrefix = item.isLastMessageFromMe ? 'You: ' : '';
     final resolvedTitle = _displayTitle(item);
+    final preview = _previewText(item);
 
     return AppSurfaceCard(
       onTap: onTap,
@@ -286,7 +298,7 @@ class _ConversationCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    '$subtitlePrefix${item.lastMessageContent}',
+                    '$subtitlePrefix$preview',
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.bodySmall?.copyWith(
@@ -364,6 +376,17 @@ class _ConversationCard extends StatelessWidget {
     }
 
     return 'Chat';
+  }
+
+  static String _previewText(ConversationSummary item) {
+    final raw = item.lastMessageContent.trim();
+    if (raw.isNotEmpty) return raw;
+
+    if (item.type == ChatThreadType.direct) {
+      return 'No messages yet';
+    }
+
+    return 'No messages in this chat yet';
   }
 
   static String? cleanUsername(String? value) {

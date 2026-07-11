@@ -6,13 +6,21 @@ public static class ClaimsPrincipalExtensions
 {
     public static int GetUserId(this ClaimsPrincipal user)
     {
+        var userId = user.GetUserIdOrNull();
+        return userId ?? throw new UnauthorizedAccessException("User ID claim not found.");
+    }
+
+    public static int? GetUserIdOrNull(this ClaimsPrincipal? user)
+    {
+        if (user is null)
+            return null;
+
         var claim = user.FindFirst(ClaimTypes.NameIdentifier)
-            ?? user.FindFirst("sub")
-            ?? throw new UnauthorizedAccessException("User ID claim not found.");
+            ?? user.FindFirst("sub");
 
-        if (!int.TryParse(claim.Value, out var userId))
-            throw new UnauthorizedAccessException("Invalid user ID claim.");
+        if (claim is null)
+            return null;
 
-        return userId;
+        return int.TryParse(claim.Value, out var userId) ? userId : null;
     }
 }

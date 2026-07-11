@@ -23,7 +23,7 @@ public class UserProfileService : IUserProfileService
 
         try
         {
-            var response = await _httpClient.GetAsync($"api/preferences/users/{userId}");
+            var response = await _httpClient.GetAsync($"api/internal/preferences/users/{userId}");
 
             if (!response.IsSuccessStatusCode)
             {
@@ -36,7 +36,7 @@ public class UserProfileService : IUserProfileService
             }
 
             var data = await response.Content.ReadFromJsonAsync<List<UserPreferenceDto>>();
-            return data is not null ? data : [];
+            return Array.Empty<UserPreferenceDto>();
         }
         catch (Exception ex)
         {
@@ -47,10 +47,7 @@ public class UserProfileService : IUserProfileService
 
     public async Task<IReadOnlyDictionary<int, CommentUserProfileDto>> GetProfilesByIdsAsync(IEnumerable<int> userIds)
     {
-        var ids = userIds
-            .Where(id => id > 0)
-            .Distinct()
-            .ToList();
+        var ids = userIds.Where(id => id > 0).Distinct().ToList();
 
         if (ids.Count == 0)
             return new Dictionary<int, CommentUserProfileDto>();

@@ -21,7 +21,8 @@ public class EventDirectoryClient : IEventDirectoryClient
     public async Task<EventSummaryDto?> GetEventAsync(int eventId, CancellationToken cancellationToken = default)
     {
         var response = await _httpClient.GetAsync($"/api/public/events/{eventId}", cancellationToken);
-        if (!response.IsSuccessStatusCode) return null;
+        if (!response.IsSuccessStatusCode)
+            return null;
 
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
         return await JsonSerializer.DeserializeAsync<EventSummaryDto>(stream, JsonOptions, cancellationToken);

@@ -31,13 +31,25 @@ class EventReservationsHeaderCard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            '$attendeeCount attendee${attendeeCount == 1 ? '' : 's'} • '
-            '$totalTickets ticket${totalTickets == 1 ? '' : 's'} • '
-            '$totalReservations total reservations',
+            [
+              _countLabel(attendeeCount, singular: 'attendee'),
+              _countLabel(totalTickets, singular: 'ticket'),
+              '$totalReservations total reservations',
+            ].join(' • '),
             style: Theme.of(context).textTheme.bodySmall,
           ),
         ],
       ),
     );
+  }
+
+  static String _countLabel(
+    int count, {
+    required String singular,
+    String? plural,
+  }) {
+    final resolvedPlural = plural ?? '${singular}s';
+    final label = count == 1 ? singular : resolvedPlural;
+    return '$count $label';
   }
 }

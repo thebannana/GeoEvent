@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using TicketService.Application.Common;
 using TicketService.Application.DTOs;
+using TicketService.Application.Interfaces.Persistence;
+using TicketService.Application.Interfaces.Repositories;
 using TicketService.Domain.Entities;
 using TicketService.Domain.Enums;
 using TicketService.Infrastructure.Persistence;
@@ -26,13 +28,155 @@ public class TicketRepository : ITicketRepository
         return (normalizedPage, normalizedPageSize);
     }
 
-    public async Task<PagedResult<EventAttendeePreviewDto>> GetPublicEventAttendeesAsync(
-    int eventId,
-    int page,
-    int pageSize)
+    public async Task ExecuteInStrategyAsync(Func<Task> operation)
     {
-        page = page <= 0 ? 1 : page;
-        pageSize = pageSize <= 0 ? 20 : Math.Min(pageSize, 50);
+        var strategy = _context.Database.CreateExecutionStrategy();
+        await strategy.ExecuteAsync(operation);
+    }
+
+    public async Task<IAppTransaction> BeginTransactionAsync()
+    {
+        var tx = await _context.Database.BeginTransactionAsync();
+        return new EfAppTransaction(tx);
+    }
+
+    public async Task SaveChangesAsync()
+        => await _context.SaveChangesAsync();
+
+    public async Task<EventTicket> CreateEventTicketAsync(EventTicket eventTicket)
+    {
+        _context.EventTickets.Add(eventTicket);
+        return eventTicket;
+    }
+
+    public async Task<Reservation> CreateReservationAsync(Reservation reservation)
+    {
+        await _context.Reservations.AddAsync(reservation);
+        return reservation;
+    }
+
+    public async Task AddTicketsAsync(IEnumerable<Ticket> tickets)
+    {
+        await _context.IssuedTickets.AddRangeAsync(tickets);
+    }
+
+    public async Task AddPaymentDetailAsync(PaymentDetail payment)
+    {
+        await _context.PaymentDetails.AddAsync(payment);
+    }
+
+    public Task UpdateReservationAsync(Reservation reservation)
+    {
+        _context.Entry(reservation).State = EntityState.Modified;
+        return Task.CompletedTask;
+    }
+
+    public Task UpdateEventTicketAsync(EventTicket eventTicket)
+    {
+        _context.Entry(eventTicket).State = EntityState.Modified;
+        return Task.CompletedTask;
+    }
+
+    public Task UpdateTicketAsync(Ticket ticket)
+    {
+        _context.Entry(ticket).State = EntityState.Modified;
+        return Task.CompletedTask;
+    }
+
+    public Task UpdatePaymentDetailAsync(PaymentDetail payment)
+    {
+        _context.Entry(payment).State = EntityState.Modified;
+        return Task.CompletedTask;
+    }
+
+    public async Task<Reservation?> GetReservationByIdAsync(int reservationId) =>
+        await _context.Reservations
+            .AsNoTracking()
+            .Include(r => r.Tickets)
+            .Include(r => r.PaymentDetails)
+            .FirstOrDefaultAsync(r => r.ReservationId == reservationId);
+
+    public async Task<Reservation?> GetReservationByIdForUpdateAsync(int reservationId) =>
+        await _context.Reservations
+            .Include(r => r.Tickets)
+            .Include(r => r.PaymentDetails)
+            .FirstOrDefaultAsync(r => r.ReservationId == reservationId);
+
+    public async Task<Reservation?> GetReservationByPendingProviderOrderIdAsync(string providerOrderId) =>
+        await _context.Reservations
+            .AsNoTracking()
+            .Include(r => r.Tickets)
+            .Include(r => r.PaymentDetails)
+            .FirstOrDefaultAsync(r => r.PendingProviderOrderId == providerOrderId);
+
+    public async Task<Reservation?> GetReservationByPendingProviderOrderIdForUpdateAsync(string providerOrderId) =>
+        await _context.Reservations
+            .Include(r => r.Tickets)
+            .Include(r => r.PaymentDetails)
+            .FirstOrDefaultAsync(r => r.PendingProviderOrderId == providerOrderId);
+
+    public async Task<EventTicket?> GetEventTicketByIdAsync(int eventTicketId) =>
+        await _context.EventTickets
+            .AsNoTracking()
+            .FirstOrDefaultAsync(t => t.TicketId == eventTicketId);
+
+    public async Task<EventTicket?> GetEventTicketByIdForUpdateAsync(int eventTicketId) =>
+        await _context.EventTickets
+            .FirstOrDefaultAsync(t => t.TicketId == eventTicketId);
+
+    public async Task<List<Ticket>> GetTicketsByReservationForUpdateAsync(int reservationId) =>
+        await _context.IssuedTickets
+            .Where(t => t.ReservationId == reservationId)
+            .OrderBy(t => t.TicketId)
+            .ToListAsync();
+
+    public async Task<List<PaymentDetail>> GetPaymentsByReservationForUpdateAsync(int reservationId) =>
+        await _context.PaymentDetails
+            .Where(p => p.ReservationId == reservationId)
+            .OrderByDescending(p => p.PaidAt)
+            .ToListAsync();
+
+    public async Task<List<Ticket>> GetTicketsByReservationAsync(int reservationId) =>
+        await _context.IssuedTickets
+            .AsNoTracking()
+            .Where(t => t.ReservationId == reservationId)
+            .OrderBy(t => t.TicketId)
+            .ToListAsync();
+
+    public async Task<List<PaymentDetail>> GetPaymentsByReservationAsync(int reservationId) =>
+        await _context.PaymentDetails
+            .AsNoTracking()
+            .Where(p => p.ReservationId == reservationId)
+            .OrderByDescending(p => p.PaidAt)
+            .ToListAsync();
+
+    public async Task<Ticket?> GetTicketByIdAsync(int ticketId) =>
+        await _context.IssuedTickets
+            .AsNoTracking()
+            .Include(t => t.Reservation)
+            .FirstOrDefaultAsync(t => t.TicketId == ticketId);
+
+    public async Task<Ticket?> GetTicketByQrCodeAsync(string qrCode) =>
+        await _context.IssuedTickets
+            .AsNoTracking()
+            .Include(t => t.Reservation)
+            .FirstOrDefaultAsync(t => t.QrCode == qrCode);
+
+    public async Task<Ticket?> GetTicketForValidationAsync(string qrCode) =>
+        await _context.IssuedTickets
+            .AsNoTracking()
+            .Include(t => t.Reservation!)
+                .ThenInclude(r => r.PaymentDetails)
+            .FirstOrDefaultAsync(t => t.QrCode == qrCode);
+
+    public async Task<PaymentDetail?> GetPaymentByTransactionIdAsync(string transactionId) =>
+        await _context.PaymentDetails
+            .AsNoTracking()
+            .FirstOrDefaultAsync(p => p.TransactionId == transactionId);
+
+    public async Task<PagedResult<EventAttendeePreviewDto>> GetPublicEventAttendeesAsync(int eventId, int page, int pageSize)
+    {
+        var (normalizedPage, normalizedPageSize) = NormalizePaging(page, pageSize);
 
         var query = _context.Reservations
             .AsNoTracking()
@@ -49,16 +193,16 @@ public class TicketRepository : ITicketRepository
         var totalCount = await query.CountAsync();
 
         var items = await query
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
+            .Skip((normalizedPage - 1) * normalizedPageSize)
+            .Take(normalizedPageSize)
             .ToListAsync();
 
         return new PagedResult<EventAttendeePreviewDto>
         {
             Items = items,
             TotalCount = totalCount,
-            Page = page,
-            PageSize = pageSize
+            Page = normalizedPage,
+            PageSize = normalizedPageSize
         };
     }
 
@@ -147,24 +291,7 @@ public class TicketRepository : ITicketRepository
         };
     }
 
-    public async Task<Reservation?> GetReservationByIdAsync(int reservationId) =>
-        await _context.Reservations
-            .AsNoTracking()
-            .Include(r => r.EventTicket)
-            .Include(r => r.Tickets)
-            .Include(r => r.PaymentDetails)
-            .FirstOrDefaultAsync(r => r.ReservationId == reservationId);
-
-    public async Task<Reservation?> GetReservationByPendingProviderOrderIdAsync(string providerOrderId) =>
-        await _context.Reservations
-            .AsNoTracking()
-            .Include(r => r.EventTicket)
-            .Include(r => r.Tickets)
-            .FirstOrDefaultAsync(r => r.PendingProviderOrderId == providerOrderId);
-
-    public async Task<PagedResult<Reservation>> GetEventReservationsAsync(
-        int eventId,
-        ReservationFilterDto filter)
+    public async Task<PagedResult<Reservation>> GetEventReservationsAsync(int eventId, ReservationFilterDto filter)
     {
         filter ??= new ReservationFilterDto();
         var (page, pageSize) = NormalizePaging(filter.Page, filter.PageSize);
@@ -194,13 +321,6 @@ public class TicketRepository : ITicketRepository
             Page = page,
             PageSize = pageSize
         };
-    }
-
-    public async Task<EventTicket> CreateEventTicketAsync(EventTicket eventTicket)
-    {
-        _context.EventTickets.Add(eventTicket);
-        await _context.SaveChangesAsync();
-        return eventTicket;
     }
 
     public async Task<int> GetEventCapacityAsync(int eventId)
@@ -245,43 +365,11 @@ public class TicketRepository : ITicketRepository
         };
     }
 
-    public async Task<Reservation> CreateReservationAsync(Reservation reservation)
-    {
-        await _context.Reservations.AddAsync(reservation);
-        await _context.SaveChangesAsync();
-        return reservation;
-    }
-
-    public async Task UpdateReservationAsync(Reservation reservation)
-    {
-        _context.Reservations.Update(reservation);
-        await _context.SaveChangesAsync();
-    }
-
     public async Task<List<Reservation>> GetExpiredReservationsAsync() =>
         await _context.Reservations
             .AsNoTracking()
             .Where(r => r.Status == ReservationStatus.Pending && r.ExpiresAt < DateTime.UtcNow)
             .OrderBy(r => r.ExpiresAt)
-            .ToListAsync();
-
-    public async Task<Ticket?> GetTicketByIdAsync(int ticketId) =>
-        await _context.IssuedTickets
-            .AsNoTracking()
-            .Include(t => t.Reservation)
-            .FirstOrDefaultAsync(t => t.TicketId == ticketId);
-
-    public async Task<Ticket?> GetTicketByQrCodeAsync(string qrCode) =>
-        await _context.IssuedTickets
-            .AsNoTracking()
-            .Include(t => t.Reservation)
-            .FirstOrDefaultAsync(t => t.QrCode == qrCode);
-
-    public async Task<List<Ticket>> GetTicketsByReservationAsync(int reservationId) =>
-        await _context.IssuedTickets
-            .AsNoTracking()
-            .Where(t => t.ReservationId == reservationId)
-            .OrderBy(t => t.TicketId)
             .ToListAsync();
 
     public async Task<PagedResult<Ticket>> GetUserTicketsAsync(int userId, TicketFilterDto filter)
@@ -352,8 +440,7 @@ public class TicketRepository : ITicketRepository
             .AnyAsync(r =>
                 r.UserId == userId &&
                 r.EventTicketId == eventTicketId &&
-                (r.Status == ReservationStatus.Pending ||
-                 r.Status == ReservationStatus.Confirmed));
+                (r.Status == ReservationStatus.Pending || r.Status == ReservationStatus.Confirmed));
 
     public async Task<List<EventTicket>> GetEventTicketsByEventAsync(int eventId) =>
         await _context.EventTickets
@@ -362,57 +449,23 @@ public class TicketRepository : ITicketRepository
             .OrderBy(t => t.Price)
             .ToListAsync();
 
-    public async Task UpdateEventTicketAsync(EventTicket eventTicket)
-    {
-        _context.EventTickets.Update(eventTicket);
-        await _context.SaveChangesAsync();
-    }
-
-    public async Task<List<PaymentDetail>> GetPaymentsByReservationAsync(int reservationId) =>
-        await _context.PaymentDetails
-            .AsNoTracking()
-            .Where(p => p.ReservationId == reservationId)
-            .OrderByDescending(p => p.PaidAt)
-            .ToListAsync();
-
-    public async Task<PaymentDetail?> GetPaymentByTransactionIdAsync(string transactionId) =>
-        await _context.PaymentDetails
-            .AsNoTracking()
-            .FirstOrDefaultAsync(p => p.TransactionId == transactionId);
-
-    public async Task AddTicketsAsync(IEnumerable<Ticket> tickets)
-    {
-        await _context.IssuedTickets.AddRangeAsync(tickets);
-        await _context.SaveChangesAsync();
-    }
-
-    public async Task UpdateTicketAsync(Ticket ticket)
-    {
-        _context.IssuedTickets.Update(ticket);
-        await _context.SaveChangesAsync();
-    }
-
-    public async Task<EventTicket?> GetEventTicketByIdAsync(int eventTicketId) =>
-        await _context.EventTickets
-            .AsNoTracking()
-            .FirstOrDefaultAsync(t => t.TicketId == eventTicketId);
-
-    public async Task AddPaymentDetailAsync(PaymentDetail payment)
-    {
-        await _context.PaymentDetails.AddAsync(payment);
-        await _context.SaveChangesAsync();
-    }
-
     public async Task<List<Reservation>> GetActiveReservationsByUserAsync(int userId)
     {
         return await _context.Reservations
             .AsNoTracking()
             .Include(r => r.EventTicket)
             .Where(r => r.UserId == userId &&
-                        (r.Status == ReservationStatus.Pending ||
-                         r.Status == ReservationStatus.Confirmed))
+                        (r.Status == ReservationStatus.Pending || r.Status == ReservationStatus.Confirmed))
             .OrderByDescending(r => r.ReservedAt)
             .ToListAsync();
+    }
+
+    public async Task<Ticket?> GetTicketForValidationForUpdateAsync(string qrCode)
+    {
+        return await _context.IssuedTickets
+            .Include(t => t.Reservation!)
+                .ThenInclude(r => r.PaymentDetails)
+            .FirstOrDefaultAsync(t => t.QrCode == qrCode);
     }
 
     public async Task<List<Reservation>> GetActiveReservationsByEventAsync(int eventId)
@@ -421,8 +474,7 @@ public class TicketRepository : ITicketRepository
             .AsNoTracking()
             .Include(r => r.EventTicket)
             .Where(r => r.EventId == eventId &&
-                        (r.Status == ReservationStatus.Pending ||
-                         r.Status == ReservationStatus.Confirmed))
+                        (r.Status == ReservationStatus.Pending || r.Status == ReservationStatus.Confirmed))
             .OrderByDescending(r => r.ReservedAt)
             .ToListAsync();
     }
@@ -439,13 +491,6 @@ public class TicketRepository : ITicketRepository
         return await query.CountAsync();
     }
 
-    public async Task<Ticket?> GetTicketForValidationAsync(string qrCode) =>
-        await _context.IssuedTickets
-            .AsNoTracking()
-            .Include(t => t.Reservation!)
-                .ThenInclude(r => r.PaymentDetails)
-            .FirstOrDefaultAsync(t => t.QrCode == qrCode);
-
     public async Task<int> GetEventReservedQuantityAsync(int eventId, params ReservationStatus[] statuses)
     {
         var query = _context.Reservations
@@ -456,11 +501,5 @@ public class TicketRepository : ITicketRepository
             query = query.Where(r => statuses.Contains(r.Status));
 
         return await query.SumAsync(r => (int?)r.Quantity) ?? 0;
-    }
-
-    public async Task UpdatePaymentDetailAsync(PaymentDetail payment)
-    {
-        _context.PaymentDetails.Update(payment);
-        await _context.SaveChangesAsync();
     }
 }

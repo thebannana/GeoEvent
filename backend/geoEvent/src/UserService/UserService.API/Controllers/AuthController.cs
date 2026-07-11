@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using UserService.API.Extensions;
+using UserService.Application.Common;
 using UserService.Application.DTOs;
 using UserService.Application.Interfaces.Services;
 
@@ -22,6 +23,9 @@ public class AuthController : ControllerBase
     [AllowAnonymous]
     public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordDto dto)
     {
+        if (dto is null)
+            return BadRequest(new { error = "Request body is required." });
+
         var result = await _authService.ForgotPasswordAsync(dto);
 
         return result.Success
@@ -33,6 +37,9 @@ public class AuthController : ControllerBase
     [AllowAnonymous]
     public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordDto dto)
     {
+        if (dto is null)
+            return BadRequest(new { error = "Request body is required." });
+
         var result = await _authService.ResetPasswordAsync(dto);
 
         return result.Success
@@ -45,13 +52,15 @@ public class AuthController : ControllerBase
     [AllowAnonymous]
     public async Task<IActionResult> Register([FromBody] RegisterRequestDto request)
     {
+        if (request is null)
+            return BadRequest(new { error = "Request body is required." });
+
         var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
         var result = await _authService.RegisterAsync(request, ipAddress);
 
-        if (!result.Success)
-            return StatusCode(result.StatusCode, new { error = result.Error });
-
-        return Ok(result.Data);
+        return result.Success
+            ? Ok(result.Data)
+            : StatusCode(result.StatusCode, new { error = result.Error });
     }
 
     [HttpPost("login")]
@@ -59,13 +68,15 @@ public class AuthController : ControllerBase
     [AllowAnonymous]
     public async Task<IActionResult> Login([FromBody] LoginRequestDto request)
     {
+        if (request is null)
+            return BadRequest(new { error = "Request body is required." });
+
         var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
         var result = await _authService.LoginAsync(request, ipAddress);
 
-        if (!result.Success)
-            return StatusCode(result.StatusCode, new { error = result.Error });
-
-        return Ok(result.Data);
+        return result.Success
+            ? Ok(result.Data)
+            : StatusCode(result.StatusCode, new { error = result.Error });
     }
 
     [HttpPost("refresh")]
@@ -73,47 +84,40 @@ public class AuthController : ControllerBase
     [AllowAnonymous]
     public async Task<IActionResult> Refresh([FromBody] RefreshTokenRequestDto request)
     {
+        if (request is null)
+            return BadRequest(new { error = "Request body is required." });
+
         var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
         var result = await _authService.RefreshTokenAsync(request.RefreshToken, ipAddress);
 
-        if (!result.Success)
-            return StatusCode(result.StatusCode, new { error = result.Error });
-
-        return Ok(result.Data);
+        return result.Success
+            ? Ok(result.Data)
+            : StatusCode(result.StatusCode, new { error = result.Error });
     }
 
     [HttpPost("logout")]
     [Authorize]
     public async Task<IActionResult> Logout([FromBody] RefreshTokenRequestDto request)
     {
+        if (request is null)
+            return BadRequest(new { error = "Request body is required." });
+
         var result = await _authService.LogoutAsync(request.RefreshToken);
 
-        if (!result.Success)
-            return StatusCode(result.StatusCode, new { error = result.Error });
-
-        return Ok(new { message = "Logged out successfully." });
+        return result.Success
+            ? Ok(new { message = "Logged out successfully." })
+            : StatusCode(result.StatusCode, new { error = result.Error });
     }
 
     [HttpPost("revoke-all")]
     [Authorize]
     public async Task<IActionResult> RevokeAllSessions()
     {
-        int userId;
-
-        try
-        {
-            userId = User.GetUserId();
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            return Unauthorized(new { error = ex.Message });
-        }
-
+        var userId = User.GetUserId();
         var result = await _authService.RevokeAllSessionsAsync(userId);
 
-        if (!result.Success)
-            return StatusCode(result.StatusCode, new { error = result.Error });
-
-        return Ok(new { message = "All sessions revoked successfully." });
+        return result.Success
+            ? Ok(new { message = "All sessions revoked successfully." })
+            : StatusCode(result.StatusCode, new { error = result.Error });
     }
 }

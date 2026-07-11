@@ -10,8 +10,14 @@ public class ServiceResult<T>
     public static ServiceResult<T> Ok(T data) =>
         new() { Success = true, Data = data, StatusCode = 200 };
 
+    public static ServiceResult<T> Created(T data) =>
+        new() { Success = true, Data = data, StatusCode = 201 };
+
     public static ServiceResult<T> Fail(string error, int statusCode = 400) =>
         new() { Success = false, Error = error, StatusCode = statusCode };
+
+    public static ServiceResult<T> BadRequest(string error) =>
+        new() { Success = false, Error = error, StatusCode = 400 };
 
     public static ServiceResult<T> NotFound(string error) =>
         new() { Success = false, Error = error, StatusCode = 404 };
@@ -21,10 +27,7 @@ public class ServiceResult<T>
 
     public static ServiceResult<T> Forbidden(string error) =>
         new() { Success = false, Error = error, StatusCode = 403 };
-    public static ServiceResult<T> Created(T data) =>
-    new() { Success = true, Data = data, StatusCode = 201 };
 
     public static ServiceResult<T> Conflict(string error) =>
         new() { Success = false, Error = error, StatusCode = 409 };
-
 }

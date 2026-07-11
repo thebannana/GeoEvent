@@ -15,6 +15,8 @@ class CreateEventLocationSearchResultTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final subtitle = item.subtitle?.trim();
+
     return AppSurfaceCard(
       onTap: onTap,
       padding: const EdgeInsets.all(14),
@@ -22,16 +24,16 @@ class CreateEventLocationSearchResultTile extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            item.title,
+            item.title.trim(),
             style: const TextStyle(
               fontWeight: FontWeight.w700,
               fontSize: 14,
             ),
           ),
-          if ((item.subtitle ?? '').isNotEmpty) ...[
+          if (subtitle != null && subtitle.isNotEmpty) ...[
             const SizedBox(height: 4),
             Text(
-              item.subtitle!,
+              subtitle,
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ],

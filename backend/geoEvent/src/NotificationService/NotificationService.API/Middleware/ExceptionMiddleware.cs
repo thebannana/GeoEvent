@@ -24,23 +24,11 @@ public class ExceptionMiddleware
         {
             await WriteAsync(context, StatusCodes.Status404NotFound, ex.Message);
         }
-        catch (NotificationQueueNotFoundException ex)
-        {
-            await WriteAsync(context, StatusCodes.Status404NotFound, ex.Message);
-        }
         catch (NotificationAccessDeniedException ex)
         {
             await WriteAsync(context, StatusCodes.Status403Forbidden, ex.Message);
         }
         catch (NotificationAlreadyReadException ex)
-        {
-            await WriteAsync(context, StatusCodes.Status409Conflict, ex.Message);
-        }
-        catch (QueueItemCannotBeRetriedException ex)
-        {
-            await WriteAsync(context, StatusCodes.Status409Conflict, ex.Message);
-        }
-        catch (QueueItemCannotBeCancelledException ex)
         {
             await WriteAsync(context, StatusCodes.Status409Conflict, ex.Message);
         }

@@ -3,6 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/errors/error_mapper.dart';
+import '../../../../core/utils/date_time_extensions.dart';
+import '../../../../core/utils/logger.dart';
 import '../../../../core/utils/validators.dart';
 import '../../application/auth_controller.dart';
 import '../widgets/auth_consent_tile.dart';
@@ -37,6 +40,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
 
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
+  bool _consentGiven = false;
   DateTime? _selectedBirthDate;
 
   @override
@@ -63,14 +67,11 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
       initialDate: _selectedBirthDate ?? initialDate,
     );
 
-    if (date == null) return;
+    if (date == null || !mounted) return;
 
     setState(() {
       _selectedBirthDate = date;
-      _birthDateController.text =
-          '${date.day.toString().padLeft(2, '0')}.'
-          '${date.month.toString().padLeft(2, '0')}.'
-          '${date.year}';
+      _birthDateController.text = date.formatDate(pattern: 'dd.MM.yyyy');
     });
   }
 
@@ -90,7 +91,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
             confirmPassword: _confirmPasswordController.text,
             firstName: _firstNameController.text.trim(),
             lastName: _lastNameController.text.trim(),
-            consentGiven: true,
+            consentGiven: _consentGiven,
           );
 
       TextInput.finishAutofillContext();
@@ -102,12 +103,25 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
         'Account created successfully. Welcome to GeoEvent!',
       );
       context.go('/app');
-    } catch (error) {
+    } catch (error, stackTrace) {
       if (!mounted) return;
+
+      AppLogger.error(
+        'Registration failed.',
+        tag: 'RegisterScreen',
+        error: error,
+        stackTrace: stackTrace,
+      );
+
       showAuthError(
         context,
         error,
-        fallbackMessage: 'Registration failed. Please review your details and try again.',
+        fallbackMessage: ErrorMapper.toMessage(
+          error,
+          stackTrace: stackTrace,
+          fallbackMessage:
+              'Registration failed. Please review your details and try again.',
+        ),
       );
     }
   }
@@ -239,6 +253,12 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
                   AuthConsentTile(
                     enabled: !authState.isLoading,
                     title: 'I agree to the app consent and data usage.',
+                    initialValue: _consentGiven,
+                    onChanged: (value) {
+                      setState(() {
+                        _consentGiven = value ?? false;
+                      });
+                    },
                     validator: (value) {
                       if (value != true) {
                         return 'You must accept consent to continue.';
@@ -264,7 +284,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
                   AuthSubmitButton(
                     label: 'Create Account',
                     isLoading: authState.isLoading,
-                    disabledReason: 'Please wait while your account is being created.',
+                    disabledReason:
+                        'Please wait while your account is being created.',
                     onPressed: _submit,
                   ),
                   const SizedBox(height: 8),

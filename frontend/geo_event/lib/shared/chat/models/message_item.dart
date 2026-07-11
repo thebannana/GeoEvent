@@ -15,6 +15,10 @@ class MessageItem {
   final String? replyPreview;
   final String? replySenderName;
 
+  final bool isPending;
+  final bool isFailed;
+  final String? clientTag;
+
   const MessageItem({
     required this.id,
     required this.threadId,
@@ -31,6 +35,9 @@ class MessageItem {
     required this.replyToMessageId,
     required this.replyPreview,
     required this.replySenderName,
+    this.isPending = false,
+    this.isFailed = false,
+    this.clientTag,
   });
 
   factory MessageItem.fromJson(Map<String, dynamic> json) {
@@ -45,8 +52,7 @@ class MessageItem {
       isRead: json['isRead'] as bool? ?? false,
       likesCount: (json['likesCount'] as num?)?.toInt() ?? 0,
       isLikedByMe: json['isLikedByMe'] as bool? ?? false,
-      sentAt: DateTime.tryParse(json['sentAt']?.toString() ?? '')
-              ?.toLocal() ??
+      sentAt: DateTime.tryParse(json['sentAt']?.toString() ?? '')?.toLocal() ??
           DateTime.fromMillisecondsSinceEpoch(0),
       readAt: json['readAt'] != null
           ? DateTime.tryParse(json['readAt'].toString())?.toLocal()
@@ -65,6 +71,9 @@ class MessageItem {
       replySenderName: json['replySenderName']?.toString() ??
           replyMap?['senderDisplayName']?.toString() ??
           replyMap?['senderName']?.toString(),
+      isPending: false,
+      isFailed: false,
+      clientTag: json['clientTag']?.toString(),
     );
   }
 
@@ -91,6 +100,10 @@ class MessageItem {
     bool clearReplyPreview = false,
     String? replySenderName,
     bool clearReplySenderName = false,
+    bool? isPending,
+    bool? isFailed,
+    String? clientTag,
+    bool clearClientTag = false,
   }) {
     return MessageItem(
       id: id ?? this.id,
@@ -112,11 +125,13 @@ class MessageItem {
       replyToMessageId: clearReplyToMessageId
           ? null
           : replyToMessageId ?? this.replyToMessageId,
-      replyPreview:
-          clearReplyPreview ? null : replyPreview ?? this.replyPreview,
+      replyPreview: clearReplyPreview ? null : replyPreview ?? this.replyPreview,
       replySenderName: clearReplySenderName
           ? null
           : replySenderName ?? this.replySenderName,
+      isPending: isPending ?? this.isPending,
+      isFailed: isFailed ?? this.isFailed,
+      clientTag: clearClientTag ? null : clientTag ?? this.clientTag,
     );
   }
 }

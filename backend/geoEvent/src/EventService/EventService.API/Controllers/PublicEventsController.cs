@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using EventService.Application.DTOs;
 using EventService.Application.Interfaces.Services;
 using EventService.API.Extensions;
+using EventService.API.Filters;
 
 namespace EventService.API.Controllers;
 

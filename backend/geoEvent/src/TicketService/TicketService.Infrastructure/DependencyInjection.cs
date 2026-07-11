@@ -6,6 +6,7 @@ using TicketService.Application.Interfaces.Services;
 using TicketService.Infrastructure.Persistence;
 using TicketService.Infrastructure.Repositories;
 using TicketService.Infrastructure.Services;
+using TicketService.Application.Interfaces.Repositories;
 
 namespace TicketService.Infrastructure;
 

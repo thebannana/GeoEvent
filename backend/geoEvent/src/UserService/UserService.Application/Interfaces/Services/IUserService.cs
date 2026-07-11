@@ -27,6 +27,7 @@ public interface IUserService
     Task<ServiceResult<PagedResult<UserPreferenceResponseDto>>> GetUserPreferencesAsync(
         int userId,
         PreferencesFilterDto filter);
+
     Task<ServiceResult<UserPreferenceResponseDto>> UpsertPreferenceAsync(int userId, UpdatePreferenceDto dto);
     Task<ServiceResult<bool>> DeletePreferenceAsync(int userId, int prefId);
 

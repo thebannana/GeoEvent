@@ -23,6 +23,10 @@ class ChatReplyPreview extends StatelessWidget {
             ? message.replySenderName!.trim()
             : 'Replying';
 
+    final previewText = message.content.trim().isNotEmpty
+        ? message.content.trim()
+        : 'Message preview unavailable.';
+
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
@@ -49,7 +53,7 @@ class ChatReplyPreview extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  message.content,
+                  previewText,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -58,6 +62,7 @@ class ChatReplyPreview extends StatelessWidget {
           ),
           IconButton(
             onPressed: onClose,
+            tooltip: 'Cancel reply',
             icon: const Icon(Icons.close_rounded),
           ),
         ],

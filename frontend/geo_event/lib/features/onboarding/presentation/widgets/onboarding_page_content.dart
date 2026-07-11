@@ -1,112 +1,141 @@
 import 'package:flutter/material.dart';
+import 'package:lottie/lottie.dart';
 
 class OnboardingPageContent extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String description;
-  final List<String> bullets;
-  final Color? accentColor;
-
   const OnboardingPageContent({
     super.key,
-    required this.icon,
     required this.title,
     required this.description,
     this.bullets = const [],
-    this.accentColor,
+    required this.lottieAssetPath,
+    required this.cardBackgroundColor,
+    this.isActive = true,
   });
+
+  final String title;
+  final String description;
+  final List<String> bullets;
+  final String lottieAssetPath;
+  final Color cardBackgroundColor;
+  final bool isActive;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final accent = accentColor ?? theme.colorScheme.primary;
-    final isDark = theme.brightness == Brightness.dark;
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return SingleChildScrollView(
-          physics: const ClampingScrollPhysics(),
-          child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: constraints.maxHeight),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    width: 104,
-                    height: 104,
-                    decoration: BoxDecoration(
-                      color: accent.withValues(alpha: isDark ? 0.18 : 0.12),
-                      borderRadius: BorderRadius.circular(30),
-                    ),
-                    child: Icon(
-                      icon,
-                      size: 50,
-                      color: accent,
+    const textColor = Colors.black;
+    final borderColor = Colors.black.withValues(alpha: 0.14);
+    final innerCircleColor = Colors.white.withValues(alpha: 0.24);
+
+    return AnimatedScale(
+      duration: const Duration(milliseconds: 260),
+      scale: isActive ? 1 : 0.975,
+      child: AnimatedOpacity(
+        duration: const Duration(milliseconds: 260),
+        opacity: isActive ? 1 : 0.88,
+        child: SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(26, 30, 26, 28),
+            decoration: BoxDecoration(
+              color: cardBackgroundColor,
+              borderRadius: BorderRadius.circular(34),
+              border: Border.all(color: borderColor),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.08),
+                  blurRadius: 22,
+                  offset: const Offset(0, 12),
+                ),
+              ],
+            ),
+            child: Column(
+              children: [
+                Container(
+                  width: 190,
+                  height: 190,
+                  decoration: BoxDecoration(
+                    color: innerCircleColor,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Center(
+                    child: Lottie.asset(
+                      lottieAssetPath,
+                      fit: BoxFit.contain,
+                      repeat: true,
+                      animate: true,
+                      errorBuilder: (context, error, stackTrace) {
+                        return const Icon(
+                          Icons.animation_outlined,
+                          size: 44,
+                          color: Colors.black,
+                        );
+                      },
                     ),
                   ),
-                  const SizedBox(height: 28),
-                  Text(
-                    title,
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.w800,
-                      height: 1.15,
-                    ),
+                ),
+                const SizedBox(height: 24),
+                Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    height: 1.16,
+                    color: textColor,
+                    letterSpacing: -0.35,
                   ),
-                  const SizedBox(height: 14),
-                  Text(
-                    description,
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.bodyLarge?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                      height: 1.5,
-                    ),
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  description,
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.bodyLarge?.copyWith(
+                    color: textColor.withValues(alpha: 0.82),
+                    height: 1.6,
                   ),
-                  if (bullets.isNotEmpty) ...[
-                    const SizedBox(height: 24),
-                    Column(
-                      children: bullets
-                          .map(
-                            (bullet) => Padding(
-                              padding: const EdgeInsets.only(bottom: 10),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Padding(
-                                    padding: const EdgeInsets.only(top: 3),
-                                    child: Icon(
-                                      Icons.check_circle_rounded,
-                                      size: 18,
-                                      color: accent,
+                ),
+                if (bullets.isNotEmpty) ...[
+                  const SizedBox(height: 24),
+                  Column(
+                    children: bullets
+                        .map(
+                          (bullet) => Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Container(
+                                  width: 8,
+                                  height: 8,
+                                  margin: const EdgeInsets.only(top: 8),
+                                  decoration: const BoxDecoration(
+                                    color: Colors.black,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    bullet,
+                                    style: theme.textTheme.bodyMedium?.copyWith(
+                                      color: Colors.black,
+                                      height: 1.55,
                                     ),
                                   ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: Text(
-                                      bullet,
-                                      style:
-                                          theme.textTheme.bodyMedium?.copyWith(
-                                        height: 1.45,
-                                        color:
-                                            theme.colorScheme.onSurfaceVariant,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
+                                ),
+                              ],
                             ),
-                          )
-                          .toList(),
-                    ),
-                  ],
+                          ),
+                        )
+                        .toList(),
+                  ),
                 ],
-              ),
+              ],
             ),
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 }

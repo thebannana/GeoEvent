@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/errors/error_mapper.dart';
+import '../../../../core/utils/logger.dart';
 import '../../../../core/widgets/async/app_async_view.dart';
 import '../../../../core/widgets/feedback/app_confirm_dialog.dart';
 import '../../../../core/widgets/feedback/app_error_state.dart';
@@ -21,7 +23,9 @@ import 'profile_screen.dart';
 import 'ticket_scanner_entry_screen.dart';
 
 class ProfileTabPage extends ConsumerStatefulWidget {
-  const ProfileTabPage({super.key});
+  const ProfileTabPage({super.key, this.onClose});
+
+  final VoidCallback? onClose;
 
   @override
   ConsumerState<ProfileTabPage> createState() => _ProfileTabPageState();
@@ -101,7 +105,11 @@ class _ProfileTabPageState extends ConsumerState<ProfileTabPage> {
             padding: const EdgeInsets.all(16),
             child: AppErrorState(
               title: 'Failed to load profile',
-              message: 'Please try again.',
+              message: ErrorMapper.toMessage(
+                error,
+                stackTrace: stackTrace,
+                fallbackMessage: 'Please try again.',
+              ),
               onRetry: () => ref.invalidate(profileControllerProvider),
             ),
           ),
@@ -154,15 +162,29 @@ class _ProfileTabPageState extends ConsumerState<ProfileTabPage> {
             if (!confirmed || !context.mounted) return;
 
             try {
-              await ref.read(profileControllerProvider.notifier).revokeAllSessions();
+              await ref
+                  .read(profileControllerProvider.notifier)
+                  .revokeAllSessions();
+
               ProfileTabPage.showSnackBar(
                 context,
                 message: 'All other sessions were revoked successfully.',
               );
-            } catch (_) {
+            } catch (error, stackTrace) {
+              AppLogger.error(
+                'Failed to revoke all sessions.',
+                tag: 'ProfileTabPage',
+                error: error,
+                stackTrace: stackTrace,
+              );
+
               ProfileTabPage.showSnackBar(
                 context,
-                message: 'Failed to revoke sessions.',
+                message: ErrorMapper.toMessage(
+                  error,
+                  stackTrace: stackTrace,
+                  fallbackMessage: 'Failed to revoke sessions.',
+                ),
               );
             }
           },
@@ -180,14 +202,30 @@ class _ProfileTabPageState extends ConsumerState<ProfileTabPage> {
             try {
               await ref.read(authStateProvider.notifier).logout();
               ProfileTabPage.clearSessionScopedProviders(ref);
+
+              widget.onClose?.call();
+
+              if (!context.mounted) return;
+
               ProfileTabPage.showSnackBar(
                 context,
                 message: 'Logged out successfully.',
               );
-            } catch (_) {
+            } catch (error, stackTrace) {
+              AppLogger.error(
+                'Failed to log out.',
+                tag: 'ProfileTabPage',
+                error: error,
+                stackTrace: stackTrace,
+              );
+
               ProfileTabPage.showSnackBar(
                 context,
-                message: 'Failed to log out.',
+                message: ErrorMapper.toMessage(
+                  error,
+                  stackTrace: stackTrace,
+                  fallbackMessage: 'Failed to log out.',
+                ),
               );
             }
           },

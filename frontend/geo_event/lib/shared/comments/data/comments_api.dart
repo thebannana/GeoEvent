@@ -78,8 +78,8 @@ class CommentsApi {
         ApiEndpoints.commentsBase,
         data: {
           'eventId': eventId,
-          'content': content,
-          'parentCommentId': ?parentCommentId,
+          'content': content.trim(),
+          if (parentCommentId != null) 'parentCommentId': parentCommentId,
         },
       );
 
@@ -96,7 +96,7 @@ class CommentsApi {
     try {
       final response = await _dio.put(
         ApiEndpoints.commentById(commentId),
-        data: {'content': content},
+        data: {'content': content.trim()},
       );
 
       return CommentItem.fromJson(_asMap(response.data));
@@ -113,17 +113,19 @@ class CommentsApi {
     }
   }
 
-  Future<void> likeComment(int commentId) async {
+  Future<CommentItem> likeComment(int commentId) async {
     try {
-      await _dio.post(ApiEndpoints.likeComment(commentId));
+      final response = await _dio.post(ApiEndpoints.likeComment(commentId));
+      return CommentItem.fromJson(_asMap(response.data));
     } catch (e, st) {
       throw ErrorMapper.toAppException(e, stackTrace: st);
     }
   }
 
-  Future<void> unlikeComment(int commentId) async {
+  Future<CommentItem> unlikeComment(int commentId) async {
     try {
-      await _dio.delete(ApiEndpoints.likeComment(commentId));
+      final response = await _dio.delete(ApiEndpoints.likeComment(commentId));
+      return CommentItem.fromJson(_asMap(response.data));
     } catch (e, st) {
       throw ErrorMapper.toAppException(e, stackTrace: st);
     }

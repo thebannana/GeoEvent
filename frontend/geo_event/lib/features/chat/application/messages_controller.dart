@@ -66,8 +66,12 @@ class MessagesInboxController extends Notifier<MessagesInboxState> {
 
   @override
   MessagesInboxState build() {
-    Future.microtask(load);
     return const MessagesInboxState();
+  }
+
+  Future<void> loadInitial() async {
+    if (state.initialized) return;
+    await load();
   }
 
   Future<void> load() async {

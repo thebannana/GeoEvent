@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/errors/error_mapper.dart';
+import '../../../../core/utils/logger.dart';
+import '../../../../core/widgets/feedback/app_confirm_dialog.dart';
 import '../../../../core/widgets/feedback/app_spinner.dart';
 import '../../../../core/widgets/layout/app_scaffold.dart';
 import '../../../../core/widgets/surfaces/app_surface_card.dart';
@@ -42,6 +45,16 @@ class _WriteReviewScreenState extends State<WriteReviewScreen> {
     super.dispose();
   }
 
+  void _showMessage(String message) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(content: Text(message)),
+      );
+  }
+
   Future<void> save() async {
     if (rating == null || isBusy) return;
 
@@ -56,12 +69,19 @@ class _WriteReviewScreenState extends State<WriteReviewScreen> {
 
       if (!mounted) return;
       Navigator.pop(context, true);
-    } catch (_) {
-      if (!mounted) return;
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'Could not save review.',
+        tag: 'WriteReviewScreen',
+        error: error,
+        stackTrace: stackTrace,
+      );
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Could not save review. Please try again.'),
+      _showMessage(
+        ErrorMapper.toMessage(
+          error,
+          stackTrace: stackTrace,
+          fallbackMessage: 'Could not save review. Please try again.',
         ),
       );
     } finally {
@@ -72,51 +92,45 @@ class _WriteReviewScreenState extends State<WriteReviewScreen> {
   }
 
   Future<void> deleteReview() async {
-  if (widget.onDelete == null || isBusy) return;
+    if (widget.onDelete == null || isBusy) return;
 
-  final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Delete review?'),
-          content: const Text(
-            'Your review will be permanently removed.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Delete'),
-            ),
-          ],
+    final confirmed = await AppConfirmDialog.show(
+          context,
+          title: 'Delete review?',
+          message: 'Your review will be permanently removed.',
+          confirmLabel: 'Delete',
+          destructive: true,
+        );
+
+    if (!confirmed || !mounted) return;
+
+    setState(() => isBusy = true);
+    try {
+      await widget.onDelete!();
+
+      if (!mounted) return;
+      Navigator.pop(context, true);
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'Could not delete review.',
+        tag: 'WriteReviewScreen',
+        error: error,
+        stackTrace: stackTrace,
+      );
+
+      _showMessage(
+        ErrorMapper.toMessage(
+          error,
+          stackTrace: stackTrace,
+          fallbackMessage: 'Could not delete review. Please try again.',
         ),
-      ) ??
-      false;
-
-  if (!confirmed || !mounted) return;
-
-  setState(() => isBusy = true);
-  try {
-    await widget.onDelete!();
-
-    if (!mounted) return;
-    Navigator.pop(context, true);
-  } catch (_) {
-    if (!mounted) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Could not delete review. Please try again.'),
-      ),
-    );
-  } finally {
-    if (mounted) {
-      setState(() => isBusy = false);
+      );
+    } finally {
+      if (mounted) {
+        setState(() => isBusy = false);
+      }
     }
   }
-}
 
   @override
   Widget build(BuildContext context) {

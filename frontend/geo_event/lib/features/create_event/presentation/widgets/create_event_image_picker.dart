@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../../../../core/widgets/feedback/app_confirm_dialog.dart';
 import '../../../../core/widgets/surfaces/app_surface_card.dart';
 import '../../../../shared/events/models/create_event_models.dart';
 import '../../../../shared/events/models/create_event_state.dart';
@@ -111,24 +112,11 @@ class ImagePreviewTile extends StatelessWidget {
   Future<void> _confirmRemove(BuildContext context) async {
     if (onRemove == null) return;
 
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Remove image?'),
-        content: const Text(
-          'This image will be removed from the event draft.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Remove'),
-          ),
-        ],
-      ),
+    final confirmed = await AppConfirmDialog.show(
+      context,
+      title: 'Remove image?',
+      message: 'This image will be removed from the event draft.',
+      confirmLabel: 'Remove',
     );
 
     if (confirmed == true) {
@@ -174,6 +162,7 @@ class ImagePreviewTile extends StatelessWidget {
           ),
           IconButton(
             onPressed: onRemove == null ? null : () => _confirmRemove(context),
+            tooltip: 'Remove image',
             icon: const Icon(Icons.delete_outline_rounded),
           ),
         ],
@@ -195,24 +184,11 @@ class GalleryImageCard extends StatelessWidget {
   Future<void> _confirmRemove(BuildContext context) async {
     if (onRemove == null) return;
 
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Remove image?'),
-        content: const Text(
-          'This image will be removed from the event draft.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Remove'),
-          ),
-        ],
-      ),
+    final confirmed = await AppConfirmDialog.show(
+      context,
+      title: 'Remove image?',
+      message: 'This image will be removed from the event draft.',
+      confirmLabel: 'Remove',
     );
 
     if (confirmed == true) {

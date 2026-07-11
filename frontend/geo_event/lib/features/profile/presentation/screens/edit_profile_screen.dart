@@ -7,7 +7,9 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../../../core/constants/app_strings.dart';
 import '../../../../core/errors/error_mapper.dart';
+import '../../../../core/utils/logger.dart';
 import '../../../../core/utils/validators.dart';
+import '../../../../core/widgets/feedback/app_confirm_dialog.dart';
 import '../../../../core/widgets/feedback/app_spinner.dart';
 import '../../../../core/widgets/layout/app_bottom_sheet_container.dart';
 import '../../../../core/widgets/layout/app_scaffold.dart';
@@ -84,6 +86,13 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
         _removeCurrentPhoto = false;
       });
     } catch (error, stackTrace) {
+      AppLogger.error(
+        'Failed to pick profile image.',
+        tag: 'EditProfileScreen',
+        error: error,
+        stackTrace: stackTrace,
+      );
+
       if (!mounted) return;
       _showMessage(
         ErrorMapper.toMessage(
@@ -161,26 +170,13 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   }
 
   Future<void> _confirmRemovePhoto() async {
-    final shouldRemove = await showDialog<bool>(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Remove photo'),
-            content: const Text(
-              'Are you sure you want to remove your profile photo?',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('Cancel'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.of(context).pop(true),
-                child: const Text('Remove'),
-              ),
-            ],
-          ),
-        ) ??
-        false;
+    final shouldRemove = await AppConfirmDialog.show(
+          context,
+          title: 'Remove photo',
+          message: 'Are you sure you want to remove your profile photo?',
+          confirmLabel: 'Remove',
+          destructive: true,
+        );
 
     if (!shouldRemove || !mounted) return;
 
@@ -229,6 +225,13 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
       _showMessage('Profile updated successfully.');
       Navigator.of(context).pop(true);
     } catch (error, stackTrace) {
+      AppLogger.error(
+        'Failed to update profile.',
+        tag: 'EditProfileScreen',
+        error: error,
+        stackTrace: stackTrace,
+      );
+
       if (!mounted) return;
       _showMessage(
         ErrorMapper.toMessage(

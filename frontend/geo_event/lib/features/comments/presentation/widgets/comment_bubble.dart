@@ -18,6 +18,9 @@ class CommentBubble extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
     final authorName = commentAuthorName(comment);
     final handle = commentAuthorHandle(comment);
+    final content = comment.content.trim().isNotEmpty
+        ? comment.content.trim()
+        : (comment.isDeleted ? 'Comment removed' : 'No comment text');
 
     return Container(
       width: double.infinity,
@@ -73,7 +76,7 @@ class CommentBubble extends StatelessWidget {
             ),
           const SizedBox(height: 3),
           Text(
-            comment.content,
+            content,
             style: TextStyle(
               color: comment.isDeleted
                   ? colorScheme.onSurfaceVariant.withValues(alpha: 0.7)

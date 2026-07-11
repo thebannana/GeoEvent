@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/utils/logger.dart';
+
 class EventGallery extends StatefulWidget {
   final List<String> imageUrls;
 
@@ -54,18 +56,27 @@ class _EventGalleryState extends State<EventGallery> {
               itemCount: widget.imageUrls.length,
               onPageChanged: (value) => setState(() => _index = value),
               itemBuilder: (context, index) {
+                final imageUrl = widget.imageUrls[index];
+
                 return Image.network(
-                  widget.imageUrls[index],
+                  imageUrl,
                   fit: BoxFit.cover,
-                  errorBuilder: (_, _, _) => Container(
-                    color: scheme.surfaceContainerHighest,
-                    child: Center(
-                      child: Icon(
-                        Icons.broken_image_outlined,
-                        color: scheme.onSurface.withValues(alpha: 0.54),
+                  errorBuilder: (_, error, stackTrace) {
+                    AppLogger.warning(
+                      'Failed to load gallery image: $imageUrl',
+                      tag: 'EventGallery',
+                    );
+
+                    return Container(
+                      color: scheme.surfaceContainerHighest,
+                      child: Center(
+                        child: Icon(
+                          Icons.broken_image_outlined,
+                          color: scheme.onSurface.withValues(alpha: 0.54),
+                        ),
                       ),
-                    ),
-                  ),
+                    );
+                  },
                 );
               },
             ),

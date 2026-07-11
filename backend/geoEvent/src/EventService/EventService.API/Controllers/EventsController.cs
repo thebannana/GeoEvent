@@ -1,4 +1,5 @@
 using EventService.API.Extensions;
+using EventService.API.Security;
 using EventService.Application.Common;
 using EventService.Application.DTOs;
 using EventService.Application.Interfaces.Services;
@@ -10,7 +11,7 @@ namespace EventService.API.Controllers;
 
 [ApiController]
 [Route("api/events")]
-[Authorize(Roles = "User,Organizer,Admin")]
+[Authorize(Roles = AppRoles.User + "," + AppRoles.Admin)]
 public class EventsController : ControllerBase
 {
     private readonly IEventService _eventService;
@@ -55,7 +56,7 @@ public class EventsController : ControllerBase
     public async Task<IActionResult> Delete(int eventId)
     {
         var result = await _eventService.DeleteAsync(eventId, User.GetUserId());
-        return ToMessageResult(result, "Event deleted.");
+        return ToMessageResult(result, "Event removed from public listing.");
     }
 
     [HttpPost("{eventId:int}/publish")]

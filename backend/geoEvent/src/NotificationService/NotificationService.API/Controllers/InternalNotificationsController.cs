@@ -1,14 +1,15 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using NotificationService.API.Filters;
 using NotificationService.Application.DTOs;
 using NotificationService.Application.Interfaces.Services;
-using NotificationService.Infrastructure.Filters;
 
 namespace NotificationService.API.Controllers;
 
 [ApiController]
 [Route("api/internal/notifications")]
-[ApiKeyAuth]
-public class InternalNotificationsController : ControllerBase
+[ServiceFilter(typeof(InternalApiKeyAuthFilter))]
+public sealed class InternalNotificationsController : ControllerBase
 {
     private readonly INotificationService _notificationService;
 

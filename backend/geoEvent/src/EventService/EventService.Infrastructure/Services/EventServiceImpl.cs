@@ -5,7 +5,10 @@ using EventService.Application.Interfaces.Services;
 using EventService.Domain.Entities;
 using EventService.Domain.Enums;
 using EventService.Domain.Exceptions;
+using EventService.Infrastructure.Repositories;
 using MassTransit;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Shared.Contracts.Events;
 using DomainEvent = EventService.Domain.Entities.Event;
@@ -14,21 +17,239 @@ namespace EventService.Infrastructure.Services;
 
 public class EventServiceImpl : IEventService
 {
+    private const int DefaultPageSize = 20;
+    private const int MaxPageSize = 50;
+    private const string SegmentsCacheKey = "eventservice:segments:all";
+
     private readonly IEventRepository _eventRepository;
     private readonly IPublishEndpoint _publishEndpoint;
     private readonly IUserProfileService _userProfileService;
+    private readonly IMemoryCache _cache;
     private readonly ILogger<EventServiceImpl> _logger;
 
     public EventServiceImpl(
         IEventRepository eventRepository,
         IPublishEndpoint publishEndpoint,
         IUserProfileService userProfileService,
+        IMemoryCache cache,
         ILogger<EventServiceImpl> logger)
     {
         _eventRepository = eventRepository;
         _publishEndpoint = publishEndpoint;
         _userProfileService = userProfileService;
+        _cache = cache;
         _logger = logger;
+    }
+    public async Task<ServiceResult<int>> GetPublicCountByOrganizerAsync(int userId)
+    {
+        if (userId <= 0)
+            return ServiceResult<int>.Fail("A valid organizer id is required.");
+
+        var count = await _eventRepository.CountPublicByOrganizerAsync(userId);
+        return ServiceResult<int>.Ok(count);
+    }
+    public async Task<ServiceResult<CommentResponseDto>> GetCommentByIdAsync(int commentId, int? requesterId = null)
+    {
+        var comment = await _eventRepository.GetCommentTreeByIdAsync(commentId);
+        if (comment is null || comment.IsDeleted)
+            return ServiceResult<CommentResponseDto>.NotFound("Comment not found.");
+
+        var mapped = MapComment(comment, includeReplies: true);
+        await EnrichCommentsAsync(new List<CommentResponseDto> { mapped }, requesterId);
+
+        return ServiceResult<CommentResponseDto>.Ok(mapped);
+    }
+
+    public async Task<ServiceResult<CommentResponseDto>> CreateCommentAsync(CreateCommentDto dto, int userId)
+    {
+        Comment? parent = null;
+
+        if (dto.ParentCommentId.HasValue)
+        {
+            parent = await _eventRepository.GetCommentByIdAsync(dto.ParentCommentId.Value);
+            if (parent is null || parent.IsDeleted)
+                return ServiceResult<CommentResponseDto>.NotFound($"Parent comment {dto.ParentCommentId.Value} not found.");
+        }
+
+        try
+        {
+            var comment = new Comment(userId, dto.EventId, dto.Content, dto.ParentCommentId);
+            var created = await _eventRepository.CreateCommentAsync(comment);
+
+            var reloaded = await _eventRepository.GetCommentTreeByIdAsync(created.CommentId) ?? created;
+            var dtoResult = MapComment(reloaded, includeReplies: true);
+
+            await EnrichCommentsAsync(new List<CommentResponseDto> { dtoResult }, userId);
+
+            var ev = await _eventRepository.GetByIdWithDetailsAsync(dto.EventId);
+            if (ev is not null)
+            {
+                var profiles = await _userProfileService.GetProfilesByIdsAsync(new[] { userId });
+                profiles.TryGetValue(userId, out var actor);
+
+                var actorDisplayName = ResolveDisplayName(actor, userId);
+                var actorAvatarUrl = actor?.AvatarUrl;
+                var eventImageUrl = ResolveEventImageUrl(ev);
+                var preview = BuildPreview(created.Content);
+
+                if (dto.ParentCommentId.HasValue)
+                {
+                    if (parent is not null && parent.UserId != userId)
+                    {
+                        await _publishEndpoint.Publish(new EventCommentReplyCreatedMessage(
+                            ev.EventId,
+                            ev.Title,
+                            eventImageUrl,
+                            parent.CommentId,
+                            parent.UserId,
+                            created.CommentId,
+                            userId,
+                            actorDisplayName,
+                            actorAvatarUrl,
+                            preview,
+                            DateTime.UtcNow
+                        ));
+                    }
+                }
+                else
+                {
+                    if (ev.OrganizerId != userId)
+                    {
+                        await _publishEndpoint.Publish(new EventCommentCreatedMessage(
+                            ev.EventId,
+                            ev.Title,
+                            eventImageUrl,
+                            ev.OrganizerId,
+                            created.CommentId,
+                            userId,
+                            actorDisplayName,
+                            actorAvatarUrl,
+                            preview,
+                            DateTime.UtcNow
+                        ));
+                    }
+                }
+
+                await _publishEndpoint.Publish(new UserEventPreferenceInteractionMessage(
+                    Guid.NewGuid(),
+                    userId,
+                    ev.EventId,
+                    ev.SegmentId,
+                    ev.GenreId,
+                    ev.SubGenreId,
+                    "Comment",
+                    DateTime.UtcNow));
+            }
+
+            return ServiceResult<CommentResponseDto>.Ok(dtoResult);
+        }
+        catch (InvalidCommentException ex)
+        {
+            _logger.LogWarning(ex, "Invalid comment data for user {UserId} on event {EventId}", userId, dto.EventId);
+            return ServiceResult<CommentResponseDto>.Fail(ex.Message);
+        }
+    }
+
+    public async Task<ServiceResult<CommentResponseDto>> UpdateCommentAsync(int commentId, UpdateCommentDto dto, int userId)
+    {
+        var comment = await _eventRepository.GetTrackedCommentByIdAsync(commentId);
+
+        if (comment is null)
+            return ServiceResult<CommentResponseDto>.NotFound("Comment not found.");
+
+        if (comment.UserId != userId)
+            return ServiceResult<CommentResponseDto>.Forbidden("Not your comment.");
+
+        try
+        {
+            comment.Edit(dto.Content);
+            await _eventRepository.UpdateCommentAsync(comment);
+
+            var reloaded = await _eventRepository.GetCommentTreeByIdAsync(commentId) ?? comment;
+            var dtoResult = MapComment(reloaded, includeReplies: true);
+            await EnrichCommentsAsync(new List<CommentResponseDto> { dtoResult }, userId);
+
+            return ServiceResult<CommentResponseDto>.Ok(dtoResult);
+        }
+        catch (InvalidCommentException ex)
+        {
+            _logger.LogWarning(ex, "Invalid comment data while updating comment {CommentId}", commentId);
+            return ServiceResult<CommentResponseDto>.Fail(ex.Message);
+        }
+        catch (CommentAlreadyDeletedException ex)
+        {
+            _logger.LogWarning(ex, "Attempted to edit deleted comment {CommentId}", commentId);
+            return ServiceResult<CommentResponseDto>.Fail(ex.Message);
+        }
+    }
+
+    public async Task<ServiceResult<CommentResponseDto>> LikeCommentAsync(int commentId, int userId)
+    {
+        var comment = await _eventRepository.GetCommentByIdAsync(commentId);
+        if (comment is null)
+            return ServiceResult<CommentResponseDto>.NotFound("Comment not found.");
+
+        if (comment.IsDeleted)
+            return ServiceResult<CommentResponseDto>.Fail("Comment has been deleted.");
+
+        if (await _eventRepository.IsCommentLikedByUserAsync(commentId, userId))
+            return ServiceResult<CommentResponseDto>.Conflict("Comment already liked.");
+
+        await _eventRepository.LikeCommentAsync(commentId, userId);
+
+        if (comment.UserId != userId)
+        {
+            var ev = await _eventRepository.GetByIdWithDetailsAsync(comment.EventId);
+            if (ev is not null)
+            {
+                var profiles = await _userProfileService.GetProfilesByIdsAsync(new[] { userId });
+                profiles.TryGetValue(userId, out var liker);
+
+                await _publishEndpoint.Publish(new EventCommentLikedMessage(
+                    ev.EventId,
+                    ev.Title,
+                    ResolveEventImageUrl(ev),
+                    comment.CommentId,
+                    comment.UserId,
+                    userId,
+                    ResolveDisplayName(liker, userId),
+                    liker?.AvatarUrl,
+                    BuildPreview(comment.Content),
+                    DateTime.UtcNow
+                ));
+            }
+        }
+
+        var updated = await _eventRepository.GetCommentTreeByIdAsync(commentId);
+        if (updated is null || updated.IsDeleted)
+            return ServiceResult<CommentResponseDto>.NotFound("Comment not found.");
+
+        var dtoResult = MapComment(updated, includeReplies: true);
+        await EnrichCommentsAsync(new List<CommentResponseDto> { dtoResult }, userId);
+
+        return ServiceResult<CommentResponseDto>.Ok(dtoResult);
+    }
+
+    public async Task<ServiceResult<CommentResponseDto>> UnlikeCommentAsync(int commentId, int userId)
+    {
+        var comment = await _eventRepository.GetCommentByIdAsync(commentId);
+
+        if (comment is null)
+            return ServiceResult<CommentResponseDto>.NotFound("Comment not found.");
+
+        if (comment.IsDeleted)
+            return ServiceResult<CommentResponseDto>.Fail("Comment has been deleted.");
+
+        await _eventRepository.UnlikeCommentAsync(commentId, userId);
+
+        var updated = await _eventRepository.GetCommentTreeByIdAsync(commentId);
+        if (updated is null || updated.IsDeleted)
+            return ServiceResult<CommentResponseDto>.NotFound("Comment not found.");
+
+        var dtoResult = MapComment(updated, includeReplies: true);
+        await EnrichCommentsAsync(new List<CommentResponseDto> { dtoResult }, userId);
+
+        return ServiceResult<CommentResponseDto>.Ok(dtoResult);
     }
 
     public async Task<ServiceResult<PagedResult<CommentResponseDto>>> GetEventCommentsAsync(
@@ -37,11 +258,11 @@ public class EventServiceImpl : IEventService
     int pageSize,
     int? requesterId = null)
     {
-        page = page <= 0 ? 1 : page;
-        pageSize = pageSize <= 0 ? 20 : Math.Min(pageSize, 50);
+        page = NormalizePage(page);
+        pageSize = NormalizePageSize(pageSize);
 
         var pagedComments = await _eventRepository.GetEventCommentsAsync(eventId, page, pageSize);
-        var mapped = pagedComments.Items.Select(c => MapComment(c, includeReplies: false)).ToList();
+        var mapped = pagedComments.Items.Select(c => MapComment(c, includeReplies: true)).ToList();
 
         await EnrichCommentsAsync(mapped, requesterId);
 
@@ -61,11 +282,11 @@ public class EventServiceImpl : IEventService
         int pageSize,
         int? requesterId = null)
     {
-        page = page <= 0 ? 1 : page;
-        pageSize = pageSize <= 0 ? 20 : Math.Min(pageSize, 50);
+        page = NormalizePage(page);
+        pageSize = NormalizePageSize(pageSize);
 
         var pagedReplies = await _eventRepository.GetRepliesAsync(commentId, page, pageSize);
-        var mapped = pagedReplies.Items.Select(c => MapComment(c, includeReplies: false)).ToList();
+        var mapped = pagedReplies.Items.Select(c => MapComment(c, includeReplies: true)).ToList();
 
         await EnrichCommentsAsync(mapped, requesterId);
 
@@ -82,6 +303,8 @@ public class EventServiceImpl : IEventService
     public async Task<ServiceResult<PagedResult<EventResponseDto>>> GetAllAsync(EventFilterDto filter)
     {
         filter ??= new EventFilterDto();
+        filter.Page = NormalizePage(filter.Page);
+        filter.PageSize = NormalizePageSize(filter.PageSize);
 
         var result = await _eventRepository.GetAllAsync(filter);
 
@@ -96,17 +319,14 @@ public class EventServiceImpl : IEventService
     }
 
     public async Task<ServiceResult<PagedResult<EventResponseDto>>> GetPublicAsync(
-        EventFilterDto filter,
-        int? requesterId = null)
+    EventFilterDto filter,
+    int? requesterId = null)
     {
         filter ??= new EventFilterDto();
         filter.Status = EventStatus.Confirmed;
         filter.OrganizerId = null;
-
-        var page = filter.Page <= 0 ? 1 : filter.Page;
-        var pageSize = filter.PageSize <= 0 ? 20 : Math.Min(filter.PageSize, 50);
-        filter.Page = page;
-        filter.PageSize = pageSize;
+        filter.Page = NormalizePage(filter.Page);
+        filter.PageSize = NormalizePageSize(filter.PageSize);
 
         if (!requesterId.HasValue)
         {
@@ -127,13 +347,15 @@ public class EventServiceImpl : IEventService
         if (preferences.Count == 0)
         {
             var result = await _eventRepository.GetAllAsync(filter);
-            var mapped = new List<EventResponseDto>();
+            var events = result.Items.ToList();
 
-            foreach (var ev in result.Items)
-            {
-                var isLiked = await _eventRepository.IsLikedByUserAsync(ev.EventId, requesterId.Value);
-                mapped.Add(MapToDto(ev, isLiked));
-            }
+            var fallbackLikedIds = await _eventRepository.GetLikedEventIdsAsync(
+                requesterId.Value,
+                events.Select(e => e.EventId));
+
+            var mapped = events
+                .Select(ev => MapToDto(ev, fallbackLikedIds.Contains(ev.EventId)))
+                .ToList();
 
             return ServiceResult<PagedResult<EventResponseDto>>.Ok(
                 new PagedResult<EventResponseDto>
@@ -162,25 +384,27 @@ public class EventServiceImpl : IEventService
         var totalCount = ranked.Count;
 
         var paged = ranked
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
+            .Skip((filter.Page - 1) * filter.PageSize)
+            .Take(filter.PageSize)
             .ToList();
 
-        var personalizedItems = new List<EventResponseDto>(paged.Count);
+        var pagedEvents = paged.Select(x => x.Event).ToList();
 
-        foreach (var item in paged)
-        {
-            var isLiked = await _eventRepository.IsLikedByUserAsync(item.Event.EventId, requesterId.Value);
-            personalizedItems.Add(MapToDto(item.Event, isLiked));
-        }
+        var personalizedLikedIds = await _eventRepository.GetLikedEventIdsAsync(
+            requesterId.Value,
+            pagedEvents.Select(e => e.EventId));
+
+        var personalizedItems = pagedEvents
+            .Select(ev => MapToDto(ev, personalizedLikedIds.Contains(ev.EventId)))
+            .ToList();
 
         return ServiceResult<PagedResult<EventResponseDto>>.Ok(
             new PagedResult<EventResponseDto>
             {
                 Items = personalizedItems,
                 TotalCount = totalCount,
-                Page = page,
-                PageSize = pageSize
+                Page = filter.Page,
+                PageSize = filter.PageSize
             });
     }
 
@@ -208,8 +432,8 @@ public class EventServiceImpl : IEventService
 
     public async Task<ServiceResult<PagedResult<LikedEventResponseDto>>> GetLikedEventsAsync(int userId, int page, int pageSize)
     {
-        page = page <= 0 ? 1 : page;
-        pageSize = pageSize <= 0 ? 20 : Math.Min(pageSize, 50);
+        page = NormalizePage(page);
+        pageSize = NormalizePageSize(pageSize);
 
         var pagedLikes = await _eventRepository.GetLikedEventsByUserAsync(userId, page, pageSize);
 
@@ -256,50 +480,29 @@ public class EventServiceImpl : IEventService
         return ServiceResult<List<EventResponseDto>>.Ok(publicEvents);
     }
 
-    public async Task<ServiceResult<PagedResult<EventResponseDto>>> GetMyPendingAsync(EventFilterDto filter, int requesterId)
-    {
-        filter ??= new EventFilterDto();
-        filter.OrganizerId = requesterId;
-        filter.Status = EventStatus.Pending;
-
-        var result = await _eventRepository.GetAllAsync(filter);
-
-        return ServiceResult<PagedResult<EventResponseDto>>.Ok(new PagedResult<EventResponseDto>
-        {
-            Items = result.Items.Select(ev => MapToDto(ev, false)).ToList(),
-            TotalCount = result.TotalCount,
-            Page = result.Page,
-            PageSize = result.PageSize
-        });
-    }
-
     public async Task<ServiceResult<EventResponseDto>> CreateAsync(CreateEventDto dto, int organizerId)
     {
         try
         {
             var entity = new DomainEvent(
-            organizerId: organizerId,
-            segmentId: dto.SegmentId,
-            genreId: dto.GenreId,
-            subGenreId: dto.SubGenreId,
-            title: dto.Title,
-            description: dto.Description,
-            latitude: dto.Latitude,
-            longitude: dto.Longitude,
-            startDateTime: dto.StartDateTime,
-            endDateTime: dto.EndDateTime,
-            capacity: dto.Capacity,
-            price: dto.Price,
-            isOnline: dto.IsOnline,
-            isFeatured: false,
-            tags: dto.Tags,
-            externalUrl: dto.ExternalUrl,
-            externalSource: null,
-            externalId: null,
-            accessibilityInfo: dto.AccessibilityInfo,
-            promoterName: dto.PromoterName,
-            locale: dto.Locale
-        );
+                organizerId: organizerId,
+                segmentId: dto.SegmentId,
+                genreId: dto.GenreId,
+                subGenreId: dto.SubGenreId,
+                title: dto.Title,
+                description: dto.Description,
+                latitude: dto.Latitude,
+                longitude: dto.Longitude,
+                startDateTime: dto.StartDateTime,
+                endDateTime: dto.EndDateTime,
+                capacity: dto.Capacity,
+                price: dto.Price,
+                isFeatured: false,
+                tags: dto.Tags,
+                accessibilityInfo: dto.AccessibilityInfo,
+                promoterName: dto.PromoterName,
+                locale: dto.Locale
+            );
 
             var created = await _eventRepository.CreateAsync(entity);
 
@@ -315,7 +518,6 @@ public class EventServiceImpl : IEventService
                 created.Price,
                 created.Price == 0,
                 created.Capacity,
-                created.IsOnline,
                 created.StartDateTime,
                 created.EndDateTime,
                 DateTime.UtcNow
@@ -325,13 +527,14 @@ public class EventServiceImpl : IEventService
         }
         catch (InvalidEventDataException ex)
         {
+            _logger.LogWarning(ex, "Invalid event data while creating event for organizer {OrganizerId}", organizerId);
             return ServiceResult<EventResponseDto>.Fail(ex.Message);
         }
     }
 
     public async Task<ServiceResult<EventResponseDto>> UpdateAsync(int eventId, UpdateEventDto dto, int requesterId)
     {
-        var ev = await _eventRepository.GetByIdAsync(eventId);
+        var ev = await _eventRepository.GetTrackedByIdAsync(eventId);
         if (ev is null)
             return ServiceResult<EventResponseDto>.NotFound($"Event {eventId} not found.");
 
@@ -352,12 +555,8 @@ public class EventServiceImpl : IEventService
                 endDateTime: dto.EndDateTime ?? ev.EndDateTime,
                 capacity: dto.Capacity ?? ev.Capacity,
                 price: dto.Price ?? ev.Price,
-                isOnline: dto.IsOnline ?? ev.IsOnline,
                 isFeatured: ev.IsFeatured,
                 tags: dto.Tags ?? ev.Tags,
-                externalUrl: dto.ExternalUrl ?? ev.ExternalUrl,
-                externalSource: ev.ExternalSource,
-                externalId: ev.ExternalId,
                 accessibilityInfo: dto.AccessibilityInfo ?? ev.AccessibilityInfo,
                 promoterName: dto.PromoterName ?? ev.PromoterName,
                 locale: dto.Locale ?? ev.Locale
@@ -380,26 +579,36 @@ public class EventServiceImpl : IEventService
         }
         catch (InvalidEventDataException ex)
         {
+            _logger.LogWarning(ex, "Invalid event data while updating event {EventId}", eventId);
             return ServiceResult<EventResponseDto>.Fail(ex.Message);
         }
     }
 
     public async Task<ServiceResult<bool>> DeleteAsync(int eventId, int requesterId)
     {
-        var ev = await _eventRepository.GetByIdAsync(eventId);
+        var ev = await _eventRepository.GetTrackedByIdAsync(eventId);
         if (ev is null)
             return ServiceResult<bool>.NotFound($"Event {eventId} not found.");
 
         if (ev.OrganizerId != requesterId)
-            return ServiceResult<bool>.Forbidden("You do not own this event.");
+            return ServiceResult<bool>.Forbidden("You can only delete your own events.");
 
-        await _eventRepository.DeleteAsync(eventId);
-        return ServiceResult<bool>.Ok(true);
+        try
+        {
+            ev.Cancel();
+            await _eventRepository.UpdateAsync(ev);
+            return ServiceResult<bool>.Ok(true);
+        }
+        catch (InvalidEventStateTransitionException ex)
+        {
+            _logger.LogWarning(ex, "Invalid state transition while deleting event {EventId}", eventId);
+            return ServiceResult<bool>.Fail(ex.Message);
+        }
     }
 
     public async Task<ServiceResult<bool>> PublishAsync(int eventId, int requesterId)
     {
-        var ev = await _eventRepository.GetByIdAsync(eventId);
+        var ev = await _eventRepository.GetTrackedByIdAsync(eventId);
         if (ev is null)
             return ServiceResult<bool>.NotFound($"Event {eventId} not found.");
 
@@ -433,9 +642,9 @@ public class EventServiceImpl : IEventService
         return ServiceResult<bool>.Ok(true);
     }
 
-    public async Task<ServiceResult<bool>> CancelAsync(int eventId, int requesterId, string reason = "Cancelled by organizer")
+    public async Task<ServiceResult<bool>> CancelAsync(int eventId, int requesterId)
     {
-        var ev = await _eventRepository.GetByIdAsync(eventId);
+        var ev = await _eventRepository.GetTrackedByIdAsync(eventId);
         if (ev is null)
             return ServiceResult<bool>.NotFound($"Event {eventId} not found.");
 
@@ -450,14 +659,14 @@ public class EventServiceImpl : IEventService
             ev.Title,
             ev.OrganizerId,
             DateTime.UtcNow,
-            reason));
+            "Cancelled by organizer"));
 
         return ServiceResult<bool>.Ok(true);
     }
 
     public async Task<ServiceResult<bool>> CompleteAsync(int eventId, int requesterId)
     {
-        var ev = await _eventRepository.GetByIdAsync(eventId);
+        var ev = await _eventRepository.GetTrackedByIdAsync(eventId);
         if (ev is null)
             return ServiceResult<bool>.NotFound($"Event {eventId} not found.");
 
@@ -538,7 +747,7 @@ public class EventServiceImpl : IEventService
 
     public async Task<ServiceResult<bool>> AddImageAsync(int eventId, string imageUrl, bool isCover, int requesterId)
     {
-        var ev = await _eventRepository.GetByIdAsync(eventId);
+        var ev = await _eventRepository.GetTrackedByIdAsync(eventId);
         if (ev is null)
             return ServiceResult<bool>.NotFound($"Event {eventId} not found.");
 
@@ -563,6 +772,7 @@ public class EventServiceImpl : IEventService
         }
         catch (InvalidEventImageException ex)
         {
+            _logger.LogWarning(ex, "Invalid event image for event {EventId}", eventId);
             return ServiceResult<bool>.Fail(ex.Message);
         }
     }
@@ -573,7 +783,7 @@ public class EventServiceImpl : IEventService
         if (image is null)
             return ServiceResult<bool>.NotFound("Image not found.");
 
-        var ev = await _eventRepository.GetByIdAsync(image.EventId);
+        var ev = await _eventRepository.GetTrackedByIdAsync(image.EventId);
         if (ev is null)
             return ServiceResult<bool>.NotFound($"Event {image.EventId} not found.");
 
@@ -586,7 +796,7 @@ public class EventServiceImpl : IEventService
 
     public async Task<ServiceResult<bool>> SetCoverImageAsync(int eventId, int imageId, int requesterId)
     {
-        var ev = await _eventRepository.GetByIdAsync(eventId);
+        var ev = await _eventRepository.GetTrackedByIdAsync(eventId);
         if (ev is null)
             return ServiceResult<bool>.NotFound($"Event {eventId} not found.");
 
@@ -603,8 +813,14 @@ public class EventServiceImpl : IEventService
 
     public async Task<ServiceResult<List<SegmentResponseDto>>> GetAllSegmentsAsync()
     {
-        var segments = await _eventRepository.GetAllSegmentsAsync();
-        return ServiceResult<List<SegmentResponseDto>>.Ok(segments.Select(MapSegment).ToList());
+        var items = await _cache.GetOrCreateAsync(SegmentsCacheKey, async entry =>
+        {
+            entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(10);
+            var segments = await _eventRepository.GetAllSegmentsAsync();
+            return segments.Select(MapSegment).ToList();
+        });
+
+        return ServiceResult<List<SegmentResponseDto>>.Ok(items!);
     }
 
     public async Task<ServiceResult<SegmentResponseDto>> GetSegmentByIdAsync(int segmentId)
@@ -625,17 +841,20 @@ public class EventServiceImpl : IEventService
                 segment.Deactivate();
 
             var created = await _eventRepository.CreateSegmentAsync(segment);
+            InvalidateSegmentCache();
+
             return ServiceResult<SegmentResponseDto>.Created(MapSegment(created));
         }
         catch (InvalidReferenceDataException ex)
         {
+            _logger.LogWarning(ex, "Invalid segment data while creating segment");
             return ServiceResult<SegmentResponseDto>.Fail(ex.Message);
         }
     }
 
     public async Task<ServiceResult<SegmentResponseDto>> UpdateSegmentAsync(int segmentId, UpdateSegmentDto dto)
     {
-        var segment = await _eventRepository.GetSegmentByIdAsync(segmentId);
+        var segment = await _eventRepository.GetTrackedSegmentByIdAsync(segmentId);
         if (segment is null)
             return ServiceResult<SegmentResponseDto>.NotFound("Segment not found.");
 
@@ -654,18 +873,29 @@ public class EventServiceImpl : IEventService
             }
 
             await _eventRepository.UpdateSegmentAsync(segment);
+            InvalidateSegmentCache();
+
             return ServiceResult<SegmentResponseDto>.Ok(MapSegment(segment));
         }
         catch (InvalidReferenceDataException ex)
         {
+            _logger.LogWarning(ex, "Invalid segment data while updating segment {SegmentId}", segmentId);
             return ServiceResult<SegmentResponseDto>.Fail(ex.Message);
         }
     }
 
     public async Task<ServiceResult<List<GenreResponseDto>>> GetGenresBySegmentAsync(int segmentId)
     {
-        var genres = await _eventRepository.GetGenresBySegmentAsync(segmentId);
-        return ServiceResult<List<GenreResponseDto>>.Ok(genres.Select(MapGenre).ToList());
+        var cacheKey = $"eventservice:genres:segment:{segmentId}";
+
+        var items = await _cache.GetOrCreateAsync(cacheKey, async entry =>
+        {
+            entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(10);
+            var genres = await _eventRepository.GetGenresBySegmentAsync(segmentId);
+            return genres.Select(MapGenre).ToList();
+        });
+
+        return ServiceResult<List<GenreResponseDto>>.Ok(items!);
     }
 
     public async Task<ServiceResult<GenreResponseDto>> GetGenreByIdAsync(int genreId)
@@ -692,20 +922,24 @@ public class EventServiceImpl : IEventService
             var created = await _eventRepository.CreateGenreAsync(genre);
             var createdWithDetails = await _eventRepository.GetGenreByIdAsync(created.GenreId);
 
+            InvalidateGenresCache(dto.SegmentId);
+
             return ServiceResult<GenreResponseDto>.Created(MapGenre(createdWithDetails ?? created));
         }
         catch (InvalidReferenceDataException ex)
         {
+            _logger.LogWarning(ex, "Invalid genre data while creating genre for segment {SegmentId}", dto.SegmentId);
             return ServiceResult<GenreResponseDto>.Fail(ex.Message);
         }
     }
 
     public async Task<ServiceResult<GenreResponseDto>> UpdateGenreAsync(int genreId, UpdateGenreDto dto)
     {
-        var genre = await _eventRepository.GetGenreByIdAsync(genreId);
+        var genre = await _eventRepository.GetTrackedGenreByIdAsync(genreId);
         if (genre is null)
             return ServiceResult<GenreResponseDto>.NotFound("Genre not found.");
 
+        var oldSegmentId = genre.SegmentId;
         var targetSegmentId = dto.SegmentId ?? genre.SegmentId;
 
         var segment = await _eventRepository.GetSegmentByIdAsync(targetSegmentId);
@@ -723,20 +957,34 @@ public class EventServiceImpl : IEventService
             }
 
             await _eventRepository.UpdateGenreAsync(genre);
+
+            InvalidateGenresCache(oldSegmentId);
+            if (targetSegmentId != oldSegmentId)
+                InvalidateGenresCache(targetSegmentId);
+
             var updated = await _eventRepository.GetGenreByIdAsync(genreId);
 
             return ServiceResult<GenreResponseDto>.Ok(MapGenre(updated ?? genre));
         }
         catch (InvalidReferenceDataException ex)
         {
+            _logger.LogWarning(ex, "Invalid genre data while updating genre {GenreId}", genreId);
             return ServiceResult<GenreResponseDto>.Fail(ex.Message);
         }
     }
 
     public async Task<ServiceResult<List<SubGenreResponseDto>>> GetSubGenresByGenreAsync(int genreId)
     {
-        var subGenres = await _eventRepository.GetSubGenresByGenreAsync(genreId);
-        return ServiceResult<List<SubGenreResponseDto>>.Ok(subGenres.Select(MapSubGenre).ToList());
+        var cacheKey = $"eventservice:subgenres:genre:{genreId}";
+
+        var items = await _cache.GetOrCreateAsync(cacheKey, async entry =>
+        {
+            entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(10);
+            var subGenres = await _eventRepository.GetSubGenresByGenreAsync(genreId);
+            return subGenres.Select(MapSubGenre).ToList();
+        });
+
+        return ServiceResult<List<SubGenreResponseDto>>.Ok(items!);
     }
 
     public async Task<ServiceResult<SubGenreResponseDto>> GetSubGenreByIdAsync(int subGenreId)
@@ -761,20 +1009,24 @@ public class EventServiceImpl : IEventService
                 subGenre.Deactivate();
 
             var created = await _eventRepository.CreateSubGenreAsync(subGenre);
+            InvalidateSubGenresCache(dto.GenreId);
+
             return ServiceResult<SubGenreResponseDto>.Created(MapSubGenre(created));
         }
         catch (InvalidReferenceDataException ex)
         {
+            _logger.LogWarning(ex, "Invalid subgenre data while creating subgenre for genre {GenreId}", dto.GenreId);
             return ServiceResult<SubGenreResponseDto>.Fail(ex.Message);
         }
     }
 
     public async Task<ServiceResult<SubGenreResponseDto>> UpdateSubGenreAsync(int subGenreId, UpdateSubGenreDto dto)
     {
-        var subGenre = await _eventRepository.GetSubGenreByIdAsync(subGenreId);
+        var subGenre = await _eventRepository.GetTrackedSubGenreByIdAsync(subGenreId);
         if (subGenre is null)
             return ServiceResult<SubGenreResponseDto>.NotFound("Subgenre not found.");
 
+        var oldGenreId = subGenre.GenreId;
         var targetGenreId = dto.GenreId ?? subGenre.GenreId;
 
         var genre = await _eventRepository.GetGenreByIdAsync(targetGenreId);
@@ -792,10 +1044,16 @@ public class EventServiceImpl : IEventService
             }
 
             await _eventRepository.UpdateSubGenreAsync(subGenre);
+
+            InvalidateSubGenresCache(oldGenreId);
+            if (targetGenreId != oldGenreId)
+                InvalidateSubGenresCache(targetGenreId);
+
             return ServiceResult<SubGenreResponseDto>.Ok(MapSubGenre(subGenre));
         }
         catch (InvalidReferenceDataException ex)
         {
+            _logger.LogWarning(ex, "Invalid subgenre data while updating subgenre {SubGenreId}", subGenreId);
             return ServiceResult<SubGenreResponseDto>.Fail(ex.Message);
         }
     }
@@ -806,8 +1064,8 @@ public class EventServiceImpl : IEventService
     {
         filter ??= new BookmarkFilterDto();
 
-        var page = filter.Page <= 0 ? 1 : filter.Page;
-        var pageSize = filter.PageSize <= 0 ? 20 : Math.Min(filter.PageSize, 50);
+        var page = NormalizePage(filter.Page);
+        var pageSize = NormalizePageSize(filter.PageSize);
 
         var pagedBookmarks = await _eventRepository.GetUserBookmarksAsync(userId, page, pageSize);
 
@@ -820,7 +1078,6 @@ public class EventServiceImpl : IEventService
                 PageSize = pagedBookmarks.PageSize
             });
     }
-
 
     public async Task<ServiceResult<BookmarkResponseDto>> CreateBookmarkAsync(CreateBookmarkDto dto, int userId)
     {
@@ -869,13 +1126,14 @@ public class EventServiceImpl : IEventService
         }
         catch (InvalidBookmarkException ex)
         {
+            _logger.LogWarning(ex, "Invalid bookmark data for user {UserId} and event {EventId}", userId, dto.EventId);
             return ServiceResult<BookmarkResponseDto>.Fail(ex.Message);
         }
     }
 
     public async Task<ServiceResult<BookmarkResponseDto>> UpdateBookmarkAsync(int bookmarkId, UpdateBookmarkDto dto, int userId)
     {
-        var bookmark = await _eventRepository.GetBookmarkByIdAsync(bookmarkId);
+        var bookmark = await _eventRepository.GetTrackedBookmarkByIdAsync(bookmarkId);
         if (bookmark is null)
             return ServiceResult<BookmarkResponseDto>.NotFound("Bookmark not found.");
 
@@ -890,7 +1148,7 @@ public class EventServiceImpl : IEventService
 
     public async Task<ServiceResult<bool>> DeleteBookmarkAsync(int bookmarkId, int userId)
     {
-        var bookmark = await _eventRepository.GetBookmarkByIdAsync(bookmarkId);
+        var bookmark = await _eventRepository.GetTrackedBookmarkByIdAsync(bookmarkId);
         if (bookmark is null)
             return ServiceResult<bool>.NotFound("Bookmark not found.");
 
@@ -901,138 +1159,9 @@ public class EventServiceImpl : IEventService
         return ServiceResult<bool>.Ok(true);
     }
 
-    public async Task<ServiceResult<CommentResponseDto>> GetCommentByIdAsync(int commentId, int? requesterId = null)
-    {
-        var comment = await _eventRepository.GetCommentByIdAsync(commentId);
-        if (comment is null || comment.IsDeleted)
-            return ServiceResult<CommentResponseDto>.NotFound("Comment not found.");
-
-        var mapped = MapComment(comment);
-        await EnrichCommentsAsync(new List<CommentResponseDto> { mapped }, requesterId);
-
-        return ServiceResult<CommentResponseDto>.Ok(mapped);
-    }
-
-    public async Task<ServiceResult<CommentResponseDto>> CreateCommentAsync(CreateCommentDto dto, int userId)
-    {
-        Comment? parent = null;
-
-        if (dto.ParentCommentId.HasValue)
-        {
-            parent = await _eventRepository.GetCommentByIdAsync(dto.ParentCommentId.Value);
-            if (parent is null)
-                return ServiceResult<CommentResponseDto>.NotFound($"Parent comment {dto.ParentCommentId.Value} not found.");
-        }
-
-        try
-        {
-            var comment = new Comment(userId, dto.EventId, dto.Content, dto.ParentCommentId);
-            var created = await _eventRepository.CreateCommentAsync(comment);
-            var dtoResult = MapComment(created);
-
-            await EnrichCommentsAsync(new List<CommentResponseDto> { dtoResult }, userId);
-
-            var ev = await _eventRepository.GetByIdWithDetailsAsync(dto.EventId);
-            if (ev is not null)
-            {
-                var profiles = await _userProfileService.GetProfilesByIdsAsync(new[] { userId });
-                profiles.TryGetValue(userId, out var actor);
-
-                var actorDisplayName = ResolveDisplayName(actor, userId);
-                var actorAvatarUrl = actor?.AvatarUrl;
-                var eventImageUrl = ResolveEventImageUrl(ev);
-                var preview = BuildPreview(created.Content);
-
-                if (dto.ParentCommentId.HasValue)
-                {
-                    if (parent is not null && parent.UserId != userId)
-                    {
-                        await _publishEndpoint.Publish(new EventCommentReplyCreatedMessage(
-                            ev.EventId,
-                            ev.Title,
-                            eventImageUrl,
-                            parent.CommentId,
-                            parent.UserId,
-                            created.CommentId,
-                            userId,
-                            actorDisplayName,
-                            actorAvatarUrl,
-                            preview,
-                            DateTime.UtcNow
-                        ));
-                    }
-                }
-                else
-                {
-                    if (ev.OrganizerId != userId)
-                    {
-                        await _publishEndpoint.Publish(new EventCommentCreatedMessage(
-                            ev.EventId,
-                            ev.Title,
-                            eventImageUrl,
-                            ev.OrganizerId,
-                            created.CommentId,
-                            userId,
-                            actorDisplayName,
-                            actorAvatarUrl,
-                            preview,
-                            DateTime.UtcNow
-                        ));
-                    }
-                }
-
-                await _publishEndpoint.Publish(new UserEventPreferenceInteractionMessage(
-                    Guid.NewGuid(),
-                    userId,
-                    ev.EventId,
-                    ev.SegmentId,
-                    ev.GenreId,
-                    ev.SubGenreId,
-                    "Comment",
-                    DateTime.UtcNow));
-            }
-
-            return ServiceResult<CommentResponseDto>.Ok(dtoResult);
-        }
-        catch (InvalidCommentException ex)
-        {
-            return ServiceResult<CommentResponseDto>.Fail(ex.Message);
-        }
-    }
-
-    public async Task<ServiceResult<CommentResponseDto>> UpdateCommentAsync(int commentId, UpdateCommentDto dto, int userId)
-    {
-        var comment = await _eventRepository.GetCommentByIdAsync(commentId);
-
-        if (comment is null)
-            return ServiceResult<CommentResponseDto>.NotFound("Comment not found.");
-
-        if (comment.UserId != userId)
-            return ServiceResult<CommentResponseDto>.Forbidden("Not your comment.");
-
-        try
-        {
-            comment.Edit(dto.Content);
-            await _eventRepository.UpdateCommentAsync(comment);
-
-            var dtoResult = MapComment(comment);
-            await EnrichCommentsAsync(new List<CommentResponseDto> { dtoResult }, userId);
-
-            return ServiceResult<CommentResponseDto>.Ok(dtoResult);
-        }
-        catch (InvalidCommentException ex)
-        {
-            return ServiceResult<CommentResponseDto>.Fail(ex.Message);
-        }
-        catch (CommentAlreadyDeletedException ex)
-        {
-            return ServiceResult<CommentResponseDto>.Fail(ex.Message);
-        }
-    }
-
     public async Task<ServiceResult<bool>> DeleteCommentAsync(int commentId, int userId)
     {
-        var comment = await _eventRepository.GetCommentByIdAsync(commentId);
+        var comment = await _eventRepository.GetTrackedCommentByIdAsync(commentId);
 
         if (comment is null)
             return ServiceResult<bool>.NotFound("Comment not found.");
@@ -1043,57 +1172,6 @@ public class EventServiceImpl : IEventService
         comment.Delete();
         await _eventRepository.UpdateCommentAsync(comment);
 
-        return ServiceResult<bool>.Ok(true);
-    }
-
-    public async Task<ServiceResult<bool>> LikeCommentAsync(int commentId, int userId)
-    {
-        var comment = await _eventRepository.GetCommentByIdAsync(commentId);
-        if (comment is null)
-            return ServiceResult<bool>.NotFound("Comment not found.");
-
-        if (comment.IsDeleted)
-            return ServiceResult<bool>.Fail("Comment has been deleted.");
-
-        if (await _eventRepository.IsCommentLikedByUserAsync(commentId, userId))
-            return ServiceResult<bool>.Conflict("Comment already liked.");
-
-        await _eventRepository.LikeCommentAsync(commentId, userId);
-
-        if (comment.UserId != userId)
-        {
-            var ev = await _eventRepository.GetByIdWithDetailsAsync(comment.EventId);
-            if (ev is not null)
-            {
-                var profiles = await _userProfileService.GetProfilesByIdsAsync(new[] { userId });
-                profiles.TryGetValue(userId, out var liker);
-
-                await _publishEndpoint.Publish(new EventCommentLikedMessage(
-                    ev.EventId,
-                    ev.Title,
-                    ResolveEventImageUrl(ev),
-                    comment.CommentId,
-                    comment.UserId,
-                    userId,
-                    ResolveDisplayName(liker, userId),
-                    liker?.AvatarUrl,
-                    BuildPreview(comment.Content),
-                    DateTime.UtcNow
-                ));
-            }
-        }
-
-        return ServiceResult<bool>.Ok(true);
-    }
-
-    public async Task<ServiceResult<bool>> UnlikeCommentAsync(int commentId, int userId)
-    {
-        var comment = await _eventRepository.GetCommentByIdAsync(commentId);
-
-        if (comment is null)
-            return ServiceResult<bool>.NotFound("Comment not found.");
-
-        await _eventRepository.UnlikeCommentAsync(commentId, userId);
         return ServiceResult<bool>.Ok(true);
     }
 
@@ -1108,6 +1186,14 @@ public class EventServiceImpl : IEventService
             .ToList();
 
         var profiles = await _userProfileService.GetProfilesByIdsAsync(userIds);
+
+        HashSet<int> likedCommentIds = [];
+        if (requesterId.HasValue)
+        {
+            likedCommentIds = await _eventRepository.GetLikedCommentIdsAsync(
+                requesterId.Value,
+                allComments.Select(c => c.CommentId));
+        }
 
         foreach (var comment in allComments)
         {
@@ -1127,19 +1213,17 @@ public class EventServiceImpl : IEventService
                 comment.AvatarUrl = profile.AvatarUrl;
             }
 
-            comment.IsLiked = requesterId.HasValue &&
-                             await _eventRepository.IsCommentLikedByUserAsync(comment.CommentId, requesterId.Value);
+            comment.IsLiked = requesterId.HasValue && likedCommentIds.Contains(comment.CommentId);
         }
     }
 
-    private static CommentResponseDto MapComment(Comment c, bool includeReplies = false)
+    private static CommentResponseDto MapComment(Comment c, bool includeReplies = true)
     {
         var visibleReplies = includeReplies
-            ? c.Replies
-                .Where(r => !r.IsDeleted)
-                .Select(r => MapComment(r, includeReplies: true))
-                .ToList()
+            ? c.Replies.Where(r => !r.IsDeleted).Select(r => MapComment(r, true)).ToList()
             : new List<CommentResponseDto>();
+
+        var replyCount = c.Replies?.Count(r => !r.IsDeleted) ?? 0;
 
         return new CommentResponseDto
         {
@@ -1153,8 +1237,8 @@ public class EventServiceImpl : IEventService
             IsDeleted = c.IsDeleted,
             IsReply = c.IsReply,
             ParentCommentId = c.ParentCommentId,
-            ReplyCount = c.Replies?.Count(r => !r.IsDeleted) ?? 0,
-            Replies = visibleReplies,
+            ReplyCount = replyCount,
+            Replies = includeReplies ? visibleReplies : new List<CommentResponseDto>(),
             Username = null,
             DisplayName = null,
             AvatarUrl = null,
@@ -1171,34 +1255,6 @@ public class EventServiceImpl : IEventService
             foreach (var reply in FlattenComments(comment.Replies))
                 yield return reply;
         }
-    }
-
-    private static CommentResponseDto MapComment(Comment c)
-    {
-        var visibleReplies = c.Replies
-            .Where(r => !r.IsDeleted)
-            .Select(MapComment)
-            .ToList();
-
-        return new CommentResponseDto
-        {
-            CommentId = c.CommentId,
-            Content = c.IsDeleted ? "[deleted]" : c.Content,
-            LikesCount = c.LikesCount,
-            UserId = c.IsDeleted ? null : c.UserId,
-            EventId = c.EventId,
-            CreatedAt = c.CreatedAt,
-            UpdatedAt = c.UpdatedAt,
-            IsDeleted = c.IsDeleted,
-            IsReply = c.IsReply,
-            ParentCommentId = c.ParentCommentId,
-            ReplyCount = c.Replies.Count(r => !r.IsDeleted),
-            Replies = visibleReplies,
-            Username = null,
-            DisplayName = null,
-            AvatarUrl = null,
-            IsLiked = false
-        };
     }
 
     private static double CalculatePreferenceScore(
@@ -1328,18 +1384,6 @@ public class EventServiceImpl : IEventService
         UserId = b.UserId
     };
 
-    private static IEnumerable<int> GetCommentTreeUserIds(Comment comment)
-    {
-        if (!comment.IsDeleted)
-            yield return comment.UserId;
-
-        foreach (var reply in comment.Replies)
-        {
-            foreach (var id in GetCommentTreeUserIds(reply))
-                yield return id;
-        }
-    }
-
     private static string ResolveDisplayName(CommentUserProfileDto? profile, int userId)
     {
         if (!string.IsNullOrWhiteSpace(profile?.Username))
@@ -1366,5 +1410,26 @@ public class EventServiceImpl : IEventService
         return normalized.Length <= maxLength
             ? normalized
             : normalized[..maxLength];
+    }
+
+    private static int NormalizePage(int page) => page <= 0 ? 1 : page;
+
+    private static int NormalizePageSize(int pageSize) =>
+        pageSize <= 0 ? DefaultPageSize : Math.Min(pageSize, MaxPageSize);
+
+    private void InvalidateSegmentCache()
+    {
+        _cache.Remove(SegmentsCacheKey);
+    }
+
+    private void InvalidateGenresCache(int segmentId)
+    {
+        _cache.Remove($"eventservice:genres:segment:{segmentId}");
+        _cache.Remove(SegmentsCacheKey);
+    }
+
+    private void InvalidateSubGenresCache(int genreId)
+    {
+        _cache.Remove($"eventservice:subgenres:genre:{genreId}");
     }
 }

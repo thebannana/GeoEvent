@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/errors/error_mapper.dart';
+import '../../../../core/utils/logger.dart';
 import '../../../../core/widgets/async/app_async_view.dart';
 import '../../../../core/widgets/feedback/app_empty_state.dart';
 import '../../../../core/widgets/feedback/app_error_state.dart';
@@ -39,31 +41,66 @@ class PublicProfileScreen extends ConsumerStatefulWidget {
 }
 
 class _PublicProfileScreenState extends ConsumerState<PublicProfileScreen> {
+  void _showMessage(String message) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(content: Text(message)),
+      );
+  }
+
   Future<void> openDirectChat({
     required BuildContext context,
     required WidgetRef ref,
     required int otherUserId,
   }) async {
-    final result = await ref.read(messagesRepositoryProvider).openDirectThread(
-          otherUserId: otherUserId,
-        );
+    try {
+      final result = await ref.read(messagesRepositoryProvider).openDirectThread(
+            otherUserId: otherUserId,
+          );
 
-    if (!context.mounted) return;
+      if (!context.mounted) return;
 
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => ChatThreadScreen(
-          args: ChatThreadArgs(
-            threadId: (result['threadId'] as num).toInt(),
-            type: ChatThreadType.direct,
-            title: (result['title'] as String?)?.trim().isNotEmpty == true
-                ? (result['title'] as String).trim()
-                : 'Chat',
-            otherUserId: (result['otherUserId'] as num?)?.toInt(),
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => ChatThreadScreen(
+            args: ChatThreadArgs(
+              threadId: (result['threadId'] as num).toInt(),
+              type: ChatThreadType.direct,
+              title: (result['title'] as String?)?.trim().isNotEmpty == true
+                  ? (result['title'] as String).trim()
+                  : 'Chat',
+              otherUserId: (result['otherUserId'] as num?)?.toInt(),
+            ),
           ),
         ),
-      ),
-    );
+      );
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'Failed to open direct chat.',
+        tag: 'PublicProfileScreen',
+        error: error,
+        stackTrace: stackTrace,
+      );
+
+      if (!context.mounted) return;
+
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              ErrorMapper.toMessage(
+                error,
+                stackTrace: stackTrace,
+                fallbackMessage: 'Could not open chat. Please try again.',
+              ),
+            ),
+          ),
+        );
+    }
   }
 
   Future<void> _openReportUserScreen(PublicProfileUser user) async {
@@ -98,20 +135,20 @@ class _PublicProfileScreenState extends ConsumerState<PublicProfileScreen> {
 
     try {
       await controller.submitReview(rating: value);
-
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('You rated this profile $value/5.'),
-        ),
+      _showMessage('You rated this profile $value/5.');
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'Failed to submit rating.',
+        tag: 'PublicProfileScreen',
+        error: error,
+        stackTrace: stackTrace,
       );
-    } catch (_) {
-      if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Could not submit rating. Please try again.'),
+      _showMessage(
+        ErrorMapper.toMessage(
+          error,
+          stackTrace: stackTrace,
+          fallbackMessage: 'Could not submit rating. Please try again.',
         ),
       );
     }
@@ -147,12 +184,8 @@ class _PublicProfileScreenState extends ConsumerState<PublicProfileScreen> {
 
     if (!mounted || result != true) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          hadExistingReview ? 'Review updated.' : 'Review saved.',
-        ),
-      ),
+    _showMessage(
+      hadExistingReview ? 'Review updated.' : 'Review saved.',
     );
   }
 
@@ -177,9 +210,13 @@ class _PublicProfileScreenState extends ConsumerState<PublicProfileScreen> {
           title: 'Loading profile',
           message: 'Fetching public profile details...',
         ),
-        errorBuilder: (_, _) => AppErrorState(
+        errorBuilder: (error, stackTrace) => AppErrorState(
           title: 'Could not load profile',
-          message: 'Please try again.',
+          message: ErrorMapper.toMessage(
+            error,
+            stackTrace: stackTrace,
+            fallbackMessage: 'Please try again.',
+          ),
           onRetry: controller.reload,
         ),
         data: (data) {

@@ -5,7 +5,7 @@ enum RefundRequestStatus {
   approved,
   rejected,
   failed,
-  unknown;
+  unknown, refunded;
 
   static RefundRequestStatus fromValue(String? value) {
     switch (value?.trim().toLowerCase()) {

@@ -1,3 +1,5 @@
+import '../../../core/utils/date_time_extensions.dart';
+
 class UserPreference {
   final int prefId;
   final int? segmentId;
@@ -22,8 +24,13 @@ class UserPreference {
       genreId: (json['genreId'] as num?)?.toInt(),
       subGenreId: (json['subGenreId'] as num?)?.toInt(),
       score: (json['score'] as num?)?.toDouble() ?? 0,
-      lastUpdated: DateTime.tryParse((json['lastUpdated'] ?? '').toString()) ??
-          DateTime.fromMillisecondsSinceEpoch(0),
+      lastUpdated: (() {
+        try {
+          return parseApiDateTime(json['lastUpdated']);
+        } catch (_) {
+          return DateTime.fromMillisecondsSinceEpoch(0);
+        }
+      })(),
     );
   }
 }

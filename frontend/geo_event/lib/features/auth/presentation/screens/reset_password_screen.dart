@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/errors/error_mapper.dart';
+import '../../../../core/utils/logger.dart';
 import '../../../../core/utils/validators.dart';
 import '../../application/auth_controller.dart';
 import '../widgets/auth_feedback.dart';
@@ -85,13 +87,25 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen>
       );
 
       context.go('/login');
-    } catch (error) {
+    } catch (error, stackTrace) {
       if (!mounted) return;
+
+      AppLogger.error(
+        'Reset password failed.',
+        tag: 'ResetPasswordScreen',
+        error: error,
+        stackTrace: stackTrace,
+      );
 
       showAuthError(
         context,
         error,
-        fallbackMessage: 'Failed to reset the password. Please request a new reset link and try again.',
+        fallbackMessage: ErrorMapper.toMessage(
+          error,
+          stackTrace: stackTrace,
+          fallbackMessage:
+              'Failed to reset the password. Please request a new reset link and try again.',
+        ),
       );
     }
   }
@@ -192,7 +206,8 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen>
                       AuthSubmitButton(
                         label: 'Reset Password',
                         isLoading: authState.isLoading,
-                        disabledReason: 'Please wait while your password is being reset.',
+                        disabledReason:
+                            'Please wait while your password is being reset.',
                         onPressed: _submit,
                       ),
                     ],

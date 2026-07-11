@@ -12,4 +12,4 @@ RUN ls -la /app/publish
 FROM base AS final
 WORKDIR /app
 COPY --from=build /app/publish/ .
-ENTRYPOINT ["dotnet", "NotificationService.Worker.dll"]
+ENTRYPOINT ["dotnet", "HelperWorkers.dll"]

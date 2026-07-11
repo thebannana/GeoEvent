@@ -1,8 +1,9 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/errors/error_mapper.dart';
+import '../../../../core/utils/debounce.dart';
+import '../../../../core/utils/logger.dart';
 import '../../../../core/utils/price_formatter.dart';
 import '../../../../core/widgets/feedback/app_confirm_dialog.dart';
 import '../../../../core/widgets/feedback/app_empty_state.dart';
@@ -39,12 +40,13 @@ class EventReservationsScreen extends ConsumerStatefulWidget {
 class _EventReservationsScreenState
     extends ConsumerState<EventReservationsScreen> {
   static const int _nextPageTriggerOffset = 280;
-  static const Duration _filterDebounce = Duration(milliseconds: 350);
 
   late final ScrollController _scrollController;
+  final Debouncer _filterDebouncer = Debouncer(
+    delay: const Duration(milliseconds: 350),
+  );
 
   final Map<int, PublicUserProfileDto> _profilesByUserId = {};
-  Timer? _filterDebounceTimer;
 
   bool _loadingProfiles = false;
   bool _didRequestInitialLoad = false;
@@ -74,6 +76,41 @@ class _EventReservationsScreenState
       await _loadMissingProfiles();
     });
   }
+
+void _showSnackBarMessage(
+  BuildContext context,
+  String message,
+) {
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(content: Text(message)),
+  );
+}
+
+void _showMappedError(
+  BuildContext context, {
+  required Object error,
+  required StackTrace stackTrace,
+  required String fallbackMessage,
+  required String tag,
+}) {
+  AppLogger.error(
+    fallbackMessage,
+    tag: tag,
+    error: error,
+    stackTrace: stackTrace,
+  );
+
+  if (!context.mounted) return;
+
+  _showSnackBarMessage(
+    context,
+    ErrorMapper.toMessage(
+      error,
+      stackTrace: stackTrace,
+      fallbackMessage: fallbackMessage,
+    ),
+  );
+}
 
   void _onScroll() {
     if (!_scrollController.hasClients) return;
@@ -115,7 +152,13 @@ class _EventReservationsScreenState
       setState(() {
         _profilesByUserId.addAll(profiles);
       });
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'Failed to load missing public profiles.',
+        tag: 'EventReservationsScreen',
+        error: error,
+        stackTrace: stackTrace,
+      );
     } finally {
       _loadingProfiles = false;
     }
@@ -133,8 +176,7 @@ class _EventReservationsScreenState
   }
 
   void _onFilterSelected(ReservationStatus? status) {
-    _filterDebounceTimer?.cancel();
-    _filterDebounceTimer = Timer(_filterDebounce, () async {
+    _filterDebouncer.run(() async {
       await ref
           .read(
             eventReservationsControllerProvider(widget.event.eventId).notifier,
@@ -150,7 +192,7 @@ class _EventReservationsScreenState
       await _loadMissingProfiles();
 
       if (_scrollController.hasClients) {
-        _scrollController.animateTo(
+        await _scrollController.animateTo(
           0,
           duration: const Duration(milliseconds: 220),
           curve: Curves.easeOut,
@@ -161,7 +203,7 @@ class _EventReservationsScreenState
 
   @override
   void dispose() {
-    _filterDebounceTimer?.cancel();
+    _filterDebouncer.dispose();
     _scrollController
       ..removeListener(_onScroll)
       ..dispose();
@@ -360,25 +402,25 @@ class _EventReservationsScreenState
   }
 
   Future<void> _removeAttendee(
-    BuildContext context,
-    WidgetRef ref,
-    OrganizerReservationDto reservation,
-  ) async {
-    final confirm = await AppConfirmDialog.show(
-      context,
-      title: 'Remove attendee?',
-      message:
-          'This will remove the attendee from the event and trigger the standard refund review flow.',
-      confirmLabel: 'Remove',
-      destructive: true,
-    );
+  BuildContext context,
+  WidgetRef ref,
+  OrganizerReservationDto reservation,
+) async {
+  final confirm = await AppConfirmDialog.show(
+    context,
+    title: 'Remove attendee?',
+    message: 'This will remove the attendee from the event and cancel the reservation for event entry.',
+    confirmLabel: 'Remove',
+    destructive: true,
+  );
 
-    if (!confirm || !context.mounted) return;
+  if (!confirm || !context.mounted) return;
 
-    final controller = ref.read(
-      eventReservationsControllerProvider(widget.event.eventId).notifier,
-    );
+  final controller = ref.read(
+    eventReservationsControllerProvider(widget.event.eventId).notifier,
+  );
 
+  try {
     await controller.removeAttendee(
       reservation.reservationId,
       reason: 'Removed by organizer. Standard refund review required.',
@@ -390,43 +432,47 @@ class _EventReservationsScreenState
     if (!context.mounted) return;
 
     if ((state.errorMessage ?? '').trim().isNotEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(state.errorMessage!)),
-      );
+      _showSnackBarMessage(context, state.errorMessage!.trim());
       return;
     }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Attendee removed and refund review requested.'),
-      ),
+    _showSnackBarMessage(context, 'Attendee removed successfully.');
+  } catch (error, stackTrace) {
+    _showMappedError(
+      context,
+      error: error,
+      stackTrace: stackTrace,
+      fallbackMessage: 'Could not remove attendee.',
+      tag: 'EventReservationsScreen',
     );
   }
+}
 
   Future<void> _collectCash(
-    BuildContext context,
-    WidgetRef ref,
-    OrganizerReservationDto reservation,
-  ) async {
-    final amountLabel = PriceFormatter.format(
-      reservation.totalAmount,
-      currency: reservation.currency,
-    );
+  BuildContext context,
+  WidgetRef ref,
+  OrganizerReservationDto reservation,
+) async {
+  final amountLabel = PriceFormatter.format(
+    reservation.totalAmount,
+    currency: reservation.currency,
+  );
 
-    final confirm = await AppConfirmDialog.show(
-      context,
-      title: 'Mark cash as received?',
-      message:
-          'This will mark $amountLabel as collected in cash for this attendee.',
-      confirmLabel: 'Confirm',
-    );
+  final confirm = await AppConfirmDialog.show(
+    context,
+    title: 'Mark cash as received?',
+    message:
+        'This will mark $amountLabel as collected in cash for this attendee.',
+    confirmLabel: 'Confirm',
+  );
 
-    if (!confirm || !context.mounted) return;
+  if (!confirm || !context.mounted) return;
 
-    final controller = ref.read(
-      eventReservationsControllerProvider(widget.event.eventId).notifier,
-    );
+  final controller = ref.read(
+    eventReservationsControllerProvider(widget.event.eventId).notifier,
+  );
 
+  try {
     await controller.markCashCollected(reservation.reservationId);
 
     final state =
@@ -435,16 +481,22 @@ class _EventReservationsScreenState
     if (!context.mounted) return;
 
     if ((state.errorMessage ?? '').trim().isNotEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(state.errorMessage!)),
-      );
+      _showSnackBarMessage(context, state.errorMessage!.trim());
       return;
     }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Cash payment marked as received.'),
-      ),
+    _showSnackBarMessage(
+      context,
+      'Cash payment marked as received.',
+    );
+  } catch (error, stackTrace) {
+    _showMappedError(
+      context,
+      error: error,
+      stackTrace: stackTrace,
+      fallbackMessage: 'Could not update cash collection status.',
+      tag: 'EventReservationsScreen',
     );
   }
+}
 }

@@ -10,9 +10,9 @@ namespace UserService.Infrastructure.Repositories;
 
 public class UserRepository : IUserRepository
 {
-    private const int DefaultPageSize = 20;
     private const int MaxPageSize = 100;
     private const int MaxReviewPageSize = 50;
+    private const int MaxUserReportPageSize = 50;
 
     private readonly UserDbContext _context;
 
@@ -21,11 +21,20 @@ public class UserRepository : IUserRepository
         _context = context;
     }
 
-    private static (int Page, int PageSize) NormalizePaging(int page, int pageSize, int maxPageSize = MaxPageSize)
+    public Task SaveChangesAsync(CancellationToken cancellationToken = default) =>
+        _context.SaveChangesAsync(cancellationToken);
+
+    private static void ValidatePaging(int page, int pageSize, int maxPageSize)
     {
-        var normalizedPage = page <= 0 ? 1 : page;
-        var normalizedPageSize = pageSize <= 0 ? DefaultPageSize : Math.Min(pageSize, maxPageSize);
-        return (normalizedPage, normalizedPageSize);
+        if (page <= 0)
+            throw new ArgumentOutOfRangeException(nameof(page), "Page must be greater than 0.");
+
+        if (pageSize <= 0 || pageSize > maxPageSize)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(pageSize),
+                $"PageSize must be between 1 and {maxPageSize}.");
+        }
     }
 
     public async Task<List<UserPreference>> GetUserPreferencesAsync(int userId) =>
@@ -47,66 +56,93 @@ public class UserRepository : IUserRepository
                 p.GenreId == genreId &&
                 p.SubGenreId == subGenreId);
 
+    public async Task<UserPreference?> GetPreferenceForUpdateAsync(
+        int userId,
+        int? segmentId,
+        int? genreId,
+        int? subGenreId) =>
+        await _context.UserPreferences
+            .FirstOrDefaultAsync(p =>
+                p.UserId == userId &&
+                p.SegmentId == segmentId &&
+                p.GenreId == genreId &&
+                p.SubGenreId == subGenreId);
+
     public async Task<UserRating?> GetUserRatingAsync(int raterId, int ratedUserId) =>
         await _context.Set<UserRating>()
             .AsNoTracking()
             .FirstOrDefaultAsync(x => x.RaterId == raterId && x.RatedUserId == ratedUserId);
 
-    public async Task<UserRating> CreateUserRatingAsync(UserRating rating)
+    public async Task<UserRating?> GetUserRatingForUpdateAsync(int raterId, int ratedUserId) =>
+        await _context.Set<UserRating>()
+            .FirstOrDefaultAsync(x => x.RaterId == raterId && x.RatedUserId == ratedUserId);
+
+    public Task CreateUserRatingAsync(UserRating rating)
     {
         _context.Set<UserRating>().Add(rating);
-        await _context.SaveChangesAsync();
-        return rating;
+        return Task.CompletedTask;
     }
 
-    public async Task UpdateUserRatingAsync(UserRating rating)
+    public Task UpdateUserRatingAsync(UserRating rating)
     {
         _context.Set<UserRating>().Update(rating);
-        await _context.SaveChangesAsync();
+        return Task.CompletedTask;
     }
 
-    public async Task<UserPreference> CreatePreferenceAsync(UserPreference preference)
-    {
-        _context.UserPreferences.Add(preference);
-        await _context.SaveChangesAsync();
-        return preference;
-    }
-
-    public async Task UpdatePreferenceAsync(UserPreference preference)
-    {
-        _context.UserPreferences.Update(preference);
-        await _context.SaveChangesAsync();
-    }
-
-    public async Task DeletePreferenceAsync(UserPreference preference)
-    {
-        _context.UserPreferences.Remove(preference);
-        await _context.SaveChangesAsync();
-    }
-
-    public async Task DeleteUserRatingAsync(UserRating rating)
+    public Task DeleteUserRatingAsync(UserRating rating)
     {
         _context.Set<UserRating>().Remove(rating);
-        await _context.SaveChangesAsync();
+        return Task.CompletedTask;
     }
 
     public async Task<(double AverageRating, int RatingsCount)> GetUserRatingSummaryAsync(int userId)
     {
-        var query = _context.Set<UserRating>()
+        var result = await _context.Set<UserRating>()
             .AsNoTracking()
-            .Where(x => x.RatedUserId == userId);
+            .Where(x => x.RatedUserId == userId)
+            .GroupBy(x => x.RatedUserId)
+            .Select(g => new
+            {
+                AverageRating = g.Average(x => x.Value),
+                RatingsCount = g.Count()
+            })
+            .FirstOrDefaultAsync();
 
-        var count = await query.CountAsync();
-        if (count == 0)
-            return (0, 0);
+        return result is null
+            ? (0, 0)
+            : (Math.Round(result.AverageRating, 2), result.RatingsCount);
+    }
 
-        var avg = await query.AverageAsync(x => x.Value);
-        return (Math.Round(avg, 2), count);
+    public async Task<Dictionary<int, (double AverageRating, int RatingsCount)>> GetUserRatingSummariesAsync(IEnumerable<int> userIds)
+    {
+        var ids = userIds
+            .Where(x => x > 0)
+            .Distinct()
+            .ToList();
+
+        if (ids.Count == 0)
+            return [];
+
+        var summaries = await _context.Set<UserRating>()
+            .AsNoTracking()
+            .Where(x => ids.Contains(x.RatedUserId))
+            .GroupBy(x => x.RatedUserId)
+            .Select(g => new
+            {
+                UserId = g.Key,
+                AverageRating = g.Average(x => x.Value),
+                RatingsCount = g.Count()
+            })
+            .ToListAsync();
+
+        return summaries.ToDictionary(
+            x => x.UserId,
+            x => (Math.Round(x.AverageRating, 2), x.RatingsCount));
     }
 
     public async Task<List<UserRating>> GetUserReviewsAsync(int ratedUserId, int page, int pageSize)
     {
-        var (normalizedPage, normalizedPageSize) = NormalizePaging(page, pageSize, MaxReviewPageSize);
+        ValidatePaging(page, pageSize, MaxReviewPageSize);
 
         return await _context.Set<UserRating>()
             .AsNoTracking()
@@ -114,8 +150,8 @@ public class UserRepository : IUserRepository
             .ThenInclude(x => x!.Person)
             .Where(x => x.RatedUserId == ratedUserId && !string.IsNullOrWhiteSpace(x.Comment))
             .OrderByDescending(x => x.UpdatedAt ?? x.CreatedAt)
-            .Skip((normalizedPage - 1) * normalizedPageSize)
-            .Take(normalizedPageSize)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
             .ToListAsync();
     }
 
@@ -124,9 +160,32 @@ public class UserRepository : IUserRepository
             .AsNoTracking()
             .CountAsync(x => x.RatedUserId == ratedUserId && !string.IsNullOrWhiteSpace(x.Comment));
 
+    public Task<UserPreference> CreatePreferenceAsync(UserPreference preference)
+    {
+        _context.UserPreferences.Add(preference);
+        return Task.FromResult(preference);
+    }
+
+    public Task UpdatePreferenceAsync(UserPreference preference)
+    {
+        _context.UserPreferences.Update(preference);
+        return Task.CompletedTask;
+    }
+
+    public Task DeletePreferenceAsync(UserPreference preference)
+    {
+        _context.UserPreferences.Remove(preference);
+        return Task.CompletedTask;
+    }
+
     public async Task<User?> GetByIdAsync(int userId) =>
         await _context.Users
             .AsNoTracking()
+            .Include(u => u.Person)
+            .FirstOrDefaultAsync(u => u.PersonId == userId);
+
+    public async Task<User?> GetByIdForUpdateAsync(int userId) =>
+        await _context.Users
             .Include(u => u.Person)
             .FirstOrDefaultAsync(u => u.PersonId == userId);
 
@@ -135,7 +194,6 @@ public class UserRepository : IUserRepository
         var normalizedEmail = email.Trim().ToLowerInvariant();
 
         return await _context.Users
-            .AsNoTracking()
             .Include(u => u.Person)
             .FirstOrDefaultAsync(u => u.Email == normalizedEmail);
     }
@@ -155,21 +213,27 @@ public class UserRepository : IUserRepository
         var normalizedIdentifier = identifier.Trim().ToLowerInvariant();
 
         return await _context.Users
-            .AsNoTracking()
             .Include(u => u.Person)
-            .FirstOrDefaultAsync(u => u.Email == normalizedIdentifier || u.Username == normalizedIdentifier);
+            .FirstOrDefaultAsync(u =>
+                u.Email == normalizedIdentifier || u.Username == normalizedIdentifier);
     }
 
     public async Task<bool> EmailExistsAsync(string email)
     {
         var normalizedEmail = email.Trim().ToLowerInvariant();
-        return await _context.Users.AsNoTracking().AnyAsync(u => u.Email == normalizedEmail);
+
+        return await _context.Users
+            .AsNoTracking()
+            .AnyAsync(u => u.Email == normalizedEmail);
     }
 
     public async Task<bool> UsernameExistsAsync(string username)
     {
         var normalizedUsername = username.Trim().ToLowerInvariant();
-        return await _context.Users.AsNoTracking().AnyAsync(u => u.Username == normalizedUsername);
+
+        return await _context.Users
+            .AsNoTracking()
+            .AnyAsync(u => u.Username == normalizedUsername);
     }
 
     public async Task<User> CreateAsync(User user, Person person)
@@ -177,14 +241,13 @@ public class UserRepository : IUserRepository
         await _context.People.AddAsync(person);
         user.Person = person;
         await _context.Users.AddAsync(user);
-        await _context.SaveChangesAsync();
         return user;
     }
 
-    public async Task UpdateAsync(User user)
+    public Task UpdateAsync(User user)
     {
         _context.Users.Update(user);
-        await _context.SaveChangesAsync();
+        return Task.CompletedTask;
     }
 
     public async Task SoftDeleteAsync(int userId)
@@ -197,13 +260,12 @@ public class UserRepository : IUserRepository
             return;
 
         user.SoftDelete();
-        await _context.SaveChangesAsync();
     }
 
     public async Task<PagedResult<User>> GetAllAsync(UserFilterDto filter)
     {
         filter ??= new UserFilterDto();
-        var (page, pageSize) = NormalizePaging(filter.Page, filter.PageSize);
+        ValidatePaging(filter.Page, filter.PageSize, MaxPageSize);
 
         var query = _context.Users
             .AsNoTracking()
@@ -230,16 +292,16 @@ public class UserRepository : IUserRepository
 
         var items = await query
             .OrderByDescending(u => u.CreatedAt)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
+            .Skip((filter.Page - 1) * filter.PageSize)
+            .Take(filter.PageSize)
             .ToListAsync();
 
         return new PagedResult<User>
         {
             Items = items,
             TotalCount = total,
-            Page = page,
-            PageSize = pageSize
+            Page = filter.Page,
+            PageSize = filter.PageSize
         };
     }
 
@@ -247,12 +309,10 @@ public class UserRepository : IUserRepository
         await _context.RefreshTokens
             .Include(r => r.User)
             .ThenInclude(u => u!.Person)
-            .FirstOrDefaultAsync(r => r.TokenHash == tokenHash && r.RevokedAt == null && r.ExpiresAt > DateTime.UtcNow);
-
-    public async Task CleanupExpiredTokensAsync(int userId) =>
-        await _context.RefreshTokens
-            .Where(r => r.UserId == userId && r.ExpiresAt <= DateTime.UtcNow)
-            .ExecuteDeleteAsync();
+            .FirstOrDefaultAsync(r =>
+                r.TokenHash == tokenHash &&
+                r.RevokedAt == null &&
+                r.ExpiresAt > DateTime.UtcNow);
 
     public async Task<RefreshToken?> GetRefreshTokenAsync(string tokenHash) =>
         await _context.RefreshTokens
@@ -260,24 +320,64 @@ public class UserRepository : IUserRepository
             .ThenInclude(u => u!.Person)
             .FirstOrDefaultAsync(r => r.TokenHash == tokenHash);
 
-    public async Task AddRefreshTokenAsync(RefreshToken token)
+    public Task AddRefreshTokenAsync(RefreshToken token)
     {
-        await _context.RefreshTokens.AddAsync(token);
-        await _context.SaveChangesAsync();
+        _context.RefreshTokens.Add(token);
+        return Task.CompletedTask;
     }
 
     public async Task RevokeRefreshTokenAsync(string tokenHash)
     {
-        var token = await _context.RefreshTokens.FirstOrDefaultAsync(r => r.TokenHash == tokenHash);
-        if (token is null) return;
+        var token = await _context.RefreshTokens
+            .FirstOrDefaultAsync(r => r.TokenHash == tokenHash);
+
+        if (token is null)
+            return;
+
         token.Revoke();
-        await _context.SaveChangesAsync();
     }
 
-    public async Task RevokeAllUserTokensAsync(int userId) =>
-        await _context.RefreshTokens
+    public Task RevokeAllUserTokensAsync(int userId) =>
+        _context.RefreshTokens
             .Where(r => r.UserId == userId && r.RevokedAt == null)
             .ExecuteUpdateAsync(s => s.SetProperty(r => r.RevokedAt, DateTime.UtcNow));
+
+    public Task CleanupExpiredTokensAsync(int userId) =>
+        _context.RefreshTokens
+            .Where(r => r.UserId == userId && r.ExpiresAt <= DateTime.UtcNow)
+            .ExecuteDeleteAsync();
+
+    public async Task<PasswordResetToken?> GetActivePasswordResetTokenAsync(int userId, string tokenHash) =>
+        await _context.PasswordResetTokens
+            .FirstOrDefaultAsync(x =>
+                x.UserId == userId &&
+                x.TokenHash == tokenHash &&
+                x.UsedAt == null &&
+                x.ExpiresAt > DateTime.UtcNow);
+
+    public async Task InvalidateActivePasswordResetTokensAsync(int userId)
+    {
+        var activeTokens = await _context.PasswordResetTokens
+            .Where(x => x.UserId == userId && x.UsedAt == null && x.ExpiresAt > DateTime.UtcNow)
+            .ToListAsync();
+
+        foreach (var token in activeTokens)
+        {
+            token.Invalidate();
+        }
+    }
+
+    public Task CreatePasswordResetTokenAsync(PasswordResetToken token)
+    {
+        _context.PasswordResetTokens.Add(token);
+        return Task.CompletedTask;
+    }
+
+    public Task MarkPasswordResetTokenUsedAsync(PasswordResetToken token)
+    {
+        _context.PasswordResetTokens.Update(token);
+        return Task.CompletedTask;
+    }
 
     public async Task<Report?> GetReportByIdAsync(int reportId) =>
         await _context.Reports
@@ -286,9 +386,15 @@ public class UserRepository : IUserRepository
             .Include(r => r.ResolvedBy)
             .FirstOrDefaultAsync(r => r.ReportId == reportId);
 
+    public async Task<Report?> GetReportByIdForUpdateAsync(int reportId) =>
+        await _context.Reports
+            .Include(r => r.Reporter)
+            .Include(r => r.ResolvedBy)
+            .FirstOrDefaultAsync(r => r.ReportId == reportId);
+
     public async Task<PagedResult<Report>> GetReportsAsync(ReportStatus? status, int page, int pageSize)
     {
-        var (normalizedPage, normalizedPageSize) = NormalizePaging(page, pageSize);
+        ValidatePaging(page, pageSize, MaxPageSize);
 
         var query = _context.Reports
             .AsNoTracking()
@@ -304,22 +410,22 @@ public class UserRepository : IUserRepository
 
         var items = await query
             .OrderByDescending(r => r.ReportId)
-            .Skip((normalizedPage - 1) * normalizedPageSize)
-            .Take(normalizedPageSize)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
             .ToListAsync();
 
         return new PagedResult<Report>
         {
             Items = items,
             TotalCount = total,
-            Page = normalizedPage,
-            PageSize = normalizedPageSize
+            Page = page,
+            PageSize = pageSize
         };
     }
 
     public async Task<PagedResult<Report>> GetUserReportsAsync(int userId, int page, int pageSize)
     {
-        var (normalizedPage, normalizedPageSize) = NormalizePaging(page, pageSize, 50);
+        ValidatePaging(page, pageSize, MaxUserReportPageSize);
 
         var query = _context.Reports
             .AsNoTracking()
@@ -329,30 +435,29 @@ public class UserRepository : IUserRepository
 
         var items = await query
             .OrderByDescending(r => r.ReportId)
-            .Skip((normalizedPage - 1) * normalizedPageSize)
-            .Take(normalizedPageSize)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
             .ToListAsync();
 
         return new PagedResult<Report>
         {
             Items = items,
             TotalCount = total,
-            Page = normalizedPage,
-            PageSize = normalizedPageSize
+            Page = page,
+            PageSize = pageSize
         };
     }
 
-    public async Task<Report> CreateReportAsync(Report report)
+    public Task<Report> CreateReportAsync(Report report)
     {
         _context.Reports.Add(report);
-        await _context.SaveChangesAsync();
-        return report;
+        return Task.FromResult(report);
     }
 
-    public async Task UpdateReportAsync(Report report)
+    public Task UpdateReportAsync(Report report)
     {
         _context.Reports.Update(report);
-        await _context.SaveChangesAsync();
+        return Task.CompletedTask;
     }
 
     public async Task<bool> HasOpenReportAsync(int reporterId, ReportTargetType targetType, int targetId) =>
@@ -372,7 +477,13 @@ public class UserRepository : IUserRepository
 
     public async Task<List<User>> GetPublicByIdsAsync(IEnumerable<int> userIds)
     {
-        var ids = userIds.Distinct().ToList();
+        var ids = userIds
+            .Where(x => x > 0)
+            .Distinct()
+            .ToList();
+
+        if (ids.Count == 0)
+            return [];
 
         return await _context.Users
             .AsNoTracking()

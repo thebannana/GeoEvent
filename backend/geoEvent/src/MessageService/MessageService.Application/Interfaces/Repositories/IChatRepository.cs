@@ -33,6 +33,7 @@ public interface IChatRepository
 
     Task<List<ChatThreadParticipant>> GetUserParticipationsAsync(int userId);
     Task<List<ChatMessage>> GetMessagesBySenderAsync(int userId);
+    Task<List<ChatMessage>> GetMessagesByThreadAndSenderAsync(long threadId, int userId);
 
     Task<PagedResult<ChatThread>> GetUserThreadsAsync(
         int userId,

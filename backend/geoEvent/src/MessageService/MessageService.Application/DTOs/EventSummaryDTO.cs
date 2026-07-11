@@ -6,8 +6,6 @@ public class EventSummaryDto
     public string Title { get; set; } = string.Empty;
     public DateTime StartDateTime { get; set; }
     public DateTime EndDateTime { get; set; }
-    public string? VenueName { get; set; }
-    public bool IsOnline { get; set; }
     public int? OrganizerId { get; set; }
     public string? CoverImageUrl { get; set; }
 }

@@ -13,14 +13,14 @@ final reservationsControllerProvider =
 );
 
 class ReservationsController extends AsyncNotifier<ReservationsState> {
-  late final ReservationsRepository _repository;
+  ReservationsRepository get _repository =>
+      ref.read(reservationsRepositoryProvider);
 
   static const int _defaultPageSize = ReservationsQuery.defaultPageSize;
 
   @override
   Future<ReservationsState> build() async {
     ref.watch(sessionUserIdProvider);
-    _repository = ref.read(reservationsRepositoryProvider);
     return _loadPage(
       const ReservationsQuery(page: 1, pageSize: _defaultPageSize),
       append: false,

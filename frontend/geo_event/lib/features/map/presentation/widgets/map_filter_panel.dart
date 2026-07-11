@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/errors/error_mapper.dart';
+import '../../../../core/utils/logger.dart';
 import '../../../../shared/events/providers/event_providers.dart';
 import '../../../../shared/location/models/map_filter_selection.dart';
 import 'map_filter_widgets.dart';
@@ -128,6 +130,31 @@ class _MapFilterPanelState extends ConsumerState<MapFilterPanel>
     super.dispose();
   }
 
+  void _logLoadError(
+    String message, {
+    required Object error,
+    required StackTrace stackTrace,
+  }) {
+    AppLogger.error(
+      message,
+      tag: 'MapFilterPanel',
+      error: error,
+      stackTrace: stackTrace,
+    );
+  }
+
+  String _mapErrorMessage(
+    Object error, {
+    StackTrace? stackTrace,
+    String fallback = 'Something went wrong.',
+  }) {
+    return ErrorMapper.toMessage(
+      error,
+      stackTrace: stackTrace,
+      fallbackMessage: fallback,
+    );
+  }
+
   Future<void> _loadInitialData() async {
     if (!mounted) return;
 
@@ -176,12 +203,22 @@ class _MapFilterPanelState extends ConsumerState<MapFilterPanel>
       if (_selection.genreId != null) {
         await _loadSubGenres(_selection.genreId!, keepSelection: true);
       }
-    } catch (e) {
+    } catch (error, stackTrace) {
+      _logLoadError(
+        'Failed to load initial map filter data.',
+        error: error,
+        stackTrace: stackTrace,
+      );
+
       if (!mounted) return;
 
       setState(() {
         _loadingSegments = false;
-        _error = e.toString().replaceFirst('Exception: ', '');
+        _error = _mapErrorMessage(
+          error,
+          stackTrace: stackTrace,
+          fallback: 'Unable to load filter options.',
+        );
       });
     }
   }
@@ -191,6 +228,7 @@ class _MapFilterPanelState extends ConsumerState<MapFilterPanel>
 
     setState(() {
       _loadingGenres = true;
+      _error = null;
       _genres = [];
       _subGenres = [];
       _selection = _selection.copyWith(
@@ -227,9 +265,23 @@ class _MapFilterPanelState extends ConsumerState<MapFilterPanel>
         _genres = genres;
         _loadingGenres = false;
       });
-    } catch (_) {
+    } catch (error, stackTrace) {
+      _logLoadError(
+        'Failed to load genres.',
+        error: error,
+        stackTrace: stackTrace,
+      );
+
       if (!mounted) return;
-      setState(() => _loadingGenres = false);
+
+      setState(() {
+        _loadingGenres = false;
+        _error = _mapErrorMessage(
+          error,
+          stackTrace: stackTrace,
+          fallback: 'Unable to load genres.',
+        );
+      });
     }
   }
 
@@ -238,6 +290,7 @@ class _MapFilterPanelState extends ConsumerState<MapFilterPanel>
 
     setState(() {
       _loadingSubGenres = true;
+      _error = null;
       _subGenres = [];
       _selection = _selection.copyWith(
         genreId: genreId,
@@ -272,9 +325,23 @@ class _MapFilterPanelState extends ConsumerState<MapFilterPanel>
         _subGenres = subGenres;
         _loadingSubGenres = false;
       });
-    } catch (_) {
+    } catch (error, stackTrace) {
+      _logLoadError(
+        'Failed to load subgenres.',
+        error: error,
+        stackTrace: stackTrace,
+      );
+
       if (!mounted) return;
-      setState(() => _loadingSubGenres = false);
+
+      setState(() {
+        _loadingSubGenres = false;
+        _error = _mapErrorMessage(
+          error,
+          stackTrace: stackTrace,
+          fallback: 'Unable to load subgenres.',
+        );
+      });
     }
   }
 
@@ -350,6 +417,7 @@ class _MapFilterPanelState extends ConsumerState<MapFilterPanel>
       );
       _genres = [];
       _subGenres = [];
+      _error = null;
     });
   }
 
@@ -360,12 +428,14 @@ class _MapFilterPanelState extends ConsumerState<MapFilterPanel>
         clearSubGenre: true,
       );
       _subGenres = [];
+      _error = null;
     });
   }
 
   void _clearSubGenreSelection() {
     setState(() {
       _selection = _selection.copyWith(clearSubGenre: true);
+      _error = null;
     });
   }
 
@@ -455,29 +525,31 @@ class _MapFilterPanelState extends ConsumerState<MapFilterPanel>
       title: 'Genre',
       child: _loadingGenres
           ? const MapLoadingState()
-          : Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                MapChoicePill(
-                  label: 'All',
-                  selected: _selection.genreId == null,
-                  onTap: _clearGenreSelection,
-                ),
-                ..._genres.map((genre) {
-                  final selected = _selection.genreId == genre.id;
+          : _error != null
+              ? MapFilterErrorText(message: _error!)
+              : Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    MapChoicePill(
+                      label: 'All',
+                      selected: _selection.genreId == null,
+                      onTap: _clearGenreSelection,
+                    ),
+                    ..._genres.map((genre) {
+                      final selected = _selection.genreId == genre.id;
 
-                  return MapChoicePill(
-                    label: genre.name,
-                    selected: selected,
-                    onTap: () async {
-                      if (selected) return;
-                      await _loadSubGenres(genre.id);
-                    },
-                  );
-                }),
-              ],
-            ),
+                      return MapChoicePill(
+                        label: genre.name,
+                        selected: selected,
+                        onTap: () async {
+                          if (selected) return;
+                          await _loadSubGenres(genre.id);
+                        },
+                      );
+                    }),
+                  ],
+                ),
     );
   }
 
@@ -486,32 +558,34 @@ class _MapFilterPanelState extends ConsumerState<MapFilterPanel>
       title: 'Subgenre',
       child: _loadingSubGenres
           ? const MapLoadingState()
-          : Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                MapChoicePill(
-                  label: 'All',
-                  selected: _selection.subGenreId == null,
-                  onTap: _clearSubGenreSelection,
-                ),
-                ..._subGenres.map((subGenre) {
-                  final selected = _selection.subGenreId == subGenre.id;
+          : _error != null
+              ? MapFilterErrorText(message: _error!)
+              : Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    MapChoicePill(
+                      label: 'All',
+                      selected: _selection.subGenreId == null,
+                      onTap: _clearSubGenreSelection,
+                    ),
+                    ..._subGenres.map((subGenre) {
+                      final selected = _selection.subGenreId == subGenre.id;
 
-                  return MapChoicePill(
-                    label: subGenre.name,
-                    selected: selected,
-                    onTap: () {
-                      setState(() {
-                        _selection = _selection.copyWith(
-                          subGenreId: subGenre.id,
-                        );
-                      });
-                    },
-                  );
-                }),
-              ],
-            ),
+                      return MapChoicePill(
+                        label: subGenre.name,
+                        selected: selected,
+                        onTap: () {
+                          setState(() {
+                            _selection = _selection.copyWith(
+                              subGenreId: subGenre.id,
+                            );
+                          });
+                        },
+                      );
+                    }),
+                  ],
+                ),
     );
   }
 

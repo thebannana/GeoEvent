@@ -290,11 +290,6 @@ namespace UserService.Infrastructure.Migrations
                         .HasColumnType("int")
                         .HasDefaultValue(0);
 
-                    b.Property<bool>("HasPayPalConnected")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bit")
-                        .HasDefaultValue(false);
-
                     b.Property<bool>("IsBanned")
                         .HasColumnType("bit");
 
@@ -316,25 +311,6 @@ namespace UserService.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("varbinary(max)");
 
-                    b.Property<DateTime?>("PayPalConnectedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("PayPalConnectionStatus")
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
-
-                    b.Property<string>("PayPalEmail")
-                        .HasMaxLength(255)
-                        .HasColumnType("nvarchar(255)");
-
-                    b.Property<string>("PayPalMerchantId")
-                        .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)");
-
-                    b.Property<string>("PayPalTrackingId")
-                        .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)");
-
                     b.Property<string>("Role")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -351,10 +327,6 @@ namespace UserService.Infrastructure.Migrations
                         .IsUnique();
 
                     b.HasIndex("LockoutUntil");
-
-                    b.HasIndex("PayPalMerchantId");
-
-                    b.HasIndex("PayPalTrackingId");
 
                     b.HasIndex("Username")
                         .IsUnique();

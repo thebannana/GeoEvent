@@ -13,8 +13,6 @@ public class PublicUserProfileDto
 
 
     public int EventsCount { get; set; }
-    public int FollowersCount { get; set; }
-    public int FollowingCount { get; set; }
 
     public double AverageRating { get; set; }
     public int RatingsCount { get; set; }

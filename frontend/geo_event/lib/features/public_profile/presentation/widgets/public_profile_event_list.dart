@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/utils/date_time_extensions.dart';
+import '../../../../core/utils/price_formatter.dart';
 import '../../../../shared/public_profile/models/public_profile_event.dart';
+import '../../../profile/presentation/widgets/list_paging_footer.dart';
 
 class PublicProfileEventList extends StatelessWidget {
   final List<PublicProfileEvent> events;
@@ -34,20 +37,6 @@ class PublicProfileEventList extends StatelessWidget {
     return scheme.secondary;
   }
 
-  String _formatPrice(double price) {
-    if (price <= 0) return 'Free';
-    if (price % 1 == 0) return price.toInt().toString();
-    return price.toStringAsFixed(2);
-  }
-
-  String _formatDate(DateTime? value) {
-    if (value == null) return '';
-    final local = value.toLocal();
-    return '${local.day.toString().padLeft(2, '0')}.'
-        '${local.month.toString().padLeft(2, '0')}.'
-        '${local.year}.';
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -75,7 +64,8 @@ class PublicProfileEventList extends StatelessWidget {
           final infoParts = <String>[
             if ((item.resolvedLocationName ?? '').trim().isNotEmpty)
               item.resolvedLocationName!.trim(),
-            if (item.startDateTime != null) _formatDate(item.startDateTime),
+            if (item.startDateTime != null)
+              item.startDateTime!.formatDate(pattern: 'dd.MM.yyyy.'),
           ];
           final infoText = infoParts.join(' · ');
 
@@ -195,12 +185,7 @@ class PublicProfileEventList extends StatelessWidget {
                                 horizontal: 10,
                                 vertical: 5,
                               ),
-                              child: Text(
-                                _formatPrice(item.price),
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: colorScheme.onSurface,
-                                  fontWeight: FontWeight.w700,
-                                ),
+                              child: Text(PriceFormatter.formatPriceWithBam(item.price),
                               ),
                             ),
                           ),
@@ -213,18 +198,19 @@ class PublicProfileEventList extends StatelessWidget {
             ),
           );
         }),
-        if (hasNextPage || isLoadingMore)
-          Padding(
+        SliverToBoxAdapter(
+          child: Padding(
             padding: const EdgeInsets.only(top: 14, bottom: 4),
-            child: Center(
-              child: isLoadingMore
-                  ? const CircularProgressIndicator()
-                  : OutlinedButton(
-                      onPressed: onLoadMore,
-                      child: const Text('Load more events'),
-                    ),
+            child: ListPagingFooter(
+              isLoadingMore: isLoadingMore,
+              hasMore: hasNextPage,
+              loadedCount: events.length,
+              totalCount: events.length,
+              itemLabel: 'events',
+              onLoadMore: hasNextPage && !isLoadingMore ? onLoadMore : null,
             ),
           ),
+        ).child!,
       ]),
     );
   }

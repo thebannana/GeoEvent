@@ -1,14 +1,13 @@
-using System.Security.Cryptography;
 using MassTransit;
 using Shared.Contracts.Users;
 using UserService.Application.Common;
 using UserService.Application.DTOs;
+using UserService.Application.Interfaces;
 using UserService.Application.Interfaces.Repositories;
 using UserService.Application.Interfaces.Services;
 using UserService.Domain.Entities;
 using UserService.Domain.Enums;
 using UserService.Domain.Exceptions;
-using UserService.Infrastructure.Repositories;
 
 namespace UserService.Infrastructure.Services;
 
@@ -18,27 +17,30 @@ public class UserServiceImpl : IUserService
     private readonly PasswordService _passwordService;
     private readonly IPublishEndpoint _publishEndpoint;
     private readonly IExternalValidationService _externalValidationService;
+    private readonly IEventInternalClient _eventInternalClient;
 
     public UserServiceImpl(
         IUserRepository userRepository,
         PasswordService passwordService,
         IPublishEndpoint publishEndpoint,
-        IExternalValidationService externalValidationService)
+        IExternalValidationService externalValidationService,
+        IEventInternalClient eventInternalClient)
     {
         _userRepository = userRepository;
         _passwordService = passwordService;
         _publishEndpoint = publishEndpoint;
         _externalValidationService = externalValidationService;
+        _eventInternalClient = eventInternalClient;
     }
 
     public async Task ApplyInteractionPreferenceAsync(
-    int userId,
-    int eventId,
-    int? segmentId,
-    int? genreId,
-    int? subGenreId,
-    string interactionType,
-    DateTime occurredAt)
+        int userId,
+        int eventId,
+        int? segmentId,
+        int? genreId,
+        int? subGenreId,
+        string interactionType,
+        DateTime occurredAt)
     {
         var (segmentWeight, genreWeight, subGenreWeight) = interactionType switch
         {
@@ -49,14 +51,28 @@ public class UserServiceImpl : IUserService
             _ => (0.0, 0.0, 0.0)
         };
 
+        var changed = false;
+
         if (segmentId.HasValue && segmentWeight > 0)
+        {
             await UpsertIncrementPreferenceAsync(userId, segmentId, null, null, segmentWeight);
+            changed = true;
+        }
 
         if (segmentId.HasValue && genreId.HasValue && genreWeight > 0)
+        {
             await UpsertIncrementPreferenceAsync(userId, segmentId, genreId, null, genreWeight);
+            changed = true;
+        }
 
         if (segmentId.HasValue && genreId.HasValue && subGenreId.HasValue && subGenreWeight > 0)
+        {
             await UpsertIncrementPreferenceAsync(userId, segmentId, genreId, subGenreId, subGenreWeight);
+            changed = true;
+        }
+
+        if (changed)
+            await _userRepository.SaveChangesAsync();
     }
 
     private async Task UpsertIncrementPreferenceAsync(
@@ -66,7 +82,7 @@ public class UserServiceImpl : IUserService
         int? subGenreId,
         double amount)
     {
-        var existing = await _userRepository.GetPreferenceAsync(userId, segmentId, genreId, subGenreId);
+        var existing = await _userRepository.GetPreferenceForUpdateAsync(userId, segmentId, genreId, subGenreId);
 
         if (existing is not null)
         {
@@ -87,6 +103,7 @@ public class UserServiceImpl : IUserService
 
         await _userRepository.CreatePreferenceAsync(preference);
     }
+
     public async Task<ServiceResult<UserProfileDto>> GetProfileAsync(int userId)
     {
         var user = await _userRepository.GetByIdAsync(userId);
@@ -109,6 +126,7 @@ public class UserServiceImpl : IUserService
             return ServiceResult<PublicUserProfileDto>.NotFound($"User {userId} not found.");
 
         var summary = await _userRepository.GetUserRatingSummaryAsync(userId);
+        var eventsCount = await _eventInternalClient.GetOrganizerEventsCountAsync(userId);
 
         int? myRating = null;
         string? myReviewComment = null;
@@ -127,9 +145,7 @@ public class UserServiceImpl : IUserService
             FirstName = user.Person?.FirstName ?? string.Empty,
             LastName = user.Person?.LastName ?? string.Empty,
             ImageUrl = string.IsNullOrWhiteSpace(user.Person?.ImageUrl) ? null : user.Person.ImageUrl,
-            EventsCount = 0,
-            FollowersCount = 0,
-            FollowingCount = 0,
+            EventsCount = eventsCount,
             AverageRating = summary.AverageRating,
             RatingsCount = summary.RatingsCount,
             MyRating = myRating,
@@ -145,7 +161,7 @@ public class UserServiceImpl : IUserService
             .ToList();
 
         if (distinctIds.Count == 0)
-            return new List<CommentUserProfileDto>();
+            return [];
 
         var users = await _userRepository.GetPublicByIdsAsync(distinctIds);
 
@@ -157,9 +173,10 @@ public class UserServiceImpl : IUserService
             AvatarUrl = string.IsNullOrWhiteSpace(u.Person?.ImageUrl) ? null : u.Person.ImageUrl
         }).ToList();
     }
+
     public async Task<ServiceResult<UserProfileDto>> UpdateProfileAsync(int userId, UpdateProfileDto request)
     {
-        var user = await _userRepository.GetByIdAsync(userId);
+        var user = await _userRepository.GetByIdForUpdateAsync(userId);
         if (user is null)
             return ServiceResult<UserProfileDto>.NotFound($"User {userId} not found.");
 
@@ -208,56 +225,66 @@ public class UserServiceImpl : IUserService
         person.UpdatedAt = DateTime.UtcNow;
 
         await _userRepository.UpdateAsync(user);
+        await _userRepository.SaveChangesAsync();
 
         return ServiceResult<UserProfileDto>.Ok(MapToProfile(user));
     }
 
-
     public async Task<ServiceResult<bool>> DeleteAccountAsync(int userId)
     {
         var user = await _userRepository.GetByIdAsync(userId);
-        if (user is null) return ServiceResult<bool>.NotFound($"User {userId} not found.");
+        if (user is null)
+            return ServiceResult<bool>.NotFound($"User {userId} not found.");
 
         await _userRepository.SoftDeleteAsync(userId);
+        await _userRepository.SaveChangesAsync();
+
         await _publishEndpoint.Publish(new UserDeletedMessage(userId, DateTime.UtcNow));
         return ServiceResult<bool>.Ok(true);
     }
 
     public async Task<ServiceResult<bool>> BanUserAsync(int userId, string reason = "Policy violation")
     {
-        var user = await _userRepository.GetByIdAsync(userId);
-        if (user is null) return ServiceResult<bool>.NotFound($"User {userId} not found.");
+        var user = await _userRepository.GetByIdForUpdateAsync(userId);
+        if (user is null)
+            return ServiceResult<bool>.NotFound($"User {userId} not found.");
 
-        user.IsBanned = true;
+        user.Ban();
         await _userRepository.UpdateAsync(user);
+        await _userRepository.SaveChangesAsync();
+
         await _publishEndpoint.Publish(new UserBannedMessage(userId, user.Username, reason, DateTime.UtcNow));
         return ServiceResult<bool>.Ok(true);
     }
 
     public async Task<ServiceResult<bool>> UnbanUserAsync(int userId)
     {
-        var user = await _userRepository.GetByIdAsync(userId);
-        if (user is null) return ServiceResult<bool>.NotFound($"User {userId} not found.");
+        var user = await _userRepository.GetByIdForUpdateAsync(userId);
+        if (user is null)
+            return ServiceResult<bool>.NotFound($"User {userId} not found.");
 
-        user.IsBanned = false;
+        user.Unban();
         await _userRepository.UpdateAsync(user);
+        await _userRepository.SaveChangesAsync();
+
         return ServiceResult<bool>.Ok(true);
     }
 
     public async Task<ServiceResult<bool>> ChangePasswordAsync(int userId, ChangePasswordDto dto)
     {
-        var user = await _userRepository.GetByIdAsync(userId);
-        if (user is null) return ServiceResult<bool>.NotFound($"User {userId} not found.");
+        var user = await _userRepository.GetByIdForUpdateAsync(userId);
+        if (user is null)
+            return ServiceResult<bool>.NotFound($"User {userId} not found.");
 
         if (!_passwordService.VerifyPassword(dto.CurrentPassword, user.PasswordHash, user.PasswordSalt))
             return ServiceResult<bool>.Unauthorized("Current password is incorrect.");
 
         var (hash, salt) = _passwordService.HashPassword(dto.NewPassword);
-        user.PasswordHash = hash;
-        user.PasswordSalt = salt;
+        user.ChangePassword(hash, salt);
 
         await _userRepository.RevokeAllUserTokensAsync(userId);
         await _userRepository.UpdateAsync(user);
+        await _userRepository.SaveChangesAsync();
 
         return ServiceResult<bool>.Ok(true);
     }
@@ -267,11 +294,12 @@ public class UserServiceImpl : IUserService
         var result = await _userRepository.GetAllAsync(filter);
         var mapped = new PagedResult<UserProfileDto>
         {
-            Items = result.Items.Select(MapToProfile),
+            Items = result.Items.Select(MapToProfile).ToList(),
             TotalCount = result.TotalCount,
             Page = result.Page,
             PageSize = result.PageSize
         };
+
         return ServiceResult<PagedResult<UserProfileDto>>.Ok(mapped);
     }
 
@@ -285,7 +313,6 @@ public class UserServiceImpl : IUserService
         var pageSize = filter.PageSize < 1 ? 20 : Math.Min(filter.PageSize, 100);
 
         var pagedPrefs = await _userRepository.GetUserPreferencesAsync(userId);
-
         var filtered = pagedPrefs.AsEnumerable();
 
         if (!string.IsNullOrWhiteSpace(filter.Type))
@@ -311,14 +338,10 @@ public class UserServiceImpl : IUserService
         }
 
         if (filter.MinScore.HasValue)
-        {
             filtered = filtered.Where(p => p.Score >= filter.MinScore.Value);
-        }
 
         if (filter.MaxScore.HasValue)
-        {
             filtered = filtered.Where(p => p.Score <= filter.MaxScore.Value);
-        }
 
         if (!string.IsNullOrWhiteSpace(filter.Search))
         {
@@ -356,23 +379,20 @@ public class UserServiceImpl : IUserService
         return ServiceResult<PagedResult<UserPreferenceResponseDto>>.Ok(result);
     }
 
-    private static UserPreferenceResponseDto MapPreference(UserPreference preference)
+    private static UserPreferenceResponseDto MapPreference(UserPreference preference) => new()
     {
-        return new UserPreferenceResponseDto
-        {
-            PrefId = preference.PrefId,
-            UserId = preference.UserId,
-            SegmentId = preference.SegmentId,
-            GenreId = preference.GenreId,
-            SubGenreId = preference.SubGenreId,
-            Score = preference.Score,
-            LastUpdated = preference.LastUpdated
-        };
-    }
+        PrefId = preference.PrefId,
+        UserId = preference.UserId,
+        SegmentId = preference.SegmentId,
+        GenreId = preference.GenreId,
+        SubGenreId = preference.SubGenreId,
+        Score = preference.Score,
+        LastUpdated = preference.LastUpdated
+    };
 
     public async Task<ServiceResult<UserPreferenceResponseDto>> UpsertPreferenceAsync(int userId, UpdatePreferenceDto dto)
     {
-        var existing = await _userRepository.GetPreferenceAsync(
+        var existing = await _userRepository.GetPreferenceForUpdateAsync(
             userId,
             dto.SegmentId,
             dto.GenreId,
@@ -382,6 +402,8 @@ public class UserServiceImpl : IUserService
         {
             existing.UpdateScore(dto.Score);
             await _userRepository.UpdatePreferenceAsync(existing);
+            await _userRepository.SaveChangesAsync();
+
             return ServiceResult<UserPreferenceResponseDto>.Ok(MapPreference(existing));
         }
 
@@ -396,6 +418,8 @@ public class UserServiceImpl : IUserService
         };
 
         var created = await _userRepository.CreatePreferenceAsync(preference);
+        await _userRepository.SaveChangesAsync();
+
         return ServiceResult<UserPreferenceResponseDto>.Ok(MapPreference(created));
     }
 
@@ -408,6 +432,8 @@ public class UserServiceImpl : IUserService
             return ServiceResult<bool>.NotFound("Preference not found.");
 
         await _userRepository.DeletePreferenceAsync(pref);
+        await _userRepository.SaveChangesAsync();
+
         return ServiceResult<bool>.Ok(true);
     }
 
@@ -429,18 +455,16 @@ public class UserServiceImpl : IUserService
         if (dto.TargetType == ReportTargetType.User && dto.TargetId == reporterId)
             return ServiceResult<ReportResponseDto>.Fail("You cannot report yourself.", 400);
 
-        var report = new Report
-        {
-            TargetType = dto.TargetType,
-            TargetId = dto.TargetId,
-            Reason = dto.Reason.Trim(),
-            Description = dto.Description?.Trim() ?? string.Empty,
-            Status = ReportStatus.Pending,
-            ReporterId = reporterId,
-            CreatedAt = DateTime.UtcNow
-        };
+        var report = new Report(
+            dto.TargetType,
+            dto.TargetId,
+            dto.Reason,
+            reporterId,
+            dto.Description);
 
         var created = await _userRepository.CreateReportAsync(report);
+        await _userRepository.SaveChangesAsync();
+
         return ServiceResult<ReportResponseDto>.Ok(MapReport(created));
     }
 
@@ -473,7 +497,7 @@ public class UserServiceImpl : IUserService
 
         var mapped = new PagedResult<ReportResponseDto>
         {
-            Items = result.Items.Select(MapReport),
+            Items = result.Items.Select(MapReport).ToList(),
             TotalCount = result.TotalCount,
             Page = result.Page,
             PageSize = result.PageSize
@@ -496,7 +520,7 @@ public class UserServiceImpl : IUserService
         ResolveReportDto dto,
         int resolvedById)
     {
-        var report = await _userRepository.GetReportByIdAsync(reportId);
+        var report = await _userRepository.GetReportByIdForUpdateAsync(reportId);
         if (report is null)
             return ServiceResult<ReportResponseDto>.NotFound("Report not found.");
 
@@ -505,11 +529,11 @@ public class UserServiceImpl : IUserService
 
         if (dto.Action == ReportResolutionAction.Resolve)
         {
-            report.Resolve(resolvedById);
+            report.Resolve(resolvedById, dto.ResolutionNote, dto.ModeratorAction);
         }
         else if (dto.Action == ReportResolutionAction.Dismiss)
         {
-            report.Dismiss(resolvedById);
+            report.Dismiss(resolvedById, dto.ResolutionNote, dto.ModeratorAction);
         }
         else
         {
@@ -517,6 +541,8 @@ public class UserServiceImpl : IUserService
         }
 
         await _userRepository.UpdateReportAsync(report);
+        await _userRepository.SaveChangesAsync();
+
         return ServiceResult<ReportResponseDto>.Ok(MapReport(report));
     }
 
@@ -601,30 +627,19 @@ public class UserServiceImpl : IUserService
             });
     }
 
-    private static PublicUserProfileDto MapPublic(User user, double averageRating, int ratingsCount, int? myRating) => new()
-    {
-        UserId = user.PersonId,
-        Username = user.Username,
-        FirstName = user.Person?.FirstName ?? string.Empty,
-        LastName = user.Person?.LastName ?? string.Empty,
-        ImageUrl = string.IsNullOrWhiteSpace(user.Person?.ImageUrl) ? null : user.Person.ImageUrl,
-        AverageRating = averageRating,
-        RatingsCount = ratingsCount,
-        MyRating = myRating
-    };
-
-
     public async Task<ServiceResult<List<PublicUserProfileDto>>> GetPublicProfilesAsync(IEnumerable<int> userIds)
     {
         var users = await _userRepository.GetPublicByIdsAsync(userIds);
+        var userIdList = users.Select(u => u.PersonId).ToList();
+        var summaries = await _userRepository.GetUserRatingSummariesAsync(userIdList);
 
-        var result = new List<PublicUserProfileDto>();
-
-        foreach (var user in users)
+        var result = users.Select(user =>
         {
-            var summary = await _userRepository.GetUserRatingSummaryAsync(user.PersonId);
+            var summary = summaries.TryGetValue(user.PersonId, out var value)
+                ? value
+                : (0d, 0);
 
-            result.Add(new PublicUserProfileDto
+            return new PublicUserProfileDto
             {
                 UserId = user.PersonId,
                 Username = user.Username,
@@ -632,14 +647,12 @@ public class UserServiceImpl : IUserService
                 LastName = user.Person?.LastName ?? string.Empty,
                 ImageUrl = string.IsNullOrWhiteSpace(user.Person?.ImageUrl) ? null : user.Person.ImageUrl,
                 EventsCount = 0,
-                FollowersCount = 0,
-                FollowingCount = 0,
-                AverageRating = summary.AverageRating,
-                RatingsCount = summary.RatingsCount,
+                AverageRating = summary.Item1,
+                RatingsCount = summary.Item2,
                 MyRating = null,
                 MyReviewComment = null
-            });
-        }
+            };
+        }).ToList();
 
         return ServiceResult<List<PublicUserProfileDto>>.Ok(result);
     }
@@ -662,19 +675,11 @@ public class UserServiceImpl : IUserService
         if (ratedUser is null)
             return ServiceResult<bool>.NotFound("User not found.");
 
-        var existing = await _userRepository.GetUserRatingAsync(raterId, ratedUserId);
+        var existing = await _userRepository.GetUserRatingForUpdateAsync(raterId, ratedUserId);
 
         if (existing is null)
         {
-            var rating = new UserRating
-            {
-                RaterId = raterId,
-                RatedUserId = ratedUserId,
-                Value = dto.Value,
-                Comment = string.IsNullOrWhiteSpace(dto.Comment) ? null : dto.Comment.Trim(),
-                CreatedAt = DateTime.UtcNow
-            };
-
+            var rating = new UserRating(raterId, ratedUserId, dto.Value, dto.Comment);
             await _userRepository.CreateUserRatingAsync(rating);
         }
         else
@@ -683,6 +688,7 @@ public class UserServiceImpl : IUserService
             await _userRepository.UpdateUserRatingAsync(existing);
         }
 
+        await _userRepository.SaveChangesAsync();
         return ServiceResult<bool>.Ok(true);
     }
 
@@ -695,17 +701,17 @@ public class UserServiceImpl : IUserService
         if (ratedUser is null)
             return ServiceResult<bool>.NotFound("User not found.");
 
-        var existing = await _userRepository.GetUserRatingAsync(raterId, ratedUserId);
+        var existing = await _userRepository.GetUserRatingForUpdateAsync(raterId, ratedUserId);
         if (existing is null)
             return ServiceResult<bool>.NotFound("Review not found.");
 
         await _userRepository.DeleteUserRatingAsync(existing);
+        await _userRepository.SaveChangesAsync();
+
         return ServiceResult<bool>.Ok(true);
     }
 
-
-
-    private static UserProfileDto MapToProfile(UserService.Domain.Entities.User user)
+    private static UserProfileDto MapToProfile(User user)
     {
         var person = user.Person!;
 
@@ -719,23 +725,7 @@ public class UserServiceImpl : IUserService
             PhoneNumber = person.PhoneNumber,
             ImageUrl = person.ImageUrl,
             Role = user.Role.ToString(),
-            CreatedAt = user.CreatedAt,
+            CreatedAt = user.CreatedAt
         };
     }
-
-    private static PublicUserProfileDto MapPublic(User user) => new()
-    {
-        UserId = user.PersonId,
-        Username = user.Username,
-        FirstName = user.Person?.FirstName ?? string.Empty,
-        LastName = user.Person?.LastName ?? string.Empty,
-        ImageUrl = string.IsNullOrWhiteSpace(user.Person?.ImageUrl) ? null : user.Person.ImageUrl,
-        EventsCount = 0,
-        FollowersCount = 0,
-        FollowingCount = 0,
-        AverageRating = 0,
-        RatingsCount = 0,
-        MyRating = null,
-        MyReviewComment = null
-    };
 }

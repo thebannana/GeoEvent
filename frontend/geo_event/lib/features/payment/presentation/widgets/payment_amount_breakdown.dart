@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:geo_event/shared/payment/models/payment_summary.dart';
 
+import '../../../../core/utils/price_formatter.dart';
 import '../../../../core/widgets/surfaces/app_surface_card.dart';
 
 class PaymentAmountBreakdown extends StatelessWidget {
@@ -65,6 +66,11 @@ class PaymentAmountBreakdown extends StatelessWidget {
   }
 
   String _formatPrice(double value, String currency) {
-    return '${value.toStringAsFixed(2)} $currency';
+    return PriceFormatter.format(
+      value,
+      currency: currency.trim().toUpperCase(),
+      decimalDigits: 2,
+      fallback: '-',
+    );
   }
 }

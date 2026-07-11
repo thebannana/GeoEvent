@@ -39,7 +39,6 @@ class CreateEventForm extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-
     return Column(
       children: [
         SectionCard(
@@ -123,13 +122,14 @@ class CreateEventForm extends StatelessWidget {
               TextFormField(
                 controller: priceCtrl,
                 enabled: !state.isFree && !state.submitting,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 decoration: InputDecoration(
-                  labelText: 'Price',
+                  labelText: 'Ticket price',
                   hintText: state.isFree
                       ? 'Free event selected'
-                      : 'Enter ticket price',
+                      : '0.00',
+                  suffixText: state.isFree ? null : 'KM',
+                  helperText: state.isFree ? 'No ticket price needed for free events.' : 'Currency: BAM (KM).',
                 ),
               ),
               const SizedBox(height: 12),
@@ -262,14 +262,14 @@ class InlineBanner extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.10),
+        color: color.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: color.withOpacity(0.28),
+          color: color.withValues(alpha: 0.28),
         ),
       ),
       child: Text(
-        message,
+        message.trim(),
         style: TextStyle(
           fontSize: 13,
           color: color,

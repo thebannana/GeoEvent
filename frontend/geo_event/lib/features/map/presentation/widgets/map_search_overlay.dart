@@ -1,14 +1,15 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/errors/error_mapper.dart';
+import '../../../../core/utils/debounce.dart';
+import '../../../../core/utils/logger.dart';
 import '../../../../core/widgets/inputs/app_icon_circle_button.dart';
 import '../../../../core/widgets/layout/app_bottom_sheet_container.dart';
 import '../../../../shared/events/models/create_event_models.dart'
     hide isWithinRadius, rankByPreferences, rankSearchResults;
 import '../../../../shared/events/providers/event_providers.dart';
-import 'map_search_helpers.dart';
+import 'map_event_helpers.dart';
 import 'map_search_widgets.dart';
 
 class MapSearchOverlay extends ConsumerStatefulWidget {
@@ -44,8 +45,8 @@ class _MapSearchOverlayState extends ConsumerState<MapSearchOverlay>
   late final AnimationController _controller;
   late final Animation<Offset> _slide;
   final TextEditingController _textController = TextEditingController();
+  final Debouncer _debouncer = Debouncer(delay: _debounceDuration);
 
-  Timer? _debounce;
   List<EventItem> _results = [];
   bool _loading = false;
   String? _error;
@@ -93,7 +94,7 @@ class _MapSearchOverlayState extends ConsumerState<MapSearchOverlay>
 
   @override
   void dispose() {
-    _debounce?.cancel();
+    _debouncer.dispose();
     _textController.removeListener(_onQueryChanged);
     _textController.dispose();
     _controller.dispose();
@@ -101,9 +102,7 @@ class _MapSearchOverlayState extends ConsumerState<MapSearchOverlay>
   }
 
   void _onQueryChanged() {
-    _debounce?.cancel();
-
-    _debounce = Timer(_debounceDuration, () async {
+    _debouncer.runAsync(() async {
       if (_query.isEmpty) {
         await _loadInitial(force: true);
       } else {
@@ -118,6 +117,31 @@ class _MapSearchOverlayState extends ConsumerState<MapSearchOverlay>
 
   int _beginRequest() => ++_requestId;
 
+  String _mapErrorMessage(
+    Object error, {
+    StackTrace? stackTrace,
+    String fallback = 'Something went wrong.',
+  }) {
+    return ErrorMapper.toMessage(
+      error,
+      stackTrace: stackTrace,
+      fallbackMessage: fallback,
+    );
+  }
+
+  void _logError(
+    String message, {
+    required Object error,
+    StackTrace? stackTrace,
+  }) {
+    AppLogger.error(
+      message,
+      tag: 'MapSearchOverlay',
+      error: error,
+      stackTrace: stackTrace,
+    );
+  }
+
   void _startLoading() {
     if (!mounted) return;
     setState(() {
@@ -126,7 +150,10 @@ class _MapSearchOverlayState extends ConsumerState<MapSearchOverlay>
     });
   }
 
-  void _finishWithResults(List<EventItem> items, {bool markNearbyLoaded = false}) {
+  void _finishWithResults(
+    List<EventItem> items, {
+    bool markNearbyLoaded = false,
+  }) {
     if (!mounted) return;
     setState(() {
       _results = items;
@@ -138,12 +165,20 @@ class _MapSearchOverlayState extends ConsumerState<MapSearchOverlay>
     });
   }
 
-  void _finishWithError(Object error) {
+  void _finishWithError(
+    Object error, {
+    StackTrace? stackTrace,
+    String fallback = 'Unable to load events.',
+  }) {
     if (!mounted) return;
     setState(() {
       _results = [];
       _loading = false;
-      _error = error.toString().replaceFirst('Exception: ', '');
+      _error = _mapErrorMessage(
+        error,
+        stackTrace: stackTrace,
+        fallback: fallback,
+      );
     });
   }
 
@@ -181,9 +216,20 @@ class _MapSearchOverlayState extends ConsumerState<MapSearchOverlay>
       );
 
       _finishWithResults(ranked, markNearbyLoaded: true);
-    } catch (e) {
+    } catch (error, stackTrace) {
       if (!mounted || requestId != _requestId) return;
-      _finishWithError(e);
+
+      _logError(
+        'Failed to load nearby search results.',
+        error: error,
+        stackTrace: stackTrace,
+      );
+
+      _finishWithError(
+        error,
+        stackTrace: stackTrace,
+        fallback: 'Unable to load nearby events.',
+      );
     }
   }
 
@@ -207,9 +253,20 @@ class _MapSearchOverlayState extends ConsumerState<MapSearchOverlay>
       );
 
       _finishWithResults(ranked);
-    } catch (e) {
+    } catch (error, stackTrace) {
       if (!mounted || requestId != _requestId) return;
-      _finishWithError(e);
+
+      _logError(
+        'Failed to load global search results.',
+        error: error,
+        stackTrace: stackTrace,
+      );
+
+      _finishWithError(
+        error,
+        stackTrace: stackTrace,
+        fallback: 'Unable to load global events.',
+      );
     }
   }
 
@@ -259,9 +316,20 @@ class _MapSearchOverlayState extends ConsumerState<MapSearchOverlay>
       );
 
       _finishWithResults(ranked);
-    } catch (e) {
+    } catch (error, stackTrace) {
       if (!mounted || requestId != _requestId) return;
-      _finishWithError(e);
+
+      _logError(
+        'Failed to search events.',
+        error: error,
+        stackTrace: stackTrace,
+      );
+
+      _finishWithError(
+        error,
+        stackTrace: stackTrace,
+        fallback: 'Unable to search events.',
+      );
     }
   }
 
@@ -303,7 +371,7 @@ class _MapSearchOverlayState extends ConsumerState<MapSearchOverlay>
     if (_closing) return;
     _closing = true;
 
-    _debounce?.cancel();
+    _debouncer.cancel();
     _requestId++;
 
     await _controller.reverse();

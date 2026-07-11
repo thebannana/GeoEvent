@@ -39,7 +39,9 @@ class TicketScanResultDto {
     DateTime? parseDate(dynamic value) {
       final raw = value?.toString().trim();
       if (raw == null || raw.isEmpty) return null;
-      return DateTime.tryParse(raw);
+
+      final parsed = DateTime.tryParse(raw);
+      return parsed?.toLocal();
     }
 
     return TicketScanResultDto(

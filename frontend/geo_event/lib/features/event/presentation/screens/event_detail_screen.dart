@@ -1,22 +1,27 @@
 import 'dart:async';
 
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 
-import '../../../../core/widgets/layout/app_bottom_sheet_container.dart';
+import '../../../../core/errors/error_mapper.dart';
+import '../../../../core/utils/date_time_extensions.dart';
+import '../../../../core/utils/logger.dart';
+import '../../../../core/utils/validators.dart';
 import '../../../../core/widgets/feedback/app_empty_state.dart';
-import '../../../../core/widgets/inputs/app_icon_circle_button.dart';
+import '../../../../core/widgets/feedback/app_error_state.dart';
 import '../../../../core/widgets/feedback/app_loading_indicator.dart';
 import '../../../../core/widgets/feedback/app_spinner.dart';
+import '../../../../core/widgets/inputs/app_icon_circle_button.dart';
+import '../../../../core/widgets/layout/app_bottom_sheet_container.dart';
 import '../../../../core/widgets/surfaces/app_surface_card.dart';
 import '../../../../shared/bookmarks/application/bookmark_controller.dart';
 import '../../../../shared/chat/models/chat_thread_args.dart';
 import '../../../../shared/chat/models/chat_thread_type.dart';
 import '../../../../shared/chat/providers/chat_providers.dart';
 import '../../../../shared/events/models/create_event_models.dart';
+import '../../../../shared/likes/providers/liked_events_providers.dart';
 import '../../../../shared/location/models/event_directions_request.dart';
 import '../../../../shared/location/providers/directions_providers.dart';
 import '../../../../shared/location/providers/location_providers.dart';
@@ -159,6 +164,8 @@ class _EventDetailsScreenState extends ConsumerState<EventDetailsScreen> {
   bool _reserveLoading = false;
   bool _availabilityLoading = false;
   bool _reservationDataLoading = false;
+  bool _bookmarkBusy = false;
+  bool _likeBusy = false;
 
   List<EventAttendeeItem> _attendees = [];
   List<EventTicketItem> _tickets = const [];
@@ -170,8 +177,12 @@ class _EventDetailsScreenState extends ConsumerState<EventDetailsScreen> {
   void initState() {
     super.initState();
     Future.microtask(() async {
-      await _loadReservationData();
-      await _loadTickets();
+      await Future.wait([
+        ref.read(bookmarksProvider.notifier).loadInitial(),
+        ref.read(likedEventsProvider.notifier).loadInitial(),
+        _loadReservationData(),
+        _loadTickets(),
+      ]);
     });
   }
 
@@ -190,16 +201,26 @@ class _EventDetailsScreenState extends ConsumerState<EventDetailsScreen> {
       final tickets = await ticketsRepository.getEventTickets(widget.eventId);
       reservedCount = tickets.fold<int>(0, (sum, t) => sum + t.soldQuantity);
       totalCount = tickets.fold<int>(0, (sum, t) => sum + t.totalQuantity);
-    } catch (e) {
-      debugPrint('Failed to load tickets summary: $e');
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'Failed to load tickets summary.',
+        tag: 'EventDetailsScreen',
+        error: error,
+        stackTrace: stackTrace,
+      );
     }
 
     try {
       final attendeeResponse =
           await ticketsRepository.getEventAttendees(widget.eventId);
       attendees = attendeeResponse.items;
-    } catch (e) {
-      debugPrint('Failed to load attendees: $e');
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'Failed to load attendees.',
+        tag: 'EventDetailsScreen',
+        error: error,
+        stackTrace: stackTrace,
+      );
     }
 
     if (!mounted) return;
@@ -225,7 +246,14 @@ class _EventDetailsScreenState extends ConsumerState<EventDetailsScreen> {
       setState(() {
         _tickets = tickets;
       });
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'Failed to load tickets.',
+        tag: 'EventDetailsScreen',
+        error: error,
+        stackTrace: stackTrace,
+      );
+
       if (!mounted) return;
       setState(() {
         _tickets = const [];
@@ -255,45 +283,36 @@ class _EventDetailsScreenState extends ConsumerState<EventDetailsScreen> {
   String formatDateRange(EventItem item) {
     final start = item.startDateTime;
     final end = item.endDateTime;
-    final sameDay =
-        start.year == end.year &&
-        start.month == end.month &&
-        start.day == end.day;
 
-    if (sameDay) {
-      return '${weekday(start)}, ${start.day}.${start.month}.${start.year}.';
+    if (start.isSameDate(end)) {
+      return '${start.formatDate(pattern: 'EEE')}, ${start.formatDate(pattern: 'dd.MM.yyyy.')}';
     }
 
-    return '${start.day}.${start.month}.${start.year}. - ${end.day}.${end.month}.${end.year}.';
+    return '${start.formatDate(pattern: 'dd.MM.yyyy.')} - ${end.formatDate(pattern: 'dd.MM.yyyy.')}';
   }
 
   String formatTimeRange(EventItem item) {
-    final start = item.startDateTime;
-    final end = item.endDateTime;
-    return '${two(start.hour)}:${two(start.minute)} - ${two(end.hour)}:${two(end.minute)}';
+    return '${item.startDateTime.formatTime()} - ${item.endDateTime.formatTime()}';
   }
 
   String countdownText(EventItem item) {
     final now = DateTime.now();
-    final diff = item.startDateTime.difference(now);
+    final start = item.startDateTime.toLocal();
 
-    if (diff.isNegative) return 'Event started or finished';
+    if (!start.isAfter(now)) {
+      return 'Event started or finished';
+    }
 
+    final diff = start.difference(now);
     final days = diff.inDays;
     final hours = diff.inHours % 24;
     final minutes = diff.inMinutes % 60;
 
     if (days > 0) return 'Starts in $days days, $hours hours';
     if (hours > 0) return 'Starts in $hours hours, $minutes minutes';
-    return 'Starts in $minutes minutes';
+    if (minutes > 0) return 'Starts in $minutes minutes';
+    return 'Starts soon';
   }
-
-  String weekday(DateTime dt) {
-    const names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    return names[dt.weekday - 1];
-  }
-
-  String two(int value) => value.toString().padLeft(2, '0');
 
   String _fallbackLocation(EventItem item) {
     return '${item.latitude.toStringAsFixed(6)}, ${item.longitude.toStringAsFixed(6)}';
@@ -338,24 +357,58 @@ class _EventDetailsScreenState extends ConsumerState<EventDetailsScreen> {
     required WidgetRef ref,
     required int otherUserId,
   }) async {
-    final result = await ref.read(messagesRepositoryProvider).openDirectThread(
-          otherUserId: otherUserId,
-        );
+    final userIdError = Validators.selectionRequired<int>(
+      otherUserId,
+      fieldName: 'Recipient',
+    );
+    if (userIdError != null) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(userIdError)),
+      );
+      return;
+    }
 
-    if (!context.mounted) return;
+    try {
+      final result = await ref.read(messagesRepositoryProvider).openDirectThread(
+            otherUserId: otherUserId,
+          );
 
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => ChatThreadScreen(
-          args: ChatThreadArgs(
-            threadId: (result['threadId'] as num).toInt(),
-            type: ChatThreadType.direct,
-            title: result['title'] as String? ?? 'Chat',
-            otherUserId: (result['otherUserId'] as num?)?.toInt(),
+      if (!context.mounted) return;
+
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => ChatThreadScreen(
+            args: ChatThreadArgs(
+              threadId: (result['threadId'] as num).toInt(),
+              type: ChatThreadType.direct,
+              title: result['title'] as String? ?? 'Chat',
+              otherUserId: (result['otherUserId'] as num?)?.toInt(),
+            ),
           ),
         ),
-      ),
-    );
+      );
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'Failed to open direct chat.',
+        tag: 'EventDetailsScreen',
+        error: error,
+        stackTrace: stackTrace,
+      );
+
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            ErrorMapper.toMessage(
+              error,
+              stackTrace: stackTrace,
+              fallbackMessage: 'Could not open chat.',
+            ),
+          ),
+        ),
+      );
+    }
   }
 
   void openOwnerProfile(EventItem item) {
@@ -466,6 +519,7 @@ class _EventDetailsScreenState extends ConsumerState<EventDetailsScreen> {
                 ),
                 IconButton(
                   onPressed: () => Navigator.of(context).pop(),
+                  tooltip: 'Close',
                   icon: const Icon(Icons.close_rounded),
                 ),
               ],
@@ -606,6 +660,18 @@ class _EventDetailsScreenState extends ConsumerState<EventDetailsScreen> {
       return;
     }
 
+    final organizerError = Validators.selectionRequired<int?>(
+      item.organizerId,
+      fieldName: 'Organizer',
+    );
+    if (organizerError != null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(organizerError)),
+      );
+      return;
+    }
+
     setState(() => _reserveLoading = true);
 
     try {
@@ -664,36 +730,31 @@ class _EventDetailsScreenState extends ConsumerState<EventDetailsScreen> {
           const SnackBar(content: Text('Reservation confirmed successfully.')),
         );
       }
-    } on DioException catch (e) {
-      final message = _readDioMessage(e);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message)),
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'Reservation flow failed.',
+        tag: 'EventDetailsScreen',
+        error: error,
+        stackTrace: stackTrace,
       );
-    } catch (_) {
+
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not start reservation flow.')),
+        SnackBar(
+          content: Text(
+            ErrorMapper.toMessage(
+              error,
+              stackTrace: stackTrace,
+              fallbackMessage: 'Could not start reservation flow.',
+            ),
+          ),
+        ),
       );
     } finally {
       if (mounted) {
         setState(() => _reserveLoading = false);
       }
     }
-  }
-
-  String _readDioMessage(DioException e) {
-    final data = e.response?.data;
-    if (data is Map && data['error'] != null) {
-      return data['error'].toString();
-    }
-    if (e.response?.statusCode == 401) {
-      return 'Please sign in to reserve tickets.';
-    }
-    if (e.response?.statusCode == 409) {
-      return 'This ticket is no longer available.';
-    }
-    return 'Something went wrong. Please try again.';
   }
 
   Future<void> openShareSheet(EventItem item) async {
@@ -717,33 +778,70 @@ class _EventDetailsScreenState extends ConsumerState<EventDetailsScreen> {
         return EventShareSheet(
           item: item,
           onCopyLink: () async {
-            final link = buildEventShareLink(item);
-            await Clipboard.setData(ClipboardData(text: link));
-            if (!mounted) return;
-            Navigator.of(context).pop();
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Event link copied.')),
-            );
+            try {
+              final link = buildEventShareLink(item);
+              await Clipboard.setData(ClipboardData(text: link));
+              if (!mounted) return;
+              Navigator.of(context).pop();
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Event link copied.')),
+              );
+            } catch (error, stackTrace) {
+              AppLogger.error(
+                'Failed to copy event link.',
+                tag: 'EventDetailsScreen',
+                error: error,
+                stackTrace: stackTrace,
+              );
+
+              if (!mounted) return;
+              Navigator.of(context).pop();
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    ErrorMapper.toMessage(
+                      error,
+                      stackTrace: stackTrace,
+                      fallbackMessage: 'Could not copy event link.',
+                    ),
+                  ),
+                ),
+              );
+            }
           },
           onSystemShare: () async {
-            final text = buildEventShareText(item, location);
-            await SharePlus.instance.share(
-              ShareParams(
-                text: text,
-                subject: item.title,
-              ),
-            );
-            if (!mounted) return;
-            Navigator.of(context).pop();
-          },
-          onSendInChat: () {
-            Navigator.of(context).pop();
-            if (item.organizerId == null) return;
-            openDirectChat(
-              context: context,
-              ref: ref,
-              otherUserId: item.organizerId!,
-            );
+            try {
+              final text = buildEventShareText(item, location);
+              await SharePlus.instance.share(
+                ShareParams(
+                  text: text,
+                  subject: item.title,
+                ),
+              );
+              if (!mounted) return;
+              Navigator.of(context).pop();
+            } catch (error, stackTrace) {
+              AppLogger.error(
+                'Failed to share event.',
+                tag: 'EventDetailsScreen',
+                error: error,
+                stackTrace: stackTrace,
+              );
+
+              if (!mounted) return;
+              Navigator.of(context).pop();
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    ErrorMapper.toMessage(
+                      error,
+                      stackTrace: stackTrace,
+                      fallbackMessage: 'Could not share event.',
+                    ),
+                  ),
+                ),
+              );
+            }
           },
         );
       },
@@ -777,6 +875,7 @@ class _EventDetailsScreenState extends ConsumerState<EventDetailsScreen> {
         ref.read(eventDetailsControllerProvider(widget.eventId).notifier);
     final bookmarksState = ref.watch(bookmarksProvider);
     final bookmarksController = ref.read(bookmarksProvider.notifier);
+    final likedState = ref.watch(likedEventsProvider);
     final authState = ref.watch(authStateProvider);
     final currentUserId = authState.user?.userId;
 
@@ -794,17 +893,13 @@ class _EventDetailsScreenState extends ConsumerState<EventDetailsScreen> {
       return Scaffold(
         backgroundColor: theme.scaffoldBackgroundColor,
         appBar: AppBar(),
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Text(
-              state.error ?? 'Failed to load event.',
-              style: theme.textTheme.bodyLarge?.copyWith(
-                color: scheme.onSurface,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ),
+        body: AppErrorState(
+          title: 'Failed to load event',
+          message: state.error?.trim().isNotEmpty == true
+              ? state.error!.trim()
+              : 'Could not load event details.',
+          retryLabel: 'Try again',
+          onRetry: () => controller.refresh(),
         ),
       );
     }
@@ -814,8 +909,9 @@ class _EventDetailsScreenState extends ConsumerState<EventDetailsScreen> {
         currentUserId != null &&
         item.organizerId != null &&
         currentUserId == item.organizerId;
-    final isLiked = item.isLiked;
-    final isBookmarked = bookmarksState.items.any((b) => b.eventId == item.eventId);
+    final isLiked = likedState.items.any((e) => e.eventId == item.eventId);
+    final isBookmarked =
+        bookmarksState.items.any((b) => b.eventId == item.eventId);
     final gallery = buildGallery(item);
 
     final ownerProfileState = item.organizerId != null
@@ -831,8 +927,9 @@ class _EventDetailsScreenState extends ConsumerState<EventDetailsScreen> {
         item.promoterName?.trim();
 
     final ownerUsername = ownerProfileState?.maybeWhen(
-      data: (bundle) =>
-          bundle.user.username.trim().isNotEmpty ? bundle.user.username.trim() : null,
+      data: (bundle) => bundle.user.username.trim().isNotEmpty
+          ? bundle.user.username.trim()
+          : null,
       orElse: () => null,
     );
 
@@ -863,7 +960,9 @@ class _EventDetailsScreenState extends ConsumerState<EventDetailsScreen> {
         .map(
           (e) => AttendeePreviewUser(
             userId: e.userId,
-            label: e.username.trim().isNotEmpty ? e.username.trim() : 'User ${e.userId}',
+            label: e.username.trim().isNotEmpty
+                ? e.username.trim()
+                : 'User ${e.userId}',
             avatarUrl: e.avatarUrl,
           ),
         )
@@ -884,9 +983,13 @@ class _EventDetailsScreenState extends ConsumerState<EventDetailsScreen> {
             Expanded(
               child: RefreshIndicator(
                 onRefresh: () async {
-                  await controller.refresh();
-                  await _loadReservationData();
-                  await _loadTickets();
+                  await Future.wait([
+                    controller.refresh(),
+                    ref.read(bookmarksProvider.notifier).refresh(),
+                    ref.read(likedEventsProvider.notifier).refresh(),
+                    _loadReservationData(),
+                    _loadTickets(),
+                  ]);
                 },
                 child: ListView(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
@@ -898,25 +1001,85 @@ class _EventDetailsScreenState extends ConsumerState<EventDetailsScreen> {
                       ownerDisplayName: ownerDisplayName,
                       ownerUsername: ownerUsername,
                       ownerAvatarUrl: ownerAvatarUrl,
-                      likes: item.likesCount,
+                      likes: state.event?.likesCount ?? 0,
                       views: item.viewCount,
                       price: item.price,
                       isLiked: isLiked,
                       isBookmarked: isBookmarked,
                       onBack: () => Navigator.of(context).maybePop(),
                       onLikeTap: () async {
+                        if (_likeBusy || state.isTogglingLike) return;
+                        setState(() => _likeBusy = true);
+
                         try {
                           if (isLiked) {
                             await controller.unlikeEvent();
                           } else {
                             await controller.likeEvent();
                           }
-                        } catch (_) {}
+                        } catch (error, stackTrace) {
+                          AppLogger.error(
+                            'Failed to toggle event like.',
+                            tag: 'EventDetailsScreen',
+                            error: error,
+                            stackTrace: stackTrace,
+                          );
+
+                          if (!mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                ErrorMapper.toMessage(
+                                  error,
+                                  stackTrace: stackTrace,
+                                  fallbackMessage: 'Could not update like.',
+                                ),
+                              ),
+                            ),
+                          );
+                        } finally {
+                          if (mounted) {
+                            setState(() => _likeBusy = false);
+                          }
+                        }
                       },
                       onBookmarkTap: () async {
-                        await bookmarksController.toggleBookmark(eventId: item.eventId);
+                        if (_bookmarkBusy) return;
+                        setState(() => _bookmarkBusy = true);
+
+                        try {
+                          await bookmarksController.toggleBookmark(
+                            eventId: item.eventId,
+                          );
+                        } catch (error, stackTrace) {
+                          AppLogger.error(
+                            'Failed to toggle bookmark.',
+                            tag: 'EventDetailsScreen',
+                            error: error,
+                            stackTrace: stackTrace,
+                          );
+
+                          if (!mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                ErrorMapper.toMessage(
+                                  error,
+                                  stackTrace: stackTrace,
+                                  fallbackMessage:
+                                      'Could not update bookmark.',
+                                ),
+                              ),
+                            ),
+                          );
+                        } finally {
+                          if (mounted) {
+                            setState(() => _bookmarkBusy = false);
+                          }
+                        }
                       },
-                      onReportTap: isOwnEvent ? null : () => openReportEventScreen(item),
+                      onReportTap:
+                          isOwnEvent ? null : () => openReportEventScreen(item),
                       onShareTap: () => openShareSheet(item),
                       onOwnerTap: item.organizerId == null
                           ? null
@@ -975,7 +1138,9 @@ class _EventDetailsScreenState extends ConsumerState<EventDetailsScreen> {
                                   effectiveReserveEnabled
                                       ? Icons.confirmation_number_outlined
                                       : Icons.info_outline,
-                                  color: effectiveReserveEnabled ? scheme.primary : muted,
+                                  color: effectiveReserveEnabled
+                                      ? scheme.primary
+                                      : muted,
                                 ),
                                 const SizedBox(width: 10),
                                 Expanded(

@@ -20,10 +20,11 @@ class EventChatInfoCard extends StatelessWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
+    final title = info.title.trim().isNotEmpty ? info.title.trim() : 'Event';
     final subtitleParts = <String>[
       if (info.startsAt != null) info.startsAt!.formatEventDateTime(),
     ];
-    
+
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 12, 16, 8),
       padding: const EdgeInsets.all(14),
@@ -44,7 +45,7 @@ class EventChatInfoCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  info.title,
+                  title,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
@@ -76,6 +77,7 @@ class EventChatInfoCard extends StatelessWidget {
           ),
           IconButton(
             onPressed: onClose,
+            tooltip: 'Dismiss event info',
             icon: const Icon(Icons.close_rounded),
           ),
         ],

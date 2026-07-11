@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/utils/price_formatter.dart';
 import '../../../../core/widgets/feedback/app_spinner.dart';
 import '../../../../core/widgets/inputs/app_icon_circle_button.dart';
 import '../../../../core/widgets/surfaces/app_surface_card.dart';
 import '../../../../shared/my_events/models/my_event_response_dto.dart';
 import '../../../../shared/profile/utils/ticket_scanner_event_mapper.dart';
-import '../../../../shared/profile/utils/ticket_scanner_formatters.dart';
 
 class TicketScannerEventCard extends StatelessWidget {
   const TicketScannerEventCard({
@@ -116,14 +116,7 @@ class TicketScannerEventCard extends StatelessWidget {
                               color: theme.colorScheme.surfaceContainerHighest,
                               borderRadius: BorderRadius.circular(9),
                             ),
-                            child: Text(
-                              TicketScannerFormatters.formatPrice(
-                                viewModel.price,
-                              ),
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
+                            child: Text(PriceFormatter.formatPriceWithBam(viewModel.price)),
                           ),
                         ),
                       ),

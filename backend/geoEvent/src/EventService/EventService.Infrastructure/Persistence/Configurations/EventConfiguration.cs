@@ -47,9 +47,6 @@ public class EventConfiguration : IEntityTypeConfiguration<Event>
             .HasPrecision(18, 2)
             .IsRequired();
 
-        builder.Property(e => e.IsOnline)
-            .HasDefaultValue(false);
-
         builder.Property(e => e.IsFeatured)
             .HasDefaultValue(false);
 
@@ -61,15 +58,6 @@ public class EventConfiguration : IEntityTypeConfiguration<Event>
 
         builder.Property(e => e.Tags)
             .HasMaxLength(500);
-
-        builder.Property(e => e.ExternalUrl)
-            .HasMaxLength(1000);
-
-        builder.Property(e => e.ExternalSource)
-            .HasMaxLength(100);
-
-        builder.Property(e => e.ExternalId)
-            .HasMaxLength(255);
 
         builder.Property(e => e.Locale)
             .HasMaxLength(10)
@@ -96,9 +84,6 @@ public class EventConfiguration : IEntityTypeConfiguration<Event>
         builder.HasIndex(e => new { e.SegmentId, e.StartDateTime });
         builder.HasIndex(e => new { e.GenreId, e.StartDateTime });
         builder.HasIndex(e => new { e.Longitude, e.Latitude });
-        builder.HasIndex(e => new { e.ExternalSource, e.ExternalId })
-            .IsUnique()
-            .HasFilter("[ExternalSource] IS NOT NULL AND [ExternalId] IS NOT NULL");
 
         builder.HasOne(e => e.Segment)
             .WithMany(s => s.Events)

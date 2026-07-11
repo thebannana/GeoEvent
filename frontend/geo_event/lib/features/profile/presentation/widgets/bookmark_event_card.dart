@@ -110,7 +110,15 @@ class BookmarkEventCard extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            BookmarkEventCardImage(imageUrl: imageUrl),
+            const EventCardThumbnailFrame(
+              width: 98,
+              height: 92,
+              borderRadius: 16,
+            ).buildWithImage(
+              context,
+              imageUrl: imageUrl,
+              fallbackIcon: Icons.image_not_supported_outlined,
+            ),
             const SizedBox(width: 12),
             Expanded(
               child: SizedBox(
@@ -145,15 +153,9 @@ class BookmarkEventCard extends StatelessWidget {
                           itemBuilder: (context) => [
                             PopupMenuItem<String>(
                               value: 'delete',
-                              child: Row(
-                                children: [
-                                  const Icon(
-                                    Icons.delete_outline_rounded,
-                                    size: 18,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(removeLabel),
-                                ],
+                              child: _PopupActionRow(
+                                icon: Icons.delete_outline_rounded,
+                                label: removeLabel,
                               ),
                             ),
                           ],
@@ -197,6 +199,7 @@ class BookmarkEventCard extends StatelessWidget {
                         ),
                       ],
                     ),
+                    
                   ],
                 ),
               ),
@@ -208,24 +211,31 @@ class BookmarkEventCard extends StatelessWidget {
   }
 }
 
-class BookmarkEventCardImage extends StatelessWidget {
-  const BookmarkEventCardImage({
+class EventCardThumbnailFrame extends StatelessWidget {
+  const EventCardThumbnailFrame({
     super.key,
-    required this.imageUrl,
+    required this.width,
+    required this.height,
+    this.borderRadius = 16,
   });
 
-  final String? imageUrl;
+  final double width;
+  final double height;
+  final double borderRadius;
 
-  @override
-  Widget build(BuildContext context) {
+  Widget buildWithImage(
+    BuildContext context, {
+    required String? imageUrl,
+    required IconData fallbackIcon,
+  }) {
     final normalizedUrl = imageUrl?.trim();
     final hasImage = normalizedUrl != null && normalizedUrl.isNotEmpty;
 
     return ClipRRect(
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(borderRadius),
       child: SizedBox(
-        width: 98,
-        height: 92,
+        width: width,
+        height: height,
         child: hasImage
             ? Image.network(
                 normalizedUrl,
@@ -234,20 +244,33 @@ class BookmarkEventCardImage extends StatelessWidget {
                   if (wasSynchronouslyLoaded || frame != null) {
                     return child;
                   }
-                  return const _BookmarkEventCardImageFallback(loading: true);
+                  return _EventCardThumbnailFallback(
+                    loading: true,
+                    icon: fallbackIcon,
+                  );
                 },
-                errorBuilder: (_, _, _) =>
-                    const _BookmarkEventCardImageFallback(),
+                errorBuilder: (_, _, _) => _EventCardThumbnailFallback(
+                  icon: fallbackIcon,
+                ),
               )
-            : const _BookmarkEventCardImageFallback(),
+            : _EventCardThumbnailFallback(icon: fallbackIcon),
       ),
     );
   }
+
+  @override
+  Widget build(BuildContext context) {
+    return const SizedBox.shrink();
+  }
 }
 
-class _BookmarkEventCardImageFallback extends StatelessWidget {
-  const _BookmarkEventCardImageFallback({this.loading = false});
+class _EventCardThumbnailFallback extends StatelessWidget {
+  const _EventCardThumbnailFallback({
+    required this.icon,
+    this.loading = false,
+  });
 
+  final IconData icon;
   final bool loading;
 
   @override
@@ -260,11 +283,32 @@ class _BookmarkEventCardImageFallback extends StatelessWidget {
         child: loading
             ? const AppSpinner(size: 22, strokeWidth: 2)
             : Icon(
-                Icons.image_not_supported_outlined,
+                icon,
                 size: 28,
                 color: theme.colorScheme.onSurfaceVariant,
               ),
       ),
+    );
+  }
+}
+
+class _PopupActionRow extends StatelessWidget {
+  const _PopupActionRow({
+    required this.icon,
+    required this.label,
+  });
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 18),
+        const SizedBox(width: 8),
+        Text(label),
+      ],
     );
   }
 }

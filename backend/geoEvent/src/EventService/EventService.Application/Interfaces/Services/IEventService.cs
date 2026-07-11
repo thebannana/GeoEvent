@@ -5,19 +5,19 @@ namespace EventService.Application.Interfaces.Services;
 
 public interface IEventService
 {
+    Task<ServiceResult<int>> GetPublicCountByOrganizerAsync(int userId);
     Task<ServiceResult<PagedResult<EventResponseDto>>> GetPublicAsync(EventFilterDto filter, int? requesterId = null);
     Task<ServiceResult<EventResponseDto>> GetPublicByIdAsync(int eventId, int? requesterId = null);
     Task<ServiceResult<List<EventResponseDto>>> GetNearbyPublicAsync(NearbyEventSearchDto dto);
     Task<ServiceResult<PagedResult<LikedEventResponseDto>>> GetLikedEventsAsync(int userId, int page, int pageSize);
 
-    Task<ServiceResult<PagedResult<EventResponseDto>>> GetMyPendingAsync(EventFilterDto filter, int requesterId);
+    Task<ServiceResult<PagedResult<EventResponseDto>>> GetAllAsync(EventFilterDto filter);
     Task<ServiceResult<EventResponseDto>> CreateAsync(CreateEventDto dto, int organizerId);
     Task<ServiceResult<EventResponseDto>> UpdateAsync(int eventId, UpdateEventDto dto, int requesterId);
     Task<ServiceResult<bool>> DeleteAsync(int eventId, int requesterId);
     Task<ServiceResult<bool>> PublishAsync(int eventId, int requesterId);
-    Task<ServiceResult<bool>> CancelAsync(int eventId, int requesterId, string reason = "Cancelled by organizer");
+    Task<ServiceResult<bool>> CancelAsync(int eventId, int requesterId);
     Task<ServiceResult<bool>> CompleteAsync(int eventId, int requesterId);
-    Task<ServiceResult<PagedResult<EventResponseDto>>> GetAllAsync(EventFilterDto filter);
 
     Task<ServiceResult<bool>> LikeAsync(int eventId, int userId);
     Task<ServiceResult<bool>> UnlikeAsync(int eventId, int userId);
@@ -47,11 +47,11 @@ public interface IEventService
     Task<ServiceResult<bool>> DeleteBookmarkAsync(int bookmarkId, int userId);
 
     Task<ServiceResult<CommentResponseDto>> GetCommentByIdAsync(int commentId, int? requesterId = null);
-    Task<ServiceResult<PagedResult<CommentResponseDto>>> GetEventCommentsAsync(int eventId, int page, int pageSize, int? requesterId = null);
+    Task<ServiceResult<PagedResult<CommentResponseDto>>> GetEventCommentsAsync(int eventId,int page,int pageSize,int? requesterId = null);
     Task<ServiceResult<PagedResult<CommentResponseDto>>> GetRepliesAsync(int commentId, int page, int pageSize, int? requesterId = null);
     Task<ServiceResult<CommentResponseDto>> CreateCommentAsync(CreateCommentDto dto, int userId);
     Task<ServiceResult<CommentResponseDto>> UpdateCommentAsync(int commentId, UpdateCommentDto dto, int userId);
     Task<ServiceResult<bool>> DeleteCommentAsync(int commentId, int userId);
-    Task<ServiceResult<bool>> LikeCommentAsync(int commentId, int userId);
-    Task<ServiceResult<bool>> UnlikeCommentAsync(int commentId, int userId);
+    Task<ServiceResult<CommentResponseDto>> LikeCommentAsync(int commentId, int userId);
+    Task<ServiceResult<CommentResponseDto>> UnlikeCommentAsync(int commentId, int userId);
 }

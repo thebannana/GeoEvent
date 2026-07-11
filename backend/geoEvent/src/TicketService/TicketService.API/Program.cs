@@ -1,14 +1,15 @@
-using System.Text;
-using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using System.Text;
+using System.Text.Json.Serialization;
+using System.Threading.RateLimiting;
+using TicketService.API.Extensions;
+using TicketService.API.Filters;
 using TicketService.API.Middleware;
 using TicketService.Infrastructure;
 using TicketService.Infrastructure.Persistence;
-using TicketService.API.Extensions;
-using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -149,6 +150,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddAuthorization();
 builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddScoped<InternalApiKeyAuthFilter>();
 
 builder.Services.AddSwaggerGen(options =>
 {

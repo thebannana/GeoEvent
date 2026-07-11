@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../../core/errors/error_mapper.dart';
+import '../../../../core/utils/logger.dart';
 import '../../../../core/widgets/layout/app_scaffold.dart';
 import '../../../../shared/payment/data/paypal_return_coordinator.dart';
 import '../../../../shared/profile/models/paypal_approval_result.dart';
@@ -27,6 +29,7 @@ class _PayPalApprovalScreenState extends ConsumerState<PayPalApprovalScreen>
     with WidgetsBindingObserver {
   bool _opening = false;
   bool _completed = false;
+  String? _errorMessage;
 
   @override
   void initState() {
@@ -57,11 +60,42 @@ class _PayPalApprovalScreenState extends ConsumerState<PayPalApprovalScreen>
 
     setState(() {
       _opening = true;
+      _errorMessage = null;
     });
 
     try {
       final uri = Uri.parse(widget.approveUrl);
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
+      final launched = await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+      );
+
+      if (!launched) {
+        throw Exception('Could not open PayPal.');
+      }
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'Failed to open PayPal approval URL.',
+        tag: 'PayPalApprovalScreen',
+        error: error,
+        stackTrace: stackTrace,
+      );
+
+      final message = ErrorMapper.toMessage(
+        error,
+        stackTrace: stackTrace,
+        fallbackMessage: 'Unable to open PayPal. Please try again.',
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _errorMessage = message;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message)),
+      );
     } finally {
       if (mounted) {
         setState(() {
@@ -127,6 +161,16 @@ class _PayPalApprovalScreenState extends ConsumerState<PayPalApprovalScreen>
             const Text(
               'A PayPal approval page will open outside the app. After approval or cancellation, you will be returned to the app automatically.',
             ),
+            if (_errorMessage != null) ...[
+              const SizedBox(height: 12),
+              Text(
+                _errorMessage!,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.error,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
             const SizedBox(height: 16),
             SelectableText(widget.approveUrl),
             const SizedBox(height: 8),

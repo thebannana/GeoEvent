@@ -5,6 +5,7 @@ import '../../../../core/utils/validators.dart';
 import '../../../../core/widgets/feedback/app_confirm_dialog.dart';
 import '../../../../core/widgets/surfaces/app_surface_card.dart';
 import '../../../../shared/comments/models/comment_item.dart';
+import '../../../../shared/comments/models/event_comments_state.dart';
 import '../../../../shared/reports/models/report_target_type.dart';
 import '../../../auth/application/auth_controller.dart';
 import '../../../reports/presentation/screens/report_screen.dart';
@@ -33,9 +34,35 @@ class _InlineEventCommentsSectionState
   final TextEditingController _composerController = TextEditingController();
   final GlobalKey<FormState> _composerFormKey = GlobalKey<FormState>();
   bool _composerTouched = false;
+  late final ProviderSubscription<EventCommentsState> _commentsSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _commentsSubscription = ref.listenManual<EventCommentsState>(
+      eventCommentsControllerProvider(widget.eventId),
+      (previous, next) {
+        final leftReplyMode =
+            previous?.replyingToCommentId != null && next.replyingToCommentId == null;
+        final leftEditMode =
+            previous?.editingCommentId != null && next.editingCommentId == null;
+
+        if (!mounted) return;
+
+        if ((leftReplyMode || leftEditMode) && !next.isSubmitting) {
+          _composerController.clear();
+          _composerFormKey.currentState?.reset();
+          FocusManager.instance.primaryFocus?.unfocus();
+          setState(() => _composerTouched = false);
+        }
+      },
+    );
+  }
 
   @override
   void dispose() {
+    _commentsSubscription.close();
     _composerController.dispose();
     super.dispose();
   }
@@ -47,7 +74,7 @@ class _InlineEventCommentsSectionState
           targetType: ReportTargetType.comment,
           targetId: comment.commentId,
           targetTitle: commentAuthorName(comment),
-          targetSubtitle: comment.content,
+          targetSubtitle: comment.content.trim(),
           targetImageUrl: comment.avatarUrl,
         ),
       ),
@@ -106,7 +133,7 @@ class _InlineEventCommentsSectionState
           ),
           const SizedBox(height: 14),
           if (state.error != null && state.error!.trim().isNotEmpty) ...[
-            InlineErrorBanner(message: state.error!),
+            InlineErrorBanner(message: state.error!.trim()),
             const SizedBox(height: 12),
           ],
           CommentComposer(
@@ -126,8 +153,9 @@ class _InlineEventCommentsSectionState
                     controller.cancelReply();
                     controller.cancelEdit();
                     _composerController.clear();
-                    setState(() => _composerTouched = false);
                     _composerFormKey.currentState?.reset();
+                    FocusManager.instance.primaryFocus?.unfocus();
+                    setState(() => _composerTouched = false);
                   }
                 : null,
             validator: (value) {
@@ -158,6 +186,7 @@ class _InlineEventCommentsSectionState
               }
             },
             onSubmit: () async {
+              FocusScope.of(context).unfocus();
               setState(() => _composerTouched = true);
 
               final isValid = _composerFormKey.currentState?.validate() ?? false;
@@ -177,7 +206,14 @@ class _InlineEventCommentsSectionState
 
               if (ok) {
                 _composerController.clear();
+                _composerController.value = const TextEditingValue(
+                  text: '',
+                  selection: TextSelection.collapsed(offset: 0),
+                );
                 _composerFormKey.currentState?.reset();
+                controller.cancelReply();
+                controller.cancelEdit();
+                FocusScope.of(context).unfocus();
                 setState(() => _composerTouched = false);
               }
             },
@@ -195,18 +231,20 @@ class _InlineEventCommentsSectionState
               controller.cancelEdit();
               controller.startReply(comment.commentId);
               _composerController.clear();
+              _composerFormKey.currentState?.reset();
               setState(() => _composerTouched = false);
             },
             onEditTap: (comment) {
               controller.cancelReply();
               controller.startEdit(comment.commentId);
-              _composerController.text = comment.content;
+              _composerController.text = comment.content.trim();
               _composerController.selection = TextSelection.collapsed(
                 offset: _composerController.text.length,
               );
               setState(() => _composerTouched = false);
             },
-            onDeleteTap: (comment) => _deleteCommentWithConfirmation(comment.commentId),
+            onDeleteTap: (comment) =>
+                _deleteCommentWithConfirmation(comment.commentId),
             onReportTap: _openReportCommentScreen,
           ),
         ],

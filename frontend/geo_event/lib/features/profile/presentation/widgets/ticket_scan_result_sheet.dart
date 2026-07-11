@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/utils/date_time_extensions.dart';
 import '../../../../core/widgets/layout/app_bottom_sheet_container.dart';
 import '../../../../shared/profile/models/ticket_scan_result.dart';
 
@@ -109,14 +110,22 @@ class TicketScanResultSheet extends StatelessWidget {
               contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.qr_code_scanner_rounded),
               title: const Text('Scanned at'),
-              subtitle: Text(_formatDateTime(result.scannedAt!)),
+              subtitle: Text(
+                result.scannedAt!.formatDateTime(
+                  pattern: 'dd.MM.yyyy • HH:mm',
+                ),
+              ),
             ),
           if (result.usedAt != null)
             ListTile(
               contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.access_time_rounded),
               title: const Text('Previously used'),
-              subtitle: Text(_formatDateTime(result.usedAt!)),
+              subtitle: Text(
+                result.usedAt!.formatDateTime(
+                  pattern: 'dd.MM.yyyy • HH:mm',
+                ),
+              ),
             ),
           if (result.paymentMethod != null || result.paymentStatus != null)
             ListTile(
@@ -178,15 +187,5 @@ class TicketScanResultSheet extends StatelessWidget {
     if (method.isEmpty) return status;
     if (status.isEmpty) return method;
     return '$method • $status';
-  }
-
-  String _formatDateTime(DateTime value) {
-    final local = value.toLocal();
-    final dd = local.day.toString().padLeft(2, '0');
-    final mm = local.month.toString().padLeft(2, '0');
-    final yyyy = local.year.toString();
-    final hh = local.hour.toString().padLeft(2, '0');
-    final min = local.minute.toString().padLeft(2, '0');
-    return '$dd.$mm.$yyyy • $hh:$min';
   }
 }

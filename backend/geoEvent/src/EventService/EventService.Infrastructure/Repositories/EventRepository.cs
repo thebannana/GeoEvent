@@ -10,6 +10,22 @@ namespace EventService.Infrastructure.Repositories;
 
 public class EventRepository : IEventRepository
 {
+    private const int DefaultPage = 1;
+    private const int DefaultPageSize = 20;
+    private const int MaxPageSize = 50;
+    private const int DefaultNearbyRadiusKm = 50;
+    private const int MaxNearbyRadiusKm = 500;
+    private const int DefaultNearbyLimit = 20;
+    private const int MaxNearbyLimit = 100;
+    private const double MinCosLatitude = 0.000001d;
+
+    private static readonly EventStatus[] ReservationStatuses =
+    [
+        EventStatus.Pending,
+        EventStatus.Confirmed,
+        EventStatus.Completed
+    ];
+
     private readonly EventDbContext _context;
 
     public EventRepository(EventDbContext context)
@@ -17,17 +33,203 @@ public class EventRepository : IEventRepository
         _context = context;
     }
 
+    public async Task<int> CountPublicByOrganizerAsync(int userId)
+    {
+        var nowUtc = DateTime.UtcNow;
+
+        return await _context.Events
+            .AsNoTracking()
+            .Where(e => e.OrganizerId == userId)
+            .Where(e => e.Status == EventStatus.Confirmed)
+            .Where(e => e.EndDateTime > nowUtc)
+            .CountAsync();
+    }
+    public async Task LikeAsync(int eventId, int userId)
+    {
+        var strategy = _context.Database.CreateExecutionStrategy();
+
+        await strategy.ExecuteAsync(async () =>
+        {
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+
+            var alreadyLiked = await _context.EventLikes
+                .AnyAsync(l => l.EventId == eventId && l.UserId == userId);
+
+            if (!alreadyLiked)
+            {
+                await _context.EventLikes.AddAsync(new EventLike(eventId, userId));
+                await _context.SaveChangesAsync();
+
+                await _context.Events
+                    .Where(e => e.EventId == eventId)
+                    .ExecuteUpdateAsync(s =>
+                        s.SetProperty(e => e.LikesCount, e => e.LikesCount + 1));
+            }
+
+            await transaction.CommitAsync();
+        });
+    }
+
+    public async Task UnlikeAsync(int eventId, int userId)
+    {
+        var strategy = _context.Database.CreateExecutionStrategy();
+
+        await strategy.ExecuteAsync(async () =>
+        {
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+
+            var deletedRows = await _context.EventLikes
+                .Where(l => l.EventId == eventId && l.UserId == userId)
+                .ExecuteDeleteAsync();
+
+            if (deletedRows > 0)
+            {
+                await _context.Events
+                    .Where(e => e.EventId == eventId && e.LikesCount > 0)
+                    .ExecuteUpdateAsync(s =>
+                        s.SetProperty(e => e.LikesCount, e => e.LikesCount - 1));
+            }
+
+            await transaction.CommitAsync();
+        });
+    }
+
+    public async Task<Comment?> GetCommentTreeByIdAsync(int commentId)
+    {
+        return await _context.Comments
+            .AsNoTracking()
+            .Include(c => c.Replies)
+                .ThenInclude(r => r.Replies)
+            .FirstOrDefaultAsync(c => c.CommentId == commentId);
+    }
+
+    public async Task LikeCommentAsync(int commentId, int userId)
+    {
+        var strategy = _context.Database.CreateExecutionStrategy();
+
+        await strategy.ExecuteAsync(async () =>
+        {
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+
+            var alreadyLiked = await _context.CommentLikes
+                .AnyAsync(l => l.CommentId == commentId && l.UserId == userId);
+
+            if (!alreadyLiked)
+            {
+                await _context.CommentLikes.AddAsync(new CommentLike(commentId, userId));
+                await _context.SaveChangesAsync();
+
+                await _context.Comments
+                    .Where(c => c.CommentId == commentId)
+                    .ExecuteUpdateAsync(s =>
+                        s.SetProperty(c => c.LikesCount, c => c.LikesCount + 1));
+            }
+
+            await transaction.CommitAsync();
+        });
+    }
+
+    public async Task UnlikeCommentAsync(int commentId, int userId)
+    {
+        var strategy = _context.Database.CreateExecutionStrategy();
+
+        await strategy.ExecuteAsync(async () =>
+        {
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+
+            var deletedRows = await _context.CommentLikes
+                .Where(l => l.CommentId == commentId && l.UserId == userId)
+                .ExecuteDeleteAsync();
+
+            if (deletedRows > 0)
+            {
+                await _context.Comments
+                    .Where(c => c.CommentId == commentId && c.LikesCount > 0)
+                    .ExecuteUpdateAsync(s =>
+                        s.SetProperty(c => c.LikesCount, c => c.LikesCount - 1));
+            }
+
+            await transaction.CommitAsync();
+        });
+    }
+
+    public async Task<Event?> GetTrackedByIdAsync(int eventId) =>
+        await _context.Events
+            .Include(e => e.Images)
+            .Include(e => e.Segment)
+            .Include(e => e.Genre)
+            .Include(e => e.SubGenre)
+            .FirstOrDefaultAsync(e => e.EventId == eventId);
+
+    public async Task<Comment?> GetTrackedCommentByIdAsync(int commentId) =>
+        await _context.Comments
+            .Include(c => c.Replies)
+            .FirstOrDefaultAsync(c => c.CommentId == commentId);
+
+    public async Task<Segment?> GetTrackedSegmentByIdAsync(int segmentId) =>
+        await _context.Segments
+            .Include(s => s.Genres)
+                .ThenInclude(g => g.SubGenres)
+            .FirstOrDefaultAsync(s => s.SegmentId == segmentId);
+
+    public async Task<Genre?> GetTrackedGenreByIdAsync(int genreId) =>
+        await _context.Genres
+            .Include(g => g.SubGenres)
+            .FirstOrDefaultAsync(g => g.GenreId == genreId);
+
+    public async Task<SubGenre?> GetTrackedSubGenreByIdAsync(int subGenreId) =>
+        await _context.SubGenres
+            .FirstOrDefaultAsync(s => s.SubGenreId == subGenreId);
+
+    public async Task<Bookmark?> GetTrackedBookmarkByIdAsync(int bookmarkId) =>
+        await _context.Bookmarks
+            .Include(b => b.Event)
+                .ThenInclude(e => e!.Images)
+            .FirstOrDefaultAsync(b => b.BookmarkId == bookmarkId);
+
+    public async Task<HashSet<int>> GetLikedEventIdsAsync(int userId, IEnumerable<int> eventIds)
+    {
+        var ids = eventIds
+            .Distinct()
+            .ToList();
+
+        if (ids.Count == 0)
+            return [];
+
+        return await _context.EventLikes
+            .AsNoTracking()
+            .Where(l => l.UserId == userId && ids.Contains(l.EventId))
+            .Select(l => l.EventId)
+            .ToHashSetAsync();
+    }
+
+    public async Task<HashSet<int>> GetLikedCommentIdsAsync(int userId, IEnumerable<int> commentIds)
+    {
+        var ids = commentIds
+            .Distinct()
+            .ToList();
+
+        if (ids.Count == 0)
+            return [];
+
+        return await _context.CommentLikes
+            .AsNoTracking()
+            .Where(l => l.UserId == userId && ids.Contains(l.CommentId))
+            .Select(l => l.CommentId)
+            .ToHashSetAsync();
+    }
+
     public async Task<Comment?> GetCommentByIdAsync(int commentId)
     {
         return await _context.Comments
             .AsNoTracking()
-            .FirstOrDefaultAsync(c => c.CommentId == commentId && !c.IsDeleted);
+            .FirstOrDefaultAsync(c => c.CommentId == commentId);
     }
 
     public async Task<PagedResult<Comment>> GetEventCommentsAsync(int eventId, int page, int pageSize)
     {
-        page = page <= 0 ? 1 : page;
-        pageSize = pageSize <= 0 ? 20 : Math.Min(pageSize, 50);
+        page = NormalizePage(page);
+        pageSize = NormalizePageSize(pageSize);
 
         var query = _context.Comments
             .AsNoTracking()
@@ -36,6 +238,7 @@ public class EventRepository : IEventRepository
         var totalCount = await query.CountAsync();
 
         var items = await query
+            .Include(c => c.Replies.Where(r => !r.IsDeleted))
             .OrderByDescending(c => c.CreatedAt)
             .ThenByDescending(c => c.CommentId)
             .Skip((page - 1) * pageSize)
@@ -53,8 +256,8 @@ public class EventRepository : IEventRepository
 
     public async Task<PagedResult<Comment>> GetRepliesAsync(int parentCommentId, int page, int pageSize)
     {
-        page = page <= 0 ? 1 : page;
-        pageSize = pageSize <= 0 ? 20 : Math.Min(pageSize, 50);
+        page = NormalizePage(page);
+        pageSize = NormalizePageSize(pageSize);
 
         var query = _context.Comments
             .AsNoTracking()
@@ -83,7 +286,7 @@ public class EventRepository : IEventRepository
         return await _context.Bookmarks
             .AsNoTracking()
             .Include(b => b.Event)
-            .ThenInclude(e => e!.Images)
+                .ThenInclude(e => e!.Images)
             .FirstOrDefaultAsync(b => b.BookmarkId == bookmarkId);
     }
 
@@ -96,13 +299,13 @@ public class EventRepository : IEventRepository
 
     public async Task<PagedResult<Bookmark>> GetUserBookmarksAsync(int userId, int page, int pageSize)
     {
-        page = page <= 0 ? 1 : page;
-        pageSize = pageSize <= 0 ? 20 : Math.Min(pageSize, 50);
+        page = NormalizePage(page);
+        pageSize = NormalizePageSize(pageSize);
 
         var query = _context.Bookmarks
             .AsNoTracking()
             .Include(b => b.Event)
-            .ThenInclude(e => e!.Images)
+                .ThenInclude(e => e!.Images)
             .Where(b => b.UserId == userId);
 
         var totalCount = await query.CountAsync();
@@ -125,14 +328,13 @@ public class EventRepository : IEventRepository
 
     public async Task<Bookmark> CreateBookmarkAsync(Bookmark bookmark)
     {
-        _context.Bookmarks.Add(bookmark);
+        await _context.Bookmarks.AddAsync(bookmark);
         await _context.SaveChangesAsync();
         return bookmark;
     }
 
     public async Task UpdateBookmarkAsync(Bookmark bookmark)
     {
-        _context.Bookmarks.Update(bookmark);
         await _context.SaveChangesAsync();
     }
 
@@ -197,45 +399,21 @@ public class EventRepository : IEventRepository
 
     public async Task<Comment> CreateCommentAsync(Comment comment)
     {
-        _context.Comments.Add(comment);
+        await _context.Comments.AddAsync(comment);
         await _context.SaveChangesAsync();
         return comment;
     }
 
     public async Task UpdateCommentAsync(Comment comment)
     {
-        _context.Comments.Update(comment);
         await _context.SaveChangesAsync();
     }
 
     public async Task<bool> IsCommentLikedByUserAsync(int commentId, int userId)
     {
         return await _context.CommentLikes
+            .AsNoTracking()
             .AnyAsync(l => l.CommentId == commentId && l.UserId == userId);
-    }
-
-    public async Task LikeCommentAsync(int commentId, int userId)
-    {
-        _context.CommentLikes.Add(new CommentLike(commentId, userId));
-        await _context.SaveChangesAsync();
-
-        await _context.Comments
-            .Where(c => c.CommentId == commentId)
-            .ExecuteUpdateAsync(s => s.SetProperty(c => c.LikesCount, c => c.LikesCount + 1));
-    }
-
-    public async Task UnlikeCommentAsync(int commentId, int userId)
-    {
-        var deletedRows = await _context.CommentLikes
-            .Where(l => l.CommentId == commentId && l.UserId == userId)
-            .ExecuteDeleteAsync();
-
-        if (deletedRows > 0)
-        {
-            await _context.Comments
-                .Where(c => c.CommentId == commentId && c.LikesCount > 0)
-                .ExecuteUpdateAsync(s => s.SetProperty(c => c.LikesCount, c => c.LikesCount - 1));
-        }
     }
 
     public async Task<Event?> GetByIdAsync(int eventId) =>
@@ -300,21 +478,10 @@ public class EventRepository : IEventRepository
 
         if (filter.CanViewReservations.HasValue)
         {
-            var reservationStatuses = new[]
-            {
-            EventStatus.Pending,
-            EventStatus.Confirmed,
-            EventStatus.Completed
-        };
-
             if (filter.CanViewReservations.Value)
-            {
-                query = query.Where(e => reservationStatuses.Contains(e.Status));
-            }
+                query = query.Where(e => ReservationStatuses.Contains(e.Status));
             else
-            {
-                query = query.Where(e => !reservationStatuses.Contains(e.Status));
-            }
+                query = query.Where(e => !ReservationStatuses.Contains(e.Status));
         }
 
         if (!string.IsNullOrWhiteSpace(filter.SearchTerm))
@@ -345,11 +512,11 @@ public class EventRepository : IEventRepository
 
             _ => filter.SortDescending
                 ? query.OrderByDescending(e => e.StartDateTime).ThenByDescending(e => e.EventId)
-                : query.OrderBy(e => e.StartDateTime).ThenBy(e => e.EventId),
+                : query.OrderBy(e => e.StartDateTime).ThenBy(e => e.EventId)
         };
 
-        var page = filter.Page <= 0 ? 1 : filter.Page;
-        var pageSize = filter.PageSize <= 0 ? 20 : Math.Min(filter.PageSize, 50);
+        var page = NormalizePage(filter.Page);
+        var pageSize = NormalizePageSize(filter.PageSize);
 
         var totalCount = await query.CountAsync();
 
@@ -372,14 +539,19 @@ public class EventRepository : IEventRepository
         var latitude = dto.Latitude!.Value;
         var longitude = dto.Longitude!.Value;
 
-        var radiusKm = dto.RadiusKm <= 0 ? 50 : Math.Min(dto.RadiusKm, 500);
-        var limit = dto.Limit <= 0 ? 20 : Math.Min(dto.Limit, 100);
+        var radiusKm = dto.RadiusKm <= 0
+            ? DefaultNearbyRadiusKm
+            : Math.Min(dto.RadiusKm, MaxNearbyRadiusKm);
+
+        var limit = dto.Limit <= 0
+            ? DefaultNearbyLimit
+            : Math.Min(dto.Limit, MaxNearbyLimit);
 
         var latDelta = (decimal)(radiusKm / 111.0);
 
         var cosLatitude = Math.Cos((double)latitude * Math.PI / 180.0);
-        if (Math.Abs(cosLatitude) < 0.000001)
-            cosLatitude = 0.000001;
+        if (Math.Abs(cosLatitude) < MinCosLatitude)
+            cosLatitude = MinCosLatitude;
 
         var lonDelta = (decimal)(radiusKm / 111.0 / Math.Abs(cosLatitude));
         var nowUtc = DateTime.UtcNow;
@@ -439,19 +611,13 @@ public class EventRepository : IEventRepository
 
     public async Task UpdateAsync(Event entity)
     {
-        _context.Events.Update(entity);
         await _context.SaveChangesAsync();
     }
 
-    public async Task DeleteAsync(int eventId)
-    {
-        await _context.Events
-            .Where(e => e.EventId == eventId)
-            .ExecuteDeleteAsync();
-    }
-
     public async Task<bool> ExistsAsync(int eventId) =>
-        await _context.Events.AnyAsync(e => e.EventId == eventId);
+        await _context.Events
+            .AsNoTracking()
+            .AnyAsync(e => e.EventId == eventId);
 
     public async Task IncrementViewCountAsync(int eventId)
     {
@@ -463,43 +629,18 @@ public class EventRepository : IEventRepository
 
     public async Task<bool> IsLikedByUserAsync(int eventId, int userId) =>
         await _context.EventLikes
+            .AsNoTracking()
             .AnyAsync(l => l.EventId == eventId && l.UserId == userId);
-
-    public async Task LikeAsync(int eventId, int userId)
-    {
-        await _context.EventLikes.AddAsync(new EventLike(eventId, userId));
-        await _context.SaveChangesAsync();
-
-        await _context.Events
-            .Where(e => e.EventId == eventId)
-            .ExecuteUpdateAsync(s =>
-                s.SetProperty(e => e.LikesCount, e => e.LikesCount + 1));
-    }
-
-    public async Task UnlikeAsync(int eventId, int userId)
-    {
-        var deletedRows = await _context.EventLikes
-            .Where(l => l.EventId == eventId && l.UserId == userId)
-            .ExecuteDeleteAsync();
-
-        if (deletedRows > 0)
-        {
-            await _context.Events
-                .Where(e => e.EventId == eventId && e.LikesCount > 0)
-                .ExecuteUpdateAsync(s =>
-                    s.SetProperty(e => e.LikesCount, e => e.LikesCount - 1));
-        }
-    }
 
     public async Task<PagedResult<EventLike>> GetLikedEventsByUserAsync(int userId, int page, int pageSize)
     {
-        page = page <= 0 ? 1 : page;
-        pageSize = pageSize <= 0 ? 20 : Math.Min(pageSize, 50);
+        page = NormalizePage(page);
+        pageSize = NormalizePageSize(pageSize);
 
         var query = _context.EventLikes
             .AsNoTracking()
             .Include(x => x.Event)
-            .ThenInclude(e => e!.Images)
+                .ThenInclude(e => e!.Images)
             .Where(x => x.UserId == userId);
 
         var totalCount = await query.CountAsync();
@@ -549,6 +690,8 @@ public class EventRepository : IEventRepository
 
     public async Task SetCoverImageAsync(int eventId, int imageId)
     {
+        await using var transaction = await _context.Database.BeginTransactionAsync();
+
         await _context.EventImages
             .Where(i => i.EventId == eventId)
             .ExecuteUpdateAsync(s => s.SetProperty(i => i.IsCover, false));
@@ -556,6 +699,8 @@ public class EventRepository : IEventRepository
         await _context.EventImages
             .Where(i => i.EventId == eventId && i.ImageId == imageId)
             .ExecuteUpdateAsync(s => s.SetProperty(i => i.IsCover, true));
+
+        await transaction.CommitAsync();
     }
 
     public async Task<List<Segment>> GetAllSegmentsAsync() =>
@@ -602,40 +747,45 @@ public class EventRepository : IEventRepository
 
     public async Task<Segment> CreateSegmentAsync(Segment segment)
     {
-        _context.Segments.Add(segment);
+        await _context.Segments.AddAsync(segment);
         await _context.SaveChangesAsync();
         return segment;
     }
 
     public async Task UpdateSegmentAsync(Segment segment)
     {
-        _context.Segments.Update(segment);
         await _context.SaveChangesAsync();
     }
 
     public async Task<Genre> CreateGenreAsync(Genre genre)
     {
-        _context.Genres.Add(genre);
+        await _context.Genres.AddAsync(genre);
         await _context.SaveChangesAsync();
         return genre;
     }
 
     public async Task UpdateGenreAsync(Genre genre)
     {
-        _context.Genres.Update(genre);
         await _context.SaveChangesAsync();
     }
 
     public async Task<SubGenre> CreateSubGenreAsync(SubGenre subGenre)
     {
-        _context.SubGenres.Add(subGenre);
+        await _context.SubGenres.AddAsync(subGenre);
         await _context.SaveChangesAsync();
         return subGenre;
     }
 
     public async Task UpdateSubGenreAsync(SubGenre subGenre)
     {
-        _context.SubGenres.Update(subGenre);
         await _context.SaveChangesAsync();
     }
+
+    private static int NormalizePage(int page) =>
+        page < 1 ? DefaultPage : page;
+
+    private static int NormalizePageSize(int pageSize) =>
+        pageSize < 1
+            ? DefaultPageSize
+            : Math.Min(pageSize, MaxPageSize);
 }

@@ -1,4 +1,4 @@
-using DotNetEnv;
+using System.Net.Http.Headers;
 using GeoEvent.HelperWorkers.Consumers;
 using GeoEvent.HelperWorkers.Consumers.Messages;
 using GeoEvent.HelperWorkers.Consumers.Notifications;
@@ -7,103 +7,50 @@ using GeoEvent.HelperWorkers.Interfaces;
 using GeoEvent.HelperWorkers.Options;
 using GeoEvent.HelperWorkers.Services;
 using MassTransit;
-using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using NotificationService.Worker.Options;
-using TicketService.Infrastructure.Persistence;
-using TicketService.Infrastructure.Repositories;
-using UserService.Application.Interfaces.Repositories;
-using UserService.Application.Interfaces.Services;
-using UserService.Infrastructure.Persistence;
-using UserService.Infrastructure.Repositories;
-using UserService.Infrastructure.Services;
-
-static string? FindSharedEnvFile(string startDirectory)
-{
-    var directory = new DirectoryInfo(startDirectory);
-
-    while (directory is not null)
-    {
-        var candidate = Path.Combine(directory.FullName, ".env");
-        if (File.Exists(candidate))
-            return candidate;
-
-        directory = directory.Parent;
-    }
-
-    return null;
-}
 
 var builder = Host.CreateApplicationBuilder(args);
 
-if (builder.Environment.IsDevelopment())
-{
-    var sharedEnvPath = FindSharedEnvFile(builder.Environment.ContentRootPath);
-    if (!string.IsNullOrWhiteSpace(sharedEnvPath))
-    {
-        Env.Load(sharedEnvPath);
-    }
-}
-
-var userDbConnectionString = builder.Configuration.GetConnectionString("UserDb");
-if (string.IsNullOrWhiteSpace(userDbConnectionString))
-    throw new InvalidOperationException("Missing configuration: ConnectionStrings:UserDb");
-
-builder.Services.AddDbContext<UserDbContext>(options =>
-    options.UseSqlServer(
-        userDbConnectionString,
-        sqlOptions => sqlOptions.EnableRetryOnFailure(
-            maxRetryCount: 10,
-            maxRetryDelay: TimeSpan.FromSeconds(15),
-            errorNumbersToAdd: null)));
-
-var ticketDbConnectionString = builder.Configuration.GetConnectionString("TicketDb");
-if (string.IsNullOrWhiteSpace(ticketDbConnectionString))
-    throw new InvalidOperationException("Missing configuration: ConnectionStrings:TicketDb");
-
-builder.Services.AddDbContext<TicketDbContext>(options =>
-    options.UseSqlServer(
-        ticketDbConnectionString,
-        sqlOptions => sqlOptions.EnableRetryOnFailure(
-            maxRetryCount: 10,
-            maxRetryDelay: TimeSpan.FromSeconds(15),
-            errorNumbersToAdd: null)));
-
-builder.Services.AddScoped<IUserRepository, UserRepository>();
-builder.Services.AddScoped<IUserService, UserServiceImpl>();
-builder.Services.AddScoped<PasswordService>();
-builder.Services.AddScoped<TokenService>();
-
-builder.Services.AddScoped<ITicketRepository, TicketRepository>();
-
-var eventServiceBaseUrl = builder.Configuration["Services:EventService"];
-if (string.IsNullOrWhiteSpace(eventServiceBaseUrl))
-    throw new InvalidOperationException("Missing configuration: Services:EventService");
-if (!Uri.TryCreate(eventServiceBaseUrl, UriKind.Absolute, out var eventServiceUri))
-    throw new InvalidOperationException("Invalid configuration: Services:EventService must be an absolute URL");
-
-builder.Services.AddHttpClient<IExternalValidationService, ExternalValidationService>(client =>
-{
-    client.BaseAddress = eventServiceUri;
-    client.DefaultRequestHeaders.Accept.Add(
-        new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
-});
+builder.Configuration.AddEnvironmentVariables();
 
 builder.Services.Configure<SmtpOptions>(builder.Configuration.GetSection("Smtp"));
 builder.Services.AddScoped<IEmailSender, SmtpEmailSender>();
 
-var notificationServiceBaseUrl = builder.Configuration["Services:NotificationService:BaseUrl"];
-if (string.IsNullOrWhiteSpace(notificationServiceBaseUrl))
-    throw new InvalidOperationException("Missing configuration: Services:NotificationService:BaseUrl");
-if (!Uri.TryCreate(notificationServiceBaseUrl, UriKind.Absolute, out var notificationServiceUri))
-    throw new InvalidOperationException("Invalid configuration: Services:NotificationService:BaseUrl must be an absolute URL");
+static Uri GetRequiredAbsoluteUri(IConfiguration configuration, string key)
+{
+    var value = configuration[key];
 
-var notificationServiceInternalApiKey = builder.Configuration["Services:NotificationService:InternalApiKey"];
-if (string.IsNullOrWhiteSpace(notificationServiceInternalApiKey))
-    throw new InvalidOperationException("Missing configuration: Services:NotificationService:InternalApiKey");
+    if (string.IsNullOrWhiteSpace(value))
+        throw new InvalidOperationException($"Missing configuration: {key}");
+
+    if (!Uri.TryCreate(value, UriKind.Absolute, out var uri))
+        throw new InvalidOperationException($"Invalid configuration: {key} must be an absolute URL");
+
+    return uri;
+}
+
+static string GetRequiredSetting(IConfiguration configuration, string key)
+{
+    var value = configuration[key];
+
+    if (string.IsNullOrWhiteSpace(value))
+        throw new InvalidOperationException($"Missing configuration: {key}");
+
+    return value;
+}
+
+var notificationServiceUri = GetRequiredAbsoluteUri(
+    builder.Configuration,
+    "Services:NotificationService:BaseUrl");
+
+var notificationServiceInternalApiKey = GetRequiredSetting(
+    builder.Configuration,
+    "Services:NotificationService:InternalApiKey");
 
 builder.Services.Configure<NotificationServiceOptions>(options =>
 {
-    options.BaseUrl = notificationServiceBaseUrl;
+    options.BaseUrl = notificationServiceUri.ToString();
     options.InternalApiKey = notificationServiceInternalApiKey;
 });
 
@@ -112,46 +59,69 @@ builder.Services.AddHttpClient<INotificationApiClient, NotificationApiClient>(cl
     client.BaseAddress = notificationServiceUri;
     client.Timeout = TimeSpan.FromSeconds(15);
     client.DefaultRequestHeaders.Accept.Add(
-        new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
-    client.DefaultRequestHeaders.Add("X-Internal-Api-Key", notificationServiceInternalApiKey);
+        new MediaTypeWithQualityHeaderValue("application/json"));
+    client.DefaultRequestHeaders.Add("X-Api-Key", notificationServiceInternalApiKey);
 });
 
-var messageServiceBaseUrl = builder.Configuration["Services:MessageService:BaseUrl"];
-if (string.IsNullOrWhiteSpace(messageServiceBaseUrl))
-    throw new InvalidOperationException("Missing configuration: Services:MessageService:BaseUrl");
-if (!Uri.TryCreate(messageServiceBaseUrl, UriKind.Absolute, out var messageServiceUri))
-    throw new InvalidOperationException("Invalid configuration: Services:MessageService:BaseUrl must be an absolute URL");
+var messageServiceUri = GetRequiredAbsoluteUri(
+    builder.Configuration,
+    "Services:MessageService:BaseUrl");
 
-var messageServiceInternalApiKey = builder.Configuration["Services:MessageService:InternalApiKey"];
-if (string.IsNullOrWhiteSpace(messageServiceInternalApiKey))
-    throw new InvalidOperationException("Missing configuration: Services:MessageService:InternalApiKey");
+var messageServiceInternalApiKey = GetRequiredSetting(
+    builder.Configuration,
+    "Services:MessageService:InternalApiKey");
 
 builder.Services.AddHttpClient<IMessageChatAdminClient, MessageChatAdminClient>(client =>
 {
     client.BaseAddress = messageServiceUri;
     client.Timeout = TimeSpan.FromSeconds(15);
     client.DefaultRequestHeaders.Accept.Add(
-        new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
-    client.DefaultRequestHeaders.Add("X-Internal-Api-Key", messageServiceInternalApiKey);
+        new MediaTypeWithQualityHeaderValue("application/json"));
+    client.DefaultRequestHeaders.Add("X-Api-Key", messageServiceInternalApiKey);
 });
 
-var rabbitMqHost = builder.Configuration["RabbitMq:Host"];
-var rabbitMqVirtualHost = builder.Configuration["RabbitMq:VirtualHost"] ?? "/";
-var rabbitMqUsername = builder.Configuration["RabbitMq:Username"];
-var rabbitMqPassword = builder.Configuration["RabbitMq:Password"];
+var ticketServiceUri = GetRequiredAbsoluteUri(
+    builder.Configuration,
+    "Services:TicketService:BaseUrl");
 
-if (string.IsNullOrWhiteSpace(rabbitMqHost))
-    throw new InvalidOperationException("Missing configuration: RabbitMq:Host");
-if (string.IsNullOrWhiteSpace(rabbitMqUsername))
-    throw new InvalidOperationException("Missing configuration: RabbitMq:Username");
-if (string.IsNullOrWhiteSpace(rabbitMqPassword))
-    throw new InvalidOperationException("Missing configuration: RabbitMq:Password");
+var ticketServiceInternalApiKey = GetRequiredSetting(
+    builder.Configuration,
+    "Services:TicketService:InternalApiKey");
+
+builder.Services.AddHttpClient<ITicketInternalClient, TicketInternalClient>(client =>
+{
+    client.BaseAddress = ticketServiceUri;
+    client.Timeout = TimeSpan.FromSeconds(15);
+    client.DefaultRequestHeaders.Accept.Add(
+        new MediaTypeWithQualityHeaderValue("application/json"));
+    client.DefaultRequestHeaders.Add("X-Api-Key", ticketServiceInternalApiKey);
+});
+
+var userServiceUri = GetRequiredAbsoluteUri(
+    builder.Configuration,
+    "Services:UserService:BaseUrl");
+
+var userServiceInternalApiKey = GetRequiredSetting(
+    builder.Configuration,
+    "Services:UserService:InternalApiKey");
+
+builder.Services.AddHttpClient<IUserPreferenceInternalClient, UserPreferenceInternalClient>(client =>
+{
+    client.BaseAddress = userServiceUri;
+    client.Timeout = TimeSpan.FromSeconds(15);
+    client.DefaultRequestHeaders.Accept.Add(
+        new MediaTypeWithQualityHeaderValue("application/json"));
+    client.DefaultRequestHeaders.Add("X-Api-Key", userServiceInternalApiKey);
+});
+
+var rabbitMqHost = GetRequiredSetting(builder.Configuration, "RabbitMq:Host");
+var rabbitMqVirtualHost = builder.Configuration["RabbitMq:VirtualHost"] ?? "/";
+var rabbitMqUsername = GetRequiredSetting(builder.Configuration, "RabbitMq:Username");
+var rabbitMqPassword = GetRequiredSetting(builder.Configuration, "RabbitMq:Password");
 
 builder.Services.AddMassTransit(x =>
 {
     x.SetKebabCaseEndpointNameFormatter();
-
-    x.AddConsumer<EventCreatedConsumer>();
 
     x.AddConsumer<UserRegisteredNotificationConsumer>();
     x.AddConsumer<UserBannedNotificationConsumer>();
@@ -174,6 +144,7 @@ builder.Services.AddMassTransit(x =>
     x.AddConsumer<EventCommentReplyCreatedNotificationConsumer>();
     x.AddConsumer<EventReservationCreatedNotificationConsumer>();
     x.AddConsumer<EventReservationPaidNotificationConsumer>();
+    x.AddConsumer<EventReservationCashPendingNotificationConsumer>();
 
     x.AddConsumer<ChatMessageSentNotificationConsumer>();
     x.AddConsumer<ChatMessageLikedNotificationConsumer>();
@@ -182,12 +153,14 @@ builder.Services.AddMassTransit(x =>
     x.AddConsumer<ReservationConfirmedConsumer>();
     x.AddConsumer<ReservationCancelledIntegrationConsumer>();
     x.AddConsumer<UserDeletedConsumer>();
-    x.AddConsumer<UserEventPreferenceInteractionConsumer>();
 
     x.AddConsumer<EventRefundRequestedNotificationConsumer>();
     x.AddConsumer<ReservationRefundApprovedNotificationConsumer>();
     x.AddConsumer<ReservationRefundRejectedNotificationConsumer>();
     x.AddConsumer<ReservationRemovedByOrganizerNotificationConsumer>();
+
+    x.AddConsumer<EventCreatedConsumer>();
+    x.AddConsumer<UserEventPreferenceInteractionConsumer>();
 
     x.UsingRabbitMq((context, cfg) =>
     {

@@ -1,4 +1,5 @@
-﻿using TicketService.Application.Interfaces.Services;
+﻿using TicketService.Application.Common;
+using TicketService.Application.Interfaces.Services;
 
 namespace TicketService.Infrastructure.Services;
 
@@ -16,7 +17,7 @@ public class EventAuthorizationService : IEventAuthorizationService
         if (eventId <= 0 || userId <= 0 || string.IsNullOrWhiteSpace(role))
             return false;
 
-        if (string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(role, AppRoles.Admin, StringComparison.OrdinalIgnoreCase))
             return true;
 
         var eventSummary = await _eventDirectoryClient.GetEventAsync(eventId);

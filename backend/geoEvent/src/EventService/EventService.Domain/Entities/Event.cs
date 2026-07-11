@@ -25,16 +25,12 @@ public class Event
     public decimal Price { get; private set; }
 
     public EventStatus Status { get; private set; } = EventStatus.Pending;
-    public bool IsOnline { get; private set; }
     public bool IsFeatured { get; private set; }
 
     public int ViewCount { get; private set; }
     public int LikesCount { get; private set; }
 
     public string? Tags { get; private set; }
-    public string? ExternalUrl { get; private set; }
-    public string? ExternalSource { get; private set; }
-    public string? ExternalId { get; private set; }
     public string? AccessibilityInfo { get; private set; }
     public string? PromoterName { get; private set; }
     public string Locale { get; private set; } = "bs-BA";
@@ -66,12 +62,8 @@ public class Event
         DateTime endDateTime,
         int capacity,
         decimal price,
-        bool isOnline,
         bool isFeatured,
         string? tags = null,
-        string? externalUrl = null,
-        string? externalSource = null,
-        string? externalId = null,
         string? accessibilityInfo = null,
         string? promoterName = null,
         string? locale = null)
@@ -101,12 +93,8 @@ public class Event
         EndDateTime = endDateTime;
         Capacity = capacity;
         Price = price;
-        IsOnline = isOnline;
         IsFeatured = isFeatured;
         Tags = Normalize(tags);
-        ExternalUrl = Normalize(externalUrl);
-        ExternalSource = Normalize(externalSource);
-        ExternalId = Normalize(externalId);
         AccessibilityInfo = Normalize(accessibilityInfo);
         PromoterName = Normalize(promoterName);
         Locale = string.IsNullOrWhiteSpace(locale) ? "bs-BA" : locale.Trim();
@@ -124,12 +112,8 @@ public class Event
         DateTime endDateTime,
         int capacity,
         decimal price,
-        bool isOnline,
         bool isFeatured,
         string? tags = null,
-        string? externalUrl = null,
-        string? externalSource = null,
-        string? externalId = null,
         string? accessibilityInfo = null,
         string? promoterName = null,
         string? locale = null)
@@ -158,12 +142,8 @@ public class Event
         EndDateTime = endDateTime;
         Capacity = capacity;
         Price = price;
-        IsOnline = isOnline;
         IsFeatured = isFeatured;
         Tags = Normalize(tags);
-        ExternalUrl = Normalize(externalUrl);
-        ExternalSource = Normalize(externalSource);
-        ExternalId = Normalize(externalId);
         AccessibilityInfo = Normalize(accessibilityInfo);
         PromoterName = Normalize(promoterName);
         Locale = string.IsNullOrWhiteSpace(locale) ? "bs-BA" : locale.Trim();

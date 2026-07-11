@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/utils/price_formatter.dart';
+
 class EventPriceBadge extends StatelessWidget {
   final double price;
 
@@ -28,7 +30,14 @@ class EventPriceBadge extends StatelessWidget {
         ),
       ),
       child: Text(
-        isFree ? 'Free' : '${price.toStringAsFixed(price % 1 == 0 ? 0 : 2)} BAM',
+        isFree
+            ? 'Free'
+            : PriceFormatter.format(
+                price,
+                currency: PriceFormatter.bam,
+                decimalDigits: price % 1 == 0 ? 0 : 2,
+                fallback: '-',
+              ),
         style: theme.textTheme.labelLarge?.copyWith(
           color: isFree ? scheme.primary : scheme.onSurface,
           fontWeight: FontWeight.w700,

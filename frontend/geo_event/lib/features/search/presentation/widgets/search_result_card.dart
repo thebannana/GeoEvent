@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/utils/price_formatter.dart';
 import '../../../../shared/events/models/create_event_models.dart';
 import '../../../event/presentation/screens/event_detail_screen.dart';
 
@@ -15,7 +16,7 @@ class SearchResultCard extends StatelessWidget {
     this.onCloseParentSearchSheet,
   });
 
-  Color _segmentColor(EventItem item) {
+  static Color _segmentColor(EventItem item) {
     final name = (item.segmentName ?? '').toLowerCase();
 
     if (name.contains('concert') || name.contains('music')) {
@@ -30,26 +31,37 @@ class SearchResultCard extends StatelessWidget {
     return const Color(0xFF6B8FBF);
   }
 
-  String _formatPrice(num price) {
-    if (price <= 0) return 'Free';
-    if (price % 1 == 0) return '${price.toInt()}\$';
-    return '${price.toStringAsFixed(2)}\$';
+  static String _subtitle(EventItem item) {
+    final parts = [
+      if ((item.segmentName ?? '').isNotEmpty) item.segmentName!,
+      if ((item.genreName ?? '').isNotEmpty) item.genreName!,
+      if ((item.subGenreName ?? '').isNotEmpty) item.subGenreName!,
+    ];
+
+    return parts.join(' · ');
+  }
+
+  static String? _imageUrl(EventItem item) {
+    return item.coverImageUrl ??
+        (item.imageUrls.isNotEmpty ? item.imageUrls.first : null);
+  }
+
+  void _openDetails(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => EventDetailsScreen(
+          eventId: item.eventId,
+          onCloseParentSearchSheet: onCloseParentSearchSheet,
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-
-    final subtitleParts = [
-      if ((item.segmentName ?? '').isNotEmpty) item.segmentName!,
-      if ((item.genreName ?? '').isNotEmpty) item.genreName!,
-      if ((item.subGenreName ?? '').isNotEmpty) item.subGenreName!,
-    ];
-    final subtitle = subtitleParts.join(' · ');
     final accent = _segmentColor(item);
-    final imageUrl = item.coverImageUrl ??
-        (item.imageUrls.isNotEmpty ? item.imageUrls.first : null);
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
@@ -58,16 +70,7 @@ class SearchResultCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(18),
         child: InkWell(
           borderRadius: BorderRadius.circular(18),
-          onTap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => EventDetailsScreen(
-                  eventId: item.eventId,
-                  onCloseParentSearchSheet: onCloseParentSearchSheet,
-                ),
-              ),
-            );
-          },
+          onTap: () => _openDetails(context),
           child: Container(
             decoration: BoxDecoration(
               color: colorScheme.surface,
@@ -85,124 +88,19 @@ class SearchResultCard extends StatelessWidget {
             ),
             child: Row(
               children: [
-                ClipRRect(
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(18),
-                    bottomLeft: Radius.circular(18),
-                  ),
-                  child: SizedBox(
-                    width: 82,
-                    height: 96,
-                    child: imageUrl != null && imageUrl.isNotEmpty
-                        ? Image.network(
-                            imageUrl,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, _, _) {
-                              return _SearchResultImageFallback(accent: accent);
-                            },
-                          )
-                        : _SearchResultImageFallback(accent: accent),
-                  ),
+                _SearchResultCardImage(
+                  imageUrl: _imageUrl(item),
+                  accent: accent,
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 11),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          item.title,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        if (subtitle.isNotEmpty) ...[
-                          const SizedBox(height: 4),
-                          Text(
-                            subtitle,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ],
-                        const SizedBox(height: 7),
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.favorite_border_rounded,
-                              size: 12,
-                              color: colorScheme.onSurfaceVariant,
-                            ),
-                            const SizedBox(width: 3),
-                            Text(
-                              item.likesCount.toString(),
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Icon(
-                              Icons.remove_red_eye_outlined,
-                              size: 12,
-                              color: colorScheme.onSurfaceVariant,
-                            ),
-                            const SizedBox(width: 3),
-                            Text(
-                              item.viewCount.toString(),
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 10),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Align(
-                                alignment: Alignment.centerLeft,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 10,
-                                    vertical: 5,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color:
-                                        colorScheme.surfaceContainerHighest,
-                                    borderRadius: BorderRadius.circular(9),
-                                  ),
-                                  child: Text(
-                                    _formatPrice(item.price),
-                                    style: theme.textTheme.bodySmall?.copyWith(
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            IconButton(
-                              tooltip: 'Open directions',
-                              onPressed: onOpenDirections != null
-                                  ? () => onOpenDirections!(item)
-                                  : null,
-                              icon: const Icon(Icons.directions_rounded),
-                              style: IconButton.styleFrom(
-                                backgroundColor:
-                                    colorScheme.surfaceContainerHighest,
-                                foregroundColor: accent,
-                                disabledForegroundColor:
-                                    colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
+                    child: _SearchResultCardContent(
+                      item: item,
+                      subtitle: _subtitle(item),
+                      onOpenDirections: onOpenDirections,
+                      accent: accent,
                     ),
                   ),
                 ),
@@ -212,6 +110,169 @@ class SearchResultCard extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _SearchResultCardImage extends StatelessWidget {
+  final String? imageUrl;
+  final Color accent;
+
+  const _SearchResultCardImage({
+    required this.imageUrl,
+    required this.accent,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: const BorderRadius.only(
+        topLeft: Radius.circular(18),
+        bottomLeft: Radius.circular(18),
+      ),
+      child: SizedBox(
+        width: 82,
+        height: 96,
+        child: imageUrl != null && imageUrl!.isNotEmpty
+            ? Image.network(
+                imageUrl!,
+                fit: BoxFit.cover,
+                errorBuilder: (_, _, _) {
+                  return _SearchResultImageFallback(accent: accent);
+                },
+              )
+            : _SearchResultImageFallback(accent: accent),
+      ),
+    );
+  }
+}
+
+class _SearchResultCardContent extends StatelessWidget {
+  final EventItem item;
+  final String subtitle;
+  final ValueChanged<EventItem>? onOpenDirections;
+  final Color accent;
+
+  const _SearchResultCardContent({
+    required this.item,
+    required this.subtitle,
+    required this.onOpenDirections,
+    required this.accent,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          item.title,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: theme.textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        if (subtitle.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          Text(
+            subtitle,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+        const SizedBox(height: 7),
+        _SearchResultMetrics(item: item),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(9),
+                  ),
+                  child: Text(
+                    PriceFormatter.formatPriceWithBam(item.price),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            IconButton(
+              tooltip: 'Open directions',
+              onPressed: onOpenDirections != null
+                  ? () => onOpenDirections!(item)
+                  : null,
+              icon: const Icon(Icons.directions_rounded),
+              style: IconButton.styleFrom(
+                backgroundColor: colorScheme.surfaceContainerHighest,
+                foregroundColor: accent,
+                disabledForegroundColor: colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _SearchResultMetrics extends StatelessWidget {
+  final EventItem item;
+
+  const _SearchResultMetrics({
+    required this.item,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    TextStyle? style = theme.textTheme.bodySmall?.copyWith(
+      color: colorScheme.onSurfaceVariant,
+    );
+
+    return Row(
+      children: [
+        Icon(
+          Icons.favorite_border_rounded,
+          size: 12,
+          color: colorScheme.onSurfaceVariant,
+        ),
+        const SizedBox(width: 3),
+        Text(
+          item.likesCount.toString(),
+          style: style,
+        ),
+        const SizedBox(width: 10),
+        Icon(
+          Icons.remove_red_eye_outlined,
+          size: 12,
+          color: colorScheme.onSurfaceVariant,
+        ),
+        const SizedBox(width: 3),
+        Text(
+          item.viewCount.toString(),
+          style: style,
+        ),
+      ],
     );
   }
 }

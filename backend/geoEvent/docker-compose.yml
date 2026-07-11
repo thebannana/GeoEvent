@@ -48,16 +48,6 @@ services:
     networks:
       - geoevent-network
 
-  mailhog:
-    image: mailhog/mailhog:v1.0.1
-    container_name: geoevent-mailhog
-    ports:
-      - "1025:1025"
-      - "8025:8025"
-    restart: unless-stopped
-    networks:
-      - geoevent-network
-
   user-service:
     build:
       context: .
@@ -78,24 +68,16 @@ services:
       Jwt__Issuer: ${JWT_ISSUER}
       Jwt__Audience: ${JWT_AUDIENCE}
       Services__EventService: ${EVENT_SERVICE_BASE_URL}
+      InternalApi__Key: ${INTERNAL_API_KEY}
       Cors__AllowedOrigins__0: ${CORS_ORIGIN_0}
       Cors__AllowedOrigins__1: ${CORS_ORIGIN_1}
       Cors__AllowedOrigins__2: ${CORS_ORIGIN_2}
-      Smtp__Host: ${SMTP_HOST}
-      Smtp__Port: ${SMTP_PORT}
-      Smtp__FromEmail: ${SMTP_FROM_EMAIL}
-      Smtp__FromName: ${SMTP_FROM_NAME}
-      Smtp__EnableSsl: ${SMTP_ENABLE_SSL}
-      Smtp__Username: ${SMTP_USERNAME}
-      Smtp__Password: ${SMTP_PASSWORD}
     depends_on:
       sqlserver:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
       event-service:
-        condition: service_started
-      mailhog:
         condition: service_started
     restart: unless-stopped
     networks:
@@ -121,13 +103,14 @@ services:
       Jwt__Issuer: ${JWT_ISSUER}
       Jwt__Audience: ${JWT_AUDIENCE}
       Services__UserServiceBaseUrl: ${USER_SERVICE_BASE_URL}
+      InternalApi__Key: ${INTERNAL_API_KEY}
       Cors__AllowedOrigins__0: ${CORS_ORIGIN_0}
       Cors__AllowedOrigins__1: ${CORS_ORIGIN_1}
       Cors__AllowedOrigins__2: ${CORS_ORIGIN_2}
-      SupabaseStorage__Url: ${SUPABASE_URL}
-      SupabaseStorage__ServiceRoleKey: ${SUPABASE_SERVICE_ROLE_KEY}
-      SupabaseStorage__Bucket: ${SUPABASE_BUCKET}
-      SupabaseStorage__Folder: ${SUPABASE_FOLDER}
+      ImageKit__PublicKey: ${IMAGEKIT_PUBLIC_KEY}
+      ImageKit__PrivateKey: ${IMAGEKIT_PRIVATE_KEY}
+      ImageKit__UrlEndpoint: ${IMAGEKIT_URL_ENDPOINT}
+      ImageKit__DefaultFolder: ${IMAGEKIT_DEFAULT_FOLDER}
     depends_on:
       sqlserver:
         condition: service_healthy
@@ -158,15 +141,16 @@ services:
       Jwt__Audience: ${JWT_AUDIENCE}
       Services__UserService: ${USER_SERVICE_BASE_URL}
       Services__EventService: ${EVENT_SERVICE_BASE_URL}
+      InternalApi__Key: ${INTERNAL_API_KEY}
       Cors__AllowedOrigins__0: ${CORS_ORIGIN_0}
       Cors__AllowedOrigins__1: ${CORS_ORIGIN_1}
       Cors__AllowedOrigins__2: ${CORS_ORIGIN_2}
-      PayPal__Mode: "${PayPal__Mode}"
-      PayPal__ClientId: "${PayPal__ClientId}"
-      PayPal__ClientSecret: "${PayPal__ClientSecret}"
-      PayPal__AppBaseUrl: "${PayPal__AppBaseUrl}"
-      PayPal__ReturnUrl: "${PayPal__ReturnUrl}"
-      PayPal__CancelUrl: "${PayPal__CancelUrl}"
+      PayPal__Mode: ${PAYPAL_MODE}
+      PayPal__ClientId: ${PAYPAL_CLIENT_ID}
+      PayPal__ClientSecret: ${PAYPAL_CLIENT_SECRET}
+      PayPal__AppBaseUrl: ${PAYPAL_APP_BASE_URL}
+      PayPal__ReturnUrl: ${PAYPAL_RETURN_URL}
+      PayPal__CancelUrl: ${PAYPAL_CANCEL_URL}
     depends_on:
       sqlserver:
         condition: service_healthy
@@ -215,8 +199,6 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
-      mailhog:
-        condition: service_started
     restart: unless-stopped
     networks:
       - geoevent-network
@@ -282,14 +264,18 @@ services:
       Smtp__Port: ${SMTP_PORT}
       Smtp__FromEmail: ${SMTP_FROM_EMAIL}
       Smtp__FromName: ${SMTP_FROM_NAME}
-      Smtp__UseSsl: ${SMTP_ENABLE_SSL}
+      Smtp__EnableSsl: ${SMTP_ENABLE_SSL}
       Smtp__Username: ${SMTP_USERNAME}
       Smtp__Password: ${SMTP_PASSWORD}
-      Services__EventService: ${EVENT_SERVICE_BASE_URL}
+      Services__UserService__BaseUrl: ${USER_SERVICE_BASE_URL}
+      Services__UserService__InternalApiKey: ${INTERNAL_API_KEY}
+      Services__EventService__BaseUrl: ${EVENT_SERVICE_BASE_URL}
       Services__NotificationService__BaseUrl: ${NOTIFICATION_SERVICE_BASE_URL}
       Services__NotificationService__InternalApiKey: ${INTERNAL_API_KEY}
       Services__MessageService__BaseUrl: ${MESSAGE_SERVICE_BASE_URL}
       Services__MessageService__InternalApiKey: ${INTERNAL_API_KEY}
+      Services__TicketService__BaseUrl: ${TICKET_SERVICE_BASE_URL}
+      Services__TicketService__InternalApiKey: ${INTERNAL_API_KEY}
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -304,8 +290,6 @@ services:
       notification-service:
         condition: service_started
       message-service:
-        condition: service_started
-      mailhog:
         condition: service_started
     restart: unless-stopped
     networks:

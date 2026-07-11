@@ -60,18 +60,23 @@ public class NotificationServiceImpl : INotificationService
     }
 
     public async Task<ServiceResult<NotificationResponseDto>> CreateNotificationAsync(
-        CreateNotificationDto dto)
+    CreateNotificationDto dto)
     {
-        var notification = new Notification
+        Notification notification;
+
+        try
         {
-            UserId = dto.UserId,
-            Type = dto.Type,
-            Title = dto.Title,
-            Description = dto.Description,
-            ImageUrl = dto.ImageUrl,
-            IsRead = false,
-            CreatedAt = DateTime.UtcNow
-        };
+            notification = new Notification(
+                dto.Type,
+                dto.Title,
+                dto.Description,
+                dto.UserId,
+                dto.ImageUrl);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return ServiceResult<NotificationResponseDto>.Fail(ex.Message);
+        }
 
         var created = await repo.CreateAsync(notification);
 
@@ -80,7 +85,7 @@ public class NotificationServiceImpl : INotificationService
             created.NotificationId,
             dto.UserId);
 
-        return ServiceResult<NotificationResponseDto>.Ok(MapToDto(created));
+        return ServiceResult<NotificationResponseDto>.Created(MapToDto(created));
     }
 
     public async Task<ServiceResult<bool>> MarkAsReadAsync(int notificationId, int userId)

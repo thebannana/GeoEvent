@@ -1,9 +1,10 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geo_event/core/config/app_environment.dart';
 
+import '../../../../core/errors/error_mapper.dart';
+import '../../../../core/utils/debounce.dart';
+import '../../../../core/utils/logger.dart';
 import '../../../../core/widgets/layout/app_bottom_sheet_container.dart';
 import '../../../../core/widgets/feedback/app_empty_state.dart';
 import '../../../../core/widgets/feedback/app_error_state.dart';
@@ -73,10 +74,10 @@ class CreateEventLocationPicker extends StatelessWidget {
                       fontWeight: FontWeight.w700,
                     ),
                   ),
-                  if ((state.selectedLocation!.subtitle ?? '').isNotEmpty) ...[
+                  if ((state.selectedLocation!.subtitle ?? '').trim().isNotEmpty) ...[
                     const SizedBox(height: 4),
                     Text(
-                      state.selectedLocation!.subtitle!,
+                      state.selectedLocation!.subtitle!.trim(),
                       style: TextStyle(
                         fontSize: 13,
                         color: theme.textTheme.bodySmall?.color,
@@ -111,7 +112,9 @@ class LocationSearchSheet extends ConsumerStatefulWidget {
 
 class _LocationSearchSheetState extends ConsumerState<LocationSearchSheet> {
   final controller = TextEditingController();
-  Timer? debounce;
+  final debouncer = Debouncer(
+    delay: const Duration(milliseconds: 350),
+  );
 
   bool loading = false;
   String? error;
@@ -128,7 +131,7 @@ class _LocationSearchSheetState extends ConsumerState<LocationSearchSheet> {
 
   @override
   void dispose() {
-    debounce?.cancel();
+    debouncer.dispose();
     controller.dispose();
     super.dispose();
   }
@@ -161,20 +164,31 @@ class _LocationSearchSheetState extends ConsumerState<LocationSearchSheet> {
     });
 
     try {
-      final found = await service.searchPlaces(query);
+      final found = await service.searchPlaces(query.trim());
       if (!mounted) return;
 
       setState(() {
         results = found;
         loading = false;
       });
-    } catch (e) {
+    } catch (e, stackTrace) {
+      AppLogger.error(
+        'Location search failed.',
+        tag: 'LocationSearchSheet',
+        error: e,
+        stackTrace: stackTrace,
+      );
+
       if (!mounted) return;
 
       setState(() {
         results = const [];
         loading = false;
-        error = e.toString().replaceFirst('Exception: ', '');
+        error = ErrorMapper.toMessage(
+          e,
+          stackTrace: stackTrace,
+          fallbackMessage: 'Could not search locations.',
+        );
       });
     }
   }
@@ -201,6 +215,7 @@ class _LocationSearchSheetState extends ConsumerState<LocationSearchSheet> {
             ),
             IconButton(
               onPressed: () => Navigator.of(context).pop(),
+              tooltip: 'Close',
               icon: const Icon(Icons.close_rounded),
             ),
           ],
@@ -213,8 +228,7 @@ class _LocationSearchSheetState extends ConsumerState<LocationSearchSheet> {
             controller: controller,
             autofocus: true,
             onChanged: (value) {
-              debounce?.cancel();
-              debounce = Timer(const Duration(milliseconds: 350), () {
+              debouncer.run(() {
                 performSearch(value);
               });
             },

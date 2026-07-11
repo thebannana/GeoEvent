@@ -1,8 +1,9 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/errors/error_mapper.dart';
+import '../../../../core/utils/debounce.dart';
+import '../../../../core/utils/logger.dart';
 import '../../../../core/widgets/feedback/app_confirm_dialog.dart';
 import '../../../../core/widgets/feedback/app_empty_state.dart';
 import '../../../../core/widgets/feedback/app_error_state.dart';
@@ -27,9 +28,11 @@ class BookmarksScreen extends ConsumerStatefulWidget {
 }
 
 class _BookmarksScreenState extends ConsumerState<BookmarksScreen> {
+  static const _searchDelay = Duration(milliseconds: 350);
+
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  Timer? _debounce;
+  final Debouncer _debouncer = Debouncer(delay: _searchDelay);
 
   String _query = '';
   SavedFilterType _selectedFilter = SavedFilterType.saved;
@@ -49,7 +52,7 @@ class _BookmarksScreenState extends ConsumerState<BookmarksScreen> {
 
   @override
   void dispose() {
-    _debounce?.cancel();
+    _debouncer.dispose();
     _searchController.dispose();
     _scrollController
       ..removeListener(_onScroll)
@@ -100,6 +103,14 @@ class _BookmarksScreenState extends ConsumerState<BookmarksScreen> {
     );
   }
 
+  void _showMessage(String message) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+
   Future<void> _removeBookmark(Bookmark item) async {
     if (_busy) return;
 
@@ -116,20 +127,20 @@ class _BookmarksScreenState extends ConsumerState<BookmarksScreen> {
 
     try {
       await ref.read(bookmarksProvider.notifier).deleteBookmark(item.bookmarkId);
-
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Saved event removed successfully.'),
-        ),
+      _showMessage('Saved event removed successfully.');
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'Failed to remove bookmark.',
+        tag: 'BookmarksScreen',
+        error: error,
+        stackTrace: stackTrace,
       );
-    } catch (_) {
-      if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Could not remove the saved event.'),
+      _showMessage(
+        ErrorMapper.toMessage(
+          error,
+          stackTrace: stackTrace,
+          fallbackMessage: 'Could not remove the saved event.',
         ),
       );
     } finally {
@@ -155,20 +166,20 @@ class _BookmarksScreenState extends ConsumerState<BookmarksScreen> {
 
     try {
       await ref.read(likedEventsProvider.notifier).unlikeEvent(item.eventId);
-
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Liked event removed successfully.'),
-        ),
+      _showMessage('Liked event removed successfully.');
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'Failed to remove liked event.',
+        tag: 'BookmarksScreen',
+        error: error,
+        stackTrace: stackTrace,
       );
-    } catch (_) {
-      if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Could not update the liked event.'),
+      _showMessage(
+        ErrorMapper.toMessage(
+          error,
+          stackTrace: stackTrace,
+          fallbackMessage: 'Could not update the liked event.',
         ),
       );
     } finally {
@@ -181,14 +192,34 @@ class _BookmarksScreenState extends ConsumerState<BookmarksScreen> {
   void _onQueryChanged(String value) {
     setState(() => _query = value);
 
-    _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 350), () async {
-      if (_selectedFilter == SavedFilterType.saved) {
-        await ref.read(bookmarksProvider.notifier).search(value);
-      } else {
-        await ref.read(likedEventsProvider.notifier).refresh();
+    _debouncer.runAsync(() async {
+      try {
+        if (_selectedFilter == SavedFilterType.saved) {
+          await ref.read(bookmarksProvider.notifier).search(value);
+        } else {
+          await ref.read(likedEventsProvider.notifier).refresh();
+        }
+      } catch (error, stackTrace) {
+        AppLogger.error(
+          'Failed to apply bookmarks search.',
+          tag: 'BookmarksScreen',
+          error: error,
+          stackTrace: stackTrace,
+        );
       }
     });
+  }
+
+  Future<void> _clearSearch(bool isSavedSelected) async {
+    _debouncer.cancel();
+    _searchController.clear();
+    setState(() => _query = '');
+
+    if (isSavedSelected) {
+      await ref.read(bookmarksProvider.notifier).search('');
+    } else {
+      await ref.read(likedEventsProvider.notifier).refresh();
+    }
   }
 
   Widget _buildFooter({
@@ -202,7 +233,9 @@ class _BookmarksScreenState extends ConsumerState<BookmarksScreen> {
       hasMore: hasMore,
       loadedCount: loadedCount,
       totalCount: totalCount,
-      itemLabel: _selectedFilter == SavedFilterType.saved ? 'saved events' : 'liked events',
+      itemLabel: _selectedFilter == SavedFilterType.saved
+          ? 'saved events'
+          : 'liked events',
       onLoadMore: hasMore && !loadingMore
           ? () {
               if (_selectedFilter == SavedFilterType.saved) {
@@ -300,21 +333,7 @@ class _BookmarksScreenState extends ConsumerState<BookmarksScreen> {
                         suffixIcon: _query.isNotEmpty
                             ? IconButton(
                                 tooltip: 'Clear search',
-                                onPressed: () async {
-                                  _debounce?.cancel();
-                                  _searchController.clear();
-                                  setState(() => _query = '');
-
-                                  if (isSavedSelected) {
-                                    await ref
-                                        .read(bookmarksProvider.notifier)
-                                        .search('');
-                                  } else {
-                                    await ref
-                                        .read(likedEventsProvider.notifier)
-                                        .refresh();
-                                  }
-                                },
+                                onPressed: () => _clearSearch(isSavedSelected),
                                 icon: const Icon(
                                   Icons.close_rounded,
                                   size: 18,

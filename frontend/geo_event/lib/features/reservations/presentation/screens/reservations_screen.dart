@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/errors/error_mapper.dart';
+import '../../../../core/utils/logger.dart';
 import '../../../../core/widgets/feedback/app_confirm_dialog.dart';
 import '../../../../core/widgets/feedback/app_empty_state.dart';
 import '../../../../core/widgets/feedback/app_error_state.dart';
@@ -33,11 +35,15 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
     _ReservationFilter(label: 'Refunded', value: ReservationStatus.refunded),
   ];
 
-  @override
-  void initState() {
-    super.initState();
-    _scrollController.addListener(_onScroll);
-  }
+@override
+void initState() {
+  super.initState();
+  _scrollController.addListener(_onScroll);
+
+  Future.microtask(() {
+    ref.read(reservationsControllerProvider.notifier).refresh();
+  });
+}
 
   @override
   void dispose() {
@@ -47,15 +53,26 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
     super.dispose();
   }
 
-void _onScroll() {
-  if (!_scrollController.hasClients) return;
-  final position = _scrollController.position;
-  if (position.pixels >= position.maxScrollExtent - 240) {
-    final state = ref.read(reservationsControllerProvider).valueOrNull;
-    if (state?.isFetchingMore == true) return;
-    ref.read(reservationsControllerProvider.notifier).loadMore();
+  void _showMessage(String message) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(content: Text(message)),
+      );
   }
-}
+
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+
+    final position = _scrollController.position;
+    if (position.pixels >= position.maxScrollExtent - 240) {
+      final state = ref.read(reservationsControllerProvider).valueOrNull;
+      if (state?.isFetchingMore == true) return;
+      ref.read(reservationsControllerProvider.notifier).loadMore();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -111,13 +128,17 @@ void _onScroll() {
                   ),
                 ),
               ],
-              error: (_, _) => [
+              error: (error, stackTrace) => [
                 SliverPadding(
                   padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
                   sliver: SliverToBoxAdapter(
                     child: AppErrorState(
                       title: 'Failed to load reservations',
-                      message: 'Pull to refresh or try again.',
+                      message: ErrorMapper.toMessage(
+                        error,
+                        stackTrace: stackTrace,
+                        fallbackMessage: 'Pull to refresh or try again.',
+                      ),
                       onRetry: ctrl.refresh,
                     ),
                   ),
@@ -188,8 +209,6 @@ void _onScroll() {
     BuildContext context,
     Reservation reservation,
   ) async {
-    final messenger = ScaffoldMessenger.of(context);
-
     final confirmed = await AppConfirmDialog.show(
       context,
       title: 'Cancel reservation?',
@@ -208,97 +227,99 @@ void _onScroll() {
           .read(reservationsControllerProvider.notifier)
           .cancelReservation(reservation.reservationId);
 
-      if (!mounted) return;
-
-      messenger.showSnackBar(
-        const SnackBar(
-          content: Text('Reservation cancelled.'),
-        ),
+      _showMessage('Reservation cancelled.');
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'Failed to cancel reservation.',
+        tag: 'ReservationsScreen',
+        error: error,
+        stackTrace: stackTrace,
       );
-    } catch (_) {
-      if (!mounted) return;
 
-      messenger.showSnackBar(
-        const SnackBar(
-          content: Text('Could not cancel. Please try again.'),
+      _showMessage(
+        ErrorMapper.toMessage(
+          error,
+          stackTrace: stackTrace,
+          fallbackMessage: 'Could not cancel. Please try again.',
         ),
       );
     }
   }
 
   Future<void> _requestRefund(
-  BuildContext context,
-  Reservation reservation,
-) async {
-  final reasonController = TextEditingController();
+    BuildContext context,
+    Reservation reservation,
+  ) async {
+    final reasonController = TextEditingController();
 
-  try {
-    final reason = await showDialog<String?>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Request refund?'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Reservation #${reservation.reservationId} for '
-              '${reservation.quantity} ticket${reservation.quantity > 1 ? 's' : ''} '
-              'will be submitted for admin review.',
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: reasonController,
-              autofocus: true,
-              minLines: 2,
-              maxLines: 4,
-              textInputAction: TextInputAction.done,
-              decoration: const InputDecoration(
-                labelText: 'Reason',
-                hintText: 'Explain why you want a refund',
+    try {
+      final reason = await showDialog<String?>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Request refund?'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Reservation #${reservation.reservationId} for '
+                '${reservation.quantity} ticket${reservation.quantity > 1 ? 's' : ''} '
+                'will be submitted for admin review.',
               ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: reasonController,
+                autofocus: true,
+                minLines: 2,
+                maxLines: 4,
+                textInputAction: TextInputAction.done,
+                decoration: const InputDecoration(
+                  labelText: 'Reason',
+                  hintText: 'Explain why you want a refund',
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, null),
+              child: const Text('Keep'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, reasonController.text.trim()),
+              child: const Text('Send request'),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, null),
-            child: const Text('Keep'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, reasonController.text.trim()),
-            child: const Text('Send request'),
-          ),
-        ],
-      ),
-    );
+      );
 
-    if (reason == null || !mounted) return;
+      if (reason == null || !mounted) return;
 
-    await ref.read(reservationsControllerProvider.notifier).requestRefund(
-          reservation.reservationId,
-          reason: reason.isEmpty ? null : reason,
-        );
+      await ref.read(reservationsControllerProvider.notifier).requestRefund(
+            reservation.reservationId,
+            reason: reason.isEmpty ? null : reason,
+          );
 
-    if (!mounted) return;
+      _showMessage('Refund request submitted.');
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'Failed to request refund.',
+        tag: 'ReservationsScreen',
+        error: error,
+        stackTrace: stackTrace,
+      );
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Refund request submitted.'),
-      ),
-    );
-  } catch (e) {
-    if (!mounted) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Could not submit refund request. Please try again.'),
-      ),
-    );
-  } finally {
-    reasonController.dispose();
+      _showMessage(
+        ErrorMapper.toMessage(
+          error,
+          stackTrace: stackTrace,
+          fallbackMessage: 'Could not submit refund request. Please try again.',
+        ),
+      );
+    } finally {
+      reasonController.dispose();
+    }
   }
-}
 }
 
 class _ReservationFilter {

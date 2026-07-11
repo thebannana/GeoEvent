@@ -19,9 +19,12 @@ class MapSettingsDrawer extends ConsumerStatefulWidget {
 
 class _MapSettingsDrawerState extends ConsumerState<MapSettingsDrawer>
     with SingleTickerProviderStateMixin {
-  static const animationDuration = Duration(milliseconds: 260);
-  static const minWidth = 280.0;
-  static const maxWidth = 360.0;
+  static const _animationDuration = Duration(milliseconds: 260);
+  static const _minWidth = 280.0;
+  static const _maxWidth = 360.0;
+  static const _minHeight = 420.0;
+  static const _maxHeight = 620.0;
+  static const _logoHeight = 28.0;
 
   late final AnimationController _controller;
   late final Animation<Offset> _slide;
@@ -33,7 +36,7 @@ class _MapSettingsDrawerState extends ConsumerState<MapSettingsDrawer>
 
     _controller = AnimationController(
       vsync: this,
-      duration: animationDuration,
+      duration: _animationDuration,
     );
 
     _slide = Tween<Offset>(
@@ -66,12 +69,61 @@ class _MapSettingsDrawerState extends ConsumerState<MapSettingsDrawer>
     }
   }
 
+  Color _dividerColor(ThemeData theme) {
+    return theme.colorScheme.outline.withValues(alpha: 0.24);
+  }
+
+  BoxDecoration _buildDecoration(ThemeData theme) {
+    return BoxDecoration(
+      color: theme.colorScheme.surface,
+      borderRadius: BorderRadius.circular(28),
+      border: Border.all(
+        color: theme.colorScheme.outline.withValues(alpha: 0.35),
+      ),
+      boxShadow: [
+        BoxShadow(
+          color: theme.colorScheme.shadow.withValues(alpha: 0.10),
+          blurRadius: 28,
+          offset: const Offset(0, 10),
+        ),
+      ],
+    );
+  }
+
+Widget _buildLogoImage({
+  required String assetPath,
+  required String semanticLabel,
+}) {
+  return SizedBox(
+    height: _logoHeight,
+    child: Center(
+      child: Image.asset(
+        assetPath,
+        fit: BoxFit.contain,
+        semanticLabel: semanticLabel,
+        errorBuilder: (context, error, stackTrace) {
+          final theme = Theme.of(context);
+          return Text(
+            semanticLabel,
+            style: theme.textTheme.labelMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+              fontWeight: FontWeight.w600,
+            ),
+            textAlign: TextAlign.center,
+          );
+        },
+      ),
+    ),
+  );
+}
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final settings = ref.watch(mapSettingsControllerProvider);
     final controller = ref.read(mapSettingsControllerProvider.notifier);
     final width = MediaQuery.of(context).size.width * 0.78;
+    final dividerColor = _dividerColor(theme);
 
     return GestureDetector(
       onTap: _close,
@@ -87,25 +139,12 @@ class _MapSettingsDrawerState extends ConsumerState<MapSettingsDrawer>
               child: SlideTransition(
                 position: _slide,
                 child: Container(
-                  width: width.clamp(minWidth, maxWidth),
+                  width: width.clamp(_minWidth, _maxWidth),
                   constraints: const BoxConstraints(
-                    minHeight: 420,
-                    maxHeight: 620,
+                    minHeight: _minHeight,
+                    maxHeight: _maxHeight,
                   ),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.surface,
-                    borderRadius: BorderRadius.circular(28),
-                    border: Border.all(
-                      color: theme.colorScheme.outline.withValues(alpha: 0.35),
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: theme.colorScheme.shadow.withValues(alpha: 0.10),
-                        blurRadius: 28,
-                        offset: const Offset(0, 10),
-                      ),
-                    ],
-                  ),
+                  decoration: _buildDecoration(theme),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -142,10 +181,7 @@ class _MapSettingsDrawerState extends ConsumerState<MapSettingsDrawer>
                           ],
                         ),
                       ),
-                      Divider(
-                        height: 1,
-                        color: theme.colorScheme.outline.withValues(alpha: 0.24),
-                      ),
+                      Divider(height: 1, color: dividerColor),
                       Expanded(
                         child: SingleChildScrollView(
                           padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
@@ -161,13 +197,6 @@ class _MapSettingsDrawerState extends ConsumerState<MapSettingsDrawer>
                                         'Uses the rendered scene depth instead of only camera tilt.',
                                     value: settings.map3D,
                                     onChanged: controller.setMap3D,
-                                  ),
-                                  MapSettingsSectionItem(
-                                    label: 'Terrain elevation',
-                                    subtitle:
-                                        'Shows relief and elevation where supported by the map style.',
-                                    value: settings.terrain,
-                                    onChanged: controller.setTerrain,
                                   ),
                                 ],
                               ),
@@ -208,27 +237,24 @@ class _MapSettingsDrawerState extends ConsumerState<MapSettingsDrawer>
                           ),
                         ),
                       ),
-                      Divider(
-                        height: 1,
-                        color: theme.colorScheme.outline.withValues(alpha: 0.24),
-                      ),
+                      Divider(height: 1, color: dividerColor),
                       Padding(
                         padding: const EdgeInsets.fromLTRB(20, 14, 20, 18),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.map_rounded,
-                              size: 15,
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              'Powered by Mapbox',
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: theme.colorScheme.onSurfaceVariant,
+                        child: Center(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              _buildLogoImage(
+                                assetPath: 'assets/images/geoevent.png',
+                                semanticLabel: 'geoEvent logo',
                               ),
-                            ),
-                          ],
+                              const SizedBox(height: 12),
+                              _buildLogoImage(
+                                assetPath: 'assets/images/mapbox.png',
+                                semanticLabel: 'Mapbox logo',
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ],

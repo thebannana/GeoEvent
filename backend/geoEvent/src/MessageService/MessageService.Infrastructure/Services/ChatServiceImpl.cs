@@ -43,38 +43,32 @@ public class ChatServiceImpl : IChatService
 
         if (thread == null)
         {
-            thread = new ChatThread
-            {
-                Type = ChatThreadType.Direct,
-                Title = string.Empty,
-                CreatedByUserId = userId,
-                CreatedAt = DateTime.UtcNow,
-                Participants =
-                {
-                    new ChatThreadParticipant { UserId = userId, JoinedAt = DateTime.UtcNow },
-                    new ChatThreadParticipant { UserId = otherUserId, JoinedAt = DateTime.UtcNow }
-                }
-            };
+            thread = new ChatThread(ChatThreadType.Direct, string.Empty, userId);
 
             thread = await _repository.AddThreadAsync(thread);
+
+            await _repository.AddParticipantAsync(new ChatThreadParticipant(thread.Id, userId));
+            await _repository.AddParticipantAsync(new ChatThreadParticipant(thread.Id, otherUserId));
+
+            thread = await _repository.GetThreadByIdAsync(thread.Id) ?? thread;
         }
         else
         {
             var currentParticipant = thread.Participants.FirstOrDefault(x => x.UserId == userId);
-            if (currentParticipant != null && currentParticipant.LeftAt != null)
+            if (currentParticipant != null && !currentParticipant.IsActive)
             {
-                currentParticipant.LeftAt = null;
-                currentParticipant.JoinedAt = DateTime.UtcNow;
+                currentParticipant.Rejoin();
                 await _repository.UpdateParticipantAsync(currentParticipant);
             }
 
             var otherParticipant = thread.Participants.FirstOrDefault(x => x.UserId == otherUserId);
-            if (otherParticipant != null && otherParticipant.LeftAt != null)
+            if (otherParticipant != null && !otherParticipant.IsActive)
             {
-                otherParticipant.LeftAt = null;
-                otherParticipant.JoinedAt = DateTime.UtcNow;
+                otherParticipant.Rejoin();
                 await _repository.UpdateParticipantAsync(otherParticipant);
             }
+
+            thread = await _repository.GetThreadByIdAsync(thread.Id) ?? thread;
         }
 
         var dto = await MapThreadSummaryAsync(thread, userId);
@@ -92,8 +86,8 @@ public class ChatServiceImpl : IChatService
     }
 
     public async Task<ServiceResult<PagedResult<ChatThreadSummaryDto>>> GetThreadsAsync(
-    int userId,
-    ChatThreadsFilterDto? filter)
+        int userId,
+        ChatThreadsFilterDto? filter)
     {
         filter ??= new ChatThreadsFilterDto();
 
@@ -103,18 +97,12 @@ public class ChatServiceImpl : IChatService
             ? null
             : filter.SearchTerm.Trim();
 
-        if (filter.UnreadOnly)
-        {
-            return ServiceResult<PagedResult<ChatThreadSummaryDto>>.Fail(
-                "Unread-only filtering is not supported by the current chat participant schema.");
-        }
-
         var pagedThreads = await _repository.GetUserThreadsAsync(
             userId,
             page,
             pageSize,
-            null,
-            false);
+            searchTerm,
+            filter.UnreadOnly);
 
         var mappedItems = new List<ChatThreadSummaryDto>();
 
@@ -124,27 +112,12 @@ public class ChatServiceImpl : IChatService
             mappedItems.Add(dto);
         }
 
-        if (!string.IsNullOrWhiteSpace(searchTerm))
-        {
-            mappedItems = mappedItems
-                .Where(x =>
-                    (!string.IsNullOrWhiteSpace(x.Title) &&
-                     x.Title.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)) ||
-                    (!string.IsNullOrWhiteSpace(x.LastMessageContent) &&
-                     x.LastMessageContent.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)) ||
-                    (!string.IsNullOrWhiteSpace(x.OtherUserDisplayName) &&
-                     x.OtherUserDisplayName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)) ||
-                    (!string.IsNullOrWhiteSpace(x.OtherUserUsername) &&
-                     x.OtherUserUsername.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)))
-                .ToList();
-        }
-
         var result = new PagedResult<ChatThreadSummaryDto>
         {
             Items = mappedItems,
-            TotalCount = mappedItems.Count,
-            Page = page,
-            PageSize = pageSize
+            TotalCount = pagedThreads.TotalCount,
+            Page = pagedThreads.Page,
+            PageSize = pagedThreads.PageSize
         };
 
         return ServiceResult<PagedResult<ChatThreadSummaryDto>>.Ok(result);
@@ -157,11 +130,18 @@ public class ChatServiceImpl : IChatService
             return ServiceResult<bool>.NotFound("Thread not found.");
 
         var participant = await _repository.GetParticipantAsync(threadId, userId);
-        if (participant == null || participant.LeftAt != null)
+        if (participant == null || !participant.IsActive)
             return ServiceResult<bool>.NotFound("You are not a participant of this thread.");
 
-        participant.LeftAt = DateTime.UtcNow;
+        participant.Leave();
         await _repository.UpdateParticipantAsync(participant);
+
+        var ownMessagesInThread = await _repository.GetMessagesByThreadAndSenderAsync(threadId, userId);
+        foreach (var message in ownMessagesInThread.Where(m => !m.IsDeleted))
+        {
+            message.SoftDelete();
+            await _repository.UpdateMessageAsync(message);
+        }
 
         var activeParticipants = await _repository.GetParticipantsAsync(threadId);
         var participantUserIds = activeParticipants
@@ -198,10 +178,7 @@ public class ChatServiceImpl : IChatService
                     EventTitle = evt.Title,
                     StartDateTime = EnsureUtc(evt.StartDateTime),
                     EndDateTime = EnsureUtc(evt.EndDateTime),
-                    VenueName = evt.VenueName,
-                    CityName = null,
-                    CoverImageUrl = evt.CoverImageUrl,
-                    IsOnline = evt.IsOnline
+                    CoverImageUrl = evt.CoverImageUrl
                 };
             }
         }
@@ -218,7 +195,7 @@ public class ChatServiceImpl : IChatService
         if (thread.Type == ChatThreadType.Direct)
         {
             otherUserId = thread.Participants
-                .Where(x => x.UserId != userId && x.LeftAt == null)
+                .Where(x => x.UserId != userId && x.IsActive)
                 .Select(x => (int?)x.UserId)
                 .FirstOrDefault();
 
@@ -265,17 +242,24 @@ public class ChatServiceImpl : IChatService
             return;
 
         var participant = await _repository.GetParticipantAsync(thread.Id, userId);
-        if (participant == null || participant.LeftAt != null)
+        if (participant == null || !participant.IsActive)
             return;
 
-        participant.LeftAt = DateTime.UtcNow;
+        participant.Leave();
         await _repository.UpdateParticipantAsync(participant);
+
+        var ownMessagesInThread = await _repository.GetMessagesByThreadAndSenderAsync(thread.Id, userId);
+        foreach (var message in ownMessagesInThread.Where(m => !m.IsDeleted))
+        {
+            message.SoftDelete();
+            await _repository.UpdateMessageAsync(message);
+        }
     }
 
     public async Task<ServiceResult<PagedResult<ChatMessageDto>>> GetMessagesAsync(
-    long threadId,
-    int userId,
-    ChatMessagesFilterDto? filter)
+        long threadId,
+        int userId,
+        ChatMessagesFilterDto? filter)
     {
         filter ??= new ChatMessagesFilterDto();
 
@@ -307,12 +291,6 @@ public class ChatServiceImpl : IChatService
         if (!await _repository.IsParticipantAsync(threadId, userId))
             return ServiceResult<ChatMessageDto>.Forbidden("You are not a participant of this thread.");
 
-        if (string.IsNullOrWhiteSpace(dto.Content))
-            return ServiceResult<ChatMessageDto>.Fail("Message content cannot be empty.");
-
-        if (dto.Content.Length > 4000)
-            return ServiceResult<ChatMessageDto>.Fail("Message content cannot exceed 4000 characters.");
-
         if (dto.ReplyToMessageId.HasValue)
         {
             var replyTarget = await _repository.GetMessageByIdAsync(dto.ReplyToMessageId.Value);
@@ -320,21 +298,22 @@ public class ChatServiceImpl : IChatService
                 return ServiceResult<ChatMessageDto>.Fail("Reply target is invalid.");
         }
 
-        var message = new ChatMessage
+        ChatMessage message;
+        try
         {
-            ThreadId = threadId,
-            SenderId = userId,
-            Content = dto.Content.Trim(),
-            ReplyToMessageId = dto.ReplyToMessageId,
-            SentAt = DateTime.UtcNow
-        };
+            message = new ChatMessage(threadId, userId, dto.Content, dto.ReplyToMessageId);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return ServiceResult<ChatMessageDto>.Fail(ex.Message);
+        }
 
         message = await _repository.AddMessageAsync(message);
 
         var thread = await _repository.GetThreadByIdAsync(threadId);
         if (thread != null)
         {
-            thread.LastMessageAt = message.SentAt;
+            thread.TouchLastMessageAt(message.SentAt);
             await _repository.UpdateThreadAsync(thread);
         }
 
@@ -413,13 +392,15 @@ public class ChatServiceImpl : IChatService
         if (!message.CanEdit(userId))
             return ServiceResult<ChatMessageDto>.Forbidden("You can only edit your own messages.");
 
-        if (string.IsNullOrWhiteSpace(dto.Content))
-            return ServiceResult<ChatMessageDto>.Fail("Edited content cannot be empty.");
+        try
+        {
+            message.Edit(dto.Content);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return ServiceResult<ChatMessageDto>.Fail(ex.Message);
+        }
 
-        if (dto.Content.Length > 4000)
-            return ServiceResult<ChatMessageDto>.Fail("Message content cannot exceed 4000 characters.");
-
-        message.Edit(dto.Content);
         await _repository.UpdateMessageAsync(message);
 
         var mapped = await MapMessageAsync(message, userId);
@@ -471,13 +452,19 @@ public class ChatServiceImpl : IChatService
         if (await _repository.HasMessageLikeAsync(messageId, userId))
             return ServiceResult<ChatMessageDto>.Ok(await MapMessageAsync(message, userId));
 
-        await _repository.AddMessageLikeAsync(new ChatMessageLike
+        ChatMessageLike like;
+        try
         {
-            MessageId = messageId,
-            UserId = userId
-        });
+            like = new ChatMessageLike(messageId, userId);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return ServiceResult<ChatMessageDto>.Fail(ex.Message);
+        }
 
-        message.LikesCount++;
+        await _repository.AddMessageLikeAsync(like);
+
+        message.IncrementLikes();
         await _repository.UpdateMessageAsync(message);
 
         var mapped = await MapMessageAsync(message, userId);
@@ -540,7 +527,7 @@ public class ChatServiceImpl : IChatService
         if (like != null)
         {
             await _repository.RemoveMessageLikeAsync(like);
-            message.LikesCount = Math.Max(0, message.LikesCount - 1);
+            message.DecrementLikes();
             await _repository.UpdateMessageAsync(message);
         }
 
@@ -553,10 +540,10 @@ public class ChatServiceImpl : IChatService
     public async Task<ServiceResult<bool>> MarkThreadReadAsync(long threadId, int userId)
     {
         var participant = await _repository.GetParticipantAsync(threadId, userId);
-        if (participant == null || participant.LeftAt != null)
+        if (participant == null || !participant.IsActive)
             return ServiceResult<bool>.Forbidden("You are not a participant of this thread.");
 
-        participant.LastReadAt = DateTime.UtcNow;
+        participant.MarkAsRead();
         await _repository.UpdateParticipantAsync(participant);
 
         var participantIds = (await _repository.GetParticipantsAsync(threadId))
@@ -615,14 +602,18 @@ public class ChatServiceImpl : IChatService
 
         if (thread == null)
         {
-            thread = new ChatThread
+            try
             {
-                Type = ChatThreadType.EventGroup,
-                EventId = eventId,
-                Title = evt?.Title ?? $"Event {eventId}",
-                CreatedByUserId = evt?.OrganizerId,
-                CreatedAt = DateTime.UtcNow
-            };
+                thread = new ChatThread(
+                    ChatThreadType.EventGroup,
+                    evt?.Title ?? $"Event {eventId}",
+                    evt?.OrganizerId,
+                    eventId);
+            }
+            catch (InvalidOperationException)
+            {
+                return;
+            }
 
             thread = await _repository.AddThreadAsync(thread);
 
@@ -631,17 +622,11 @@ public class ChatServiceImpl : IChatService
                 var organizerParticipant = await _repository.GetParticipantAsync(thread.Id, organizerId);
                 if (organizerParticipant == null)
                 {
-                    await _repository.AddParticipantAsync(new ChatThreadParticipant
-                    {
-                        ThreadId = thread.Id,
-                        UserId = organizerId,
-                        JoinedAt = DateTime.UtcNow
-                    });
+                    await _repository.AddParticipantAsync(new ChatThreadParticipant(thread.Id, organizerId));
                 }
-                else if (organizerParticipant.LeftAt != null)
+                else if (!organizerParticipant.IsActive)
                 {
-                    organizerParticipant.LeftAt = null;
-                    organizerParticipant.JoinedAt = DateTime.UtcNow;
+                    organizerParticipant.Rejoin();
                     await _repository.UpdateParticipantAsync(organizerParticipant);
                 }
             }
@@ -652,19 +637,12 @@ public class ChatServiceImpl : IChatService
 
         if (existing == null)
         {
-            await _repository.AddParticipantAsync(new ChatThreadParticipant
-            {
-                ThreadId = thread.Id,
-                UserId = userId,
-                JoinedAt = DateTime.UtcNow
-            });
-
+            await _repository.AddParticipantAsync(new ChatThreadParticipant(thread.Id, userId));
             wasAdded = true;
         }
-        else if (existing.LeftAt != null)
+        else if (!existing.IsActive)
         {
-            existing.LeftAt = null;
-            existing.JoinedAt = DateTime.UtcNow;
+            existing.Rejoin();
             await _repository.UpdateParticipantAsync(existing);
             wasAdded = true;
         }
@@ -705,15 +683,15 @@ public class ChatServiceImpl : IChatService
     {
         var participations = await _repository.GetUserParticipationsAsync(userId);
 
-        foreach (var participant in participations.Where(p => p.LeftAt == null))
+        foreach (var participant in participations.Where(p => p.IsActive))
         {
-            participant.LeftAt = DateTime.UtcNow;
+            participant.Leave();
             await _repository.UpdateParticipantAsync(participant);
         }
 
         var messages = await _repository.GetMessagesBySenderAsync(userId);
 
-        foreach (var message in messages.Where(m => m.DeletedAt == null))
+        foreach (var message in messages.Where(m => !m.IsDeleted))
         {
             message.SoftDelete();
             await _repository.UpdateMessageAsync(message);
@@ -756,7 +734,7 @@ public class ChatServiceImpl : IChatService
         {
             var otherParticipant = thread.Participants
                 .Where(x => x.UserId != currentUserId)
-                .OrderBy(x => x.LeftAt.HasValue)
+                .OrderBy(x => x.IsActive ? 0 : 1)
                 .ThenBy(x => x.JoinedAt)
                 .FirstOrDefault();
 

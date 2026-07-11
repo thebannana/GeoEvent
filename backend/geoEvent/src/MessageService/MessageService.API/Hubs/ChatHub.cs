@@ -1,4 +1,4 @@
-﻿using System.Security.Claims;
+﻿using MessageService.API.Extensions;
 using MessageService.Application.Interfaces.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
@@ -20,25 +20,33 @@ public class ChatHub : Hub
 
     public override async Task OnConnectedAsync()
     {
-        var userId = GetUserId();
+        var userId = Context.User?.GetUserId()
+            ?? throw new HubException("User is not authenticated.");
+
         await Groups.AddToGroupAsync(Context.ConnectionId, UserGroup(userId));
         await _chatService.SetUserOnlineAsync(userId, true);
+
         await base.OnConnectedAsync();
     }
 
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
-        var userId = GetUserId();
-        await _chatService.SetUserOnlineAsync(userId, false);
-        await Groups.RemoveFromGroupAsync(Context.ConnectionId, UserGroup(userId));
+        var userId = Context.User?.GetUserId();
+        if (userId.HasValue)
+        {
+            await _chatService.SetUserOnlineAsync(userId.Value, false);
+            await Groups.RemoveFromGroupAsync(Context.ConnectionId, UserGroup(userId.Value));
+        }
+
         await base.OnDisconnectedAsync(exception);
     }
 
     public async Task JoinThread(long threadId)
     {
-        var userId = GetUserId();
-        var isParticipant = await _chatService.IsParticipantAsync(threadId, userId);
+        var userId = Context.User?.GetUserId()
+            ?? throw new HubException("User is not authenticated.");
 
+        var isParticipant = await _chatService.IsParticipantAsync(threadId, userId);
         if (!isParticipant)
             throw new HubException("You are not a participant of this thread.");
 
@@ -48,17 +56,5 @@ public class ChatHub : Hub
     public async Task LeaveThread(long threadId)
     {
         await Groups.RemoveFromGroupAsync(Context.ConnectionId, ThreadGroup(threadId));
-    }
-
-    private int GetUserId()
-    {
-        var raw = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value
-            ?? Context.User?.FindFirst("sub")?.Value
-            ?? throw new HubException("User ID claim not found.");
-
-        if (!int.TryParse(raw, out var userId))
-            throw new HubException("Invalid user ID claim.");
-
-        return userId;
     }
 }

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/utils/date_time_extensions.dart';
 import '../../../../core/widgets/surfaces/app_surface_card.dart';
 import '../../../../shared/public_profile/models/user_review.dart';
+import '../../../profile/presentation/widgets/list_paging_footer.dart';
 
 class PublicProfileReviewsSection extends StatelessWidget {
   final List<UserReview> reviews;
@@ -16,13 +18,6 @@ class PublicProfileReviewsSection extends StatelessWidget {
     required this.isLoadingMore,
     required this.onLoadMore,
   });
-
-  String _formatDate(DateTime value) {
-    final local = value.toLocal();
-    return '${local.day.toString().padLeft(2, '0')}.'
-        '${local.month.toString().padLeft(2, '0')}.'
-        '${local.year}.';
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -68,7 +63,7 @@ class PublicProfileReviewsSection extends StatelessWidget {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        _formatDate(review.createdAt),
+                        review.createdAt.formatDate(pattern: 'dd.MM.yyyy.'),
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: colorScheme.onSurfaceVariant,
                         ),
@@ -100,17 +95,15 @@ class PublicProfileReviewsSection extends StatelessWidget {
                 ),
               );
             }),
-          if (hasNextPage || isLoadingMore) ...[
-            const SizedBox(height: 8),
-            Center(
-              child: isLoadingMore
-                  ? const CircularProgressIndicator()
-                  : OutlinedButton(
-                      onPressed: onLoadMore,
-                      child: const Text('Load more reviews'),
-                    ),
-            ),
-          ],
+          const SizedBox(height: 8),
+          ListPagingFooter(
+            isLoadingMore: isLoadingMore,
+            hasMore: hasNextPage,
+            loadedCount: reviews.length,
+            totalCount: reviews.length,
+            itemLabel: 'reviews',
+            onLoadMore: hasNextPage && !isLoadingMore ? onLoadMore : null,
+          ),
         ],
       ),
     );

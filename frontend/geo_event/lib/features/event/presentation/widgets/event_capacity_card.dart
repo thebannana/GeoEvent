@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/widgets/surfaces/app_surface_card.dart';
+import 'user_initials.dart';
 
 class AttendeePreviewUser {
   final int userId;
@@ -39,7 +40,11 @@ class EventCapacityCard extends StatelessWidget {
     final safeCapacity = capacity <= 0 ? 1 : capacity;
     final normalizedReserved = reservedCount.clamp(0, safeCapacity);
     final progress = (normalizedReserved / safeCapacity).clamp(0.0, 1.0);
-    final left = (capacity - normalizedReserved).clamp(0, capacity);
+    final safeDisplayedCapacity = capacity < 0 ? 0 : capacity;
+    final left = (safeDisplayedCapacity - normalizedReserved).clamp(
+      0,
+      safeDisplayedCapacity,
+    );
 
     final muted =
         text.bodyMedium?.color ?? scheme.onSurface.withValues(alpha: 0.72);
@@ -64,7 +69,7 @@ class EventCapacityCard extends StatelessWidget {
                 ),
               ),
               Text(
-                '$reservedCount / $capacity',
+                '$reservedCount / $safeDisplayedCapacity',
                 style: text.bodyMedium?.copyWith(
                   color: muted,
                   fontWeight: FontWeight.w600,
@@ -171,7 +176,7 @@ class _UserAvatar extends StatelessWidget {
               radius: 15,
               backgroundColor: scheme.surfaceContainerHighest,
               child: Text(
-                _initials(user.label),
+                UserInitials.from(user.label),
                 style: theme.textTheme.labelSmall?.copyWith(
                   color: scheme.onSurface,
                   fontWeight: FontWeight.w700,
@@ -179,18 +184,5 @@ class _UserAvatar extends StatelessWidget {
               ),
             ),
     );
-  }
-
-  String _initials(String value) {
-    final parts = value
-        .trim()
-        .split(RegExp(r'\s+'))
-        .where((e) => e.isNotEmpty)
-        .toList();
-
-    if (parts.isEmpty) return 'U';
-    if (parts.length == 1) return parts.first.substring(0, 1).toUpperCase();
-    return '${parts.first.substring(0, 1)}${parts.last.substring(0, 1)}'
-        .toUpperCase();
   }
 }

@@ -53,6 +53,7 @@ public class ExceptionMiddleware
             InvalidEventImageException or
             InvalidEventLikeException or
             InvalidEventStateException or
+            InvalidEventStateTransitionException or
             InvalidReferenceDataException or
             CommentAlreadyDeletedException)
         {

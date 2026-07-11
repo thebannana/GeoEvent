@@ -1,6 +1,6 @@
 using System.Text;
-using AspNetCoreRateLimit;
 using ApiGateway.Middleware;
+using AspNetCoreRateLimit;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.IdentityModel.Tokens;
@@ -38,17 +38,23 @@ try
         .AddReverseProxy()
         .LoadFromConfig(builder.Configuration.GetSection("ReverseProxy"));
 
-    var jwtSettings = builder.Configuration.GetSection("Jwt");
-    var issuer = jwtSettings["Issuer"];
-    var audience = jwtSettings["Audience"];
-    var secret = jwtSettings["Secret"];
+    var jwtSecret = builder.Configuration["Jwt:Secret"];
+    if (string.IsNullOrWhiteSpace(jwtSecret))
+    {
+        throw new InvalidOperationException("Jwt:Secret is not configured.");
+    }
 
-    if (string.IsNullOrWhiteSpace(secret))
-        throw new InvalidOperationException("JWT Secret is missing.");
-    if (string.IsNullOrWhiteSpace(issuer))
-        throw new InvalidOperationException("JWT Issuer is missing.");
-    if (string.IsNullOrWhiteSpace(audience))
-        throw new InvalidOperationException("JWT Audience is missing.");
+    var jwtIssuer = builder.Configuration["Jwt:Issuer"];
+    if (string.IsNullOrWhiteSpace(jwtIssuer))
+    {
+        throw new InvalidOperationException("Jwt:Issuer is not configured.");
+    }
+
+    var jwtAudience = builder.Configuration["Jwt:Audience"];
+    if (string.IsNullOrWhiteSpace(jwtAudience))
+    {
+        throw new InvalidOperationException("Jwt:Audience is not configured.");
+    }
 
     builder.Services
         .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -60,13 +66,13 @@ try
             options.TokenValidationParameters = new TokenValidationParameters
             {
                 ValidateIssuer = true,
+                ValidIssuer = jwtIssuer,
                 ValidateAudience = true,
+                ValidAudience = jwtAudience,
                 ValidateLifetime = true,
                 ValidateIssuerSigningKey = true,
-                ValidIssuer = issuer,
-                ValidAudience = audience,
                 IssuerSigningKey = new SymmetricSecurityKey(
-                    Encoding.UTF8.GetBytes(secret)),
+                    Encoding.UTF8.GetBytes(jwtSecret)),
                 ClockSkew = TimeSpan.Zero,
                 RoleClaimType = "role"
             };
@@ -107,35 +113,32 @@ try
     builder.Services.AddInMemoryRateLimiting();
     builder.Services.AddSingleton<IRateLimitConfiguration, RateLimitConfiguration>();
 
-    var corsOrigins = builder.Configuration
+    var allowedOrigins = builder.Configuration
         .GetSection("Cors:AllowedOrigins")
         .Get<string[]>()?
         .Where(origin => !string.IsNullOrWhiteSpace(origin))
         .Distinct(StringComparer.OrdinalIgnoreCase)
-        .ToArray();
+        .ToArray()
+        ?? Array.Empty<string>();
 
-    if (corsOrigins == null || corsOrigins.Length == 0)
-        throw new InvalidOperationException("Cors:AllowedOrigins is not configured.");
+    if (allowedOrigins.Length == 0)
+    {
+        throw new InvalidOperationException("At least one CORS origin must be configured.");
+    }
 
     builder.Services.AddCors(options =>
     {
         options.AddPolicy("GeoEventCors", policy =>
         {
-            policy.WithOrigins(corsOrigins)
-                  .AllowAnyHeader()
-                  .AllowAnyMethod()
-                  .AllowCredentials();
+            policy
+                .WithOrigins(allowedOrigins)
+                .AllowAnyHeader()
+                .AllowAnyMethod()
+                .AllowCredentials();
         });
     });
 
-    builder.Services.AddOpenApi();
-
     var app = builder.Build();
-
-    if (app.Environment.IsDevelopment())
-    {
-        app.MapOpenApi();
-    }
 
     app.UseForwardedHeaders();
     app.UseMiddleware<SecurityHeadersMiddleware>();
@@ -160,14 +163,17 @@ try
         }))
         .AllowAnonymous();
 
-    app.MapGet("/", () =>
-        Results.Ok(new
-        {
-            service = "GeoEvent API Gateway",
-            environment = app.Environment.EnvironmentName,
-            timestamp = DateTime.UtcNow
-        }))
-        .AllowAnonymous();
+    if (app.Environment.IsDevelopment())
+    {
+        app.MapGet("/", () =>
+            Results.Ok(new
+            {
+                service = "GeoEvent API Gateway",
+                environment = app.Environment.EnvironmentName,
+                timestamp = DateTime.UtcNow
+            }))
+            .AllowAnonymous();
+    }
 
     app.MapReverseProxy();
 

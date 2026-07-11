@@ -100,7 +100,7 @@ class ChatThreadHeader extends StatelessWidget {
     }
 
     final threadTitle = details.title.trim();
-    if (threadTitle.isNotEmpty) {
+    if (threadTitle.isNotEmpty && threadTitle.toLowerCase() != 'direct chat') {
       return threadTitle;
     }
 
@@ -159,7 +159,7 @@ class ChatThreadHeader extends StatelessWidget {
       }
 
       final threadTitle = details.title.trim();
-      if (threadTitle.isNotEmpty) {
+      if (threadTitle.isNotEmpty && threadTitle.toLowerCase() != 'direct chat') {
         return threadTitle;
       }
 
@@ -177,7 +177,7 @@ class ChatThreadHeader extends StatelessWidget {
     }
 
     final threadTitle = details.title.trim();
-    if (threadTitle.isNotEmpty) {
+    if (threadTitle.isNotEmpty && threadTitle.toLowerCase() != 'direct chat') {
       return threadTitle;
     }
 

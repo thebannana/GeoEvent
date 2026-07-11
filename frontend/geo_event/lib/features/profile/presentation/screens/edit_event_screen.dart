@@ -4,17 +4,20 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geo_event/core/config/app_environment.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../../../core/errors/error_mapper.dart';
 import '../../../../core/utils/date_time_extensions.dart';
+import '../../../../core/utils/logger.dart';
 import '../../../../core/utils/validators.dart';
+import '../../../../core/widgets/feedback/app_confirm_dialog.dart';
 import '../../../../core/widgets/feedback/app_loading_indicator.dart';
 import '../../../../core/widgets/feedback/app_spinner.dart';
 import '../../../../core/widgets/layout/app_scaffold.dart';
 import '../../../../core/widgets/surfaces/app_surface_card.dart';
 import '../../../../shared/events/models/create_event_models.dart';
 import '../../../../shared/events/models/create_event_state.dart';
-import '../../../../shared/my_events/models/my_event_response_dto.dart';
 import '../../../../shared/events/providers/event_refresh_providers.dart';
 import '../../../../shared/location/providers/location_providers.dart';
+import '../../../../shared/my_events/models/my_event_response_dto.dart';
 import '../../../create_event/application/create_event_controller.dart';
 import '../../../create_event/presentation/widgets/create_event_form.dart';
 import '../../../create_event/presentation/widgets/create_event_image_picker.dart';
@@ -42,6 +45,7 @@ class _EditEventScreenState extends ConsumerState<EditEventScreen> {
   final _accessibilityCtrl = TextEditingController();
   final _promoterCtrl = TextEditingController();
   final _imagePicker = ImagePicker();
+  final _scrollController = ScrollController();
 
   static const int _maxImageBytes = 10 * 1000 * 1000;
 
@@ -68,10 +72,20 @@ class _EditEventScreenState extends ConsumerState<EditEventScreen> {
     _createEventSub = ref.listenManual<CreateEventState>(
       createEventControllerProvider,
       (previous, next) {
-        final previousMessage = previous?.successMessage?.trim() ?? '';
-        final nextMessage = next.successMessage?.trim() ?? '';
+        final previousSuccess = previous?.successMessage?.trim() ?? '';
+        final nextSuccess = next.successMessage?.trim() ?? '';
 
-        if (previousMessage.isEmpty && nextMessage.isNotEmpty && mounted) {
+        final previousError = previous?.errorMessage?.trim() ?? '';
+        final nextError = next.errorMessage?.trim() ?? '';
+
+        if (previousError.isEmpty && nextError.isNotEmpty) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            _scrollToTop();
+          });
+        }
+
+        if (previousSuccess.isEmpty && nextSuccess.isNotEmpty && mounted) {
           triggerEventMapRefresh(ref);
           Navigator.of(context).pop(true);
         }
@@ -84,42 +98,69 @@ class _EditEventScreenState extends ConsumerState<EditEventScreen> {
   Future<void> _loadInitialData() async {
     final controller = ref.read(createEventControllerProvider.notifier);
 
-    await controller.loadInitial();
-    controller.hydrateForEdit(widget.event);
-
-    if (widget.event.segmentId != null) {
-      await controller.selectSegment(widget.event.segmentId);
-    }
-    if (widget.event.genreId != null) {
-      await controller.selectGenre(widget.event.genreId);
-    }
-    if (widget.event.subGenreId != null) {
-      controller.selectSubGenre(widget.event.subGenreId);
-    }
-
-    final hasValidCoordinates =
-        widget.event.latitude != 0 || widget.event.longitude != 0;
-
-    if (!hasValidCoordinates) return;
-
     try {
-      final place =
-          await ref.read(mapboxReverseGeocodingApiProvider).reverseGeocode(
-                latitude: widget.event.latitude,
-                longitude: widget.event.longitude,
-              );
+      await controller.loadInitial();
+      controller.hydrateForEdit(widget.event);
 
-      if (place != null && mounted) {
-        controller.setSelectedLocation(place);
+      if (widget.event.segmentId != null) {
+        await controller.selectSegment(widget.event.segmentId);
       }
-    } catch (_) {
-      // Keep hydrated fallback location.
+      if (widget.event.genreId != null) {
+        await controller.selectGenre(widget.event.genreId);
+      }
+      if (widget.event.subGenreId != null) {
+        controller.selectSubGenre(widget.event.subGenreId);
+      }
+
+      final hasValidCoordinates =
+          widget.event.latitude != 0 || widget.event.longitude != 0;
+
+      if (!hasValidCoordinates) return;
+
+      try {
+        final place =
+            await ref.read(mapboxReverseGeocodingApiProvider).reverseGeocode(
+                  latitude: widget.event.latitude,
+                  longitude: widget.event.longitude,
+                );
+
+        if (place != null && mounted) {
+          controller.setSelectedLocation(place);
+        }
+      } catch (error, stackTrace) {
+        AppLogger.warning(
+          'Failed to reverse geocode existing event location.',
+          tag: 'EditEventScreen',
+        );
+        AppLogger.error(
+          'Reverse geocoding error.',
+          tag: 'EditEventScreen',
+          error: error,
+          stackTrace: stackTrace,
+        );
+      }
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'Failed to load edit event initial data.',
+        tag: 'EditEventScreen',
+        error: error,
+        stackTrace: stackTrace,
+      );
+
+      controller.setFormError(
+        ErrorMapper.toMessage(
+          error,
+          stackTrace: stackTrace,
+          fallbackMessage: 'Could not prepare the event form.',
+        ),
+      );
     }
   }
 
   @override
   void dispose() {
     _createEventSub.close();
+    _scrollController.dispose();
     _titleCtrl.dispose();
     _descriptionCtrl.dispose();
     _capacityCtrl.dispose();
@@ -147,6 +188,7 @@ class _EditEventScreenState extends ConsumerState<EditEventScreen> {
         surfaceTintColor: Colors.transparent,
       ),
       child: ListView(
+        controller: _scrollController,
         padding: const EdgeInsets.fromLTRB(18, 18, 18, 24),
         keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         children: [
@@ -309,6 +351,16 @@ class _EditEventScreenState extends ConsumerState<EditEventScreen> {
     );
   }
 
+  Future<void> _scrollToTop() async {
+    if (!_scrollController.hasClients) return;
+
+    await _scrollController.animateTo(
+      _scrollController.position.minScrollExtent,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
   void _syncFreePrice(CreateEventState state) {
     if (!state.isFree) return;
     if (_priceCtrl.text == '0') return;
@@ -334,7 +386,14 @@ class _EditEventScreenState extends ConsumerState<EditEventScreen> {
   ) async {
     try {
       AppEnvironment.validateAll();
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'Map environment validation failed.',
+        tag: 'EditEventScreen',
+        error: error,
+        stackTrace: stackTrace,
+      );
+
       if (!context.mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -360,63 +419,97 @@ class _EditEventScreenState extends ConsumerState<EditEventScreen> {
   }
 
   Future<void> _pickFeaturedImage(CreateEventController controller) async {
-    final file = await _imagePicker.pickImage(
-      source: ImageSource.gallery,
-      imageQuality: 85,
-    );
+    try {
+      final file = await _imagePicker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 85,
+      );
 
-    if (file == null) return;
+      if (file == null) return;
 
-    final validationError = await _validatePickedImageWithSize(file);
-    if (validationError != null) {
-      controller.setFormError(validationError);
-      return;
+      final validationError = await _validatePickedImageWithSize(file);
+      if (validationError != null) {
+        controller.setFormError(validationError);
+        return;
+      }
+
+      final bytes = kIsWeb ? await file.readAsBytes() : null;
+      controller.setFeaturedImage(
+        EventImageUploadItem(
+          localPath: file.path,
+          isCover: true,
+          previewBytes: bytes,
+        ),
+      );
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'Failed to pick featured image.',
+        tag: 'EditEventScreen',
+        error: error,
+        stackTrace: stackTrace,
+      );
+
+      controller.setFormError(
+        ErrorMapper.toMessage(
+          error,
+          stackTrace: stackTrace,
+          fallbackMessage: 'Could not select the featured image.',
+        ),
+      );
     }
-
-    final bytes = kIsWeb ? await file.readAsBytes() : null;
-    controller.setFeaturedImage(
-      EventImageUploadItem(
-        localPath: file.path,
-        isCover: true,
-        previewBytes: bytes,
-      ),
-    );
   }
 
   Future<void> _pickGalleryImages(
     CreateEventController controller,
     CreateEventState state,
   ) async {
-    final files = await _imagePicker.pickMultiImage(imageQuality: 85);
-    if (files.isEmpty) return;
+    try {
+      final files = await _imagePicker.pickMultiImage(imageQuality: 85);
+      if (files.isEmpty) return;
 
-    final existingPaths = <String>{
-      if (state.featuredImage != null) state.featuredImage!.localPath,
-      ...state.galleryImages.map((e) => e.localPath),
-    };
+      final existingPaths = <String>{
+        if (state.featuredImage != null) state.featuredImage!.localPath,
+        ...state.galleryImages.map((e) => e.localPath),
+      };
 
-    final newItems = <EventImageUploadItem>[];
+      final newItems = <EventImageUploadItem>[];
 
-    for (final file in files) {
-      if (existingPaths.contains(file.path)) continue;
+      for (final file in files) {
+        if (existingPaths.contains(file.path)) continue;
 
-      final validationError = await _validatePickedImageWithSize(file);
-      if (validationError != null) {
-        controller.setFormError(validationError);
-        continue;
+        final validationError = await _validatePickedImageWithSize(file);
+        if (validationError != null) {
+          controller.setFormError(validationError);
+          continue;
+        }
+
+        newItems.add(
+          EventImageUploadItem(
+            localPath: file.path,
+            isCover: false,
+            previewBytes: kIsWeb ? await file.readAsBytes() : null,
+          ),
+        );
       }
 
-      newItems.add(
-        EventImageUploadItem(
-          localPath: file.path,
-          isCover: false,
-          previewBytes: kIsWeb ? await file.readAsBytes() : null,
+      if (newItems.isEmpty) return;
+      controller.addGalleryImages(newItems);
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'Failed to pick gallery images.',
+        tag: 'EditEventScreen',
+        error: error,
+        stackTrace: stackTrace,
+      );
+
+      controller.setFormError(
+        ErrorMapper.toMessage(
+          error,
+          stackTrace: stackTrace,
+          fallbackMessage: 'Could not select gallery images.',
         ),
       );
     }
-
-    if (newItems.isEmpty) return;
-    controller.addGalleryImages(newItems);
   }
 
   Future<void> _submit(
@@ -489,23 +582,40 @@ class _EditEventScreenState extends ConsumerState<EditEventScreen> {
       return;
     }
 
-    await controller.submit(
-      title: title,
-      description: description,
-      segmentId: state.segmentId,
-      genreId: state.genreId,
-      subGenreId: state.subGenreId,
-      latitude: selectedLocation.latitude,
-      longitude: selectedLocation.longitude,
-      startDateTime: _startAt!,
-      endDateTime: _endAt!,
-      capacity: capacity,
-      price: price,
-      tags: _nullableString(_tagsCtrl.text),
-      accessibilityInfo: _nullableString(_accessibilityCtrl.text),
-      promoterName: _nullableString(_promoterCtrl.text),
-      locale: widget.event.locale,
-    );
+    try {
+      await controller.submit(
+        title: title,
+        description: description,
+        segmentId: state.segmentId,
+        genreId: state.genreId,
+        subGenreId: state.subGenreId,
+        latitude: selectedLocation.latitude,
+        longitude: selectedLocation.longitude,
+        startDateTime: _startAt!,
+        endDateTime: _endAt!,
+        capacity: capacity,
+        price: price,
+        tags: _nullableString(_tagsCtrl.text),
+        accessibilityInfo: _nullableString(_accessibilityCtrl.text),
+        promoterName: _nullableString(_promoterCtrl.text),
+        locale: widget.event.locale,
+      );
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'Failed to submit edited event.',
+        tag: 'EditEventScreen',
+        error: error,
+        stackTrace: stackTrace,
+      );
+
+      controller.setFormError(
+        ErrorMapper.toMessage(
+          error,
+          stackTrace: stackTrace,
+          fallbackMessage: 'Could not save event changes.',
+        ),
+      );
+    }
   }
 
   Future<DateTime?> _pickDateTime(
@@ -700,24 +810,12 @@ class _RemovableRemoteEventImage extends StatelessWidget {
   final ValueChanged<int> onRemove;
 
   Future<void> _confirmRemove(BuildContext context) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Remove image?'),
-        content: const Text(
-          'This image will be removed from the event.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Remove'),
-          ),
-        ],
-      ),
+    final confirmed = await AppConfirmDialog.show(
+      context,
+      title: 'Remove image?',
+      message: 'This image will be removed from the event.',
+      confirmLabel: 'Remove',
+      destructive: true,
     );
 
     if (confirmed == true) {

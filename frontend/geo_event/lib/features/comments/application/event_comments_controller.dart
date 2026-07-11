@@ -42,7 +42,10 @@ class EventCommentsController extends StateNotifier<EventCommentsState> {
       if (!mounted) return;
 
       state = state.copyWith(
-        comments: page.items,
+        comments: _mergeTopLevelWithPreservedReplies(
+          oldItems: state.comments,
+          newItems: page.items,
+        ),
         isLoading: false,
         page: page.page,
         pageSize: page.pageSize,
@@ -61,31 +64,69 @@ class EventCommentsController extends StateNotifier<EventCommentsState> {
   }
 
   Future<void> refresh() async {
-    try {
-      final page = await _repo.getEventComments(
-        _eventId,
+  if (state.isLoading || state.isSubmitting || state.isLoadingMore) return;
+
+  final expandedReplyParents = state.comments
+      .where((c) => c.areRepliesLoaded)
+      .map((c) => c.commentId)
+      .toList(growable: false);
+
+  state = state.copyWith(
+    isLoading: true,
+    isLoadingMore: false,
+    clearError: true,
+  );
+
+  try {
+    final page = await _repo.getEventComments(
+      _eventId,
+      page: 1,
+      pageSize: state.pageSize <= 0 ? _defaultPageSize : state.pageSize,
+    );
+
+    if (!mounted) return;
+
+    state = state.copyWith(
+      comments: page.items,
+      isLoading: false,
+      page: page.page,
+      pageSize: page.pageSize,
+      totalCount: page.totalCount,
+      hasMore: page.hasNextPage,
+      clearError: true,
+    );
+
+    for (final commentId in expandedReplyParents) {
+      if (!mounted) return;
+
+      final stillExists = state.comments.any((c) => c.commentId == commentId);
+      if (!stillExists) continue;
+
+      final repliesPage = await _repo.getReplies(
+        commentId,
         page: 1,
-        pageSize: state.pageSize <= 0 ? _defaultPageSize : state.pageSize,
+        pageSize: _defaultPageSize,
       );
 
       if (!mounted) return;
 
       state = state.copyWith(
-        comments: page.items,
-        page: page.page,
-        pageSize: page.pageSize,
-        totalCount: page.totalCount,
-        hasMore: page.hasNextPage,
-        clearError: true,
-      );
-    } catch (e, st) {
-      if (!mounted) return;
-
-      state = state.copyWith(
-        error: ErrorMapper.toMessage(e, stackTrace: st),
+        comments: _setRepliesPage(
+          state.comments,
+          commentId,
+          repliesPage,
+        ),
       );
     }
+  } catch (e, st) {
+    if (!mounted) return;
+
+    state = state.copyWith(
+      isLoading: false,
+      error: ErrorMapper.toMessage(e, stackTrace: st),
+    );
   }
+}
 
   Future<void> loadMore() async {
     if (state.isLoading || state.isLoadingMore || !state.hasMore) return;
@@ -105,8 +146,19 @@ class EventCommentsController extends StateNotifier<EventCommentsState> {
 
       if (!mounted) return;
 
+      final mergedIncoming = _mergeTopLevelWithPreservedReplies(
+        oldItems: state.comments,
+        newItems: page.items,
+      );
+
       state = state.copyWith(
-        comments: [...state.comments, ...page.items],
+        comments: [
+          ...state.comments,
+          ..._excludeExistingTopLevelComments(
+            existing: state.comments,
+            incoming: mergedIncoming,
+          ),
+        ],
         isLoadingMore: false,
         page: page.page,
         pageSize: page.pageSize,
@@ -285,11 +337,15 @@ class EventCommentsController extends StateNotifier<EventCommentsState> {
     );
 
     try {
-      if (comment.isLiked) {
-        await _repo.unlikeComment(comment.commentId);
-      } else {
-        await _repo.likeComment(comment.commentId);
-      }
+      final updated = comment.isLiked
+          ? await _repo.unlikeComment(comment.commentId)
+          : await _repo.likeComment(comment.commentId);
+
+      if (!mounted) return;
+
+      state = state.copyWith(
+        comments: _replaceComment(state.comments, updated),
+      );
     } catch (e, st) {
       if (!mounted) return;
 
@@ -394,14 +450,19 @@ class EventCommentsController extends StateNotifier<EventCommentsState> {
     return items.map((item) {
       if (item.commentId == updated.commentId) {
         return updated.copyWith(
-          replies: item.replies,
-          areRepliesLoaded: item.areRepliesLoaded,
+          replies: updated.replies.isNotEmpty ? updated.replies : item.replies,
+          areRepliesLoaded: item.areRepliesLoaded || updated.areRepliesLoaded,
           isReplyLoading: item.isReplyLoading,
           isLoadingMoreReplies: item.isLoadingMoreReplies,
-          hasMoreReplies: item.hasMoreReplies,
-          repliesPage: item.repliesPage,
-          repliesPageSize: item.repliesPageSize,
-          repliesTotalCount: item.repliesTotalCount,
+          hasMoreReplies:
+              item.areRepliesLoaded ? item.hasMoreReplies : updated.hasMoreReplies,
+          repliesPage: item.areRepliesLoaded ? item.repliesPage : updated.repliesPage,
+          repliesPageSize:
+              item.areRepliesLoaded ? item.repliesPageSize : updated.repliesPageSize,
+          repliesTotalCount: item.areRepliesLoaded
+              ? item.repliesTotalCount
+              : updated.repliesTotalCount,
+          replyCount: updated.replyCount > 0 ? updated.replyCount : item.replyCount,
         );
       }
       if (item.replies.isEmpty) return item;
@@ -433,8 +494,15 @@ class EventCommentsController extends StateNotifier<EventCommentsState> {
   ) {
     return items.map((item) {
       if (item.commentId == parentId) {
-        final nextReplies = [...item.replies, reply];
-        final nextReplyCount = item.replyCount + 1;
+        final existingReplies = item.replies
+            .where((r) => r.commentId != reply.commentId)
+            .toList(growable: false);
+
+        final nextReplies = [...existingReplies, reply];
+        final nextReplyCount = (item.replyCount < nextReplies.length)
+            ? nextReplies.length
+            : item.replyCount + 1;
+
         return item.copyWith(
           replies: nextReplies,
           areRepliesLoaded: true,
@@ -442,13 +510,12 @@ class EventCommentsController extends StateNotifier<EventCommentsState> {
           isLoadingMoreReplies: false,
           replyCount: nextReplyCount,
           repliesPage: item.repliesPage == 0 ? 1 : item.repliesPage,
-          repliesPageSize: item.repliesPageSize,
-          repliesTotalCount: item.repliesTotalCount > 0
-              ? item.repliesTotalCount + 1
-              : nextReplyCount,
-          hasMoreReplies: item.repliesTotalCount > 0
-              ? nextReplies.length < item.repliesTotalCount + 1
-              : false,
+          repliesPageSize:
+              item.repliesPageSize <= 0 ? _defaultPageSize : item.repliesPageSize,
+          repliesTotalCount: item.repliesTotalCount < nextReplies.length
+              ? nextReplies.length
+              : item.repliesTotalCount + 1,
+          hasMoreReplies: false,
         );
       }
       if (item.replies.isEmpty) return item;
@@ -499,7 +566,9 @@ class EventCommentsController extends StateNotifier<EventCommentsState> {
       if (item.commentId == commentId) {
         return item.copyWith(
           replies: page.items,
-          replyCount: item.replyCount > 0 ? item.replyCount : page.totalCount,
+          replyCount: page.totalCount > item.replyCount
+              ? page.totalCount
+              : item.replyCount,
           repliesTotalCount: page.totalCount,
           areRepliesLoaded: true,
           isReplyLoading: false,
@@ -523,8 +592,17 @@ class EventCommentsController extends StateNotifier<EventCommentsState> {
   ) {
     return items.map((item) {
       if (item.commentId == commentId) {
+        final mergedMap = <int, CommentItem>{
+          for (final reply in item.replies) reply.commentId: reply,
+          for (final reply in page.items) reply.commentId: reply,
+        };
+        final mergedReplies = mergedMap.values.toList(growable: false);
+
         return item.copyWith(
-          replies: [...item.replies, ...page.items],
+          replies: mergedReplies,
+          replyCount: page.totalCount > mergedReplies.length
+              ? page.totalCount
+              : mergedReplies.length,
           repliesTotalCount: page.totalCount,
           areRepliesLoaded: true,
           isReplyLoading: false,
@@ -539,5 +617,54 @@ class EventCommentsController extends StateNotifier<EventCommentsState> {
         replies: _appendRepliesPage(item.replies, commentId, page),
       );
     }).toList(growable: false);
+  }
+
+  List<CommentItem> _mergeTopLevelWithPreservedReplies({
+    required List<CommentItem> oldItems,
+    required List<CommentItem> newItems,
+  }) {
+    final oldById = {
+      for (final item in oldItems) item.commentId: item,
+    };
+
+    return newItems.map((newItem) {
+      final oldItem = oldById[newItem.commentId];
+      if (oldItem == null) return newItem;
+
+      final shouldPreserveReplies =
+          oldItem.areRepliesLoaded || oldItem.replies.isNotEmpty;
+
+      return newItem.copyWith(
+        replies: shouldPreserveReplies ? oldItem.replies : newItem.replies,
+        areRepliesLoaded:
+            shouldPreserveReplies ? true : newItem.areRepliesLoaded,
+        isReplyLoading: false,
+        isLoadingMoreReplies: false,
+        hasMoreReplies:
+            shouldPreserveReplies ? oldItem.hasMoreReplies : newItem.hasMoreReplies,
+        repliesPage:
+            shouldPreserveReplies ? oldItem.repliesPage : newItem.repliesPage,
+        repliesPageSize:
+            shouldPreserveReplies ? oldItem.repliesPageSize : newItem.repliesPageSize,
+        repliesTotalCount: shouldPreserveReplies
+            ? (oldItem.repliesTotalCount > 0
+                ? oldItem.repliesTotalCount
+                : oldItem.replies.length)
+            : newItem.repliesTotalCount,
+        replyCount: oldItem.replyCount > newItem.replyCount
+            ? oldItem.replyCount
+            : newItem.replyCount,
+      );
+    }).toList(growable: false);
+  }
+
+  List<CommentItem> _excludeExistingTopLevelComments({
+    required List<CommentItem> existing,
+    required List<CommentItem> incoming,
+  }) {
+    final existingIds = existing.map((e) => e.commentId).toSet();
+    return incoming
+        .where((item) => !existingIds.contains(item.commentId))
+        .toList(growable: false);
   }
 }

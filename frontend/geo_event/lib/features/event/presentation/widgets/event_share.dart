@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/utils/location_helpers.dart';
 import '../../../../core/widgets/layout/app_bottom_sheet_container.dart';
 import '../../../../core/widgets/surfaces/app_surface_card.dart';
 import '../../../../shared/events/models/create_event_models.dart';
@@ -8,14 +9,12 @@ class EventShareSheet extends StatelessWidget {
   final EventItem item;
   final VoidCallback onCopyLink;
   final VoidCallback onSystemShare;
-  final VoidCallback onSendInChat;
 
   const EventShareSheet({
     super.key,
     required this.item,
     required this.onCopyLink,
     required this.onSystemShare,
-    required this.onSendInChat,
   });
 
   @override
@@ -28,7 +27,10 @@ class EventShareSheet extends StatelessWidget {
         ? item.coverImageUrl!.trim()
         : (item.imageUrls.isNotEmpty ? item.imageUrls.first : null);
 
-    final locationText = '${item.latitude.toStringAsFixed(6)}, ${item.longitude.toStringAsFixed(6)}';
+    final locationText = LocationHelpers.formatCoordinates(
+      item.latitude,
+      item.longitude,
+    );
 
     return AppBottomSheetContainer(
       scrollable: false,
@@ -98,13 +100,6 @@ class EventShareSheet extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 10),
-              Expanded(
-                child: ShareActionButton(
-                  icon: Icons.chat_bubble_outline_rounded,
-                  label: 'Send',
-                  onTap: onSendInChat,
-                ),
-              ),
             ],
           ),
           const SizedBox(height: 14),

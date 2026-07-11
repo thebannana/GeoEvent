@@ -13,14 +13,14 @@ public interface IChatService
 
     Task<ServiceResult<PagedResult<ChatThreadSummaryDto>>> GetThreadsAsync(
         int userId,
-        ChatThreadsFilterDto filter);
+        ChatThreadsFilterDto? filter);
 
     Task<ServiceResult<ChatThreadDetailDto>> GetThreadDetailAsync(long threadId, int userId);
 
     Task<ServiceResult<PagedResult<ChatMessageDto>>> GetMessagesAsync(
         long threadId,
         int userId,
-        ChatMessagesFilterDto filter);
+        ChatMessagesFilterDto? filter);
 
     Task<ServiceResult<ChatMessageDto>> SendMessageAsync(long threadId, int userId, SendThreadMessageDto dto);
     Task<ServiceResult<ChatMessageDto>> EditMessageAsync(long messageId, int userId, EditChatMessageDto dto);

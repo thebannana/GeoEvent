@@ -1,19 +1,19 @@
-﻿using MassTransit;
+﻿using GeoEvent.HelperWorkers.Interfaces;
+using MassTransit;
 using Shared.Contracts.Events;
-using UserService.Application.Interfaces.Services;
 
 namespace GeoEvent.HelperWorkers.Consumers;
 
-public class UserEventPreferenceInteractionConsumer : IConsumer<UserEventPreferenceInteractionMessage>
+public sealed class UserEventPreferenceInteractionConsumer : IConsumer<UserEventPreferenceInteractionMessage>
 {
-    private readonly IUserService _userService;
+    private readonly IUserPreferenceInternalClient _userPreferenceInternalClient;
     private readonly ILogger<UserEventPreferenceInteractionConsumer> _logger;
 
     public UserEventPreferenceInteractionConsumer(
-        IUserService userService,
+        IUserPreferenceInternalClient userPreferenceInternalClient,
         ILogger<UserEventPreferenceInteractionConsumer> logger)
     {
-        _userService = userService;
+        _userPreferenceInternalClient = userPreferenceInternalClient;
         _logger = logger;
     }
 
@@ -27,13 +27,8 @@ public class UserEventPreferenceInteractionConsumer : IConsumer<UserEventPrefere
             message.EventId,
             message.InteractionType);
 
-        await _userService.ApplyInteractionPreferenceAsync(
-            message.UserId,
-            message.EventId,
-            message.SegmentId,
-            message.GenreId,
-            message.SubGenreId,
-            message.InteractionType,
-            message.OccurredAt);
+        await _userPreferenceInternalClient.ApplyInteractionPreferenceAsync(
+            message,
+            context.CancellationToken);
     }
 }

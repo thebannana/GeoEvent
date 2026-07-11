@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/utils/validators.dart';
 import '../../../../core/widgets/feedback/app_spinner.dart';
 import '../../../../core/widgets/surfaces/app_surface_card.dart';
 import '../../../../shared/events/models/create_event_state.dart';
@@ -22,10 +23,19 @@ class CreateEventTaxonomySection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final canEdit = !state.submitting;
-    final canPickGenre =
-        canEdit && state.segmentId != null && !state.genresLoading;
-    final canPickSubGenre =
-        canEdit && state.genreId != null && !state.subGenresLoading;
+    final hasSegment = Validators.selectionRequired(
+          state.segmentId,
+          fieldName: 'Segment',
+        ) ==
+        null;
+    final hasGenre = Validators.selectionRequired(
+          state.genreId,
+          fieldName: 'Genre',
+        ) ==
+        null;
+
+    final canPickGenre = canEdit && hasSegment && !state.genresLoading;
+    final canPickSubGenre = canEdit && hasGenre && !state.subGenresLoading;
 
     return AppSurfaceCard(
       padding: const EdgeInsets.all(18),
@@ -65,7 +75,7 @@ class CreateEventTaxonomySection extends StatelessWidget {
             onChanged: canPickGenre ? onGenreChanged : null,
             decoration: InputDecoration(
               labelText: 'Genre',
-              hintText: state.segmentId == null
+              hintText: !hasSegment
                   ? 'Select a segment first'
                   : state.genresLoading
                       ? 'Loading genres...'
@@ -93,7 +103,7 @@ class CreateEventTaxonomySection extends StatelessWidget {
             onChanged: canPickSubGenre ? onSubGenreChanged : null,
             decoration: InputDecoration(
               labelText: 'Subgenre',
-              hintText: state.genreId == null
+              hintText: !hasGenre
                   ? 'Select a genre first'
                   : state.subGenresLoading
                       ? 'Loading subgenres...'

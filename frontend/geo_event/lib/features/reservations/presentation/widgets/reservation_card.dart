@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/utils/date_time_extensions.dart';
 import '../../../../core/widgets/surfaces/app_surface_card.dart';
 import '../../../../shared/reservations/models/reservation.dart';
 import '../../../../shared/reservations/models/reservation_status.dart';
@@ -118,7 +119,9 @@ class ReservationCard extends ConsumerWidget {
                 ),
                 _DetailChip(
                   icon: Icons.calendar_today_outlined,
-                  label: _formatShortDate(reservation.createdAt),
+                  label: reservation.createdAt.formatDate(
+                    pattern: 'dd.MM.yyyy',
+                  ),
                 ),
               ],
             ),
@@ -136,7 +139,7 @@ class ReservationCard extends ConsumerWidget {
                   const SizedBox(width: 4),
                   Expanded(
                     child: Text(
-                      'Expires ${_formatShortDate(reservation.expiresAt)}',
+                      'Expires ${reservation.expiresAt.formatDate(pattern: 'dd.MM.yyyy')}',
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: colorScheme.error,
                       ),
@@ -255,13 +258,6 @@ class ReservationCard extends ConsumerWidget {
         tickets: reservation.tickets,
       ),
     );
-  }
-
-  String _formatShortDate(DateTime dt) {
-    final local = dt.toLocal();
-    return '${local.day.toString().padLeft(2, '0')}.'
-        '${local.month.toString().padLeft(2, '0')}.'
-        '${local.year}';
   }
 }
 

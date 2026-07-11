@@ -8,6 +8,7 @@ namespace EventService.API.Controllers;
 
 [ApiController]
 [Route("api/comments")]
+[Authorize]
 public class CommentsController : ControllerBase
 {
     private readonly IEventService _eventService;
@@ -15,6 +16,39 @@ public class CommentsController : ControllerBase
     public CommentsController(IEventService eventService)
     {
         _eventService = eventService;
+    }
+
+    [HttpGet("{commentId:int}")]
+    [AllowAnonymous]
+    public async Task<IActionResult> GetById(int commentId)
+    {
+        int? requesterId = User.Identity?.IsAuthenticated == true ? User.GetUserId() : null;
+
+        var result = await _eventService.GetCommentByIdAsync(commentId, requesterId);
+
+        return result.Success
+            ? Ok(result.Data)
+            : StatusCode(result.StatusCode, new { error = result.Error });
+    }
+
+    [HttpPost("{commentId:int}/like")]
+    public async Task<IActionResult> Like(int commentId)
+    {
+        var result = await _eventService.LikeCommentAsync(commentId, User.GetUserId());
+
+        return result.Success
+            ? Ok(result.Data)
+            : StatusCode(result.StatusCode, new { error = result.Error });
+    }
+
+    [HttpDelete("{commentId:int}/like")]
+    public async Task<IActionResult> Unlike(int commentId)
+    {
+        var result = await _eventService.UnlikeCommentAsync(commentId, User.GetUserId());
+
+        return result.Success
+            ? Ok(result.Data)
+            : StatusCode(result.StatusCode, new { error = result.Error });
     }
 
     [HttpGet("event/{eventId:int}")]
@@ -84,35 +118,6 @@ public class CommentsController : ControllerBase
 
         return result.Success
             ? NoContent()
-            : StatusCode(result.StatusCode, new { error = result.Error });
-    }
-
-    [HttpPost("{commentId:int}/like")]
-    public async Task<IActionResult> Like(int commentId)
-    {
-        var result = await _eventService.LikeCommentAsync(commentId, User.GetUserId());
-
-        return result.Success
-            ? Ok()
-            : StatusCode(result.StatusCode, new { error = result.Error });
-    }
-
-    [HttpDelete("{commentId:int}/like")]
-    public async Task<IActionResult> Unlike(int commentId)
-    {
-        var result = await _eventService.UnlikeCommentAsync(commentId, User.GetUserId());
-
-        return result.Success
-            ? NoContent()
-            : StatusCode(result.StatusCode, new { error = result.Error });
-    }
-
-    [HttpGet("{commentId:int}")]
-    public async Task<IActionResult> GetById(int commentId)
-    {
-        var result = await _eventService.GetCommentByIdAsync(commentId);
-        return result.Success
-            ? Ok(result.Data)
             : StatusCode(result.StatusCode, new { error = result.Error });
     }
 }

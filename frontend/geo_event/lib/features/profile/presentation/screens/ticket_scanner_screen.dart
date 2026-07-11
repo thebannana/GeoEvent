@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
+import '../../../../core/errors/error_mapper.dart';
+import '../../../../core/utils/logger.dart';
 import '../../../../core/widgets/feedback/app_spinner.dart';
-import '../../../../core/widgets/layout/app_scaffold.dart';
 import '../../../../core/widgets/layout/app_bottom_sheet_container.dart';
+import '../../../../core/widgets/layout/app_scaffold.dart';
 import '../../../../shared/profile/providers/profile_providers.dart';
 import '../widgets/ticket_scan_result_sheet.dart';
 
@@ -23,37 +25,78 @@ class TicketScannerScreen extends ConsumerStatefulWidget {
       _TicketScannerScreenState();
 }
 
-class _TicketScannerScreenState extends ConsumerState<TicketScannerScreen> {
-  final MobileScannerController _controller = MobileScannerController();
+class _TicketScannerScreenState extends ConsumerState<TicketScannerScreen>
+    with WidgetsBindingObserver {
+  final MobileScannerController _controller = MobileScannerController(
+    detectionSpeed: DetectionSpeed.noDuplicates,
+    formats: const [BarcodeFormat.qrCode],
+  );
+
   bool _isHandlingScan = false;
   String? _lastScannedValue;
+  DateTime? _lastScanAt;
+
+  static const Duration _duplicateCooldown = Duration(seconds: 2);
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (!_controller.value.hasCameraPermission) return;
+
+    if (state == AppLifecycleState.resumed && !_isHandlingScan) {
+      _controller.start();
+    } else if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      _controller.stop();
+    }
+  }
+
+  bool _shouldIgnoreDuplicate(String value) {
+    final lastValue = _lastScannedValue;
+    final lastAt = _lastScanAt;
+
+    if (lastValue == null || lastAt == null) return false;
+    if (lastValue != value) return false;
+
+    return DateTime.now().difference(lastAt) < _duplicateCooldown;
+  }
 
   Future<void> _handleBarcode(BarcodeCapture capture) async {
     if (_isHandlingScan || capture.barcodes.isEmpty) return;
 
     final qrCode = capture.barcodes.first.rawValue?.trim();
     if (qrCode == null || qrCode.isEmpty) return;
-    if (_lastScannedValue == qrCode) return;
+    if (_shouldIgnoreDuplicate(qrCode)) return;
 
     await _submitCode(qrCode);
   }
 
   Future<void> _submitCode(String qrCode) async {
     final trimmed = qrCode.trim();
-    if (trimmed.isEmpty || _isHandlingScan) return;
+    if (trimmed.isEmpty || _isHandlingScan || _shouldIgnoreDuplicate(trimmed)) {
+      return;
+    }
 
     setState(() {
       _isHandlingScan = true;
       _lastScannedValue = trimmed;
+      _lastScanAt = DateTime.now();
     });
 
     try {
       await _controller.stop();
 
-      final result = await ref.read(ticketScannerRepositoryProvider).validateTicket(
-            eventId: widget.eventId,
-            qrCode: trimmed,
-          );
+      final result =
+          await ref.read(ticketScannerRepositoryProvider).validateTicket(
+                eventId: widget.eventId,
+                qrCode: trimmed,
+              );
 
       if (!mounted) return;
 
@@ -63,13 +106,26 @@ class _TicketScannerScreenState extends ConsumerState<TicketScannerScreen> {
         backgroundColor: Colors.transparent,
         builder: (_) => TicketScanResultSheet(result: result),
       );
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'Ticket validation failed.',
+        tag: 'TicketScannerScreen',
+        error: error,
+        stackTrace: stackTrace,
+      );
+
       if (!mounted) return;
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
         ..showSnackBar(
-          const SnackBar(
-            content: Text('Ticket validation failed. Please try again.'),
+          SnackBar(
+            content: Text(
+              ErrorMapper.toMessage(
+                error,
+                stackTrace: stackTrace,
+                fallbackMessage: 'Ticket validation failed. Please try again.',
+              ),
+            ),
           ),
         );
     } finally {
@@ -77,7 +133,6 @@ class _TicketScannerScreenState extends ConsumerState<TicketScannerScreen> {
         await _controller.start();
         setState(() {
           _isHandlingScan = false;
-          _lastScannedValue = null;
         });
       }
     }
@@ -150,6 +205,7 @@ class _TicketScannerScreenState extends ConsumerState<TicketScannerScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _controller.dispose();
     super.dispose();
   }

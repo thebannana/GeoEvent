@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/errors/error_mapper.dart';
 import '../../../../core/utils/date_time_extensions.dart';
+import '../../../../core/utils/logger.dart';
 import '../../../../core/widgets/feedback/app_confirm_dialog.dart';
 import '../../../../core/widgets/feedback/app_empty_state.dart';
 import '../../../../core/widgets/layout/app_scaffold.dart';
@@ -10,7 +12,7 @@ import '../../../../shared/chat/models/chat_thread_details.dart';
 import '../../../../shared/chat/models/chat_thread_type.dart';
 import '../widgets/chat_avatar.dart';
 
-class ChatDetailsScreen extends StatelessWidget {
+class ChatDetailsScreen extends StatefulWidget {
   final ChatThreadDetails details;
   final Future<void> Function()? onLeaveThread;
   final void Function(ChatParticipant participant)? onOpenParticipant;
@@ -27,246 +29,7 @@ class ChatDetailsScreen extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    final effectiveType = effectiveThreadType(details);
-    final isDirect = effectiveType == ChatThreadType.direct;
-    final otherParticipant = resolveOtherParticipant(details, currentUserId);
-    final resolvedHeroTitle =
-        heroTitle(details, effectiveType, otherParticipant);
-    final resolvedHeroSubtitle =
-        heroSubtitle(details, effectiveType, otherParticipant);
-    final resolvedHeroImage =
-        heroImage(details, effectiveType, otherParticipant);
-    final resolvedAvatarSeed =
-        avatarSeed(details, effectiveType, otherParticipant);
-
-    return AppScaffold(
-      appBar: AppBar(
-        title: const Text('Chat details'),
-      ),
-      child: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          AppSurfaceCard(
-            padding: const EdgeInsets.all(18),
-            child: Column(
-              children: [
-                ChatAvatar(
-                  title: resolvedAvatarSeed,
-                  imageUrl: resolvedHeroImage,
-                  size: 72,
-                  type: effectiveType,
-                  showPresence: isDirect,
-                  isOnline: isDirect
-                      ? (otherParticipant?.isOnline ?? details.otherUserIsOnline)
-                      : false,
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  resolvedHeroTitle,
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 18,
-                  ),
-                ),
-                if (resolvedHeroSubtitle != null) ...[
-                  const SizedBox(height: 6),
-                  Text(
-                    resolvedHeroSubtitle,
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          if (details.eventInfo != null) ...[
-            const SizedBox(height: 16),
-            AppSurfaceCard(
-              padding: const EdgeInsets.all(18),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const SectionTitle('Event'),
-                  const SizedBox(height: 12),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (details.eventInfo!.imageUrl?.trim().isNotEmpty ?? false)
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(14),
-                          child: Image.network(
-                            details.eventInfo!.imageUrl!.trim(),
-                            width: 68,
-                            height: 68,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, _, _) {
-                              return EventImageFallback(
-                                title: details.eventInfo!.title,
-                              );
-                            },
-                          ),
-                        )
-                      else
-                        EventImageFallback(title: details.eventInfo!.title),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              details.eventInfo!.title,
-                              style: theme.textTheme.titleSmall?.copyWith(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            if (details.eventInfo!.startsAt != null) ...[
-                              const SizedBox(height: 6),
-                              Text(
-                                'Starts ${details.eventInfo!.startsAt!.formatEventDateTime()}',
-                                style: theme.textTheme.bodyMedium?.copyWith(
-                                  color: colorScheme.onSurface,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  if (onOpenEventDetails != null) ...[
-                    const SizedBox(height: 14),
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton.icon(
-                        onPressed: onOpenEventDetails,
-                        icon: const Icon(Icons.event_outlined),
-                        label: const Text('View event details'),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ],
-          const SizedBox(height: 16),
-          AppSurfaceCard(
-            padding: const EdgeInsets.all(18),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SectionTitle(isDirect ? 'Person' : 'Attendees'),
-                const SizedBox(height: 12),
-                if (details.participants.isEmpty)
-                  const AppEmptyState(
-                    title: 'No participants available',
-                    message: 'Participant details are not available yet.',
-                    icon: Icons.group_outlined,
-                    padding: EdgeInsets.symmetric(vertical: 12),
-                  )
-                else
-                  Column(
-                    children: [
-                      for (int i = 0; i < details.participants.length; i++) ...[
-                        ParticipantTile(
-                          participant: details.participants[i],
-                          onTap: onOpenParticipant == null
-                              ? null
-                              : () => onOpenParticipant!(details.participants[i]),
-                        ),
-                        if (i != details.participants.length - 1)
-                          const Divider(height: 18),
-                      ],
-                    ],
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-          AppSurfaceCard(
-            padding: const EdgeInsets.all(18),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SectionTitle(isDirect ? 'Chat access' : 'Group access'),
-                const SizedBox(height: 10),
-                Text(
-                  isDirect
-                      ? 'If you remove this direct chat, it will disappear from your inbox. It can appear again later if a direct conversation is opened again.'
-                      : 'If you leave this event chat, you will lose access and will not be able to rejoin it manually later.',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: colorScheme.onSurface,
-                    height: 1.35,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  isDirect
-                      ? 'This does not delete the conversation for the other person.'
-                      : 'This group is also automatically removed when the event finishes.',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                    fontSize: 13,
-                    height: 1.35,
-                  ),
-                ),
-                const SizedBox(height: 14),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: onLeaveThread == null
-                        ? null
-                        : () => confirmLeaveThread(context),
-                    icon: const Icon(Icons.exit_to_app_rounded),
-                    label: Text(isDirect ? 'Remove chat' : 'Leave group'),
-                  ),
-                ),
-                if (onLeaveThread == null) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    'This action is currently unavailable.',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> confirmLeaveThread(BuildContext context) async {
-    final action = onLeaveThread;
-    if (action == null) return;
-
-    final navigator = Navigator.of(context);
-    final isDirect = effectiveThreadType(details) == ChatThreadType.direct;
-
-    final confirmed = await AppConfirmDialog.show(
-      context,
-      title: isDirect ? 'Remove chat?' : 'Leave group?',
-      message: isDirect
-          ? 'This chat will be removed from your inbox. You can see it again if a direct conversation is opened later.'
-          : 'You will lose access to this event chat and will not be able to rejoin it manually later. This group is automatically removed when the event finishes.',
-      confirmLabel: isDirect ? 'Remove chat' : 'Leave group',
-    );
-
-    if (confirmed != true) return;
-
-    await action();
-    navigator.pop();
-  }
+  State<ChatDetailsScreen> createState() => _ChatDetailsScreenState();
 
   static ChatThreadType effectiveThreadType(ChatThreadDetails details) {
     if (details.eventInfo != null) return ChatThreadType.eventGroup;
@@ -426,6 +189,318 @@ class ChatDetailsScreen extends StatelessWidget {
     final cleaned = value?.trim().replaceFirst(RegExp(r'^@+'), '');
     if (cleaned == null || cleaned.isEmpty) return null;
     return '@$cleaned';
+  }
+}
+
+class _ChatDetailsScreenState extends State<ChatDetailsScreen> {
+  bool _leaving = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    final effectiveType = ChatDetailsScreen.effectiveThreadType(widget.details);
+    final isDirect = effectiveType == ChatThreadType.direct;
+    final otherParticipant = ChatDetailsScreen.resolveOtherParticipant(
+      widget.details,
+      widget.currentUserId,
+    );
+    final resolvedHeroTitle = ChatDetailsScreen.heroTitle(
+      widget.details,
+      effectiveType,
+      otherParticipant,
+    );
+    final resolvedHeroSubtitle = ChatDetailsScreen.heroSubtitle(
+      widget.details,
+      effectiveType,
+      otherParticipant,
+    );
+    final resolvedHeroImage = ChatDetailsScreen.heroImage(
+      widget.details,
+      effectiveType,
+      otherParticipant,
+    );
+    final resolvedAvatarSeed = ChatDetailsScreen.avatarSeed(
+      widget.details,
+      effectiveType,
+      otherParticipant,
+    );
+
+    return AppScaffold(
+      appBar: AppBar(
+        title: const Text('Chat details'),
+      ),
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          AppSurfaceCard(
+            padding: const EdgeInsets.all(18),
+            child: Column(
+              children: [
+                ChatAvatar(
+                  title: resolvedAvatarSeed,
+                  imageUrl: resolvedHeroImage,
+                  size: 72,
+                  type: effectiveType,
+                  showPresence: isDirect,
+                  isOnline: isDirect
+                      ? (otherParticipant?.isOnline ?? widget.details.otherUserIsOnline)
+                      : false,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  resolvedHeroTitle,
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 18,
+                  ),
+                ),
+                if (resolvedHeroSubtitle != null) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    resolvedHeroSubtitle,
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          if (widget.details.eventInfo != null) ...[
+            const SizedBox(height: 16),
+            AppSurfaceCard(
+              padding: const EdgeInsets.all(18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SectionTitle('Event'),
+                  const SizedBox(height: 12),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (widget.details.eventInfo!.imageUrl?.trim().isNotEmpty ?? false)
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(14),
+                          child: Image.network(
+                            widget.details.eventInfo!.imageUrl!.trim(),
+                            width: 68,
+                            height: 68,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, _, _) {
+                              return EventImageFallback(
+                                title: widget.details.eventInfo!.title,
+                              );
+                            },
+                          ),
+                        )
+                      else
+                        EventImageFallback(title: widget.details.eventInfo!.title),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              widget.details.eventInfo!.title,
+                              style: theme.textTheme.titleSmall?.copyWith(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            if (widget.details.eventInfo!.startsAt != null) ...[
+                              const SizedBox(height: 6),
+                              Text(
+                                'Starts ${widget.details.eventInfo!.startsAt!.formatEventDateTime()}',
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  color: colorScheme.onSurface,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (widget.onOpenEventDetails != null) ...[
+                    const SizedBox(height: 14),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        onPressed: widget.onOpenEventDetails,
+                        icon: const Icon(Icons.event_outlined),
+                        label: const Text('View event details'),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: 16),
+          AppSurfaceCard(
+            padding: const EdgeInsets.all(18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SectionTitle(isDirect ? 'Person' : 'Attendees'),
+                const SizedBox(height: 12),
+                if (widget.details.participants.isEmpty)
+                  const AppEmptyState(
+                    title: 'No participants available',
+                    message: 'Participant details are not available yet.',
+                    icon: Icons.group_outlined,
+                    padding: EdgeInsets.symmetric(vertical: 12),
+                  )
+                else
+                  Column(
+                    children: [
+                      for (int i = 0; i < widget.details.participants.length; i++) ...[
+                        ParticipantTile(
+                          participant: widget.details.participants[i],
+                          onTap: widget.onOpenParticipant == null
+                              ? null
+                              : () => widget.onOpenParticipant!(
+                                    widget.details.participants[i],
+                                  ),
+                        ),
+                        if (i != widget.details.participants.length - 1)
+                          const Divider(height: 18),
+                      ],
+                    ],
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          AppSurfaceCard(
+            padding: const EdgeInsets.all(18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SectionTitle(isDirect ? 'Chat access' : 'Group access'),
+                const SizedBox(height: 10),
+                Text(
+                  isDirect
+                      ? 'If you remove this direct chat, it will disappear from your inbox. It can appear again later if a direct conversation is opened again.'
+                      : 'If you leave this event chat, you will lose access and will not be able to rejoin it manually later.',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: colorScheme.onSurface,
+                    height: 1.35,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  isDirect
+                      ? 'This does not delete the conversation for the other person.'
+                      : 'This group is also automatically removed when the event finishes.',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                    fontSize: 13,
+                    height: 1.35,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: widget.onLeaveThread == null || _leaving
+                        ? null
+                        : () => confirmLeaveThread(context),
+                    icon: _leaving
+                        ? SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: colorScheme.primary,
+                            ),
+                          )
+                        : const Icon(Icons.exit_to_app_rounded),
+                    label: Text(
+                      _leaving
+                          ? (isDirect ? 'Removing chat...' : 'Leaving group...')
+                          : (isDirect ? 'Remove chat' : 'Leave group'),
+                    ),
+                  ),
+                ),
+                if (widget.onLeaveThread == null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'This action is currently unavailable.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> confirmLeaveThread(BuildContext context) async {
+    final action = widget.onLeaveThread;
+    if (action == null || _leaving) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    final isDirect =
+        ChatDetailsScreen.effectiveThreadType(widget.details) == ChatThreadType.direct;
+
+    final confirmed = await AppConfirmDialog.show(
+      context,
+      title: isDirect ? 'Remove chat?' : 'Leave group?',
+      message: isDirect
+          ? 'This chat will be removed from your inbox. You can see it again if a direct conversation is opened later.'
+          : 'You will lose access to this event chat and will not be able to rejoin it manually later. This group is automatically removed when the event finishes.',
+      confirmLabel: isDirect ? 'Remove chat' : 'Leave group',
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _leaving = true);
+
+    try {
+      await action();
+      if (!mounted) return;
+
+      Navigator.of(context).popUntil((route) {
+        return route.settings.name == '/chat-threads' || route.isFirst;
+      });
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'Failed to leave chat thread.',
+        tag: 'ChatDetailsScreen',
+        error: error,
+        stackTrace: stackTrace,
+      );
+
+      if (!mounted) return;
+
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              ErrorMapper.toMessage(
+                error,
+                stackTrace: stackTrace,
+                fallbackMessage: 'Failed to leave the chat. Please try again.',
+              ),
+            ),
+          ),
+        );
+    } finally {
+      if (mounted) {
+        setState(() => _leaving = false);
+      }
+    }
   }
 }
 

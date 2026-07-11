@@ -12,7 +12,6 @@ public record EventCreatedMessage(
     decimal Price,
     bool IsFree,
     int Capacity,
-    bool IsOnline,
     DateTime StartDateTime,
     DateTime EndDateTime,
     DateTime PublishedAt

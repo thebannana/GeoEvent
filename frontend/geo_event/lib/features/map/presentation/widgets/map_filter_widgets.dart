@@ -166,15 +166,13 @@ class MapFilterErrorText extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
     return Padding(
       padding: const EdgeInsets.only(top: 4),
       child: Text(
         message,
-        style: theme.textTheme.bodySmall?.copyWith(
-          color: theme.colorScheme.error,
-        ),
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Theme.of(context).colorScheme.error,
+            ),
       ),
     );
   }
@@ -202,9 +200,6 @@ class MapSliderCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final clampedValue = value.clamp(min, max);
-
     return AppSurfaceCard(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
@@ -215,18 +210,18 @@ class MapSliderCard extends StatelessWidget {
           children: [
             Text(
               label,
-              style: theme.textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
             ),
             const SizedBox(height: 6),
             Slider(
-              value: clampedValue,
+              value: value.clamp(min, max),
               min: min,
               max: max,
               divisions: divisions,
-              activeColor: theme.colorScheme.primary,
               onChanged: enabled ? onChanged : null,
+              activeColor: Theme.of(context).colorScheme.primary,
             ),
           ],
         ),
@@ -318,6 +313,7 @@ class MapRangeSliderCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+
     final safeStart = values.start.clamp(min, max);
     final safeEnd = values.end.clamp(min, max);
     final safeValues = safeStart <= safeEnd

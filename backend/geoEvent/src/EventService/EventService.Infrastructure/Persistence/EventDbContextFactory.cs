@@ -1,8 +1,6 @@
 using DotNetEnv;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
-using Microsoft.Extensions.Configuration;
-using System.IO;
 
 namespace EventService.Infrastructure.Persistence;
 
@@ -16,15 +14,10 @@ public class EventDbContextFactory : IDesignTimeDbContextFactory<EventDbContext>
             Env.Load(envPath);
         }
 
-        var configuration = new ConfigurationBuilder()
-            .AddEnvironmentVariables()
-            .Build();
-
-        var connectionString = configuration.GetConnectionString("EventDb") 
-            ?? Environment.GetEnvironmentVariable("EVENT_DB_CONNECTION");
+        var connectionString = Environment.GetEnvironmentVariable("EVENT_DB_CONNECTION");
 
         if (string.IsNullOrWhiteSpace(connectionString))
-            throw new InvalidOperationException("Could not find connection string. Checked ConnectionStrings:EventDb and EVENT_DB_CONNECTION.");
+            throw new InvalidOperationException("Could not find EVENT_DB_CONNECTION.");
 
         var optionsBuilder = new DbContextOptionsBuilder<EventDbContext>();
         optionsBuilder.UseSqlServer(connectionString);
@@ -35,13 +28,16 @@ public class EventDbContextFactory : IDesignTimeDbContextFactory<EventDbContext>
     private static string? FindSharedEnvFile(string startDirectory)
     {
         var directory = new DirectoryInfo(startDirectory);
+
         while (directory is not null)
         {
             var candidate = Path.Combine(directory.FullName, ".env");
             if (File.Exists(candidate))
                 return candidate;
+
             directory = directory.Parent;
         }
+
         return null;
     }
 }

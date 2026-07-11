@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/utils/debounce.dart';
 import '../../../../core/widgets/feedback/app_empty_state.dart';
 import '../../../../core/widgets/feedback/app_error_state.dart';
 import '../../../../core/widgets/feedback/app_loading_indicator.dart';
@@ -20,6 +21,9 @@ class InboxScreen extends ConsumerStatefulWidget {
 
 class _InboxScreenState extends ConsumerState<InboxScreen> {
   final _searchController = TextEditingController();
+  final Debouncer _searchDebouncer = Debouncer(
+    delay: const Duration(milliseconds: 300),
+  );
 
   @override
   void initState() {
@@ -31,8 +35,15 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
 
   @override
   void dispose() {
+    _searchDebouncer.dispose();
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _onSearchChanged(String value) {
+    _searchDebouncer.run(() {
+      ref.read(inboxControllerProvider.notifier).setSearch(value);
+    });
   }
 
   @override
@@ -54,10 +65,6 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(18, 14, 18, 0),
-                child: Text(
-                  'Inbox',
-                  style: Theme.of(context).textTheme.headlineSmall,
-                ),
               ),
             ),
             SliverToBoxAdapter(
@@ -65,7 +72,7 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
                 padding: const EdgeInsets.fromLTRB(18, 14, 18, 0),
                 child: TextField(
                   controller: _searchController,
-                  onChanged: ctrl.setSearch,
+                  onChanged: _onSearchChanged,
                   style: const TextStyle(fontSize: 15),
                   decoration: InputDecoration(
                     hintText: 'Search inbox',
@@ -210,7 +217,11 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
                         state.hasMore &&
                         !state.isLoadingMore &&
                         index >= items.length - 3) {
-                      Future.microtask(ctrl.loadMore);
+                      Future.microtask(() {
+                        if (!state.isLoadingMore) {
+                          ctrl.loadMore();
+                        }
+                      });
                     }
 
                     return InboxNotificationTile(

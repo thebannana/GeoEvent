@@ -63,7 +63,9 @@ class CommentThreadTile extends StatelessWidget {
                   CommentMetaText(comment.createdAt.timeAgo(short: true)),
                   CommentActionTextButton(
                     label: comment.isLiked ? 'Unlike' : 'Like',
-                    color: comment.isLiked ? likedColor : colorScheme.onSurfaceVariant,
+                    color: comment.isLiked
+                        ? likedColor
+                        : colorScheme.onSurfaceVariant,
                     onTap: comment.isDeleted ? null : () => onLikeTap(comment),
                     disabledReason: 'Deleted comments cannot be liked.',
                   ),
@@ -76,19 +78,23 @@ class CommentThreadTile extends StatelessWidget {
                     CommentActionTextButton(
                       label: 'Report',
                       color: Colors.orangeAccent,
-                      onTap: comment.isDeleted ? null : () => onReportTap(comment),
+                      onTap:
+                          comment.isDeleted ? null : () => onReportTap(comment),
                       disabledReason: 'Deleted comments cannot be reported.',
                     ),
                   if (canManage)
                     CommentActionTextButton(
                       label: 'Edit',
                       onTap: comment.isDeleted ? null : () => onEditTap(comment),
+                      disabledReason: 'Deleted comments cannot be edited.',
                     ),
                   if (canManage)
                     CommentActionTextButton(
                       label: 'Delete',
                       color: colorScheme.error,
-                      onTap: comment.isDeleted ? null : () => onDeleteTap(comment),
+                      onTap:
+                          comment.isDeleted ? null : () => onDeleteTap(comment),
+                      disabledReason: 'Deleted comments cannot be deleted again.',
                     ),
                   if (comment.likesCount > 0)
                     CommentMetaText(
@@ -103,7 +109,9 @@ class CommentThreadTile extends StatelessWidget {
                       ? 'Loading replies...'
                       : 'View ${comment.replyCount} repl${comment.replyCount == 1 ? 'y' : 'ies'}',
                   color: colorScheme.onSurfaceVariant,
-                  onTap: comment.isReplyLoading ? null : () => onLoadRepliesTap(comment),
+                  onTap:
+                      comment.isReplyLoading ? null : () => onLoadRepliesTap(comment),
+                  disabledReason: 'Replies are already loading.',
                 ),
               ],
               if (comment.replies.isNotEmpty) ...[
@@ -149,6 +157,7 @@ class CommentThreadTile extends StatelessWidget {
                   onTap: comment.isLoadingMoreReplies
                       ? null
                       : () => onLoadMoreRepliesTap(comment),
+                  disabledReason: 'More replies are already loading.',
                 ),
               ],
             ],

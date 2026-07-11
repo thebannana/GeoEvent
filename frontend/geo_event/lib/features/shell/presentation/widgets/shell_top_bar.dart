@@ -27,6 +27,32 @@ class ShellTopBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Widget buildActions() {
+      return Row(
+        children: [
+          if (showDirectionsButton) ...[
+            AppIconCircleButton(
+              icon: Icons.navigation_rounded,
+              tooltip: _directionsTooltip,
+              onPressed: onDirections,
+            ),
+            const SizedBox(width: 10),
+          ],
+          AppIconCircleButton(
+            icon: Icons.search_rounded,
+            tooltip: _searchTooltip,
+            onPressed: onSearch,
+          ),
+          const SizedBox(width: 10),
+          AppIconCircleButton(
+            icon: Icons.tune_rounded,
+            tooltip: _filterTooltip,
+            onPressed: onFilter,
+          ),
+        ],
+      );
+    }
+
     return SafeArea(
       bottom: false,
       child: Padding(
@@ -42,32 +68,7 @@ class ShellTopBar extends StatelessWidget {
               )
             else
               const SizedBox(width: 46),
-            if (showAll)
-              Row(
-                children: [
-                  if (showDirectionsButton) ...[
-                    AppIconCircleButton(
-                      icon: Icons.navigation_rounded,
-                      tooltip: _directionsTooltip,
-                      onPressed: onDirections,
-                    ),
-                    const SizedBox(width: 10),
-                  ],
-                  AppIconCircleButton(
-                    icon: Icons.search_rounded,
-                    tooltip: _searchTooltip,
-                    onPressed: onSearch,
-                  ),
-                  const SizedBox(width: 10),
-                  AppIconCircleButton(
-                    icon: Icons.tune_rounded,
-                    tooltip: _filterTooltip,
-                    onPressed: onFilter,
-                  ),
-                ],
-              )
-            else
-              const SizedBox(width: 102),
+            if (showAll) buildActions() else const SizedBox(width: 102),
           ],
         ),
       ),

@@ -1,3 +1,4 @@
+import '../../tickets/models/request_refund_status.dart';
 import 'reservation_status.dart';
 import 'ticket.dart';
 
@@ -109,32 +110,35 @@ String get displayStatus {
   }
 
 bool get canBeCancelled {
-  return typedStatus == ReservationStatus.pending;
+  if (typedStatus == ReservationStatus.pending) return true;
+  if (typedStatus == ReservationStatus.confirmed && totalAmount <= 0) return true;
+  return false;
 }
 
 bool get canBeRefunded {
   return typedStatus == ReservationStatus.confirmed && totalAmount > 0;
 }
 
+RefundRequestStatus get typedRefundStatus =>
+    RefundRequestStatus.fromValue(refundRequestStatus);
+
 bool get hasPendingRefundRequest =>
-    (refundRequestStatus ?? '').trim().toLowerCase() == 'pending';
+    typedRefundStatus == RefundRequestStatus.pending;
 
 bool get isRefundRejected =>
-    (refundRequestStatus ?? '').trim().toLowerCase() == 'rejected';
+    typedRefundStatus == RefundRequestStatus.rejected;
 
 bool get isRefundCompleted =>
-    (refundRequestStatus ?? '').trim().toLowerCase() == 'refunded' ||
+    typedRefundStatus == RefundRequestStatus.refunded ||
     typedStatus == ReservationStatus.refunded;
 
 bool get canRequestRefund {
-  final refundState = (refundRequestStatus ?? '').trim().toLowerCase();
-
   return typedStatus == ReservationStatus.confirmed &&
       totalAmount > 0 &&
-      refundState != 'pending' &&
-      refundState != 'processing' &&
-      refundState != 'approved' &&
-      refundState != 'refunded';
+      typedRefundStatus != RefundRequestStatus.pending &&
+      typedRefundStatus != RefundRequestStatus.processing &&
+      typedRefundStatus != RefundRequestStatus.approved &&
+      typedRefundStatus != RefundRequestStatus.refunded;
 }
 
   bool get isActive {

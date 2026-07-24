@@ -16,9 +16,6 @@ public class SegmentConfiguration : IEntityTypeConfiguration<Segment>
             .HasMaxLength(100)
             .IsRequired();
 
-        builder.Property(s => s.IconUrl)
-            .HasMaxLength(1000);
-
         builder.Property(s => s.Color)
             .HasMaxLength(20);
 

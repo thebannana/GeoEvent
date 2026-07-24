@@ -8,6 +8,19 @@ namespace TicketService.Application.Interfaces.Repositories;
 
 public interface ITicketRepository
 {
+    Task<PagedResult<Reservation>> GetRefundRequestsAsync(AdminRefundRequestsQueryDto query);
+    Task<Reservation?> GetReservationByIdAsync(int reservationId);
+    Task<Reservation?> GetReservationByIdForUpdateAsync(int reservationId);
+
+    Task UpdateReservationAsync(Reservation reservation);
+    Task UpdateTicketAsync(Ticket ticket);
+    Task UpdateEventTicketAsync(EventTicket eventTicket);
+    Task<PagedResult<ManageableEventAttendeePreviewDto>> GetManageableEventAttendeesAsync(
+    int eventId,
+    int page,
+    int pageSize,
+    string? searchTerm);
+    Task<AdminDashboardTicketStatsDto> GetAdminDashboardTicketStatsAsync(string currency = "BAM");
     Task ExecuteInStrategyAsync(Func<Task> operation);
     Task<IAppTransaction> BeginTransactionAsync();
     Task SaveChangesAsync();
@@ -17,13 +30,8 @@ public interface ITicketRepository
     Task AddTicketsAsync(IEnumerable<Ticket> tickets);
     Task AddPaymentDetailAsync(PaymentDetail payment);
 
-    Task UpdateReservationAsync(Reservation reservation);
-    Task UpdateEventTicketAsync(EventTicket eventTicket);
-    Task UpdateTicketAsync(Ticket ticket);
     Task UpdatePaymentDetailAsync(PaymentDetail payment);
 
-    Task<Reservation?> GetReservationByIdAsync(int reservationId);
-    Task<Reservation?> GetReservationByIdForUpdateAsync(int reservationId);
     Task<Reservation?> GetReservationByPendingProviderOrderIdAsync(string providerOrderId);
     Task<Reservation?> GetReservationByPendingProviderOrderIdForUpdateAsync(string providerOrderId);
 

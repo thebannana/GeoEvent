@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using System.Text;
 using ApiGateway.Middleware;
 using AspNetCoreRateLimit;
@@ -74,7 +75,7 @@ try
                 IssuerSigningKey = new SymmetricSecurityKey(
                     Encoding.UTF8.GetBytes(jwtSecret)),
                 ClockSkew = TimeSpan.Zero,
-                RoleClaimType = "role"
+                RoleClaimType = ClaimTypes.Role
             };
 
             options.Events = new JwtBearerEvents

@@ -20,6 +20,20 @@ public class ReservationsController : ControllerBase
         _ticketService = ticketService;
     }
 
+    [HttpGet("refund-requests")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> GetRefundRequests([FromQuery] AdminRefundRequestsQueryDto query)
+    {
+        var userId = User.GetUserId();
+        var role = User.GetRole();
+
+        var result = await _ticketService.GetAdminRefundRequestsAsync(query, userId, role);
+
+        return result.Success
+            ? Ok(result.Data)
+            : StatusCode(result.StatusCode, new { error = result.Error });
+    }
+
     [AllowAnonymous]
     [HttpGet("public/events/{eventId:int}/attendees")]
     public async Task<IActionResult> GetPublicEventAttendees(
@@ -56,6 +70,19 @@ public class ReservationsController : ControllerBase
         };
 
         var result = await _ticketService.ConfirmReservationAsync(reservationId, dto, userId);
+        return result.Success
+            ? Ok(result.Data)
+            : StatusCode(result.StatusCode, new { error = result.Error });
+    }
+
+    [Authorize(Roles = "Admin")]
+    [HttpGet("events/{eventId:int}/attendees/manage")]
+    public async Task<IActionResult> GetManageableEventAttendees(
+    int eventId,
+    [FromQuery] ManageableEventAttendeesFilterDto filter)
+    {
+        var result = await _ticketService.GetManageableEventAttendeesAsync(eventId, filter);
+
         return result.Success
             ? Ok(result.Data)
             : StatusCode(result.StatusCode, new { error = result.Error });

@@ -82,6 +82,20 @@ public class UsersController : ControllerBase
             : StatusCode(result.StatusCode, new { error = result.Error });
     }
 
+    [Authorize(Roles = AppRoles.Admin)]
+    [HttpDelete("{userId:int}")]
+    public async Task<IActionResult> DeleteUser(int userId)
+    {
+        if (userId <= 0)
+            return BadRequest(new { error = "A valid user ID must be provided." });
+
+        var result = await _userService.AdminDeleteUserAsync(userId);
+
+        return result.Success
+            ? NoContent()
+            : StatusCode(result.StatusCode, new { error = result.Error });
+    }
+
     [HttpPut("me/password")]
     public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordDto dto)
     {
@@ -218,6 +232,23 @@ public class UsersController : ControllerBase
     }
 
     [Authorize(Roles = AppRoles.Admin)]
+    [HttpPut("{userId:int}")]
+    public async Task<IActionResult> UpdateUser(int userId, [FromBody] AdminUpdateUserDto request)
+    {
+        if (userId <= 0)
+            return BadRequest(new { error = "A valid user ID must be provided." });
+
+        if (request is null)
+            return BadRequest(new { error = "Request body is required." });
+
+        var result = await _userService.AdminUpdateUserAsync(userId, request);
+
+        return result.Success
+            ? Ok(result.Data)
+            : StatusCode(result.StatusCode, new { error = result.Error });
+    }
+
+    [Authorize(Roles = AppRoles.Admin)]
     [HttpPost("{userId:int}/unban")]
     public async Task<IActionResult> UnbanUser(int userId)
     {
@@ -228,6 +259,25 @@ public class UsersController : ControllerBase
 
         return result.Success
             ? Ok(new { message = "User unbanned." })
+            : StatusCode(result.StatusCode, new { error = result.Error });
+    }
+
+    [Authorize(Roles = AppRoles.Admin)]
+    [HttpGet("{userId:int}/admin-profile")]
+    public async Task<IActionResult> GetAdminProfile(int userId)
+    {
+        if (userId <= 0)
+            return BadRequest(new { error = "A valid user ID must be provided." });
+
+        int? requesterId = null;
+
+        if (User.Identity?.IsAuthenticated == true)
+            requesterId = User.GetUserId();
+
+        var result = await _userService.GetAdminProfileAsync(userId, requesterId);
+
+        return result.Success
+            ? Ok(result.Data)
             : StatusCode(result.StatusCode, new { error = result.Error });
     }
 

@@ -5,6 +5,18 @@ namespace EventService.Application.Interfaces.Services;
 
 public interface IEventService
 {
+    Task<ServiceResult<InternalEventLookupDto>> GetInternalEventLookupAsync(int eventId);
+    Task<ServiceResult<InternalCommentLookupDto>> GetInternalCommentLookupAsync(int commentId);
+    Task<ServiceResult<CommentResponseDto>> AdminUpdateCommentAsync(int commentId, UpdateCommentDto dto);
+    Task<ServiceResult<bool>> AdminDeleteCommentAsync(int commentId);
+    Task<ServiceResult<EventResponseDto>> GetAdminByIdAsync(int eventId);
+    Task<ServiceResult<EventResponseDto>> AdminUpdateAsync(int eventId, UpdateEventDto dto);
+    Task<ServiceResult<bool>> AdminDeleteAsync(int eventId);
+    Task<ServiceResult<AdminEventStatsDto>> GetAdminEventStatsAsync();
+    Task<ServiceResult<InternalEventEngagementStatsDto>> GetInternalEngagementStatsAsync();
+    Task<ServiceResult<PagedResultSegmentResponseDto>> GetSegmentsPagedAsync(int page, int pageSize, string? searchTerm);
+    Task<ServiceResult<PagedResultGenreResponseDto>> GetGenresPagedAsync(int page, int pageSize, string? searchTerm);
+    Task<ServiceResult<PagedResultSubGenreResponseDto>> GetSubGenresPagedAsync(int page, int pageSize, string? searchTerm);
     Task<ServiceResult<int>> GetPublicCountByOrganizerAsync(int userId);
     Task<ServiceResult<PagedResult<EventResponseDto>>> GetPublicAsync(EventFilterDto filter, int? requesterId = null);
     Task<ServiceResult<EventResponseDto>> GetPublicByIdAsync(int eventId, int? requesterId = null);

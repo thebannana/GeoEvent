@@ -20,6 +20,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("forgot-password")]
+    [EnableRateLimiting("auth")]
     [AllowAnonymous]
     public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordDto dto)
     {
@@ -33,7 +34,24 @@ public class AuthController : ControllerBase
             : StatusCode(result.StatusCode, new { error = result.Error });
     }
 
+    [HttpPost("admin-login")]
+    [EnableRateLimiting("auth")]
+    [AllowAnonymous]
+    public async Task<IActionResult> AdminLogin([FromBody] LoginRequestDto request)
+    {
+        if (request is null)
+            return BadRequest(new { error = "Request body is required." });
+
+        var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        var result = await _authService.AdminLoginAsync(request, ipAddress);
+
+        return result.Success
+            ? Ok(result.Data)
+            : StatusCode(result.StatusCode, new { error = result.Error });
+    }
+
     [HttpPost("reset-password")]
+    [EnableRateLimiting("auth")]
     [AllowAnonymous]
     public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordDto dto)
     {

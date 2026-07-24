@@ -40,6 +40,296 @@ public class EventServiceImpl : IEventService
         _cache = cache;
         _logger = logger;
     }
+
+    public async Task<ServiceResult<InternalEventLookupDto>> GetInternalEventLookupAsync(int eventId)
+    {
+        if (eventId <= 0)
+            return ServiceResult<InternalEventLookupDto>.Fail("A valid event ID is required.", 400);
+
+        var ev = await _eventRepository.GetByIdWithDetailsAsync(eventId);
+        if (ev is null)
+            return ServiceResult<InternalEventLookupDto>.NotFound("Event not found.");
+
+        string? organizerDisplayName = null;
+
+        try
+        {
+            var profiles = await _userProfileService.GetProfilesByIdsAsync(new[] { ev.OrganizerId });
+            if (profiles.TryGetValue(ev.OrganizerId, out var organizer))
+            {
+                organizerDisplayName =
+                    !string.IsNullOrWhiteSpace(organizer.DisplayName)
+                        ? organizer.DisplayName
+                        : organizer.Username;
+            }
+        }
+        catch
+        {
+        }
+
+        return ServiceResult<InternalEventLookupDto>.Ok(new InternalEventLookupDto
+        {
+            EventId = ev.EventId,
+            Title = ev.Title,
+            OrganizerDisplayName = organizerDisplayName
+        });
+    }
+
+    public async Task<ServiceResult<InternalCommentLookupDto>> GetInternalCommentLookupAsync(int commentId)
+    {
+        if (commentId <= 0)
+            return ServiceResult<InternalCommentLookupDto>.Fail("A valid comment ID is required.", 400);
+
+        var comment = await _eventRepository.GetCommentByIdAsync(commentId);
+        if (comment is null)
+            return ServiceResult<InternalCommentLookupDto>.NotFound("Comment not found.");
+
+        string? username = null;
+        string? userDisplayName = null;
+
+        try
+        {
+            var profiles = await _userProfileService.GetProfilesByIdsAsync(new[] { comment.UserId });
+            if (profiles.TryGetValue(comment.UserId, out var author))
+            {
+                username = author.Username;
+                userDisplayName = !string.IsNullOrWhiteSpace(author.DisplayName)
+                    ? author.DisplayName
+                    : author.Username;
+            }
+        }
+        catch
+        {
+        }
+
+        return ServiceResult<InternalCommentLookupDto>.Ok(new InternalCommentLookupDto
+        {
+            CommentId = comment.CommentId,
+            EventId = comment.EventId,
+            UserId = comment.UserId,
+            Username = username,
+            UserDisplayName = userDisplayName,
+            Preview = BuildLookupPreview(comment.Content, 120),
+            IsDeleted = comment.IsDeleted
+        });
+    }
+
+    private static string BuildLookupPreview(string? value, int maxLength = 120)
+    {
+        var text = string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim();
+        if (string.IsNullOrEmpty(text))
+            return string.Empty;
+
+        return text.Length <= maxLength
+            ? text
+            : text[..maxLength].TrimEnd() + "...";
+    }
+    public async Task<ServiceResult<EventResponseDto>> GetAdminByIdAsync(int eventId)
+    {
+        var ev = await _eventRepository.GetByIdWithDetailsAsync(eventId);
+        if (ev is null)
+            return ServiceResult<EventResponseDto>.NotFound($"Event {eventId} not found.");
+
+        return ServiceResult<EventResponseDto>.Ok(MapToDto(ev));
+    }
+
+    public async Task<ServiceResult<EventResponseDto>> AdminUpdateAsync(int eventId, UpdateEventDto dto)
+    {
+        var ev = await _eventRepository.GetTrackedByIdAsync(eventId);
+        if (ev is null)
+            return ServiceResult<EventResponseDto>.NotFound($"Event {eventId} not found.");
+
+        try
+        {
+            ev.UpdateDetails(
+                segmentId: dto.SegmentId ?? ev.SegmentId,
+                genreId: dto.GenreId ?? ev.GenreId,
+                subGenreId: dto.SubGenreId ?? ev.SubGenreId,
+                title: dto.Title ?? ev.Title,
+                description: dto.Description ?? ev.Description,
+                latitude: dto.Latitude ?? ev.Latitude,
+                longitude: dto.Longitude ?? ev.Longitude,
+                startDateTime: dto.StartDateTime ?? ev.StartDateTime,
+                endDateTime: dto.EndDateTime ?? ev.EndDateTime,
+                capacity: dto.Capacity ?? ev.Capacity,
+                price: dto.Price ?? ev.Price,
+                isFeatured: dto.IsFeatured ?? ev.IsFeatured,
+                tags: dto.Tags ?? ev.Tags,
+                accessibilityInfo: dto.AccessibilityInfo ?? ev.AccessibilityInfo,
+                promoterName: dto.PromoterName ?? ev.PromoterName,
+                locale: dto.Locale ?? ev.Locale
+            );
+
+            await _eventRepository.UpdateAsync(ev);
+
+            await _publishEndpoint.Publish(new EventUpdatedMessage(
+                ev.EventId,
+                ev.Title,
+                ev.OrganizerId,
+                ev.StartDateTime,
+                ev.EndDateTime,
+                "Event updated by admin",
+                DateTime.UtcNow
+            ));
+
+            var updated = await _eventRepository.GetByIdWithDetailsAsync(eventId) ?? ev;
+            return ServiceResult<EventResponseDto>.Ok(MapToDto(updated));
+        }
+        catch (InvalidEventDataException ex)
+        {
+            _logger.LogWarning(ex, "Invalid event data while admin updated event {EventId}", eventId);
+            return ServiceResult<EventResponseDto>.Fail(ex.Message);
+        }
+    }
+
+    public async Task<ServiceResult<bool>> AdminDeleteAsync(int eventId)
+    {
+        var ev = await _eventRepository.GetTrackedByIdAsync(eventId);
+        if (ev is null)
+            return ServiceResult<bool>.NotFound($"Event {eventId} not found.");
+
+        try
+        {
+            ev.Cancel();
+            await _eventRepository.UpdateAsync(ev);
+
+            await _publishEndpoint.Publish(new EventCancelledMessage(
+                ev.EventId,
+                ev.Title,
+                ev.OrganizerId,
+                DateTime.UtcNow,
+                "Cancelled by admin"
+            ));
+
+            return ServiceResult<bool>.Ok(true);
+        }
+        catch (InvalidEventStateException ex)
+        {
+            _logger.LogWarning(ex, "Invalid state while admin deleted event {EventId}", eventId);
+            return ServiceResult<bool>.Fail(ex.Message);
+        }
+    }
+
+    public async Task<ServiceResult<AdminEventStatsDto>> GetAdminEventStatsAsync()
+    {
+        const int topTake = 5;
+
+        static List<TopEventStatDto> MapTopEvents(IEnumerable<TopEventStatRawDto> items) =>
+            items.Select(x => new TopEventStatDto
+            {
+                EventId = x.EventId,
+                Title = x.Title,
+                ImageUrl = x.ImageUrl,
+                Status = x.Status.ToString(),
+                StartDateTime = x.StartDateTime,
+                Count = x.Count
+            }).ToList();
+
+        var totalEventsCount = await _eventRepository.GetTotalEventsCountAsync();
+        var confirmedEventsCount = await _eventRepository.GetEventsCountByStatusAsync(EventStatus.Confirmed);
+        var pendingEventsCount = await _eventRepository.GetEventsCountByStatusAsync(EventStatus.Pending);
+        var completedEventsCount = await _eventRepository.GetEventsCountByStatusAsync(EventStatus.Completed);
+        var cancelledEventsCount = await _eventRepository.GetEventsCountByStatusAsync(EventStatus.Cancelled);
+
+        var totalLikesCount = await _eventRepository.GetLikedEventsCountAsync();
+        var totalBookmarksCount = await _eventRepository.GetBookmarksCountAsync();
+        var totalCommentsCount = await _eventRepository.GetCommentsCountAsync();
+        var totalViewsCount = await _eventRepository.GetTotalViewsCountAsync();
+
+        var mostLikedEvents = await _eventRepository.GetMostLikedEventsAsync(topTake);
+        var mostViewedEvents = await _eventRepository.GetMostViewedEventsAsync(topTake);
+        var mostCommentedEvents = await _eventRepository.GetMostCommentedEventsAsync(topTake);
+        var mostBookmarkedEvents = await _eventRepository.GetMostBookmarkedEventsAsync(topTake);
+
+        var dto = new AdminEventStatsDto
+        {
+            TotalEventsCount = totalEventsCount,
+            ConfirmedEventsCount = confirmedEventsCount,
+            PendingEventsCount = pendingEventsCount,
+            CompletedEventsCount = completedEventsCount,
+            CancelledEventsCount = cancelledEventsCount,
+            TotalLikesCount = totalLikesCount,
+            TotalBookmarksCount = totalBookmarksCount,
+            TotalCommentsCount = totalCommentsCount,
+            TotalViewsCount = totalViewsCount,
+            MostLikedEvents = MapTopEvents(mostLikedEvents),
+            MostViewedEvents = MapTopEvents(mostViewedEvents),
+            MostCommentedEvents = MapTopEvents(mostCommentedEvents),
+            MostBookmarkedEvents = MapTopEvents(mostBookmarkedEvents)
+        };
+
+        return ServiceResult<AdminEventStatsDto>.Ok(dto);
+    }
+    public async Task<ServiceResult<InternalEventEngagementStatsDto>> GetInternalEngagementStatsAsync()
+    {
+        var bookmarksCount = await _eventRepository.GetBookmarksCountAsync();
+        var commentsCount = await _eventRepository.GetCommentsCountAsync();
+        var likedEventsCount = await _eventRepository.GetLikedEventsCountAsync();
+
+        return ServiceResult<InternalEventEngagementStatsDto>.Ok(new InternalEventEngagementStatsDto
+        {
+            BookmarksCount = bookmarksCount,
+            CommentsCount = commentsCount,
+            LikedEventsCount = likedEventsCount
+        });
+    }
+
+    public async Task<ServiceResult<PagedResultSegmentResponseDto>> GetSegmentsPagedAsync(
+    int page,
+    int pageSize,
+    string? searchTerm)
+    {
+        page = NormalizePage(page);
+        pageSize = NormalizePageSize(pageSize);
+
+        var result = await _eventRepository.GetSegmentsPagedAsync(page, pageSize, searchTerm);
+
+        return ServiceResult<PagedResultSegmentResponseDto>.Ok(new PagedResultSegmentResponseDto
+        {
+            Items = result.Items.Select(MapSegment).ToList(),
+            TotalCount = result.TotalCount,
+            Page = result.Page,
+            PageSize = result.PageSize
+        });
+    }
+
+    public async Task<ServiceResult<PagedResultGenreResponseDto>> GetGenresPagedAsync(
+        int page,
+        int pageSize,
+        string? searchTerm)
+    {
+        page = NormalizePage(page);
+        pageSize = NormalizePageSize(pageSize);
+
+        var result = await _eventRepository.GetGenresPagedAsync(page, pageSize, searchTerm);
+
+        return ServiceResult<PagedResultGenreResponseDto>.Ok(new PagedResultGenreResponseDto
+        {
+            Items = result.Items.Select(MapGenre).ToList(),
+            TotalCount = result.TotalCount,
+            Page = result.Page,
+            PageSize = result.PageSize
+        });
+    }
+
+    public async Task<ServiceResult<PagedResultSubGenreResponseDto>> GetSubGenresPagedAsync(
+        int page,
+        int pageSize,
+        string? searchTerm)
+    {
+        page = NormalizePage(page);
+        pageSize = NormalizePageSize(pageSize);
+
+        var result = await _eventRepository.GetSubGenresPagedAsync(page, pageSize, searchTerm);
+
+        return ServiceResult<PagedResultSubGenreResponseDto>.Ok(new PagedResultSubGenreResponseDto
+        {
+            Items = result.Items.Select(MapSubGenre).ToList(),
+            TotalCount = result.TotalCount,
+            Page = result.Page,
+            PageSize = result.PageSize
+        });
+    }
     public async Task<ServiceResult<int>> GetPublicCountByOrganizerAsync(int userId)
     {
         if (userId <= 0)
@@ -555,7 +845,7 @@ public class EventServiceImpl : IEventService
                 endDateTime: dto.EndDateTime ?? ev.EndDateTime,
                 capacity: dto.Capacity ?? ev.Capacity,
                 price: dto.Price ?? ev.Price,
-                isFeatured: ev.IsFeatured,
+                isFeatured: dto.IsFeatured ?? ev.IsFeatured,
                 tags: dto.Tags ?? ev.Tags,
                 accessibilityInfo: dto.AccessibilityInfo ?? ev.AccessibilityInfo,
                 promoterName: dto.PromoterName ?? ev.PromoterName,
@@ -756,17 +1046,9 @@ public class EventServiceImpl : IEventService
 
         try
         {
-            await _eventRepository.AddImageAsync(new EventImage(eventId, imageUrl, isCover));
-
-            if (isCover)
-            {
-                var latestImageId = (await _eventRepository.GetEventImagesAsync(eventId))
-                    .OrderByDescending(i => i.ImageId)
-                    .First()
-                    .ImageId;
-
-                await _eventRepository.SetCoverImageAsync(eventId, latestImageId);
-            }
+            await _eventRepository.AddImageAsync(
+                new EventImage(eventId, imageUrl, isCover),
+                isCover);
 
             return ServiceResult<bool>.Ok(true);
         }
@@ -836,7 +1118,7 @@ public class EventServiceImpl : IEventService
     {
         try
         {
-            var segment = new Segment(dto.Name, dto.IconUrl, dto.Color);
+            var segment = new Segment(dto.Name, dto.Color);
             if (!dto.IsActive)
                 segment.Deactivate();
 
@@ -862,7 +1144,6 @@ public class EventServiceImpl : IEventService
         {
             segment.Update(
                 dto.Name ?? segment.Name,
-                dto.IconUrl ?? segment.IconUrl,
                 dto.Color ?? segment.Color
             );
 
@@ -1348,7 +1629,6 @@ public class EventServiceImpl : IEventService
     {
         SegmentId = s.SegmentId,
         Name = s.Name,
-        IconUrl = s.IconUrl,
         Color = s.Color,
         IsActive = s.IsActive,
         Genres = s.Genres.Select(MapGenre).ToList()
@@ -1369,6 +1649,9 @@ public class EventServiceImpl : IEventService
         SubGenreId = s.SubGenreId,
         Name = s.Name,
         GenreId = s.GenreId,
+        GenreName = s.Genre?.Name,
+        SegmentId = s.Genre?.SegmentId,
+        SegmentName = s.Genre?.Segment?.Name,
         IsActive = s.IsActive
     };
 
@@ -1401,6 +1684,57 @@ public class EventServiceImpl : IEventService
             ?? ev.Images.FirstOrDefault()?.ImageUrl;
     }
 
+    public async Task<ServiceResult<CommentResponseDto>> AdminUpdateCommentAsync(int commentId, UpdateCommentDto dto)
+    {
+        var comment = await _eventRepository.GetTrackedCommentByIdAsync(commentId);
+        if (comment is null)
+            return ServiceResult<CommentResponseDto>.NotFound("Comment not found.");
+
+        try
+        {
+            comment.Edit(dto.Content);
+
+            await _eventRepository.UpdateCommentAsync(comment);
+
+            var reloaded = await _eventRepository.GetCommentTreeByIdAsync(commentId) ?? comment;
+            var dtoResult = MapComment(reloaded, includeReplies: true);
+
+            await EnrichCommentsAsync(new List<CommentResponseDto> { dtoResult }, null);
+
+            return ServiceResult<CommentResponseDto>.Ok(dtoResult);
+        }
+        catch (InvalidCommentException ex)
+        {
+            _logger.LogWarning(ex, "Invalid comment data while admin updated comment {CommentId}", commentId);
+            return ServiceResult<CommentResponseDto>.Fail(ex.Message);
+        }
+        catch (CommentAlreadyDeletedException ex)
+        {
+            _logger.LogWarning(ex, "Attempted to edit deleted comment {CommentId} as admin", commentId);
+            return ServiceResult<CommentResponseDto>.Fail(ex.Message);
+        }
+    }
+
+    public async Task<ServiceResult<bool>> AdminDeleteCommentAsync(int commentId)
+    {
+        var comment = await _eventRepository.GetTrackedCommentByIdAsync(commentId);
+        if (comment is null)
+            return ServiceResult<bool>.NotFound("Comment not found.");
+
+        try
+        {
+            comment.Delete();
+
+            await _eventRepository.UpdateCommentAsync(comment);
+
+            return ServiceResult<bool>.Ok(true);
+        }
+        catch (CommentAlreadyDeletedException ex)
+        {
+            _logger.LogWarning(ex, "Attempted to delete already deleted comment {CommentId} as admin", commentId);
+            return ServiceResult<bool>.Fail(ex.Message);
+        }
+    }
     private static string BuildPreview(string? content, int maxLength = 120)
     {
         if (string.IsNullOrWhiteSpace(content))

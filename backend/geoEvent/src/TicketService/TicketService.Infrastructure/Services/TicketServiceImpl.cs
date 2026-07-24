@@ -22,6 +22,7 @@ public class TicketServiceImpl : ITicketService
     private readonly IUserDirectoryService _userDirectoryService;
     private readonly IEventAuthorizationService _eventAuthorizationService;
     private readonly IEventDirectoryClient _eventDirectoryClient;
+    private readonly IInternalEventLookupClient _internalEventLookupClient;
     private readonly ILogger<TicketServiceImpl> _logger;
     private readonly IPayPalService _payPalService;
     private readonly IConfiguration _configuration;
@@ -32,6 +33,7 @@ public class TicketServiceImpl : ITicketService
         IUserDirectoryService userDirectoryService,
         IEventAuthorizationService eventAuthorization,
         IEventDirectoryClient eventDirectoryClient,
+        IInternalEventLookupClient internalEventLookupClient,
         ILogger<TicketServiceImpl> logger,
         IPayPalService payPalService,
         IConfiguration configuration)
@@ -41,9 +43,151 @@ public class TicketServiceImpl : ITicketService
         _userDirectoryService = userDirectoryService;
         _eventAuthorizationService = eventAuthorization;
         _eventDirectoryClient = eventDirectoryClient;
+        _internalEventLookupClient = internalEventLookupClient;
         _logger = logger;
         _payPalService = payPalService;
         _configuration = configuration;
+    }
+
+    public async Task<ServiceResult<PagedResult<AdminRefundRequestResponseDto>>> GetAdminRefundRequestsAsync(
+        AdminRefundRequestsQueryDto query,
+        int requesterId,
+        string requesterRole)
+    {
+        if (!string.Equals(requesterRole, "Admin", StringComparison.OrdinalIgnoreCase))
+        {
+            return ServiceResult<PagedResult<AdminRefundRequestResponseDto>>.Forbidden(
+                "Only admins can view refund requests.");
+        }
+
+        query ??= new AdminRefundRequestsQueryDto();
+
+        var paged = await _repository.GetRefundRequestsAsync(query);
+        var items = paged.Items.ToList();
+
+        var userIds = items.Select(x => x.UserId).Distinct().ToList();
+        var profiles = userIds.Count == 0
+            ? new List<PublicUserProfileDto>()
+            : await _userDirectoryService.GetPublicProfilesAsync(userIds);
+
+        var profilesById = profiles.ToDictionary(x => x.UserId);
+
+        var eventIds = items.Select(x => x.EventId).Distinct().ToList();
+
+        var eventFetchTasks = eventIds.ToDictionary(
+            eventId => eventId,
+            eventId => _internalEventLookupClient.GetEventAsync(eventId));
+
+        await Task.WhenAll(eventFetchTasks.Values);
+
+        var eventsById = eventFetchTasks.ToDictionary(
+            kvp => kvp.Key,
+            kvp => kvp.Value.Result);
+
+        var mapped = items.Select(r =>
+        {
+            profilesById.TryGetValue(r.UserId, out var profile);
+            eventsById.TryGetValue(r.EventId, out var ev);
+
+            var latestPayment = r.PaymentDetails?
+                .OrderByDescending(x => x.PaymentId)
+                .FirstOrDefault();
+
+            var eventTitle = !string.IsNullOrWhiteSpace(ev?.Title)
+                ? ev!.Title.Trim()
+                : $"Event #{r.EventId}";
+
+            return new AdminRefundRequestResponseDto
+            {
+                ReservationId = r.ReservationId,
+                RefundRequestId = $"RF-{r.ReservationId}",
+                EventId = r.EventId,
+                EventTitle = eventTitle,
+                EventImageUrl = ev?.CoverImageUrl,
+                UserId = r.UserId,
+                RequesterName = ResolveDisplayName(profile, r.UserId),
+                RequesterUsername = profile?.Username ?? $"user-{r.UserId}",
+                RequesterAvatarUrl = profile?.ImageUrl,
+                TargetName = eventTitle,
+                TargetUsername = $"event-{r.EventId}",
+                Title = BuildRefundTitle(r, eventTitle),
+                Preview = BuildRefundPreview(r),
+                FullContent = string.IsNullOrWhiteSpace(r.RefundReason)
+                    ? "Refund request submitted."
+                    : r.RefundReason.Trim(),
+                Amount = r.TotalAmount,
+                Currency = r.Currency,
+                AmountLabel = $"{r.TotalAmount:0.00} {r.Currency}",
+                QueueStatus = MapRefundQueueStatus(r.RefundRequestStatus),
+                RefundRequestStatus = r.RefundRequestStatus.ToString(),
+                CreatedAt = r.RefundRequestedAt ?? r.CreatedAt,
+                RequestedAt = r.RefundRequestedAt,
+                ReviewedAt = r.RefundReviewedAt,
+                ReviewedByUserId = r.RefundReviewedByUserId,
+                DecisionReason = r.RefundDecisionReason,
+                ModeratorAction = r.RefundModeratorAction,
+                PaymentMethod = latestPayment?.Method.ToString(),
+                PaymentStatus = latestPayment?.Status.ToString()
+            };
+        }).ToList();
+
+        return ServiceResult<PagedResult<AdminRefundRequestResponseDto>>.Ok(
+            new PagedResult<AdminRefundRequestResponseDto>
+            {
+                Items = mapped,
+                TotalCount = paged.TotalCount,
+                Page = paged.Page,
+                PageSize = paged.PageSize
+            });
+    }
+
+    private static string BuildRefundTitle(Reservation reservation, string? eventTitle)
+    {
+        var safeEventTitle = string.IsNullOrWhiteSpace(eventTitle)
+            ? $"Event #{reservation.EventId}"
+            : eventTitle.Trim();
+
+        var title = $"Refund request for {safeEventTitle}";
+        return title.Length <= 120 ? title : title[..120];
+    }
+
+    private static RefundQueueStatus MapRefundQueueStatus(RefundRequestStatus status) =>
+    status switch
+    {
+        RefundRequestStatus.Pending => RefundQueueStatus.Open,
+        RefundRequestStatus.Processing => RefundQueueStatus.InReview,
+        RefundRequestStatus.Approved => RefundQueueStatus.Resolved,
+        RefundRequestStatus.Rejected => RefundQueueStatus.Rejected,
+        _ => RefundQueueStatus.Open
+    };
+
+    private static string BuildRefundPreview(Reservation reservation)
+    {
+        if (string.IsNullOrWhiteSpace(reservation.RefundReason))
+            return "Refund request submitted by attendee.";
+
+        var value = reservation.RefundReason.Trim();
+        return value.Length <= 90 ? value : value[..90] + "...";
+    }
+    public async Task<ServiceResult<AdminDashboardTicketStatsDto>> GetAdminDashboardTicketStatsAsync(
+    int requesterId,
+    string requesterRole)
+    {
+        if (requesterId <= 0)
+        {
+            return ServiceResult<AdminDashboardTicketStatsDto>.Fail(
+                "Invalid requester id.",
+                StatusCodes.Status400BadRequest);
+        }
+
+        if (!string.Equals(requesterRole, "Admin", StringComparison.OrdinalIgnoreCase))
+        {
+            return ServiceResult<AdminDashboardTicketStatsDto>.Forbidden(
+                "Only admins can view dashboard ticket stats.");
+        }
+
+        var stats = await _repository.GetAdminDashboardTicketStatsAsync("BAM");
+        return ServiceResult<AdminDashboardTicketStatsDto>.Ok(stats);
     }
 
     public async Task<ServiceResult<EventTicketResponseDto>> CreateDefaultEventTicketAsync(
@@ -336,6 +480,59 @@ public class TicketServiceImpl : ITicketService
                 await _repository.UpdateReservationAsync(reservation);
             }
         }
+    }
+
+    public async Task<ServiceResult<PagedResult<ManageableEventAttendeePreviewDto>>> GetManageableEventAttendeesAsync(
+    int eventId,
+    ManageableEventAttendeesFilterDto? filter)
+    {
+        filter ??= new ManageableEventAttendeesFilterDto();
+
+        var page = filter.Page <= 0 ? 1 : filter.Page;
+        var pageSize = filter.PageSize <= 0 ? 20 : Math.Min(filter.PageSize, 50);
+
+        var pagedAttendees = await _repository.GetManageableEventAttendeesAsync(
+            eventId,
+            page,
+            pageSize,
+            filter.SearchTerm);
+
+        var items = pagedAttendees.Items.ToList();
+
+        if (!items.Any())
+        {
+            return ServiceResult<PagedResult<ManageableEventAttendeePreviewDto>>.Ok(
+                new PagedResult<ManageableEventAttendeePreviewDto>
+                {
+                    Items = items,
+                    TotalCount = 0,
+                    Page = page,
+                    PageSize = pageSize
+                });
+        }
+
+        var profiles = await _userDirectoryService.GetPublicProfilesAsync(
+            items.Select(x => x.UserId).Distinct().ToList());
+
+        var profilesById = profiles.ToDictionary(x => x.UserId);
+
+        foreach (var attendee in items)
+        {
+            if (!profilesById.TryGetValue(attendee.UserId, out var profile))
+                continue;
+
+            attendee.Username = profile.Username;
+            attendee.AvatarUrl = profile.ImageUrl;
+        }
+
+        return ServiceResult<PagedResult<ManageableEventAttendeePreviewDto>>.Ok(
+            new PagedResult<ManageableEventAttendeePreviewDto>
+            {
+                Items = items,
+                TotalCount = pagedAttendees.TotalCount,
+                Page = pagedAttendees.Page,
+                PageSize = pagedAttendees.PageSize
+            });
     }
 
     public async Task<ServiceResult<PagedResult<EventAttendeePreviewDto>>> GetPublicEventAttendeesAsync(
@@ -842,13 +1039,14 @@ public class TicketServiceImpl : ITicketService
     }
 
     public async Task<ServiceResult<ReservationResponseDto>> ApproveRefundAsync(
-    int eventId,
-    int reservationId,
-    ApproveRefundDto dto,
-    int organizerUserId,
-    string organizerRole)
+        int eventId,
+        int reservationId,
+        ApproveRefundDto dto,
+        int organizerUserId,
+        string organizerRole)
     {
-        if (!string.Equals(organizerRole, "Admin", StringComparison.OrdinalIgnoreCase))
+        var isAdmin = string.Equals(organizerRole, "Admin", StringComparison.OrdinalIgnoreCase);
+        if (!isAdmin)
         {
             return ServiceResult<ReservationResponseDto>.Forbidden(
                 "Only admins can approve refunds.");
@@ -913,9 +1111,21 @@ public class TicketServiceImpl : ITicketService
                 StatusCodes.Status400BadRequest);
         }
 
+        var decisionReason = string.IsNullOrWhiteSpace(dto.DecisionReason)
+            ? null
+            : dto.DecisionReason.Trim();
+
+        var moderatorAction = string.IsNullOrWhiteSpace(dto.ModeratorAction)
+            ? null
+            : dto.ModeratorAction.Trim();
+
         var now = DateTime.UtcNow;
 
-        reservation.MarkRefundProcessing(organizerUserId, dto.DecisionReason);
+        reservation.MarkRefundProcessing(
+            organizerUserId,
+            decisionReason,
+            moderatorAction);
+
         await _repository.UpdateReservationAsync(reservation);
         await _repository.SaveChangesAsync();
 
@@ -929,7 +1139,8 @@ public class TicketServiceImpl : ITicketService
         {
             reservation.MarkRefundFailed(
                 organizerUserId,
-                refundResult.Error ?? dto.DecisionReason);
+                refundResult.Error,
+                moderatorAction);
 
             await _repository.UpdateReservationAsync(reservation);
             await _repository.SaveChangesAsync();
@@ -960,7 +1171,9 @@ public class TicketServiceImpl : ITicketService
 
                 if (reservation.EventTicketId.HasValue)
                 {
-                    var eventTicket = await _repository.GetEventTicketByIdAsync(reservation.EventTicketId.Value);
+                    var eventTicket = await _repository.GetEventTicketByIdForUpdateAsync(
+                        reservation.EventTicketId.Value);
+
                     if (eventTicket is not null)
                     {
                         eventTicket.Release(reservation.Quantity);
@@ -968,9 +1181,12 @@ public class TicketServiceImpl : ITicketService
                     }
                 }
 
-                reservation.MarkRefundCompleted(organizerUserId, dto.DecisionReason);
-                await _repository.UpdateReservationAsync(reservation);
+                reservation.MarkRefundCompleted(
+                    organizerUserId,
+                    decisionReason,
+                    moderatorAction);
 
+                await _repository.UpdateReservationAsync(reservation);
                 await _repository.SaveChangesAsync();
                 await tx.CommitAsync();
             }
@@ -1003,16 +1219,17 @@ public class TicketServiceImpl : ITicketService
     }
 
     public async Task<ServiceResult<ReservationResponseDto>> RejectRefundAsync(
-    int eventId,
-    int reservationId,
-    RejectRefundDto dto,
-    int organizerUserId,
-    string organizerRole)
+        int eventId,
+        int reservationId,
+        RejectRefundDto dto,
+        int organizerUserId,
+        string organizerRole)
     {
-        if (!string.Equals(organizerRole, "Admin", StringComparison.OrdinalIgnoreCase))
+        var isAdmin = string.Equals(organizerRole, "Admin", StringComparison.OrdinalIgnoreCase);
+        if (!isAdmin)
         {
             return ServiceResult<ReservationResponseDto>.Forbidden(
-                "Only admins can reject refunds.");
+                "Only admins can approve refunds.");
         }
 
         var allowed = await _eventAuthorizationService.CanManageEventAsync(
@@ -1032,14 +1249,26 @@ public class TicketServiceImpl : ITicketService
             return ServiceResult<ReservationResponseDto>.NotFound("Reservation not found.");
         }
 
-        if (reservation.RefundRequestStatus != RefundRequestStatus.Pending)
+        if (!reservation.CanRejectRefund())
         {
             return ServiceResult<ReservationResponseDto>.Fail(
                 "Only pending refund requests can be rejected.",
                 StatusCodes.Status409Conflict);
         }
 
-        reservation.MarkRefundRejected(organizerUserId, dto.DecisionReason);
+        var decisionReason = string.IsNullOrWhiteSpace(dto.DecisionReason)
+            ? null
+            : dto.DecisionReason.Trim();
+
+        var moderatorAction = string.IsNullOrWhiteSpace(dto.ModeratorAction)
+            ? null
+            : dto.ModeratorAction.Trim();
+
+        reservation.MarkRefundRejected(
+            organizerUserId,
+            decisionReason,
+            moderatorAction);
+
         await _repository.UpdateReservationAsync(reservation);
         await _repository.SaveChangesAsync();
 
@@ -1051,6 +1280,22 @@ public class TicketServiceImpl : ITicketService
             organizerUserId);
 
         return ServiceResult<ReservationResponseDto>.Ok(MapToReservationResponse(reservation));
+    }
+
+    private static string? BuildRefundDecisionNote(string? decisionReason, string? moderatorAction)
+    {
+        var parts = new List<string>();
+
+        if (!string.IsNullOrWhiteSpace(moderatorAction))
+            parts.Add($"Action: {moderatorAction.Trim()}");
+
+        if (!string.IsNullOrWhiteSpace(decisionReason))
+            parts.Add($"Note: {decisionReason.Trim()}");
+
+        if (parts.Count == 0)
+            return null;
+
+        return string.Join(" | ", parts);
     }
 
     public async Task<ServiceResult<ReservationResponseDto>> GetReservationAsync(

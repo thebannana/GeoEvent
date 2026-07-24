@@ -2,11 +2,11 @@ using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using TicketService.Application.Interfaces.Repositories;
 using TicketService.Application.Interfaces.Services;
 using TicketService.Infrastructure.Persistence;
 using TicketService.Infrastructure.Repositories;
 using TicketService.Infrastructure.Services;
-using TicketService.Application.Interfaces.Repositories;
 
 namespace TicketService.Infrastructure;
 
@@ -39,6 +39,10 @@ public static class DependencyInjection
         if (string.IsNullOrWhiteSpace(eventServiceUrl))
             throw new InvalidOperationException("Services:EventService is not configured.");
 
+        var internalApiKey = configuration["InternalApi:Key"];
+        if (string.IsNullOrWhiteSpace(internalApiKey))
+            throw new InvalidOperationException("InternalApi:Key is not configured.");
+
         services.AddHttpClient<IUserDirectoryService, UserDirectoryService>(client =>
         {
             client.BaseAddress = new Uri(userServiceUrl);
@@ -47,6 +51,12 @@ public static class DependencyInjection
         services.AddHttpClient<IEventDirectoryClient, EventDirectoryClient>(client =>
         {
             client.BaseAddress = new Uri(eventServiceUrl);
+        });
+
+        services.AddHttpClient<IInternalEventLookupClient, InternalEventLookupClient>(client =>
+        {
+            client.BaseAddress = new Uri(eventServiceUrl);
+            client.DefaultRequestHeaders.Add("X-Api-Key", internalApiKey);
         });
 
         var rabbitMqHost = configuration["RabbitMq:Host"];

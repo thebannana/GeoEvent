@@ -29,16 +29,16 @@ public class Reservation
     public EventTicket? EventTicket { get; set; }
     public ICollection<Ticket> Tickets { get; private set; } = [];
     public ICollection<PaymentDetail> PaymentDetails { get; private set; } = [];
+
     public RefundRequestStatus RefundRequestStatus { get; private set; } = RefundRequestStatus.None;
     public string? RefundReason { get; private set; }
     public DateTime? RefundRequestedAt { get; private set; }
     public DateTime? RefundReviewedAt { get; private set; }
     public int? RefundReviewedByUserId { get; private set; }
     public string? RefundDecisionReason { get; private set; }
+    public string? RefundModeratorAction { get; private set; }
 
-    private Reservation()
-    {
-    }
+    private Reservation() { }
 
     public static Reservation Create(
         int eventId,
@@ -175,6 +175,31 @@ public class Reservation
                Status == ReservationStatus.Confirmed;
     }
 
+    public bool CanRejectRefund()
+    {
+        return RefundRequestStatus == RefundRequestStatus.Pending &&
+               Status == ReservationStatus.Confirmed;
+    }
+
+    public bool CanMarkRefundProcessing()
+    {
+        return (RefundRequestStatus == RefundRequestStatus.Pending ||
+                RefundRequestStatus == RefundRequestStatus.Approved) &&
+               Status == ReservationStatus.Confirmed;
+    }
+
+    public bool CanMarkRefundFailed()
+    {
+        return RefundRequestStatus == RefundRequestStatus.Processing;
+    }
+
+    public bool CanMarkRefundCompleted()
+    {
+        return (RefundRequestStatus == RefundRequestStatus.Processing ||
+                RefundRequestStatus == RefundRequestStatus.Approved) &&
+               Status == ReservationStatus.Confirmed;
+    }
+
     public void RequestRefund(string? reason)
     {
         if (!CanRequestRefund())
@@ -186,58 +211,82 @@ public class Reservation
         RefundReviewedAt = null;
         RefundReviewedByUserId = null;
         RefundDecisionReason = null;
+        RefundModeratorAction = null;
     }
 
-    public void MarkRefundApproved(int reviewerUserId, string? decisionReason)
+    public void MarkRefundApproved(int reviewerUserId, string? decisionReason, string? moderatorAction)
     {
-        if (RefundRequestStatus != RefundRequestStatus.Pending)
+        if (!CanApproveRefund())
             throw new BusinessException("Only pending refund requests can be approved.");
+
+        if (reviewerUserId <= 0)
+            throw new BusinessException("Reviewer user ID is required.");
 
         RefundRequestStatus = RefundRequestStatus.Approved;
         RefundReviewedAt = DateTime.UtcNow;
         RefundReviewedByUserId = reviewerUserId;
         RefundDecisionReason = string.IsNullOrWhiteSpace(decisionReason) ? null : decisionReason.Trim();
+        RefundModeratorAction = string.IsNullOrWhiteSpace(moderatorAction) ? null : moderatorAction.Trim();
     }
 
-    public void MarkRefundRejected(int reviewerUserId, string? decisionReason)
+    public void MarkRefundRejected(int reviewerUserId, string? decisionReason, string? moderatorAction)
     {
-        if (RefundRequestStatus != RefundRequestStatus.Pending)
+        if (!CanRejectRefund())
             throw new BusinessException("Only pending refund requests can be rejected.");
+
+        if (reviewerUserId <= 0)
+            throw new BusinessException("Reviewer user ID is required.");
 
         RefundRequestStatus = RefundRequestStatus.Rejected;
         RefundReviewedAt = DateTime.UtcNow;
         RefundReviewedByUserId = reviewerUserId;
         RefundDecisionReason = string.IsNullOrWhiteSpace(decisionReason) ? null : decisionReason.Trim();
+        RefundModeratorAction = string.IsNullOrWhiteSpace(moderatorAction) ? null : moderatorAction.Trim();
     }
 
-    public void MarkRefundProcessing(int reviewerUserId, string? decisionReason)
+    public void MarkRefundProcessing(int reviewerUserId, string? decisionReason, string? moderatorAction)
     {
-        if (RefundRequestStatus != RefundRequestStatus.Pending &&
-            RefundRequestStatus != RefundRequestStatus.Approved)
-        {
+        if (!CanMarkRefundProcessing())
             throw new BusinessException("Refund request is not ready for processing.");
-        }
+
+        if (reviewerUserId <= 0)
+            throw new BusinessException("Reviewer user ID is required.");
 
         RefundRequestStatus = RefundRequestStatus.Processing;
         RefundReviewedAt = DateTime.UtcNow;
         RefundReviewedByUserId = reviewerUserId;
         RefundDecisionReason = string.IsNullOrWhiteSpace(decisionReason) ? null : decisionReason.Trim();
+        RefundModeratorAction = string.IsNullOrWhiteSpace(moderatorAction) ? null : moderatorAction.Trim();
     }
 
-    public void MarkRefundFailed(int reviewerUserId, string? decisionReason)
+    public void MarkRefundFailed(int reviewerUserId, string? decisionReason, string? moderatorAction)
     {
+        if (!CanMarkRefundFailed())
+            throw new BusinessException("Only processing refund requests can fail.");
+
+        if (reviewerUserId <= 0)
+            throw new BusinessException("Reviewer user ID is required.");
+
         RefundRequestStatus = RefundRequestStatus.Failed;
         RefundReviewedAt = DateTime.UtcNow;
         RefundReviewedByUserId = reviewerUserId;
         RefundDecisionReason = string.IsNullOrWhiteSpace(decisionReason) ? null : decisionReason.Trim();
+        RefundModeratorAction = string.IsNullOrWhiteSpace(moderatorAction) ? null : moderatorAction.Trim();
     }
 
-    public void MarkRefundCompleted(int reviewerUserId, string? decisionReason)
+    public void MarkRefundCompleted(int reviewerUserId, string? decisionReason, string? moderatorAction)
     {
+        if (!CanMarkRefundCompleted())
+            throw new BusinessException("Refund request is not ready to be completed.");
+
+        if (reviewerUserId <= 0)
+            throw new BusinessException("Reviewer user ID is required.");
+
         RefundRequestStatus = RefundRequestStatus.Refunded;
         RefundReviewedAt = DateTime.UtcNow;
         RefundReviewedByUserId = reviewerUserId;
         RefundDecisionReason = string.IsNullOrWhiteSpace(decisionReason) ? null : decisionReason.Trim();
+        RefundModeratorAction = string.IsNullOrWhiteSpace(moderatorAction) ? null : moderatorAction.Trim();
 
         Refund();
     }

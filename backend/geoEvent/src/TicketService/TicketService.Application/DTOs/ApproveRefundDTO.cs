@@ -4,4 +4,5 @@ public class ApproveRefundDto
 {
     public decimal? Amount { get; set; }
     public string? DecisionReason { get; set; }
+    public string? ModeratorAction { get; set; }
 }

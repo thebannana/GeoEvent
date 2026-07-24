@@ -12,5 +12,6 @@ public interface IAuthService
     Task<ServiceResult<bool>> RevokeAllSessionsAsync(int userId);
     Task<ServiceResult<bool>> ForgotPasswordAsync(ForgotPasswordDto dto);
     Task<ServiceResult<bool>> ResetPasswordAsync(ResetPasswordDto dto);
+    Task<ServiceResult<AuthResponseDto>> AdminLoginAsync(LoginRequestDto request, string ipAddress);
 
 }

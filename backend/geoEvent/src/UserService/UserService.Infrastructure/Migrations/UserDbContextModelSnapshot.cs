@@ -213,23 +213,24 @@ namespace UserService.Infrastructure.Migrations
                         .HasColumnType("datetime2");
 
                     b.Property<string>("Description")
-                        .IsRequired()
                         .HasMaxLength(2000)
                         .HasColumnType("nvarchar(2000)");
 
                     b.Property<string>("ModeratorAction")
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(4000)
+                        .HasColumnType("nvarchar(4000)");
 
                     b.Property<string>("Reason")
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
-                    b.Property<int?>("ReporterId")
+                    b.Property<int>("ReporterId")
                         .HasColumnType("int");
 
                     b.Property<string>("ResolutionNote")
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(4000)
+                        .HasColumnType("nvarchar(4000)");
 
                     b.Property<DateTime?>("ResolvedAt")
                         .HasColumnType("datetime2");
@@ -242,7 +243,7 @@ namespace UserService.Infrastructure.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
 
-                    b.Property<int?>("TargetId")
+                    b.Property<int>("TargetId")
                         .HasColumnType("int");
 
                     b.Property<string>("TargetType")
@@ -260,9 +261,22 @@ namespace UserService.Infrastructure.Migrations
 
                     b.HasIndex("Status");
 
+                    b.HasIndex("TargetId");
+
+                    b.HasIndex("Status", "CreatedAt");
+
                     b.HasIndex("TargetType", "TargetId");
 
-                    b.ToTable("Reports");
+                    b.HasIndex("ReporterId", "TargetType", "TargetId", "Status");
+
+                    b.ToTable("Reports", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_Report_Status_Valid", "[Status] IN ('Pending', 'UnderReview', 'Resolved', 'Dismissed')");
+
+                            t.HasCheckConstraint("CK_Report_TargetId_Positive", "[TargetId] > 0");
+
+                            t.HasCheckConstraint("CK_Report_TargetType_Valid", "[TargetType] IN ('User', 'Event', 'Comment', 'Review')");
+                        });
                 });
 
             modelBuilder.Entity("UserService.Domain.Entities.User", b =>
@@ -410,16 +424,24 @@ namespace UserService.Infrastructure.Migrations
                     b.HasOne("UserService.Domain.Entities.User", "Reporter")
                         .WithMany("FiledReports")
                         .HasForeignKey("ReporterId")
-                        .OnDelete(DeleteBehavior.NoAction);
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
 
                     b.HasOne("UserService.Domain.Entities.User", "ResolvedBy")
                         .WithMany("ResolvedReports")
                         .HasForeignKey("ResolvedById")
                         .OnDelete(DeleteBehavior.NoAction);
 
+                    b.HasOne("UserService.Domain.Entities.User", "TargetUser")
+                        .WithMany()
+                        .HasForeignKey("TargetId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
                     b.Navigation("Reporter");
 
                     b.Navigation("ResolvedBy");
+
+                    b.Navigation("TargetUser");
                 });
 
             modelBuilder.Entity("UserService.Domain.Entities.User", b =>

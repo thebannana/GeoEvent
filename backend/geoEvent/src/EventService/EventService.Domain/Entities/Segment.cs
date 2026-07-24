@@ -6,7 +6,6 @@ public class Segment
 {
     public int SegmentId { get; private set; }
     public string Name { get; private set; } = string.Empty;
-    public string? IconUrl { get; private set; }
     public string? Color { get; private set; }
     public bool IsActive { get; private set; } = true;
 
@@ -15,23 +14,21 @@ public class Segment
 
     private Segment() { }
 
-    public Segment(string name, string? iconUrl = null, string? color = null)
+    public Segment(string name, string? color = null)
     {
         if (string.IsNullOrWhiteSpace(name))
             throw new InvalidReferenceDataException("Segment name is required.");
 
         Name = name.Trim();
-        IconUrl = Normalize(iconUrl);
         Color = Normalize(color);
     }
 
-    public void Update(string name, string? iconUrl, string? color)
+    public void Update(string name, string? color)
     {
         if (string.IsNullOrWhiteSpace(name))
             throw new InvalidReferenceDataException("Segment name is required.");
 
         Name = name.Trim();
-        IconUrl = Normalize(iconUrl);
         Color = Normalize(color);
     }
 

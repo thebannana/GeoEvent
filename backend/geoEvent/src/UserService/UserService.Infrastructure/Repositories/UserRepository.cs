@@ -21,6 +21,295 @@ public class UserRepository : IUserRepository
         _context = context;
     }
 
+    public async Task<UserRating?> GetUserReviewByIdAsync(int reviewId)
+    {
+        return await _context.Set<UserRating>()
+            .AsNoTracking()
+            .Include(x => x.Rater)
+                .ThenInclude(x => x!.Person)
+            .FirstOrDefaultAsync(x => x.RatingId == reviewId);
+    }
+
+    public async Task<Report?> GetReportByIdAsync(int reportId)
+    {
+        return await _context.Reports
+            .AsNoTracking()
+            .Include(r => r.Reporter)
+                .ThenInclude(u => u!.Person)
+            .Include(r => r.ResolvedBy)
+                .ThenInclude(u => u!.Person)
+            .Include(r => r.TargetUser)
+                .ThenInclude(u => u!.Person)
+            .FirstOrDefaultAsync(r => r.ReportId == reportId);
+    }
+
+    public async Task<Report?> GetReportByIdForUpdateAsync(int reportId)
+    {
+        return await _context.Reports
+            .Include(r => r.Reporter)
+                .ThenInclude(u => u!.Person)
+            .Include(r => r.ResolvedBy)
+                .ThenInclude(u => u!.Person)
+            .Include(r => r.TargetUser)
+                .ThenInclude(u => u!.Person)
+            .FirstOrDefaultAsync(r => r.ReportId == reportId);
+    }
+
+    public async Task<PagedResult<Report>> GetReportsAsync(
+        ReportStatus? status,
+        ReportTargetType? targetType,
+        string? search,
+        string? sortBy,
+        bool descending,
+        int page,
+        int pageSize)
+    {
+        ValidatePaging(page, pageSize, MaxPageSize);
+
+        var query = _context.Reports
+            .AsNoTracking()
+            .Include(r => r.Reporter)
+                .ThenInclude(u => u!.Person)
+            .Include(r => r.ResolvedBy)
+                .ThenInclude(u => u!.Person)
+            .Include(r => r.TargetUser)
+                .ThenInclude(u => u!.Person)
+            .AsQueryable();
+
+        if (status.HasValue)
+            query = query.Where(r => r.Status == status.Value);
+
+        if (targetType.HasValue)
+            query = query.Where(r => r.TargetType == targetType.Value);
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var term = search.Trim().ToLower();
+
+            query = query.Where(r =>
+                r.ReportId.ToString().Contains(term) ||
+                r.Reason.ToLower().Contains(term) ||
+                (!string.IsNullOrEmpty(r.Description) && r.Description.ToLower().Contains(term)) ||
+                r.Reporter != null && (
+                    r.Reporter.Username.ToLower().Contains(term) ||
+                    ((r.Reporter.Person!.FirstName ?? string.Empty) + " " + (r.Reporter.Person!.LastName ?? string.Empty))
+                        .Trim()
+                        .ToLower()
+                        .Contains(term)
+                ) ||
+                (r.TargetType == ReportTargetType.User && r.TargetUser != null && (
+                    r.TargetUser.Username.ToLower().Contains(term) ||
+                    ((r.TargetUser.Person!.FirstName ?? string.Empty) + " " + (r.TargetUser.Person!.LastName ?? string.Empty))
+                        .Trim()
+                        .ToLower()
+                        .Contains(term)
+                )) ||
+                (r.TargetId.HasValue && r.TargetId.Value.ToString().Contains(term))
+            );
+        }
+
+        var normalizedSort = sortBy?.Trim().ToLowerInvariant();
+
+        query = normalizedSort switch
+        {
+            "createdat" => descending
+                ? query.OrderByDescending(r => r.CreatedAt).ThenByDescending(r => r.ReportId)
+                : query.OrderBy(r => r.CreatedAt).ThenBy(r => r.ReportId),
+
+            "status" => descending
+                ? query.OrderByDescending(r => r.Status).ThenByDescending(r => r.ReportId)
+                : query.OrderBy(r => r.Status).ThenBy(r => r.ReportId),
+
+            "type" => descending
+                ? query.OrderByDescending(r => r.TargetType).ThenByDescending(r => r.ReportId)
+                : query.OrderBy(r => r.TargetType).ThenBy(r => r.ReportId),
+
+            "reporter" => descending
+                ? query.OrderByDescending(r => r.Reporter != null ? r.Reporter.Username : string.Empty)
+                       .ThenByDescending(r => r.ReportId)
+                : query.OrderBy(r => r.Reporter != null ? r.Reporter.Username : string.Empty)
+                       .ThenBy(r => r.ReportId),
+
+            "reporteduser" => descending
+                ? query.OrderByDescending(r =>
+                        r.TargetType == ReportTargetType.User && r.TargetUser != null
+                            ? r.TargetUser.Username
+                            : string.Empty)
+                       .ThenByDescending(r => r.ReportId)
+                : query.OrderBy(r =>
+                        r.TargetType == ReportTargetType.User && r.TargetUser != null
+                            ? r.TargetUser.Username
+                            : string.Empty)
+                       .ThenBy(r => r.ReportId),
+
+            "targetdisplay" => descending
+                ? query.OrderByDescending(r => r.TargetType == ReportTargetType.User && r.TargetUser != null
+                        ? ((r.TargetUser.Person!.FirstName ?? string.Empty) + " " + (r.TargetUser.Person!.LastName ?? string.Empty)).Trim()
+                        : (r.TargetId.HasValue ? r.TargetId.Value.ToString() : string.Empty))
+                       .ThenByDescending(r => r.ReportId)
+                : query.OrderBy(r => r.TargetType == ReportTargetType.User && r.TargetUser != null
+                        ? ((r.TargetUser.Person!.FirstName ?? string.Empty) + " " + (r.TargetUser.Person!.LastName ?? string.Empty)).Trim()
+                        : (r.TargetId.HasValue ? r.TargetId.Value.ToString() : string.Empty))
+                       .ThenBy(r => r.ReportId),
+
+            _ => descending
+                ? query.OrderByDescending(r => r.CreatedAt).ThenByDescending(r => r.ReportId)
+                : query.OrderBy(r => r.CreatedAt).ThenBy(r => r.ReportId)
+        };
+
+        var total = await query.CountAsync();
+
+        var items = await query
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        return new PagedResult<Report>
+        {
+            Items = items,
+            TotalCount = total,
+            Page = page,
+            PageSize = pageSize
+        };
+    }
+
+    public async Task<PagedResult<Report>> GetUserReportsAsync(int userId, int page, int pageSize)
+    {
+        ValidatePaging(page, pageSize, MaxUserReportPageSize);
+
+        var query = _context.Reports
+            .AsNoTracking()
+            .Where(r => r.ReporterId == userId);
+
+        var total = await query.CountAsync();
+
+        var items = await query
+            .OrderByDescending(r => r.ReportId)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        return new PagedResult<Report>
+        {
+            Items = items,
+            TotalCount = total,
+            Page = page,
+            PageSize = pageSize
+        };
+    }
+
+    public Task<Report> CreateReportAsync(Report report)
+    {
+        _context.Reports.Add(report);
+        return Task.FromResult(report);
+    }
+
+    public Task UpdateReportAsync(Report report)
+    {
+        _context.Reports.Update(report);
+        return Task.CompletedTask;
+    }
+
+    public async Task<bool> HasOpenReportAsync(int reporterId, ReportTargetType targetType, int targetId) =>
+        await _context.Reports
+            .AsNoTracking()
+            .AnyAsync(r =>
+                r.ReporterId == reporterId &&
+                r.TargetType == targetType &&
+                r.TargetId == targetId &&
+                (r.Status == ReportStatus.Pending || r.Status == ReportStatus.UnderReview));
+
+    public async Task<int> GetActiveUsersCountAsync(
+    DateTime activeSinceUtc,
+    CancellationToken cancellationToken = default)
+    {
+        return await _context.Users
+            .AsNoTracking()
+            .Where(u =>
+                u.Person != null &&
+                !u.Person.IsDeleted &&
+                !u.IsBanned &&
+                u.Role != UserRole.Admin &&
+                u.LastLoginAt.HasValue &&
+                u.LastLoginAt.Value >= activeSinceUtc)
+            .CountAsync(cancellationToken);
+    }
+
+    public async Task<int> GetReportsCountAsync(CancellationToken cancellationToken = default)
+    {
+        return await _context.Reports
+            .AsNoTracking()
+            .CountAsync(cancellationToken);
+    }
+
+    public async Task<List<DashboardPreferenceAggregateRawDto>> GetTopSegmentsRawAsync(
+        int take,
+        CancellationToken cancellationToken = default)
+    {
+        return await _context.UserPreferences
+            .AsNoTracking()
+            .Where(p =>
+                p.UserId != null &&
+                p.SegmentId != null &&
+                p.GenreId == null &&
+                p.SubGenreId == null)
+            .GroupBy(p => p.SegmentId!.Value)
+            .Select(g => new DashboardPreferenceAggregateRawDto
+            {
+                Id = g.Key,
+                TotalScore = Math.Round(g.Sum(x => x.Score), 2),
+                UserCount = g.Select(x => x.UserId!.Value).Distinct().Count()
+            })
+            .OrderByDescending(x => x.TotalScore)
+            .ThenByDescending(x => x.UserCount)
+            .Take(take)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<List<DashboardPreferenceAggregateRawDto>> GetTopGenresRawAsync(
+        int take,
+        CancellationToken cancellationToken = default)
+    {
+        return await _context.UserPreferences
+            .AsNoTracking()
+            .Where(p =>
+                p.UserId != null &&
+                p.GenreId != null &&
+                p.SubGenreId == null)
+            .GroupBy(p => p.GenreId!.Value)
+            .Select(g => new DashboardPreferenceAggregateRawDto
+            {
+                Id = g.Key,
+                TotalScore = Math.Round(g.Sum(x => x.Score), 2),
+                UserCount = g.Select(x => x.UserId!.Value).Distinct().Count()
+            })
+            .OrderByDescending(x => x.TotalScore)
+            .ThenByDescending(x => x.UserCount)
+            .Take(take)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<List<DashboardPreferenceAggregateRawDto>> GetTopSubGenresRawAsync(
+        int take,
+        CancellationToken cancellationToken = default)
+    {
+        return await _context.UserPreferences
+            .AsNoTracking()
+            .Where(p =>
+                p.UserId != null &&
+                p.SubGenreId != null)
+            .GroupBy(p => p.SubGenreId!.Value)
+            .Select(g => new DashboardPreferenceAggregateRawDto
+            {
+                Id = g.Key,
+                TotalScore = Math.Round(g.Sum(x => x.Score), 2),
+                UserCount = g.Select(x => x.UserId!.Value).Distinct().Count()
+            })
+            .OrderByDescending(x => x.TotalScore)
+            .ThenByDescending(x => x.UserCount)
+            .Take(take)
+            .ToListAsync(cancellationToken);
+    }
     public Task SaveChangesAsync(CancellationToken cancellationToken = default) =>
         _context.SaveChangesAsync(cancellationToken);
 
@@ -35,6 +324,52 @@ public class UserRepository : IUserRepository
                 nameof(pageSize),
                 $"PageSize must be between 1 and {maxPageSize}.");
         }
+    }
+
+    public async Task<User?> GetByIdAsync(int userId) =>
+    await _context.Users
+        .AsNoTracking()
+        .Include(u => u.Person)
+        .FirstOrDefaultAsync(u =>
+            u.PersonId == userId &&
+            u.Person != null &&
+            !u.Person.IsDeleted);
+
+    public async Task<User?> GetByIdForUpdateAsync(int userId) =>
+        await _context.Users
+            .Include(u => u.Person)
+            .FirstOrDefaultAsync(u =>
+                u.PersonId == userId &&
+                u.Person != null &&
+                !u.Person.IsDeleted);
+
+    public async Task<User?> GetPublicByIdAsync(int userId) =>
+        await _context.Users
+            .AsNoTracking()
+            .Include(u => u.Person)
+            .FirstOrDefaultAsync(u =>
+                u.PersonId == userId &&
+                u.Person != null &&
+                !u.Person.IsDeleted);
+
+    public async Task<List<User>> GetPublicByIdsAsync(IEnumerable<int> userIds)
+    {
+        var ids = userIds
+            .Where(x => x > 0)
+            .Distinct()
+            .ToList();
+
+        if (ids.Count == 0)
+            return [];
+
+        return await _context.Users
+            .AsNoTracking()
+            .Include(u => u.Person)
+            .Where(u =>
+                ids.Contains(u.PersonId) &&
+                u.Person != null &&
+                !u.Person.IsDeleted)
+            .ToListAsync();
     }
 
     public async Task<List<UserPreference>> GetUserPreferencesAsync(int userId) =>
@@ -178,17 +513,6 @@ public class UserRepository : IUserRepository
         return Task.CompletedTask;
     }
 
-    public async Task<User?> GetByIdAsync(int userId) =>
-        await _context.Users
-            .AsNoTracking()
-            .Include(u => u.Person)
-            .FirstOrDefaultAsync(u => u.PersonId == userId);
-
-    public async Task<User?> GetByIdForUpdateAsync(int userId) =>
-        await _context.Users
-            .Include(u => u.Person)
-            .FirstOrDefaultAsync(u => u.PersonId == userId);
-
     public async Task<User?> GetByEmailAsync(string email)
     {
         var normalizedEmail = email.Trim().ToLowerInvariant();
@@ -270,28 +594,36 @@ public class UserRepository : IUserRepository
         var query = _context.Users
             .AsNoTracking()
             .Include(u => u.Person)
+            .Where(u => u.Person != null && !u.Person.IsDeleted)
             .AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(filter.Search))
         {
-            var term = filter.Search.Trim();
-            query = query.Where(u => u.Username.Contains(term) || u.Email.Contains(term));
+            var term = filter.Search.Trim().ToLower();
+
+            query = query.Where(u =>
+                u.Username.ToLower().Contains(term) ||
+                u.Email.ToLower().Contains(term) ||
+                u.Person!.FirstName.ToLower().Contains(term) ||
+                u.Person.LastName.ToLower().Contains(term) ||
+                ((u.Person.FirstName + " " + u.Person.LastName).ToLower().Contains(term)) ||
+                ((u.Person.PhoneNumber ?? string.Empty).ToLower().Contains(term)));
         }
 
-        if (!string.IsNullOrWhiteSpace(filter.Role))
+        if (!string.IsNullOrWhiteSpace(filter.Role) &&
+            Enum.TryParse<UserRole>(filter.Role, true, out var parsedRole))
         {
-            query = query.Where(u => u.Role.ToString() == filter.Role);
+            query = query.Where(u => u.Role == parsedRole);
         }
 
         if (filter.IsBanned.HasValue)
-        {
             query = query.Where(u => u.IsBanned == filter.IsBanned.Value);
-        }
 
         var total = await query.CountAsync();
 
         var items = await query
             .OrderByDescending(u => u.CreatedAt)
+            .ThenBy(u => u.PersonId)
             .Skip((filter.Page - 1) * filter.PageSize)
             .Take(filter.PageSize)
             .ToListAsync();
@@ -377,118 +709,5 @@ public class UserRepository : IUserRepository
     {
         _context.PasswordResetTokens.Update(token);
         return Task.CompletedTask;
-    }
-
-    public async Task<Report?> GetReportByIdAsync(int reportId) =>
-        await _context.Reports
-            .AsNoTracking()
-            .Include(r => r.Reporter)
-            .Include(r => r.ResolvedBy)
-            .FirstOrDefaultAsync(r => r.ReportId == reportId);
-
-    public async Task<Report?> GetReportByIdForUpdateAsync(int reportId) =>
-        await _context.Reports
-            .Include(r => r.Reporter)
-            .Include(r => r.ResolvedBy)
-            .FirstOrDefaultAsync(r => r.ReportId == reportId);
-
-    public async Task<PagedResult<Report>> GetReportsAsync(ReportStatus? status, int page, int pageSize)
-    {
-        ValidatePaging(page, pageSize, MaxPageSize);
-
-        var query = _context.Reports
-            .AsNoTracking()
-            .Include(r => r.Reporter)
-            .AsQueryable();
-
-        if (status.HasValue)
-        {
-            query = query.Where(r => r.Status == status.Value);
-        }
-
-        var total = await query.CountAsync();
-
-        var items = await query
-            .OrderByDescending(r => r.ReportId)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .ToListAsync();
-
-        return new PagedResult<Report>
-        {
-            Items = items,
-            TotalCount = total,
-            Page = page,
-            PageSize = pageSize
-        };
-    }
-
-    public async Task<PagedResult<Report>> GetUserReportsAsync(int userId, int page, int pageSize)
-    {
-        ValidatePaging(page, pageSize, MaxUserReportPageSize);
-
-        var query = _context.Reports
-            .AsNoTracking()
-            .Where(r => r.ReporterId == userId);
-
-        var total = await query.CountAsync();
-
-        var items = await query
-            .OrderByDescending(r => r.ReportId)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .ToListAsync();
-
-        return new PagedResult<Report>
-        {
-            Items = items,
-            TotalCount = total,
-            Page = page,
-            PageSize = pageSize
-        };
-    }
-
-    public Task<Report> CreateReportAsync(Report report)
-    {
-        _context.Reports.Add(report);
-        return Task.FromResult(report);
-    }
-
-    public Task UpdateReportAsync(Report report)
-    {
-        _context.Reports.Update(report);
-        return Task.CompletedTask;
-    }
-
-    public async Task<bool> HasOpenReportAsync(int reporterId, ReportTargetType targetType, int targetId) =>
-        await _context.Reports
-            .AsNoTracking()
-            .AnyAsync(r =>
-                r.ReporterId == reporterId &&
-                r.TargetType == targetType &&
-                r.TargetId == targetId &&
-                (r.Status == ReportStatus.Pending || r.Status == ReportStatus.UnderReview));
-
-    public async Task<User?> GetPublicByIdAsync(int userId) =>
-        await _context.Users
-            .AsNoTracking()
-            .Include(u => u.Person)
-            .FirstOrDefaultAsync(u => u.PersonId == userId);
-
-    public async Task<List<User>> GetPublicByIdsAsync(IEnumerable<int> userIds)
-    {
-        var ids = userIds
-            .Where(x => x > 0)
-            .Distinct()
-            .ToList();
-
-        if (ids.Count == 0)
-            return [];
-
-        return await _context.Users
-            .AsNoTracking()
-            .Include(u => u.Person)
-            .Where(u => ids.Contains(u.PersonId))
-            .ToListAsync();
     }
 }

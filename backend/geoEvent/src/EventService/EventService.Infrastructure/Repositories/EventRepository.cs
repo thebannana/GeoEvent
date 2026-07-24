@@ -33,6 +33,242 @@ public class EventRepository : IEventRepository
         _context = context;
     }
 
+    public async Task<int> GetTotalEventsCountAsync() =>
+    await _context.Events
+        .AsNoTracking()
+        .CountAsync();
+
+    public async Task<int> GetEventsCountByStatusAsync(EventStatus status) =>
+        await _context.Events
+            .AsNoTracking()
+            .CountAsync(e => e.Status == status);
+
+    public async Task<int> GetTotalViewsCountAsync() =>
+        await _context.Events
+            .AsNoTracking()
+            .SumAsync(e => (int?)e.ViewCount) ?? 0;
+
+    public async Task<List<TopEventStatRawDto>> GetMostLikedEventsAsync(int take) =>
+        await _context.Events
+            .AsNoTracking()
+            .Include(e => e.Images)
+            .OrderByDescending(e => e.LikesCount)
+            .ThenByDescending(e => e.ViewCount)
+            .ThenBy(e => e.EventId)
+            .Take(take)
+            .Select(e => new TopEventStatRawDto
+            {
+                EventId = e.EventId,
+                Title = e.Title,
+                ImageUrl = e.Images
+                    .OrderByDescending(i => i.IsCover)
+                    .ThenBy(i => i.ImageId)
+                    .Select(i => i.ImageUrl)
+                    .FirstOrDefault(),
+                Status = e.Status,
+                StartDateTime = e.StartDateTime,
+                Count = e.LikesCount
+            })
+            .ToListAsync();
+
+    public async Task<List<TopEventStatRawDto>> GetMostViewedEventsAsync(int take) =>
+        await _context.Events
+            .AsNoTracking()
+            .Include(e => e.Images)
+            .OrderByDescending(e => e.ViewCount)
+            .ThenByDescending(e => e.LikesCount)
+            .ThenBy(e => e.EventId)
+            .Take(take)
+            .Select(e => new TopEventStatRawDto
+            {
+                EventId = e.EventId,
+                Title = e.Title,
+                ImageUrl = e.Images
+                    .OrderByDescending(i => i.IsCover)
+                    .ThenBy(i => i.ImageId)
+                    .Select(i => i.ImageUrl)
+                    .FirstOrDefault(),
+                Status = e.Status,
+                StartDateTime = e.StartDateTime,
+                Count = e.ViewCount
+            })
+            .ToListAsync();
+
+    public async Task<List<TopEventStatRawDto>> GetMostCommentedEventsAsync(int take) =>
+        await _context.Comments
+            .AsNoTracking()
+            .Where(c => !c.IsDeleted)
+            .GroupBy(c => new { c.EventId, c.Event!.Title, c.Event!.Status, c.Event!.StartDateTime })
+            .Select(g => new TopEventStatRawDto
+            {
+                EventId = g.Key.EventId,
+                Title = g.Key.Title,
+                Status = g.Key.Status,
+                StartDateTime = g.Key.StartDateTime,
+                ImageUrl = _context.EventImages
+                    .Where(i => i.EventId == g.Key.EventId)
+                    .OrderByDescending(i => i.IsCover)
+                    .ThenBy(i => i.ImageId)
+                    .Select(i => i.ImageUrl)
+                    .FirstOrDefault(),
+                Count = g.Count()
+            })
+            .OrderByDescending(x => x.Count)
+            .ThenBy(x => x.EventId)
+            .Take(take)
+            .ToListAsync();
+
+    public async Task<List<TopEventStatRawDto>> GetMostBookmarkedEventsAsync(int take) =>
+        await _context.Bookmarks
+            .AsNoTracking()
+            .GroupBy(b => new { b.EventId, b.Event!.Title, b.Event!.Status, b.Event!.StartDateTime })
+            .Select(g => new TopEventStatRawDto
+            {
+                EventId = g.Key.EventId,
+                Title = g.Key.Title,
+                Status = g.Key.Status,
+                StartDateTime = g.Key.StartDateTime,
+                ImageUrl = _context.EventImages
+                    .Where(i => i.EventId == g.Key.EventId)
+                    .OrderByDescending(i => i.IsCover)
+                    .ThenBy(i => i.ImageId)
+                    .Select(i => i.ImageUrl)
+                    .FirstOrDefault(),
+                Count = g.Count()
+            })
+            .OrderByDescending(x => x.Count)
+            .ThenBy(x => x.EventId)
+            .Take(take)
+            .ToListAsync();
+
+    public async Task<int> GetBookmarksCountAsync() =>
+    await _context.Bookmarks
+        .AsNoTracking()
+        .CountAsync();
+
+    public async Task<int> GetCommentsCountAsync() =>
+        await _context.Comments
+            .AsNoTracking()
+            .CountAsync(c => !c.IsDeleted);
+
+    public async Task<int> GetLikedEventsCountAsync() =>
+        await _context.EventLikes
+            .AsNoTracking()
+            .CountAsync();
+    public async Task<PagedResult<Segment>> GetSegmentsPagedAsync(int page, int pageSize, string? searchTerm)
+    {
+        page = NormalizePage(page);
+        pageSize = NormalizePageSize(pageSize);
+
+        var query = _context.Segments
+            .AsNoTracking()
+            .Include(s => s.Genres)
+                .ThenInclude(g => g.SubGenres)
+            .AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(searchTerm))
+        {
+            var term = searchTerm.Trim();
+            query = query.Where(s => s.Name.Contains(term));
+        }
+
+        query = query.OrderBy(s => s.Name).ThenBy(s => s.SegmentId);
+
+        var totalCount = await query.CountAsync();
+
+        var items = await query
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        return new PagedResult<Segment>
+        {
+            Items = items,
+            TotalCount = totalCount,
+            Page = page,
+            PageSize = pageSize,
+        };
+    }
+
+    public async Task<PagedResult<Genre>> GetGenresPagedAsync(int page, int pageSize, string? searchTerm)
+    {
+        page = NormalizePage(page);
+        pageSize = NormalizePageSize(pageSize);
+
+        var query = _context.Genres
+            .AsNoTracking()
+            .Include(g => g.Segment)
+            .Include(g => g.SubGenres)
+            .AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(searchTerm))
+        {
+            var term = searchTerm.Trim();
+            query = query.Where(g =>
+                g.Name.Contains(term) ||
+                (g.Segment != null && g.Segment.Name.Contains(term)));
+        }
+
+        query = query
+            .OrderBy(g => g.Name)
+            .ThenBy(g => g.GenreId);
+
+        var totalCount = await query.CountAsync();
+
+        var items = await query
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        return new PagedResult<Genre>
+        {
+            Items = items,
+            TotalCount = totalCount,
+            Page = page,
+            PageSize = pageSize,
+        };
+    }
+
+    public async Task<PagedResult<SubGenre>> GetSubGenresPagedAsync(int page, int pageSize, string? searchTerm)
+    {
+        page = NormalizePage(page);
+        pageSize = NormalizePageSize(pageSize);
+
+        var query = _context.SubGenres
+            .AsNoTracking()
+            .Include(sg => sg.Genre)
+                .ThenInclude(g => g!.Segment)
+            .AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(searchTerm))
+        {
+            var term = searchTerm.Trim();
+            query = query.Where(sg =>
+                sg.Name.Contains(term) ||
+                (sg.Genre != null && sg.Genre.Name.Contains(term)) ||
+                (sg.Genre != null && sg.Genre.Segment != null && sg.Genre.Segment.Name.Contains(term)));
+        }
+
+        query = query
+            .OrderBy(sg => sg.Name)
+            .ThenBy(sg => sg.SubGenreId);
+
+        var totalCount = await query.CountAsync();
+
+        var items = await query
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        return new PagedResult<SubGenre>
+        {
+            Items = items,
+            TotalCount = totalCount,
+            Page = page,
+            PageSize = pageSize,
+        };
+    }
+
     public async Task<int> CountPublicByOrganizerAsync(int userId)
     {
         var nowUtc = DateTime.UtcNow;
@@ -661,10 +897,30 @@ public class EventRepository : IEventRepository
         };
     }
 
-    public async Task AddImageAsync(EventImage image)
+    public async Task AddImageAsync(EventImage image, bool setAsCover)
     {
-        await _context.EventImages.AddAsync(image);
-        await _context.SaveChangesAsync();
+        var strategy = _context.Database.CreateExecutionStrategy();
+
+        await strategy.ExecuteAsync(async () =>
+        {
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+
+            await _context.EventImages.AddAsync(image);
+            await _context.SaveChangesAsync();
+
+            if (setAsCover)
+            {
+                await _context.EventImages
+                    .Where(i => i.EventId == image.EventId)
+                    .ExecuteUpdateAsync(s => s.SetProperty(i => i.IsCover, false));
+
+                await _context.EventImages
+                    .Where(i => i.ImageId == image.ImageId)
+                    .ExecuteUpdateAsync(s => s.SetProperty(i => i.IsCover, true));
+            }
+
+            await transaction.CommitAsync();
+        });
     }
 
     public async Task DeleteImageAsync(int imageId)
@@ -690,17 +946,22 @@ public class EventRepository : IEventRepository
 
     public async Task SetCoverImageAsync(int eventId, int imageId)
     {
-        await using var transaction = await _context.Database.BeginTransactionAsync();
+        var strategy = _context.Database.CreateExecutionStrategy();
 
-        await _context.EventImages
-            .Where(i => i.EventId == eventId)
-            .ExecuteUpdateAsync(s => s.SetProperty(i => i.IsCover, false));
+        await strategy.ExecuteAsync(async () =>
+        {
+            await using var transaction = await _context.Database.BeginTransactionAsync();
 
-        await _context.EventImages
-            .Where(i => i.EventId == eventId && i.ImageId == imageId)
-            .ExecuteUpdateAsync(s => s.SetProperty(i => i.IsCover, true));
+            await _context.EventImages
+                .Where(i => i.EventId == eventId)
+                .ExecuteUpdateAsync(s => s.SetProperty(i => i.IsCover, false));
 
-        await transaction.CommitAsync();
+            await _context.EventImages
+                .Where(i => i.EventId == eventId && i.ImageId == imageId)
+                .ExecuteUpdateAsync(s => s.SetProperty(i => i.IsCover, true));
+
+            await transaction.CommitAsync();
+        });
     }
 
     public async Task<List<Segment>> GetAllSegmentsAsync() =>

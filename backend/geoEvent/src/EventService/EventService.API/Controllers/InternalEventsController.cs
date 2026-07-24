@@ -25,4 +25,14 @@ public sealed class InternalEventsController : ControllerBase
             ? Ok(result.Data)
             : StatusCode(result.StatusCode, new { error = result.Error });
     }
+
+    [HttpGet("stats/engagement")]
+    public async Task<IActionResult> GetEngagementStats()
+    {
+        var result = await _eventService.GetInternalEngagementStatsAsync();
+
+        return result.Success
+            ? Ok(result.Data)
+            : StatusCode(result.StatusCode, new { error = result.Error });
+    }
 }

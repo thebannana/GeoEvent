@@ -6,6 +6,19 @@ namespace EventService.Application.Interfaces.Repositories;
 
 public interface IEventRepository
 {
+    Task<int> GetTotalEventsCountAsync();
+    Task<int> GetEventsCountByStatusAsync(EventService.Domain.Enums.EventStatus status);
+    Task<int> GetTotalViewsCountAsync();
+    Task<List<TopEventStatRawDto>> GetMostLikedEventsAsync(int take);
+    Task<List<TopEventStatRawDto>> GetMostViewedEventsAsync(int take);
+    Task<List<TopEventStatRawDto>> GetMostCommentedEventsAsync(int take);
+    Task<List<TopEventStatRawDto>> GetMostBookmarkedEventsAsync(int take);
+    Task<int> GetBookmarksCountAsync();
+    Task<int> GetCommentsCountAsync();
+    Task<int> GetLikedEventsCountAsync();
+    Task<PagedResult<Segment>> GetSegmentsPagedAsync(int page, int pageSize, string? searchTerm);
+    Task<PagedResult<Genre>> GetGenresPagedAsync(int page, int pageSize, string? searchTerm);
+    Task<PagedResult<SubGenre>> GetSubGenresPagedAsync(int page, int pageSize, string? searchTerm);
     Task<int> CountPublicByOrganizerAsync(int userId);
     Task<Event?> GetTrackedByIdAsync(int eventId);
     Task<Comment?> GetCommentTreeByIdAsync(int commentId);
@@ -36,7 +49,7 @@ public interface IEventRepository
     Task UnlikeAsync(int eventId, int userId);
     Task<PagedResult<EventLike>> GetLikedEventsByUserAsync(int userId, int page, int pageSize);
 
-    Task AddImageAsync(EventImage image);
+    Task AddImageAsync(EventImage image, bool setAsCover);
     Task DeleteImageAsync(int imageId);
     Task<EventImage?> GetImageAsync(int imageId);
     Task<List<EventImage>> GetEventImagesAsync(int eventId);

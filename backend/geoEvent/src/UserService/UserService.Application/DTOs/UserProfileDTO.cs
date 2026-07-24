@@ -10,6 +10,7 @@ public class UserProfileDto
     public string? PhoneNumber { get; set; }
     public string? ImageUrl { get; set; }
     public string Role { get; set; } = string.Empty;
+    public bool IsBanned { get; set; }
     public DateTime CreatedAt { get; set; }
 
     public double AverageRating { get; set; }

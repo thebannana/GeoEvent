@@ -17,6 +17,18 @@ public class GenresController : ControllerBase
         _eventService = eventService;
     }
 
+    [HttpGet]
+    public async Task<IActionResult> GetAll(
+    [FromQuery] int page = 1,
+    [FromQuery] int pageSize = 20,
+    [FromQuery] string? searchTerm = null)
+    {
+        var result = await _eventService.GetGenresPagedAsync(page, pageSize, searchTerm);
+        return result.Success
+            ? Ok(result.Data)
+            : StatusCode(result.StatusCode, new { error = result.Error });
+    }
+
     [HttpGet("{genreId:int}")]
     public async Task<IActionResult> GetById(int genreId)
     {

@@ -1,6 +1,7 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using UserService.Domain.Entities;
+using UserService.Domain.Enums;
 
 namespace UserService.Infrastructure.Persistence.Configurations;
 
@@ -8,6 +9,21 @@ public class ReportConfiguration : IEntityTypeConfiguration<Report>
 {
     public void Configure(EntityTypeBuilder<Report> builder)
     {
+        builder.ToTable("Reports", table =>
+        {
+            table.HasCheckConstraint(
+                "CK_Report_TargetId_Positive",
+                "[TargetId] > 0");
+
+            table.HasCheckConstraint(
+                "CK_Report_Status_Valid",
+                $"[Status] IN ('{ReportStatus.Pending}', '{ReportStatus.UnderReview}', '{ReportStatus.Resolved}', '{ReportStatus.Dismissed}')");
+
+            table.HasCheckConstraint(
+                "CK_Report_TargetType_Valid",
+                $"[TargetType] IN ('{ReportTargetType.User}', '{ReportTargetType.Event}', '{ReportTargetType.Comment}', '{ReportTargetType.Review}')");
+        });
+
         builder.HasKey(r => r.ReportId);
 
         builder.Property(r => r.Status)
@@ -20,12 +36,30 @@ public class ReportConfiguration : IEntityTypeConfiguration<Report>
             .HasMaxLength(50)
             .IsRequired();
 
+        builder.Property(r => r.TargetId)
+            .IsRequired();
+
         builder.Property(r => r.Reason)
             .HasMaxLength(200)
             .IsRequired();
 
         builder.Property(r => r.Description)
-            .HasMaxLength(2000);
+            .HasMaxLength(2000)
+            .IsRequired(false);
+
+        builder.Property(r => r.ResolutionNote)
+            .HasMaxLength(4000)
+            .IsRequired(false);
+
+        builder.Property(r => r.ModeratorAction)
+            .HasMaxLength(4000)
+            .IsRequired(false);
+
+        builder.Property(r => r.CreatedAt)
+            .IsRequired();
+
+        builder.Property(r => r.ResolvedAt)
+            .IsRequired(false);
 
         builder.HasOne(r => r.Reporter)
             .WithMany(u => u.FiledReports)
@@ -37,13 +71,19 @@ public class ReportConfiguration : IEntityTypeConfiguration<Report>
             .HasForeignKey(r => r.ResolvedById)
             .OnDelete(DeleteBehavior.NoAction);
 
+        builder.HasOne(r => r.TargetUser)
+            .WithMany()
+            .HasForeignKey(r => r.TargetId)
+            .HasPrincipalKey(u => u.PersonId)
+            .OnDelete(DeleteBehavior.NoAction)
+            .IsRequired(false);
+
         builder.HasIndex(r => r.Status);
         builder.HasIndex(r => r.ReporterId);
         builder.HasIndex(r => r.ResolvedById);
         builder.HasIndex(r => new { r.TargetType, r.TargetId });
-        builder.Property(r => r.CreatedAt).IsRequired();
-        builder.Property(r => r.ResolvedAt);
         builder.HasIndex(r => r.CreatedAt);
-
+        builder.HasIndex(r => new { r.Status, r.CreatedAt });
+        builder.HasIndex(r => new { r.ReporterId, r.TargetType, r.TargetId, r.Status });
     }
 }

@@ -17,10 +17,23 @@ public class SegmentsController : ControllerBase
         _eventService = eventService;
     }
 
+
     [HttpGet]
-    public async Task<IActionResult> GetAll()
+    public async Task<IActionResult> GetAll(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        [FromQuery] string? searchTerm = null,
+        [FromQuery] bool paged = false)
     {
-        var result = await _eventService.GetAllSegmentsAsync();
+        if (!paged)
+        {
+            var listResult = await _eventService.GetAllSegmentsAsync();
+            return listResult.Success
+                ? Ok(listResult.Data)
+                : StatusCode(listResult.StatusCode, new { error = listResult.Error });
+        }
+
+        var result = await _eventService.GetSegmentsPagedAsync(page, pageSize, searchTerm);
         return result.Success
             ? Ok(result.Data)
             : StatusCode(result.StatusCode, new { error = result.Error });

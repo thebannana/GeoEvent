@@ -208,6 +208,9 @@ namespace TicketService.Infrastructure.Persistence.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("nvarchar(1000)");
 
+                    b.Property<string>("RefundModeratorAction")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("RefundReason")
                         .HasMaxLength(1000)
                         .HasColumnType("nvarchar(1000)");

@@ -42,11 +42,16 @@ public static class DependencyInjection
         if (string.IsNullOrWhiteSpace(eventServiceBaseUrl))
             throw new InvalidOperationException("Missing configuration: Services:EventService");
 
+        var internalApiKey = configuration["InternalApi:Key"];
+        if (string.IsNullOrWhiteSpace(internalApiKey))
+            throw new InvalidOperationException("Missing configuration: InternalApi:Key");
+
         services.AddHttpClient<IExternalValidationService, ExternalValidationService>(client =>
         {
             client.BaseAddress = new Uri(eventServiceBaseUrl);
             client.DefaultRequestHeaders.Accept.Add(
                 new MediaTypeWithQualityHeaderValue("application/json"));
+            client.DefaultRequestHeaders.Add("X-Api-Key", internalApiKey);
         });
 
         var rabbitMqHost = configuration["RabbitMq:Host"];

@@ -179,6 +179,9 @@ public class AuthService : IAuthService
         if (user is null)
             return ServiceResult<bool>.Ok(true);
 
+        if (user.IsBanned)
+            return ServiceResult<bool>.Ok(true);
+
         var rawToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(48));
         var tokenHash = ComputeSha256(rawToken);
         var now = DateTime.UtcNow;
@@ -210,13 +213,13 @@ public class AuthService : IAuthService
         var user = await _userRepository.GetByEmailAsync(normalizedEmail);
 
         if (user is null)
-            return ServiceResult<bool>.Fail("Invalid reset request.");
+            return ServiceResult<bool>.Fail("Invalid reset request.", 400);
 
         var tokenHash = ComputeSha256(dto.Token);
         var resetToken = await _userRepository.GetActivePasswordResetTokenAsync(user.PersonId, tokenHash);
 
         if (resetToken is null)
-            return ServiceResult<bool>.Fail("Token is invalid or expired.");
+            return ServiceResult<bool>.Fail("Invalid reset request.", 400);
 
         var (hash, salt) = _passwordService.HashPassword(dto.NewPassword);
 
@@ -235,6 +238,51 @@ public class AuthService : IAuthService
     {
         await _userRepository.RevokeAllUserTokensAsync(userId);
         return ServiceResult<bool>.Ok(true);
+    }
+
+    public async Task<ServiceResult<AuthResponseDto>> AdminLoginAsync(LoginRequestDto request, string ipAddress)
+    {
+        var identifier = request.Identifier.Trim().ToLowerInvariant();
+        var user = await _userRepository.GetByEmailOrUsernameAsync(identifier);
+
+        if (user is null)
+        {
+            _logger.LogWarning("Failed admin login attempt for unknown user: {Identifier}", identifier);
+            return ServiceResult<AuthResponseDto>.Unauthorized("Invalid credentials.");
+        }
+
+        if (user.IsBanned)
+            return ServiceResult<AuthResponseDto>.Forbidden("Account is banned.");
+
+        if (user.IsLockedOut())
+        {
+            return ServiceResult<AuthResponseDto>.Unauthorized(
+                $"Account locked until {user.LockoutUntil:HH:mm} UTC.");
+        }
+
+        if (!_passwordService.VerifyPassword(request.Password, user.PasswordHash, user.PasswordSalt))
+        {
+            _logger.LogWarning("Invalid password for admin login: {Identifier}", identifier);
+            user.RegisterFailedLogin();
+            await _userRepository.UpdateAsync(user);
+            await _userRepository.SaveChangesAsync();
+
+            return ServiceResult<AuthResponseDto>.Unauthorized("Invalid credentials.");
+        }
+
+        if (user.Role != UserRole.Admin)
+        {
+            _logger.LogWarning("Non-admin attempted admin login: {Identifier}", identifier);
+            return ServiceResult<AuthResponseDto>.Forbidden("Admin access only.");
+        }
+
+        user.RegisterSuccessfulLogin(ipAddress);
+        await _userRepository.UpdateAsync(user);
+        await _userRepository.SaveChangesAsync();
+
+        _logger.LogInformation("Successful admin login for user: {Identifier}", identifier);
+
+        return await BuildAuthResponseAsync(user, ipAddress, request.DeviceInfo);
     }
 
     private async Task<ServiceResult<AuthResponseDto>> BuildAuthResponseAsync(

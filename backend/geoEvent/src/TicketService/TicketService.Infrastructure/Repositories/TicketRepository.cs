@@ -28,6 +28,186 @@ public class TicketRepository : ITicketRepository
         return (normalizedPage, normalizedPageSize);
     }
 
+    public async Task<PagedResult<Reservation>> GetRefundRequestsAsync(AdminRefundRequestsQueryDto query)
+    {
+        query ??= new AdminRefundRequestsQueryDto();
+        var (page, pageSize) = NormalizePaging(query.Page, query.PageSize);
+
+        var reservations = _context.Reservations
+            .AsNoTracking()
+            .Include(r => r.PaymentDetails)
+            .Include(r => r.Tickets)
+            .Where(r => r.RefundRequestStatus != RefundRequestStatus.None);
+
+        if (query.EventId.HasValue)
+            reservations = reservations.Where(r => r.EventId == query.EventId.Value);
+
+        if (!string.IsNullOrWhiteSpace(query.Search))
+        {
+            var search = query.Search.Trim().ToLower();
+            reservations = reservations.Where(r =>
+                (r.RefundReason != null && r.RefundReason.ToLower().Contains(search)) ||
+                r.ReservationId.ToString().Contains(search) ||
+                r.UserId.ToString().Contains(search));
+        }
+
+        if (query.Status.HasValue)
+        {
+            reservations = query.Status.Value switch
+            {
+                RefundQueueStatus.Open =>
+                    reservations.Where(r => r.RefundRequestStatus == RefundRequestStatus.Pending),
+
+                RefundQueueStatus.InReview =>
+                    reservations.Where(r => r.RefundRequestStatus == RefundRequestStatus.Processing),
+
+                RefundQueueStatus.Resolved =>
+                    reservations.Where(r => r.RefundRequestStatus == RefundRequestStatus.Approved),
+
+                RefundQueueStatus.Rejected =>
+                    reservations.Where(r => r.RefundRequestStatus == RefundRequestStatus.Rejected),
+
+                _ => reservations
+            };
+        }
+
+        reservations = (query.SortBy ?? string.Empty).Trim().ToLowerInvariant() switch
+        {
+            "status" => query.Descending
+                ? reservations.OrderByDescending(r => r.RefundRequestStatus)
+                : reservations.OrderBy(r => r.RefundRequestStatus),
+
+            "amount" => query.Descending
+                ? reservations.OrderByDescending(r => r.TotalAmount)
+                : reservations.OrderBy(r => r.TotalAmount),
+
+            _ => query.Descending
+                ? reservations.OrderByDescending(r => r.RefundRequestedAt ?? r.CreatedAt)
+                : reservations.OrderBy(r => r.RefundRequestedAt ?? r.CreatedAt)
+        };
+
+        var total = await reservations.CountAsync();
+
+        var items = await reservations
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        return new PagedResult<Reservation>
+        {
+            Items = items,
+            TotalCount = total,
+            Page = page,
+            PageSize = pageSize
+        };
+    }
+    public async Task<AdminDashboardTicketStatsDto> GetAdminDashboardTicketStatsAsync(string currency = "BAM")
+    {
+        currency = string.IsNullOrWhiteSpace(currency)
+            ? "BAM"
+            : currency.Trim().ToUpperInvariant();
+
+        var totalReservations = await _context.Reservations
+            .AsNoTracking()
+            .CountAsync();
+
+        var pendingReservations = await _context.Reservations
+            .AsNoTracking()
+            .CountAsync(r => r.Status == ReservationStatus.Pending);
+
+        var confirmedReservations = await _context.Reservations
+            .AsNoTracking()
+            .CountAsync(r => r.Status == ReservationStatus.Confirmed);
+
+        var cancelledReservations = await _context.Reservations
+            .AsNoTracking()
+            .CountAsync(r => r.Status == ReservationStatus.Cancelled);
+
+        var expiredReservations = await _context.Reservations
+            .AsNoTracking()
+            .CountAsync(r => r.Status == ReservationStatus.Expired);
+
+        var totalTickets = await _context.IssuedTickets
+            .AsNoTracking()
+            .CountAsync();
+
+        var activeTickets = await _context.IssuedTickets
+            .AsNoTracking()
+            .CountAsync(t => t.Status == TicketStatus.Active);
+
+        var usedTickets = await _context.IssuedTickets
+            .AsNoTracking()
+            .CountAsync(t => t.Status == TicketStatus.Used);
+
+        var cancelledTickets = await _context.IssuedTickets
+            .AsNoTracking()
+            .CountAsync(t => t.Status == TicketStatus.Cancelled);
+
+        var paymentQuery = _context.PaymentDetails
+            .AsNoTracking()
+            .Where(p => p.Currency == currency);
+
+        var totalPayments = await paymentQuery.CountAsync();
+
+        var completedPayments = await paymentQuery
+            .CountAsync(p => p.Status == PaymentStatus.Completed);
+
+        var pendingPayments = await paymentQuery
+            .CountAsync(p => p.Status == PaymentStatus.Pending);
+
+        var refundedPayments = await paymentQuery
+            .CountAsync(p => p.Status == PaymentStatus.Refunded);
+
+        var grossRevenue = await paymentQuery
+            .Where(p => p.Status == PaymentStatus.Completed)
+            .SumAsync(p => (decimal?)p.Amount) ?? 0m;
+
+        var refundedAmount = await paymentQuery
+            .Where(p => p.Status == PaymentStatus.Refunded)
+            .SumAsync(p => (decimal?)p.Amount) ?? 0m;
+
+        var payPalRevenue = await paymentQuery
+            .Where(p => p.Status == PaymentStatus.Completed && p.Method == PaymentMethod.PayPal)
+            .SumAsync(p => (decimal?)p.Amount) ?? 0m;
+
+        var cashRevenue = await paymentQuery
+            .Where(p => p.Status == PaymentStatus.Completed && p.Method == PaymentMethod.Cash)
+            .SumAsync(p => (decimal?)p.Amount) ?? 0m;
+
+        var pendingCashRevenue = await paymentQuery
+            .Where(p => p.Status == PaymentStatus.Pending && p.Method == PaymentMethod.Cash)
+            .SumAsync(p => (decimal?)p.Amount) ?? 0m;
+
+        return new AdminDashboardTicketStatsDto
+        {
+            TotalReservations = totalReservations,
+            PendingReservations = pendingReservations,
+            ConfirmedReservations = confirmedReservations,
+            CancelledReservations = cancelledReservations,
+            ExpiredReservations = expiredReservations,
+
+            TotalTickets = totalTickets,
+            ActiveTickets = activeTickets,
+            UsedTickets = usedTickets,
+            CancelledTickets = cancelledTickets,
+
+            GrossRevenue = grossRevenue,
+            RefundedAmount = refundedAmount,
+            NetRevenue = grossRevenue - refundedAmount,
+
+            PayPalRevenue = payPalRevenue,
+            CashRevenue = cashRevenue,
+            PendingCashRevenue = pendingCashRevenue,
+
+            TotalPayments = totalPayments,
+            CompletedPayments = completedPayments,
+            PendingPayments = pendingPayments,
+            RefundedPayments = refundedPayments,
+
+            Currency = currency
+        };
+    }
+
     public async Task ExecuteInStrategyAsync(Func<Task> operation)
     {
         var strategy = _context.Database.CreateExecutionStrategy();
@@ -235,6 +415,59 @@ public class TicketRepository : ITicketRepository
         {
             Items = items,
             TotalCount = total,
+            Page = normalizedPage,
+            PageSize = normalizedPageSize
+        };
+    }
+
+    public async Task<PagedResult<ManageableEventAttendeePreviewDto>> GetManageableEventAttendeesAsync(
+    int eventId,
+    int page,
+    int pageSize,
+    string? searchTerm)
+    {
+        var (normalizedPage, normalizedPageSize) = NormalizePaging(page, pageSize);
+
+        var query = _context.Reservations
+            .AsNoTracking()
+            .Where(r =>
+                r.EventId == eventId &&
+                (r.Status == ReservationStatus.Pending ||
+                 r.Status == ReservationStatus.Confirmed));
+
+        if (!string.IsNullOrWhiteSpace(searchTerm))
+        {
+            var term = searchTerm.Trim();
+            query = query.Where(r => r.UserId.ToString().Contains(term));
+        }
+
+        var groupedQuery = query
+            .GroupBy(r => r.UserId)
+            .Select(g => new ManageableEventAttendeePreviewDto
+            {
+                ReservationId = g
+                    .OrderByDescending(x => x.CreatedAt)
+                    .Select(x => x.ReservationId)
+                    .FirstOrDefault(),
+                UserId = g.Key,
+                Quantity = g.Sum(x => x.Quantity),
+                Username = string.Empty,
+                AvatarUrl = null
+            })
+            .OrderByDescending(x => x.Quantity)
+            .ThenBy(x => x.UserId);
+
+        var totalCount = await groupedQuery.CountAsync();
+
+        var items = await groupedQuery
+            .Skip((normalizedPage - 1) * normalizedPageSize)
+            .Take(normalizedPageSize)
+            .ToListAsync();
+
+        return new PagedResult<ManageableEventAttendeePreviewDto>
+        {
+            Items = items,
+            TotalCount = totalCount,
             Page = normalizedPage,
             PageSize = normalizedPageSize
         };

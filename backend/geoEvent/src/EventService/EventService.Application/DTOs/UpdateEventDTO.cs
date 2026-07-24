@@ -40,4 +40,6 @@ public class UpdateEventDto
 
     [StringLength(10)]
     public string? Locale { get; set; }
+    public bool? IsFeatured { get; set; }
+
 }

@@ -5,6 +5,16 @@ namespace TicketService.Application.Interfaces.Services;
 
 public interface ITicketService
 {
+    Task<ServiceResult<PagedResult<AdminRefundRequestResponseDto>>> GetAdminRefundRequestsAsync(
+    AdminRefundRequestsQueryDto query,
+    int requesterId,
+    string requesterRole);
+    Task<ServiceResult<PagedResult<ManageableEventAttendeePreviewDto>>> GetManageableEventAttendeesAsync(
+    int eventId,
+    ManageableEventAttendeesFilterDto? filter);
+    Task<ServiceResult<AdminDashboardTicketStatsDto>> GetAdminDashboardTicketStatsAsync(
+    int requesterId,
+    string requesterRole);
     Task<ServiceResult<EventTicketResponseDto>> CreateDefaultEventTicketAsync(
     CreateDefaultEventTicketRequest request);
     Task<ServiceResult<PagedResult<EventAttendeePreviewDto>>> GetPublicEventAttendeesAsync(

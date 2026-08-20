@@ -47,6 +47,50 @@ class AdminEventsRepository {
     );
   }
 
+Future<List<String>> uploadEventImages(
+  List<String> filePaths, {
+  List<String?>? fileNames,
+  List<Uint8List?>? bytesList,
+}) {
+  return api.uploadEventImages(
+    filePaths,
+    fileNames: fileNames,
+    bytesList: bytesList,
+  );
+}
+
+  Future<void> adminAddEventImage({
+    required int eventId,
+    required String imageUrl,
+    required bool isCover,
+  }) {
+    return api.adminAddEventImage(
+      eventId: eventId,
+      imageUrl: imageUrl,
+      isCover: isCover,
+    );
+  }
+
+  Future<void> adminDeleteEventImage({
+    required int eventId,
+    required int imageId,
+  }) {
+    return api.adminDeleteEventImage(
+      eventId: eventId,
+      imageId: imageId,
+    );
+  }
+
+  Future<void> adminSetCoverImage({
+    required int eventId,
+    required int imageId,
+  }) {
+    return api.adminSetCoverImage(
+      eventId: eventId,
+      imageId: imageId,
+    );
+  }
+
   Future<AdminEvent> getEventById(int eventId) {
     return api.getEventById(eventId);
   }
@@ -123,40 +167,6 @@ class AdminEventsRepository {
       eventId,
       reservationId,
       reason: reason,
-    );
-  }
-
-  Future<void> deleteEventImage({
-    required int eventId,
-    required int imageId,
-  }) {
-    return api.deleteEventImage(
-      eventId: eventId,
-      imageId: imageId,
-    );
-  }
-
-  Future<void> addEventImage({
-    required int eventId,
-    required String imageUrl,
-    required bool isCover,
-  }) {
-    return api.addEventImage(
-      eventId: eventId,
-      imageUrl: imageUrl,
-      isCover: isCover,
-    );
-  }
-
-  Future<List<String>> uploadEventImages(
-    List<String> filePaths, {
-    List<String?>? fileNames,
-    List<Uint8List?>? bytesList,
-  }) {
-    return api.uploadEventImages(
-      filePaths,
-      fileNames: fileNames,
-      bytesList: bytesList,
     );
   }
 

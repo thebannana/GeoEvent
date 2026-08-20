@@ -20,7 +20,6 @@ class PreferencesScreen extends ConsumerStatefulWidget {
 }
 
 class _PreferencesScreenState extends ConsumerState<PreferencesScreen> {
-  final _searchController = TextEditingController();
   final _minScoreController = TextEditingController();
   final _maxScoreController = TextEditingController();
 
@@ -38,7 +37,6 @@ class _PreferencesScreenState extends ConsumerState<PreferencesScreen> {
 
   @override
   void dispose() {
-    _searchController.dispose();
     _minScoreController.dispose();
     _maxScoreController.dispose();
     super.dispose();
@@ -46,7 +44,9 @@ class _PreferencesScreenState extends ConsumerState<PreferencesScreen> {
 
   Future<void> _refreshAll() async {
     ref.invalidate(eventTaxonomyProvider);
+
     await ref.read(preferencesControllerProvider.notifier).refresh();
+
     ref.invalidate(preferencesScreenControllerProvider);
 
     await Future.wait([
@@ -79,11 +79,9 @@ class _PreferencesScreenState extends ConsumerState<PreferencesScreen> {
 
     await ref.read(preferencesControllerProvider.notifier).applyFilters(
           type: _selectedType,
-          search: _searchController.text,
           minScore: minScore,
           maxScore: maxScore,
           clearType: _selectedType == null,
-          clearSearch: _searchController.text.trim().isEmpty,
           clearMinScore: minText.isEmpty,
           clearMaxScore: maxText.isEmpty,
         );
@@ -92,7 +90,6 @@ class _PreferencesScreenState extends ConsumerState<PreferencesScreen> {
   }
 
   Future<void> _clearFilters() async {
-    _searchController.clear();
     _minScoreController.clear();
     _maxScoreController.clear();
 
@@ -102,7 +99,6 @@ class _PreferencesScreenState extends ConsumerState<PreferencesScreen> {
 
     await ref.read(preferencesControllerProvider.notifier).applyFilters(
           clearType: true,
-          clearSearch: true,
           clearMinScore: true,
           clearMaxScore: true,
         );
@@ -112,6 +108,7 @@ class _PreferencesScreenState extends ConsumerState<PreferencesScreen> {
 
   void _showMessage(String message) {
     final messenger = ScaffoldMessenger.maybeOf(context);
+
     messenger?.hideCurrentSnackBar();
     messenger?.showSnackBar(
       SnackBar(content: Text(message)),
@@ -146,11 +143,11 @@ class _PreferencesScreenState extends ConsumerState<PreferencesScreen> {
                 const _AffinityExplainerCard(),
                 const SizedBox(height: 16),
                 _PreferencesFilters(
-                  searchController: _searchController,
                   minScoreController: _minScoreController,
                   maxScoreController: _maxScoreController,
                   selectedType: _selectedType,
-                  onTypeChanged: (value) => setState(() => _selectedType = value),
+                  onTypeChanged: (value) =>
+                      setState(() => _selectedType = value),
                   onApply: _applyFilters,
                   onClear: _clearFilters,
                 ),
@@ -199,12 +196,14 @@ class _PreferencesScreenState extends ConsumerState<PreferencesScreen> {
                     await ref
                         .read(preferencesControllerProvider.notifier)
                         .previousPage();
+
                     ref.invalidate(preferencesScreenControllerProvider);
                   },
                   onNext: () async {
                     await ref
                         .read(preferencesControllerProvider.notifier)
                         .nextPage();
+
                     ref.invalidate(preferencesScreenControllerProvider);
                   },
                 ),
@@ -277,7 +276,6 @@ class _AffinityExplainerCard extends StatelessWidget {
 
 class _PreferencesFilters extends StatelessWidget {
   const _PreferencesFilters({
-    required this.searchController,
     required this.minScoreController,
     required this.maxScoreController,
     required this.selectedType,
@@ -286,7 +284,6 @@ class _PreferencesFilters extends StatelessWidget {
     required this.onClear,
   });
 
-  final TextEditingController searchController;
   final TextEditingController minScoreController;
   final TextEditingController maxScoreController;
   final String? selectedType;
@@ -304,17 +301,6 @@ class _PreferencesFilters extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       child: Column(
         children: [
-          TextField(
-            controller: searchController,
-            decoration: const InputDecoration(
-              labelText: 'Search',
-              hintText: 'Search by preference ids',
-              prefixIcon: Icon(Icons.search_rounded),
-            ),
-            textInputAction: TextInputAction.search,
-            onSubmitted: (_) => onApply(),
-          ),
-          const SizedBox(height: 12),
           DropdownButtonFormField<String>(
             initialValue: selectedType,
             decoration: const InputDecoration(

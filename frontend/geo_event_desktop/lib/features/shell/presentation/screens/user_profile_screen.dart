@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/constants/app_roles.dart';
 import '../../../../core/theme/app_theme_colors.dart';
+import '../../../../core/utils/date_time_extensions.dart';
+import '../../../../core/utils/logger.dart';
 import '../../../../shared/admin_profile/data/admin_users_repository.dart';
 import '../../../../shared/admin_profile/models/user_profile.dart';
 
@@ -45,7 +48,14 @@ class _AdminUserProfileScreenState extends State<UserProfileScreen> {
         _profile = profile;
         _isLoading = false;
       });
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'Failed to load user profile.',
+        tag: 'UserProfileScreen',
+        error: error,
+        stackTrace: stackTrace,
+      );
+
       if (!mounted) return;
 
       setState(() {
@@ -172,6 +182,8 @@ class _AdminUserProfileScreenState extends State<UserProfileScreen> {
       profile.averageRating % 1 == 0 ? 0 : 1,
     );
 
+    final normalizedRole = _normalizeRole(profile.role);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -254,7 +266,7 @@ class _AdminUserProfileScreenState extends State<UserProfileScreen> {
                     runSpacing: 10,
                     children: [
                       _InfoChip(
-                        label: profile.role,
+                        label: normalizedRole,
                         background: colors.inputFill,
                         foreground: colors.textPrimary,
                       ),
@@ -294,7 +306,7 @@ class _AdminUserProfileScreenState extends State<UserProfileScreen> {
                     _InfoRow(label: 'Username', value: profile.displayUsername),
                     _InfoRow(label: 'Email', value: profile.displayEmail),
                     _InfoRow(label: 'Phone number', value: profile.displayPhoneNumber),
-                    _InfoRow(label: 'Role', value: profile.role),
+                    _InfoRow(label: 'Role', value: normalizedRole),
                   ],
                 ),
               ),
@@ -350,13 +362,19 @@ class _AdminUserProfileScreenState extends State<UserProfileScreen> {
 
   String _formatJoined(DateTime? date) {
     if (date == null) return 'Unknown';
+    return date.formatDate(pattern: 'dd MMM yyyy');
+  }
 
-    const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-    ];
+  String _normalizeRole(String role) {
+    // Normalize to canonical AppRoles values
+    final normalized = role.trim().toLowerCase();
 
-    return '${date.day} ${months[date.month - 1]} ${date.year}';
+    if (normalized == 'admin') {
+      return AppRoles.admin;
+    }
+
+    // Everything else is treated as a regular user
+    return AppRoles.user;
   }
 }
 

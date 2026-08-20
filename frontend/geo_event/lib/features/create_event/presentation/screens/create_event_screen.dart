@@ -460,7 +460,7 @@ class CreateEventScreenState extends ConsumerState<CreateEventScreen> {
       return;
     }
 
-    if (!startAt!.isAfter(DateTime.now())) {
+    if (!startAt!.isAfter(DateTime.now().toUtc())) {
       controller.setFormError('Start date must be in the future.');
       return;
     }
@@ -528,7 +528,7 @@ class CreateEventScreenState extends ConsumerState<CreateEventScreen> {
     BuildContext context, {
     DateTime? initial,
   }) async {
-    final now = DateTime.now();
+    final now = DateTime.now().toUtc();
     final today = now.dateOnly;
     final seed = initial ?? now.add(const Duration(hours: 1));
     final safeInitialDate = seed.isBefore(today) ? today : seed;

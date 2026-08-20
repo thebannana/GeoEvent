@@ -121,7 +121,7 @@ class ChatThreadHeader extends StatelessWidget {
     final lastActive = details.otherUserLastActiveAt;
     if (lastActive == null) return null;
 
-    return 'Active ${lastActive.toLocal().timeAgo(short: true)}';
+    return 'Active ${lastActive.timeAgo(short: true)}';
   }
 
   static String? _buildImageUrl(

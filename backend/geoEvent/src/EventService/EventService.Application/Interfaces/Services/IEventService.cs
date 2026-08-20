@@ -18,9 +18,13 @@ public interface IEventService
     Task<ServiceResult<PagedResultGenreResponseDto>> GetGenresPagedAsync(int page, int pageSize, string? searchTerm);
     Task<ServiceResult<PagedResultSubGenreResponseDto>> GetSubGenresPagedAsync(int page, int pageSize, string? searchTerm);
     Task<ServiceResult<int>> GetPublicCountByOrganizerAsync(int userId);
-    Task<ServiceResult<PagedResult<EventResponseDto>>> GetPublicAsync(EventFilterDto filter, int? requesterId = null);
+    Task<ServiceResult<PagedResult<EventResponseDto>>> GetPublicAsync(
+        EventFilterDto filter,
+        int? requesterId = null);
     Task<ServiceResult<EventResponseDto>> GetPublicByIdAsync(int eventId, int? requesterId = null);
-    Task<ServiceResult<List<EventResponseDto>>> GetNearbyPublicAsync(NearbyEventSearchDto dto);
+    Task<ServiceResult<List<EventResponseDto>>> GetNearbyPublicAsync(
+        NearbyEventSearchDto dto,
+        int? requesterId = null);
     Task<ServiceResult<PagedResult<LikedEventResponseDto>>> GetLikedEventsAsync(int userId, int page, int pageSize);
 
     Task<ServiceResult<PagedResult<EventResponseDto>>> GetAllAsync(EventFilterDto filter);
@@ -66,4 +70,16 @@ public interface IEventService
     Task<ServiceResult<bool>> DeleteCommentAsync(int commentId, int userId);
     Task<ServiceResult<CommentResponseDto>> LikeCommentAsync(int commentId, int userId);
     Task<ServiceResult<CommentResponseDto>> UnlikeCommentAsync(int commentId, int userId);
+    Task<ServiceResult<bool>> AdminAddImageAsync(
+    int eventId,
+    string imageUrl,
+    bool isCover);
+
+    Task<ServiceResult<bool>> AdminDeleteImageAsync(
+        int eventId,
+        int imageId);
+
+    Task<ServiceResult<bool>> AdminSetCoverImageAsync(
+        int eventId,
+        int imageId);
 }

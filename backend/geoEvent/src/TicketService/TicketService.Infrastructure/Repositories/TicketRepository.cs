@@ -46,7 +46,7 @@ public class TicketRepository : ITicketRepository
         {
             var search = query.Search.Trim().ToLower();
             reservations = reservations.Where(r =>
-                (r.RefundReason != null && r.RefundReason.ToLower().Contains(search)) ||
+                (r.RefundReason != null && r.RefundReason.Contains(search, StringComparison.CurrentCultureIgnoreCase)) ||
                 r.ReservationId.ToString().Contains(search) ||
                 r.UserId.ToString().Contains(search));
         }
@@ -62,7 +62,9 @@ public class TicketRepository : ITicketRepository
                     reservations.Where(r => r.RefundRequestStatus == RefundRequestStatus.Processing),
 
                 RefundQueueStatus.Resolved =>
-                    reservations.Where(r => r.RefundRequestStatus == RefundRequestStatus.Approved),
+                    reservations.Where(r =>
+                        r.RefundRequestStatus == RefundRequestStatus.Approved ||
+                        r.RefundRequestStatus == RefundRequestStatus.Refunded),
 
                 RefundQueueStatus.Rejected =>
                     reservations.Where(r => r.RefundRequestStatus == RefundRequestStatus.Rejected),
@@ -208,10 +210,10 @@ public class TicketRepository : ITicketRepository
         };
     }
 
-    public async Task ExecuteInStrategyAsync(Func<Task> operation)
+    public Task ExecuteInStrategyAsync(Func<Task> operation)
     {
         var strategy = _context.Database.CreateExecutionStrategy();
-        await strategy.ExecuteAsync(operation);
+        return strategy.ExecuteAsync(operation);
     }
 
     public async Task<IAppTransaction> BeginTransactionAsync()
@@ -722,6 +724,35 @@ public class TicketRepository : ITicketRepository
             query = query.Where(r => r.Status == status.Value);
 
         return await query.CountAsync();
+    }
+
+    public async Task<List<ManageableEventAttendeePreviewDto>>
+    GetManageableEventAttendeesForEventAsync(int eventId)
+    {
+        return await _context.Reservations
+            .AsNoTracking()
+            .Where(reservation =>
+                reservation.EventId == eventId &&
+                (reservation.Status == ReservationStatus.Pending ||
+                 reservation.Status == ReservationStatus.Confirmed))
+            .GroupBy(reservation => reservation.UserId)
+            .Select(group => new ManageableEventAttendeePreviewDto
+            {
+                ReservationId = group
+                    .OrderByDescending(reservation => reservation.CreatedAt)
+                    .Select(reservation => reservation.ReservationId)
+                    .FirstOrDefault(),
+
+                UserId = group.Key,
+
+                Quantity = group.Sum(reservation => reservation.Quantity),
+
+                Username = string.Empty,
+                AvatarUrl = null,
+            })
+            .OrderByDescending(attendee => attendee.Quantity)
+            .ThenBy(attendee => attendee.UserId)
+            .ToListAsync();
     }
 
     public async Task<int> GetEventReservedQuantityAsync(int eventId, params ReservationStatus[] statuses)

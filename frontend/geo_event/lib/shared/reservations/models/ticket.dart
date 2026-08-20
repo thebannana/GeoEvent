@@ -89,12 +89,12 @@ class Ticket {
       amount: (json['amount'] as num).toDouble(),
       currency: (json['currency'] ?? '').toString(),
       status: (json['status'] ?? '').toString(),
-      issuedAt: DateTime.parse((json['issuedAt'] ?? '').toString()).toLocal(),
+      issuedAt: DateTime.parse((json['issuedAt'] ?? '').toString()).toUtc(),
       usedAt: json['usedAt'] != null
-          ? DateTime.parse(json['usedAt'].toString()).toLocal()
+          ? DateTime.parse(json['usedAt'].toString()).toUtc()
           : null,
       cancelledAt: json['cancelledAt'] != null
-          ? DateTime.parse(json['cancelledAt'].toString()).toLocal()
+          ? DateTime.parse(json['cancelledAt'].toString()).toUtc()
           : null,
       seatNumber: json['seatNumber']?.toString(),
       section: json['section']?.toString(),

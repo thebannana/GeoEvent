@@ -188,64 +188,57 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   }
 
   Future<void> _submit() async {
-    final form = _formKey.currentState;
-    if (form == null || !form.validate() || _isSubmitting) return;
+  final form = _formKey.currentState;
+  if (form == null || !form.validate() || _isSubmitting) return;
 
-    FocusScope.of(context).unfocus();
-    setState(() => _isSubmitting = true);
+  FocusScope.of(context).unfocus();
+  setState(() => _isSubmitting = true);
 
-    try {
-      String? finalImageUrl =
-          _removeCurrentPhoto ? null : widget.profile.imageUrl?.trim();
+  try {
+    String? finalImageUrl =
+        _removeCurrentPhoto ? null : widget.profile.imageUrl?.trim();
 
-      if (_pickedImage != null) {
-        finalImageUrl = await ref
-            .read(profileControllerProvider.notifier)
-            .uploadProfileImage(_pickedImage!);
-      }
-
-      final success = await ref
+    if (_pickedImage != null) {
+      finalImageUrl = await ref
           .read(profileControllerProvider.notifier)
-          .updateProfile(
-            username: _usernameController.text.trim(),
-            email: _emailController.text.trim(),
-            firstName: _firstNameController.text.trim(),
-            lastName: _lastNameController.text.trim(),
-            phoneNumber: _normalizeOptionalPhone(_phoneController.text),
-            imageUrl: finalImageUrl,
-          );
+          .uploadProfileImage(_pickedImage!);
+    }
 
-      if (!mounted) return;
+    await ref.read(profileControllerProvider.notifier).updateProfile(
+          username: _usernameController.text.trim(),
+          email: _emailController.text.trim(),
+          firstName: _firstNameController.text.trim(),
+          lastName: _lastNameController.text.trim(),
+          phoneNumber: _normalizeOptionalPhone(_phoneController.text),
+          imageUrl: finalImageUrl,
+        );
 
-      if (!success) {
-        _showMessage('Failed to update profile.');
-        return;
-      }
+    if (!mounted) return;
 
-      _showMessage('Profile updated successfully.');
-      Navigator.of(context).pop(true);
-    } catch (error, stackTrace) {
-      AppLogger.error(
-        'Failed to update profile.',
-        tag: 'EditProfileScreen',
-        error: error,
+    _showMessage('Profile updated successfully.');
+    Navigator.of(context).pop(true);
+  } catch (error, stackTrace) {
+    AppLogger.error(
+      'Failed to update profile.',
+      tag: 'EditProfileScreen',
+      error: error,
+      stackTrace: stackTrace,
+    );
+
+    if (!mounted) return;
+    _showMessage(
+      ErrorMapper.toMessage(
+        error,
         stackTrace: stackTrace,
-      );
-
-      if (!mounted) return;
-      _showMessage(
-        ErrorMapper.toMessage(
-          error,
-          stackTrace: stackTrace,
-          fallbackMessage: AppStrings.genericError,
-        ),
-      );
-    } finally {
-      if (mounted) {
-        setState(() => _isSubmitting = false);
-      }
+        fallbackMessage: AppStrings.genericError,
+      ),
+    );
+  } finally {
+    if (mounted) {
+      setState(() => _isSubmitting = false);
     }
   }
+}
 
   String? _validateOptionalPhone(String? value) {
     final text = (value ?? '').trim();

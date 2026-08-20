@@ -41,20 +41,31 @@ public class EventServiceImpl : IEventService
         _logger = logger;
     }
 
-    public async Task<ServiceResult<InternalEventLookupDto>> GetInternalEventLookupAsync(int eventId)
+    public async Task<ServiceResult<InternalEventLookupDto>> GetInternalEventLookupAsync(
+        int eventId)
     {
         if (eventId <= 0)
-            return ServiceResult<InternalEventLookupDto>.Fail("A valid event ID is required.", 400);
+        {
+            return ServiceResult<InternalEventLookupDto>.Fail(
+                "A valid event ID is required.",
+                400);
+        }
 
         var ev = await _eventRepository.GetByIdWithDetailsAsync(eventId);
+
         if (ev is null)
-            return ServiceResult<InternalEventLookupDto>.NotFound("Event not found.");
+        {
+            return ServiceResult<InternalEventLookupDto>.NotFound(
+                "Event not found.");
+        }
 
         string? organizerDisplayName = null;
 
         try
         {
-            var profiles = await _userProfileService.GetProfilesByIdsAsync(new[] { ev.OrganizerId });
+            var profiles = await _userProfileService.GetProfilesByIdsAsync(
+                new[] { ev.OrganizerId });
+
             if (profiles.TryGetValue(ev.OrganizerId, out var organizer))
             {
                 organizerDisplayName =
@@ -63,55 +74,79 @@ public class EventServiceImpl : IEventService
                         : organizer.Username;
             }
         }
-        catch
+        catch (Exception ex)
         {
+            _logger.LogWarning(
+                ex,
+                "Could not load organizer profile for event {EventId} and organizer {OrganizerId}",
+                ev.EventId,
+                ev.OrganizerId);
         }
 
-        return ServiceResult<InternalEventLookupDto>.Ok(new InternalEventLookupDto
-        {
-            EventId = ev.EventId,
-            Title = ev.Title,
-            OrganizerDisplayName = organizerDisplayName
-        });
+        return ServiceResult<InternalEventLookupDto>.Ok(
+            new InternalEventLookupDto
+            {
+                EventId = ev.EventId,
+                Title = ev.Title,
+                OrganizerDisplayName = organizerDisplayName
+            });
     }
 
-    public async Task<ServiceResult<InternalCommentLookupDto>> GetInternalCommentLookupAsync(int commentId)
+    public async Task<ServiceResult<InternalCommentLookupDto>> GetInternalCommentLookupAsync(
+        int commentId)
     {
         if (commentId <= 0)
-            return ServiceResult<InternalCommentLookupDto>.Fail("A valid comment ID is required.", 400);
+        {
+            return ServiceResult<InternalCommentLookupDto>.Fail(
+                "A valid comment ID is required.",
+                400);
+        }
 
         var comment = await _eventRepository.GetCommentByIdAsync(commentId);
+
         if (comment is null)
-            return ServiceResult<InternalCommentLookupDto>.NotFound("Comment not found.");
+        {
+            return ServiceResult<InternalCommentLookupDto>.NotFound(
+                "Comment not found.");
+        }
 
         string? username = null;
         string? userDisplayName = null;
 
         try
         {
-            var profiles = await _userProfileService.GetProfilesByIdsAsync(new[] { comment.UserId });
+            var profiles = await _userProfileService.GetProfilesByIdsAsync(
+                new[] { comment.UserId });
+
             if (profiles.TryGetValue(comment.UserId, out var author))
             {
                 username = author.Username;
-                userDisplayName = !string.IsNullOrWhiteSpace(author.DisplayName)
-                    ? author.DisplayName
-                    : author.Username;
+                userDisplayName =
+                    !string.IsNullOrWhiteSpace(author.DisplayName)
+                        ? author.DisplayName
+                        : author.Username;
             }
         }
-        catch
+        catch (Exception ex)
         {
+            _logger.LogWarning(
+                ex,
+                "Could not load author profile for comment {CommentId} and user {UserId}",
+                comment.CommentId,
+                comment.UserId);
         }
 
-        return ServiceResult<InternalCommentLookupDto>.Ok(new InternalCommentLookupDto
-        {
-            CommentId = comment.CommentId,
-            EventId = comment.EventId,
-            UserId = comment.UserId,
-            Username = username,
-            UserDisplayName = userDisplayName,
-            Preview = BuildLookupPreview(comment.Content, 120),
-            IsDeleted = comment.IsDeleted
-        });
+        return ServiceResult<InternalCommentLookupDto>.Ok(
+            new InternalCommentLookupDto
+            {
+                CommentId = comment.CommentId,
+                EventId = comment.EventId,
+                UserId = comment.UserId,
+                Username = username,
+                UserDisplayName = userDisplayName,
+                Preview = BuildLookupPreview(comment.Content, 120),
+                IsDeleted = comment.IsDeleted
+            });
     }
 
     private static string BuildLookupPreview(string? value, int maxLength = 120)
@@ -182,30 +217,117 @@ public class EventServiceImpl : IEventService
         }
     }
 
+    public async Task<ServiceResult<bool>> AdminDeleteImageAsync(
+    int eventId,
+    int imageId)
+    {
+        var image = await _eventRepository.GetImageAsync(imageId);
+
+        if (image is null || image.EventId != eventId)
+        {
+            return ServiceResult<bool>.NotFound(
+                "Image not found for this event.");
+        }
+
+        await _eventRepository.DeleteImageAsync(imageId);
+
+        return ServiceResult<bool>.Ok(true);
+    }
+
+    public async Task<ServiceResult<bool>> AdminSetCoverImageAsync(
+    int eventId,
+    int imageId)
+    {
+        var ev = await _eventRepository.GetTrackedByIdAsync(eventId);
+
+        if (ev is null)
+        {
+            return ServiceResult<bool>.NotFound(
+                $"Event {eventId} not found.");
+        }
+
+        var image = await _eventRepository.GetImageAsync(imageId);
+
+        if (image is null || image.EventId != eventId)
+        {
+            return ServiceResult<bool>.NotFound(
+                "Image not found for this event.");
+        }
+
+        await _eventRepository.SetCoverImageAsync(eventId, imageId);
+
+        return ServiceResult<bool>.Ok(true);
+    }
+
     public async Task<ServiceResult<bool>> AdminDeleteAsync(int eventId)
     {
         var ev = await _eventRepository.GetTrackedByIdAsync(eventId);
+
         if (ev is null)
-            return ServiceResult<bool>.NotFound($"Event {eventId} not found.");
+        {
+            return ServiceResult<bool>.NotFound(
+                $"Event {eventId} not found.");
+        }
 
         try
         {
+            var wasAlreadyCancelled = ev.Status == EventStatus.Cancelled;
+
             ev.Cancel();
             await _eventRepository.UpdateAsync(ev);
 
-            await _publishEndpoint.Publish(new EventCancelledMessage(
-                ev.EventId,
-                ev.Title,
-                ev.OrganizerId,
-                DateTime.UtcNow,
-                "Cancelled by admin"
-            ));
+            if (!wasAlreadyCancelled)
+            {
+                await _publishEndpoint.Publish(new EventCancelledMessage(
+                    ev.EventId,
+                    ev.Title,
+                    ev.OrganizerId,
+                    DateTime.UtcNow,
+                    "Cancelled by admin"
+                ));
+            }
 
             return ServiceResult<bool>.Ok(true);
         }
         catch (InvalidEventStateException ex)
         {
-            _logger.LogWarning(ex, "Invalid state while admin deleted event {EventId}", eventId);
+            _logger.LogWarning(
+                ex,
+                "Invalid state while admin cancelled event {EventId}",
+                eventId);
+
+            return ServiceResult<bool>.Fail(ex.Message);
+        }
+    }
+
+    public async Task<ServiceResult<bool>> AdminAddImageAsync(
+    int eventId,
+    string imageUrl,
+    bool isCover)
+    {
+        var ev = await _eventRepository.GetTrackedByIdAsync(eventId);
+
+        if (ev is null)
+        {
+            return ServiceResult<bool>.NotFound(
+                $"Event {eventId} not found.");
+        }
+
+        try
+        {
+            await _eventRepository.AddImageAsync(
+                new EventImage(eventId, imageUrl, isCover),
+                isCover);
+
+            return ServiceResult<bool>.Ok(true);
+        }
+        catch (InvalidEventImageException ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Invalid admin image operation for event {EventId}",
+                eventId);
+
             return ServiceResult<bool>.Fail(ex.Message);
         }
     }
@@ -609,62 +731,50 @@ public class EventServiceImpl : IEventService
     }
 
     public async Task<ServiceResult<PagedResult<EventResponseDto>>> GetPublicAsync(
-    EventFilterDto filter,
-    int? requesterId = null)
+    EventFilterDto filter, int? requesterId = null)
     {
         filter ??= new EventFilterDto();
         filter.Status = EventStatus.Confirmed;
-        filter.OrganizerId = null;
         filter.Page = NormalizePage(filter.Page);
         filter.PageSize = NormalizePageSize(filter.PageSize);
 
-        if (!requesterId.HasValue)
+        var usePreferences = requesterId.HasValue && filter.UsePreferences;
+
+        if (!usePreferences)
         {
             var result = await _eventRepository.GetAllAsync(filter);
-
             return ServiceResult<PagedResult<EventResponseDto>>.Ok(
                 new PagedResult<EventResponseDto>
                 {
-                    Items = result.Items.Select(ev => MapToDto(ev, false)).ToList(),
+                    Items = result.Items.Select(e => MapToDto(e, false)).ToList(),
                     TotalCount = result.TotalCount,
                     Page = result.Page,
                     PageSize = result.PageSize
                 });
         }
 
-        var preferences = await _userProfileService.GetUserPreferencesAsync(requesterId.Value);
+        var preferences = await _userProfileService.GetUserPreferencesAsync(requesterId!.Value);
 
         if (preferences.Count == 0)
         {
             var result = await _eventRepository.GetAllAsync(filter);
             var events = result.Items.ToList();
-
-            var fallbackLikedIds = await _eventRepository.GetLikedEventIdsAsync(
-                requesterId.Value,
-                events.Select(e => e.EventId));
-
-            var mapped = events
-                .Select(ev => MapToDto(ev, fallbackLikedIds.Contains(ev.EventId)))
-                .ToList();
+            var likedIds = await _eventRepository.GetLikedEventIdsAsync(
+                requesterId.Value, events.Select(e => e.EventId));
 
             return ServiceResult<PagedResult<EventResponseDto>>.Ok(
                 new PagedResult<EventResponseDto>
                 {
-                    Items = mapped,
+                    Items = events.Select(e => MapToDto(e, likedIds.Contains(e.EventId))).ToList(),
                     TotalCount = result.TotalCount,
                     Page = result.Page,
                     PageSize = result.PageSize
                 });
         }
 
-        var personalizedCandidates = await _eventRepository.GetPublicCandidatesAsync(filter);
-
-        var ranked = personalizedCandidates
-            .Select(ev => new
-            {
-                Event = ev,
-                Score = CalculatePreferenceScore(ev, preferences)
-            })
+        var candidates = await _eventRepository.GetPublicCandidatesAsync(filter);
+        var ranked = candidates
+            .Select(e => new { Event = e, Score = CalculatePreferenceScore(e, preferences) })
             .OrderByDescending(x => x.Score)
             .ThenBy(x => x.Event.StartDateTime)
             .ThenByDescending(x => x.Event.LikesCount)
@@ -672,26 +782,19 @@ public class EventServiceImpl : IEventService
             .ToList();
 
         var totalCount = ranked.Count;
-
-        var paged = ranked
+        var pagedEvents = ranked
             .Skip((filter.Page - 1) * filter.PageSize)
             .Take(filter.PageSize)
+            .Select(x => x.Event)
             .ToList();
 
-        var pagedEvents = paged.Select(x => x.Event).ToList();
-
-        var personalizedLikedIds = await _eventRepository.GetLikedEventIdsAsync(
-            requesterId.Value,
-            pagedEvents.Select(e => e.EventId));
-
-        var personalizedItems = pagedEvents
-            .Select(ev => MapToDto(ev, personalizedLikedIds.Contains(ev.EventId)))
-            .ToList();
+        var likedEventIds = await _eventRepository.GetLikedEventIdsAsync(
+            requesterId.Value, pagedEvents.Select(e => e.EventId));
 
         return ServiceResult<PagedResult<EventResponseDto>>.Ok(
             new PagedResult<EventResponseDto>
             {
-                Items = personalizedItems,
+                Items = pagedEvents.Select(e => MapToDto(e, likedEventIds.Contains(e.EventId))).ToList(),
                 TotalCount = totalCount,
                 Page = filter.Page,
                 PageSize = filter.PageSize
@@ -749,23 +852,106 @@ public class EventServiceImpl : IEventService
             });
     }
 
-    public async Task<ServiceResult<List<EventResponseDto>>> GetNearbyPublicAsync(NearbyEventSearchDto dto)
+    public async Task<ServiceResult<List<EventResponseDto>>> GetNearbyPublicAsync(
+    NearbyEventSearchDto dto,
+    int? requesterId = null)
     {
-        if (dto.Latitude is null || dto.Longitude is null)
-            return ServiceResult<List<EventResponseDto>>.Fail("Latitude and Longitude are required.");
+        if (dto is null)
+        {
+            return ServiceResult<List<EventResponseDto>>.Fail(
+                "Search parameters are required.");
+        }
+
+        if (!dto.Latitude.HasValue || !dto.Longitude.HasValue)
+        {
+            return ServiceResult<List<EventResponseDto>>.Fail(
+                "Latitude and Longitude are required.");
+        }
+
+        if (dto.Latitude.Value is < -90 or > 90)
+        {
+            return ServiceResult<List<EventResponseDto>>.Fail(
+                "Latitude must be between -90 and 90.");
+        }
+
+        if (dto.Longitude.Value is < -180 or > 180)
+        {
+            return ServiceResult<List<EventResponseDto>>.Fail(
+                "Longitude must be between -180 and 180.");
+        }
 
         if (dto.RadiusKm <= 0 || dto.RadiusKm > 500)
-            return ServiceResult<List<EventResponseDto>>.Fail("Radius must be between 1 and 500 km.");
+        {
+            return ServiceResult<List<EventResponseDto>>.Fail(
+                "Radius must be between 1 and 500 km.");
+        }
 
         if (dto.Limit <= 0 || dto.Limit > 100)
-            return ServiceResult<List<EventResponseDto>>.Fail("Limit must be between 1 and 100.");
+        {
+            return ServiceResult<List<EventResponseDto>>.Fail(
+                "Limit must be between 1 and 100.");
+        }
 
-        var events = await _eventRepository.GetNearbyAsync(dto);
+        if (dto.MinPrice.HasValue && dto.MinPrice.Value < 0)
+        {
+            return ServiceResult<List<EventResponseDto>>.Fail(
+                "Minimum price cannot be negative.");
+        }
+
+        if (dto.MaxPrice.HasValue && dto.MaxPrice.Value < 0)
+        {
+            return ServiceResult<List<EventResponseDto>>.Fail(
+                "Maximum price cannot be negative.");
+        }
+
+        if (dto.MinPrice.HasValue &&
+            dto.MaxPrice.HasValue &&
+            dto.MinPrice.Value > dto.MaxPrice.Value)
+        {
+            return ServiceResult<List<EventResponseDto>>.Fail(
+                "Minimum price cannot be greater than maximum price.");
+        }
+
+        if (dto.SegmentId is <= 0 ||
+            dto.GenreId is <= 0 ||
+            dto.SubGenreId is <= 0)
+        {
+            return ServiceResult<List<EventResponseDto>>.Fail(
+                "Category IDs must be greater than zero.");
+        }
+
+        var preferences = requesterId.HasValue && dto.UsePreferences
+            ? await _userProfileService.GetUserPreferencesAsync(
+                requesterId.Value)
+            : Array.Empty<UserPreferenceDto>();
+
+        var events = await _eventRepository.GetNearbyAsync(
+            dto,
+            preferences);
 
         var publicEvents = events
-            .Where(e => e.Status == EventStatus.Confirmed && !e.IsPast())
+            .Where(e =>
+                e.Status == EventStatus.Confirmed &&
+                !e.IsPast())
             .Select(e => MapToDto(e, false))
             .ToList();
+
+        if (requesterId.HasValue && publicEvents.Count > 0)
+        {
+            var likedEventIds =
+                await _eventRepository.GetLikedEventIdsAsync(
+                    requesterId.Value,
+                    publicEvents.Select(e => e.EventId));
+
+            publicEvents = events
+                .Where(e =>
+                    e.Status == EventStatus.Confirmed &&
+                    !e.IsPast())
+                .Select(e => MapToDto(
+                    e,
+                    likedEventIds.Contains(e.EventId)))
+                .ToList();
+        }
 
         return ServiceResult<List<EventResponseDto>>.Ok(publicEvents);
     }
@@ -1658,6 +1844,7 @@ public class EventServiceImpl : IEventService
     private static BookmarkResponseDto MapBookmark(Bookmark b) => new()
     {
         BookmarkId = b.BookmarkId,
+        Title = b.Event?.Title ?? "Saved event",
         ImageUrl = b.Event?.Images.FirstOrDefault(i => i.IsCover)?.ImageUrl
                    ?? b.Event?.Images.FirstOrDefault()?.ImageUrl
                    ?? string.Empty,

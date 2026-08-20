@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -42,20 +41,19 @@ class AdminEventsApi {
           'searchTerm': _normalizeNullableString(searchTerm),
         if (_normalizeNullableString(status) != null)
           'status': _normalizeNullableString(status),
-        if (organizerId != null) 'organizerId': organizerId,
-        if (segmentId != null) 'segmentId': segmentId,
-        if (genreId != null) 'genreId': genreId,
-        if (subGenreId != null) 'subGenreId': subGenreId,
-        if (minPrice != null) 'minPrice': minPrice,
-        if (maxPrice != null) 'maxPrice': maxPrice,
+        'organizerId': ?organizerId,
+        'segmentId': ?segmentId,
+        'genreId': ?genreId,
+        'subGenreId': ?subGenreId,
+        'minPrice': ?minPrice,
+        'maxPrice': ?maxPrice,
         if (fromDate != null) 'fromDate': fromDate.toUtc().toIso8601String(),
         if (toDate != null) 'toDate': toDate.toUtc().toIso8601String(),
-        if (isFeatured != null) 'isFeatured': isFeatured,
-        if (canViewReservations != null)
-          'canViewReservations': canViewReservations,
+        'isFeatured': ?isFeatured,
+        'canViewReservations': ?canViewReservations,
         if (_normalizeNullableString(sortBy) != null)
           'sortBy': _normalizeNullableString(sortBy),
-        if (sortDescending != null) 'sortDescending': sortDescending,
+        'sortDescending': ?sortDescending,
       },
       options: Options(
         extra: const {
@@ -72,6 +70,65 @@ class AdminEventsApi {
       AdminEvent.fromJson,
     );
   }
+
+  Future<void> adminAddEventImage({
+  required int eventId,
+  required String imageUrl,
+  required bool isCover,
+}) async {
+  await dio.post(
+    ApiEndpoints.adminEventImages(eventId),
+    data: {
+      'imageUrl': imageUrl,
+      'isCover': isCover,
+    },
+    options: Options(
+      contentType: Headers.jsonContentType,
+      headers: const {
+        'Accept': 'application/json',
+      },
+      extra: const {
+        AuthInterceptor.allowRefreshKey: true,
+      },
+    ),
+  );
+}
+
+Future<void> adminDeleteEventImage({
+  required int eventId,
+  required int imageId,
+}) async {
+  await dio.delete(
+    ApiEndpoints.adminEventImage(eventId, imageId),
+    options: Options(
+      contentType: Headers.jsonContentType,
+      headers: const {
+        'Accept': 'application/json',
+      },
+      extra: const {
+        AuthInterceptor.allowRefreshKey: true,
+      },
+    ),
+  );
+}
+
+Future<void> adminSetCoverImage({
+  required int eventId,
+  required int imageId,
+}) async {
+  await dio.patch(
+    ApiEndpoints.adminEventCoverImage(eventId, imageId),
+    options: Options(
+      contentType: Headers.jsonContentType,
+      headers: const {
+        'Accept': 'application/json',
+      },
+      extra: const {
+        AuthInterceptor.allowRefreshKey: true,
+      },
+    ),
+  );
+}
 
   Future<AdminEvent> getEventById(int eventId) async {
     final response = await dio.get(
@@ -226,122 +283,84 @@ class AdminEventsApi {
     );
   }
 
-  Future<void> deleteEventImage({
+  Future<PagedResponse<AdminComment>> getEventComments({
     required int eventId,
-    required int imageId,
+    int page = 1,
+    int pageSize = 20,
   }) async {
-    await dio.delete(
-      ApiEndpoints.adminEventImage(eventId, imageId),
+    final response = await dio.get(
+      ApiEndpoints.commentsByEvent(eventId),
+      queryParameters: {
+        'page': page,
+        'pageSize': pageSize,
+      },
       options: Options(
-        contentType: Headers.jsonContentType,
         headers: const {'Accept': 'application/json'},
-        extra: const {
-          AuthInterceptor.allowRefreshKey: true,
-        },
+        extra: const {AuthInterceptor.allowRefreshKey: true},
       ),
+    );
+
+    return PagedResponse<AdminComment>.fromJson(
+      _asMap(response.data, fallbackMessage: 'Invalid event comments response.'),
+      AdminComment.fromJson,
     );
   }
 
-  Future<void> addEventImage({
-    required int eventId,
-    required String imageUrl,
-    required bool isCover,
+  Future<PagedResponse<AdminComment>> getCommentReplies({
+    required int commentId,
+    int page = 1,
+    int pageSize = 20,
   }) async {
-    await dio.post(
-      ApiEndpoints.eventImages(eventId),
+    final response = await dio.get(
+      ApiEndpoints.commentReplies(commentId),
+      queryParameters: {
+        'page': page,
+        'pageSize': pageSize,
+      },
+      options: Options(
+        headers: const {'Accept': 'application/json'},
+        extra: const {AuthInterceptor.allowRefreshKey: true},
+      ),
+    );
+
+    return PagedResponse<AdminComment>.fromJson(
+      _asMap(response.data, fallbackMessage: 'Invalid comment replies response.'),
+      AdminComment.fromJson,
+    );
+  }
+
+  Future<AdminComment> updateComment({
+    required int commentId,
+    required String content,
+  }) async {
+    final response = await dio.put(
+      ApiEndpoints.adminCommentById(commentId),
       data: {
-        'imageUrl': imageUrl,
-        'isCover': isCover,
+        'content': content.trim(),
       },
       options: Options(
         contentType: Headers.jsonContentType,
         headers: const {'Accept': 'application/json'},
-        extra: const {
-          AuthInterceptor.allowRefreshKey: true,
-        },
+        extra: const {AuthInterceptor.allowRefreshKey: true},
       ),
+    );
+
+    return AdminComment.fromJson(
+      _asMap(response.data, fallbackMessage: 'Invalid admin comment update response.'),
     );
   }
 
-Future<PagedResponse<AdminComment>> getEventComments({
-  required int eventId,
-  int page = 1,
-  int pageSize = 20,
-}) async {
-  final response = await dio.get(
-    ApiEndpoints.commentsByEvent(eventId),
-    queryParameters: {
-      'page': page,
-      'pageSize': pageSize,
-    },
-    options: Options(
-      headers: const {'Accept': 'application/json'},
-      extra: const {AuthInterceptor.allowRefreshKey: true},
-    ),
-  );
-
-  return PagedResponse<AdminComment>.fromJson(
-    _asMap(response.data, fallbackMessage: 'Invalid event comments response.'),
-    AdminComment.fromJson,
-  );
-}
-
-Future<PagedResponse<AdminComment>> getCommentReplies({
-  required int commentId,
-  int page = 1,
-  int pageSize = 20,
-}) async {
-  final response = await dio.get(
-    ApiEndpoints.commentReplies(commentId),
-    queryParameters: {
-      'page': page,
-      'pageSize': pageSize,
-    },
-    options: Options(
-      headers: const {'Accept': 'application/json'},
-      extra: const {AuthInterceptor.allowRefreshKey: true},
-    ),
-  );
-
-  return PagedResponse<AdminComment>.fromJson(
-    _asMap(response.data, fallbackMessage: 'Invalid comment replies response.'),
-    AdminComment.fromJson,
-  );
-}
-
-
-Future<AdminComment> updateComment({
-  required int commentId,
-  required String content,
-}) async {
-  final response = await dio.put(
-    ApiEndpoints.adminCommentById(commentId),
-    data: {
-      'content': content.trim(),
-    },
-    options: Options(
-      contentType: Headers.jsonContentType,
-      headers: const {'Accept': 'application/json'},
-      extra: const {AuthInterceptor.allowRefreshKey: true},
-    ),
-  );
-
-  return AdminComment.fromJson(
-    _asMap(response.data, fallbackMessage: 'Invalid admin comment update response.'),
-  );
-}
-
-Future<void> deleteComment({
-  required int commentId,
-}) async {
-  await dio.delete(
-    ApiEndpoints.adminCommentById(commentId),
-    options: Options(
-      headers: const {'Accept': 'application/json'},
-      extra: const {AuthInterceptor.allowRefreshKey: true},
-    ),
-  );
-}
+  Future<void> deleteComment({
+    required int commentId,
+  }) async {
+    await dio.delete(
+      ApiEndpoints.adminCommentById(commentId),
+      options: Options(
+        headers: const {'Accept': 'application/json'},
+        extra: const {AuthInterceptor.allowRefreshKey: true},
+      ),
+    );
+  }
 
   Future<List<String>> uploadEventImages(
     List<String> filePaths, {

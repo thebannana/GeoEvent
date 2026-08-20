@@ -99,8 +99,8 @@ class MyEventResponseDto {
   String get normalizedStatus => status.trim().toLowerCase();
 
   bool get isCompletedByTime {
-    final now = DateTime.now();
-    final localEnd = endDateTime.toLocal();
+    final now = DateTime.now().toUtc();
+    final localEnd = endDateTime.toUtc();
     return localEnd.isBefore(now) || localEnd.isAtSameMomentAs(now);
   }
 
@@ -132,7 +132,7 @@ class MyEventResponseDto {
       return const [];
     }
 
-    final now = DateTime.now();
+    final now = DateTime.now().toUtc();
     final images = asImageList(json['images'] ?? json['Images']);
 
     return MyEventResponseDto(

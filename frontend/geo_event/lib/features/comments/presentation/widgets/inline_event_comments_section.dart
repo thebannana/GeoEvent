@@ -43,17 +43,19 @@ class _InlineEventCommentsSectionState
     _commentsSubscription = ref.listenManual<EventCommentsState>(
       eventCommentsControllerProvider(widget.eventId),
       (previous, next) {
-        final leftReplyMode =
-            previous?.replyingToCommentId != null && next.replyingToCommentId == null;
-        final leftEditMode =
-            previous?.editingCommentId != null && next.editingCommentId == null;
-
         if (!mounted) return;
 
-        if ((leftReplyMode || leftEditMode) && !next.isSubmitting) {
+        final leftReplyMode =
+            previous?.replyingToCommentId != null &&
+            next.replyingToCommentId == null;
+
+        final leftEditMode =
+            previous?.editingCommentId != null &&
+            next.editingCommentId == null;
+
+        if (leftReplyMode || leftEditMode) {
           _composerController.clear();
           _composerFormKey.currentState?.reset();
-          FocusManager.instance.primaryFocus?.unfocus();
           setState(() => _composerTouched = false);
         }
       },
@@ -154,7 +156,6 @@ class _InlineEventCommentsSectionState
                     controller.cancelEdit();
                     _composerController.clear();
                     _composerFormKey.currentState?.reset();
-                    FocusManager.instance.primaryFocus?.unfocus();
                     setState(() => _composerTouched = false);
                   }
                 : null,
@@ -179,18 +180,14 @@ class _InlineEventCommentsSectionState
               return null;
             },
             onChanged: (_) {
-              if (!_composerTouched) {
-                setState(() => _composerTouched = true);
-              } else {
-                setState(() {});
-              }
+              setState(() => _composerTouched = true);
             },
             onSubmit: () async {
               FocusScope.of(context).unfocus();
               setState(() => _composerTouched = true);
 
               final isValid = _composerFormKey.currentState?.validate() ?? false;
-              if (!isValid) return;
+              if (!isValid) return false;
 
               final text = _composerController.text.trim();
               final editingId = state.editingCommentId;
@@ -202,20 +199,15 @@ class _InlineEventCommentsSectionState
                     )
                   : await controller.submitComment(text);
 
-              if (!mounted) return;
+              if (!mounted) return false;
 
               if (ok) {
-                _composerController.clear();
-                _composerController.value = const TextEditingValue(
-                  text: '',
-                  selection: TextSelection.collapsed(offset: 0),
-                );
-                _composerFormKey.currentState?.reset();
                 controller.cancelReply();
                 controller.cancelEdit();
-                FocusScope.of(context).unfocus();
                 setState(() => _composerTouched = false);
               }
+
+              return ok;
             },
           ),
           const SizedBox(height: 18),

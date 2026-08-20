@@ -32,13 +32,14 @@ class ApiEndpoints {
 
   static String adminEvent(int eventId) => '$adminEventsBase/$eventId';
 
-  static String adminEventImages(int eventId) => eventImages(eventId);
+  static String adminEventImages(int eventId) =>
+      '$adminEventsBase/$eventId/images';
 
   static String adminEventImage(int eventId, int imageId) =>
-      deleteEventImage(eventId, imageId);
+      '$adminEventsBase/$eventId/images/$imageId';
 
   static String adminEventCoverImage(int eventId, int imageId) =>
-      setEventCoverImage(eventId, imageId);
+      '$adminEventsBase/$eventId/images/$imageId/cover';
 
   // =========================
   // Users

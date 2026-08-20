@@ -3,7 +3,7 @@ import 'package:dio/dio.dart';
 import '../../shared/auth/models/auth_response.dart';
 import 'api_endpoints.dart';
 
-class AuthInterceptor extends QueuedInterceptor {
+class AuthInterceptor extends Interceptor {
   AuthInterceptor({
     required Dio dio,
     required Future<String?> Function() accessTokenReader,
@@ -93,8 +93,8 @@ class AuthInterceptor extends QueuedInterceptor {
     }
 
     try {
-      _refreshFuture ??= _refreshCall(refreshToken);
-      final refreshed = await _refreshFuture!;
+      final refreshFuture = _refreshFuture ??= _refreshCall(refreshToken);
+      final refreshed = await refreshFuture;
 
       if (!refreshed.hasTokens || refreshed.accessToken.trim().isEmpty) {
         await _safeExpireSession();

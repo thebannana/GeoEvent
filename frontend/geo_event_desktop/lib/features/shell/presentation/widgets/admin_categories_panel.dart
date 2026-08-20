@@ -1,8 +1,9 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_theme_colors.dart';
+import '../../../../core/utils/color_parser.dart';
+import '../../../../core/utils/debouncer.dart';
+import '../../../../core/utils/logger.dart';
 import '../../../../shared/admin_profile/data/admin_categories_repository.dart';
 import '../../../../shared/admin_profile/models/categories.dart';
 import '../screens/edit_category_screen.dart';
@@ -139,11 +140,14 @@ class AdminCategoriesPanel extends StatefulWidget {
 }
 
 class _AdminCategoriesPanelState extends State<AdminCategoriesPanel> {
+  static const _loggerTag = 'AdminCategoriesPanel';
   static const int _pageSize = 20;
 
   final TextEditingController _searchController = TextEditingController();
 
-  Timer? _searchDebounce;
+  final Debouncer _searchDebouncer = Debouncer(
+    delay: const Duration(milliseconds: 350),
+  );
 
   List<AdminSegment> _segments = const [];
   List<AdminCategoryRowData> _rows = const [];
@@ -166,7 +170,7 @@ class _AdminCategoriesPanelState extends State<AdminCategoriesPanel> {
 
   @override
   void dispose() {
-    _searchDebounce?.cancel();
+    _searchDebouncer.dispose();
     _searchController.dispose();
     super.dispose();
   }
@@ -285,7 +289,14 @@ class _AdminCategoriesPanelState extends State<AdminCategoriesPanel> {
                 .clamp(1, 999999);
         _isLoading = false;
       });
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'Failed to load categories.',
+        tag: _loggerTag,
+        error: error,
+        stackTrace: stackTrace,
+      );
+
       if (!mounted) return;
       setState(() {
         _isLoading = false;
@@ -295,15 +306,14 @@ class _AdminCategoriesPanelState extends State<AdminCategoriesPanel> {
   }
 
   void _onSearchChanged(String _) {
-    _searchDebounce?.cancel();
-    _searchDebounce = Timer(const Duration(milliseconds: 350), () {
+    _searchDebouncer.run(() {
       if (!mounted) return;
       _loadCategories(page: 1);
     });
   }
 
   void _clearSearch() {
-    _searchDebounce?.cancel();
+    _searchDebouncer.cancel();
     _searchController.clear();
     _loadCategories(page: 1);
   }
@@ -652,7 +662,7 @@ class _AdminCategoriesPanelState extends State<AdminCategoriesPanel> {
                                           vertical: 6,
                                         ),
                                         itemCount: _rows.length,
-                                        separatorBuilder: (_, __) => Divider(
+                                        separatorBuilder: (_, _) => Divider(
                                           height: 1,
                                           indent: 18,
                                           endIndent: 18,
@@ -912,12 +922,7 @@ class CategoryRow extends StatelessWidget {
 
   static Color? _parseColor(String? value) {
     if (value == null || value.trim().isEmpty) return null;
-    final hex = value.trim().replaceAll('#', '');
-    if (hex.length != 6 && hex.length != 8) return null;
-    final normalized = hex.length == 6 ? 'FF$hex' : hex;
-    final parsed = int.tryParse(normalized, radix: 16);
-    if (parsed == null) return null;
-    return Color(parsed);
+    return ColorParser.parseHex(value);
   }
 }
 

@@ -35,21 +35,24 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
     _ReservationFilter(label: 'Refunded', value: ReservationStatus.refunded),
   ];
 
-@override
-void initState() {
-  super.initState();
-  _scrollController.addListener(_onScroll);
+  @override
+  void initState() {
+    super.initState();
 
-  Future.microtask(() {
-    ref.read(reservationsControllerProvider.notifier).refresh();
-  });
-}
+    _scrollController.addListener(_onScroll);
+
+    Future.microtask(() {
+      if (!mounted) return;
+      ref.read(reservationsControllerProvider.notifier).refresh();
+    });
+  }
 
   @override
   void dispose() {
     _scrollController
       ..removeListener(_onScroll)
       ..dispose();
+
     super.dispose();
   }
 
@@ -67,9 +70,12 @@ void initState() {
     if (!_scrollController.hasClients) return;
 
     final position = _scrollController.position;
+
     if (position.pixels >= position.maxScrollExtent - 240) {
       final state = ref.read(reservationsControllerProvider).valueOrNull;
+
       if (state?.isFetchingMore == true) return;
+
       ref.read(reservationsControllerProvider.notifier).loadMore();
     }
   }
@@ -172,6 +178,7 @@ void initState() {
                       separatorBuilder: (_, _) => const SizedBox(height: 10),
                       itemBuilder: (context, index) {
                         final reservation = data.items[index];
+
                         return ReservationCard(
                           reservation: reservation,
                           onCancel: reservation.canBeCancelled
@@ -227,6 +234,7 @@ void initState() {
           .read(reservationsControllerProvider.notifier)
           .cancelReservation(reservation.reservationId);
 
+      if (!mounted) return;
       _showMessage('Reservation cancelled.');
     } catch (error, stackTrace) {
       AppLogger.error(
@@ -235,6 +243,8 @@ void initState() {
         error: error,
         stackTrace: stackTrace,
       );
+
+      if (!mounted) return;
 
       _showMessage(
         ErrorMapper.toMessage(
@@ -250,56 +260,22 @@ void initState() {
     BuildContext context,
     Reservation reservation,
   ) async {
-    final reasonController = TextEditingController();
+    final reason = await showDialog<String?>(
+      context: context,
+      builder: (_) => _RefundRequestDialog(
+        reservation: reservation,
+      ),
+    );
+
+    if (reason == null || !mounted) return;
 
     try {
-      final reason = await showDialog<String?>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Request refund?'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Reservation #${reservation.reservationId} for '
-                '${reservation.quantity} ticket${reservation.quantity > 1 ? 's' : ''} '
-                'will be submitted for admin review.',
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: reasonController,
-                autofocus: true,
-                minLines: 2,
-                maxLines: 4,
-                textInputAction: TextInputAction.done,
-                decoration: const InputDecoration(
-                  labelText: 'Reason',
-                  hintText: 'Explain why you want a refund',
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, null),
-              child: const Text('Keep'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(ctx, reasonController.text.trim()),
-              child: const Text('Send request'),
-            ),
-          ],
-        ),
-      );
-
-      if (reason == null || !mounted) return;
-
       await ref.read(reservationsControllerProvider.notifier).requestRefund(
             reservation.reservationId,
             reason: reason.isEmpty ? null : reason,
           );
 
+      if (!mounted) return;
       _showMessage('Refund request submitted.');
     } catch (error, stackTrace) {
       AppLogger.error(
@@ -309,6 +285,8 @@ void initState() {
         stackTrace: stackTrace,
       );
 
+      if (!mounted) return;
+
       _showMessage(
         ErrorMapper.toMessage(
           error,
@@ -316,9 +294,86 @@ void initState() {
           fallbackMessage: 'Could not submit refund request. Please try again.',
         ),
       );
-    } finally {
-      reasonController.dispose();
     }
+  }
+}
+
+class _RefundRequestDialog extends StatefulWidget {
+  final Reservation reservation;
+
+  const _RefundRequestDialog({
+    required this.reservation,
+  });
+
+  @override
+  State<_RefundRequestDialog> createState() => _RefundRequestDialogState();
+}
+
+class _RefundRequestDialogState extends State<_RefundRequestDialog> {
+  late final TextEditingController _reasonController;
+
+  @override
+  void initState() {
+    super.initState();
+    _reasonController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _reasonController.dispose();
+    super.dispose();
+  }
+
+  void _cancel() {
+    Navigator.of(context).pop(null);
+  }
+
+  void _submit() {
+    Navigator.of(context).pop(_reasonController.text.trim());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final reservation = widget.reservation;
+
+    return AlertDialog(
+      title: const Text('Request refund?'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Reservation #${reservation.reservationId} for '
+            '${reservation.quantity} ticket'
+            '${reservation.quantity > 1 ? 's' : ''} '
+            'will be submitted for admin review.',
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _reasonController,
+            autofocus: true,
+            minLines: 2,
+            maxLines: 4,
+            textInputAction: TextInputAction.done,
+            onSubmitted: (_) => _submit(),
+            decoration: const InputDecoration(
+              labelText: 'Reason',
+              hintText: 'Explain why you want a refund',
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: _cancel,
+          child: const Text('Keep'),
+        ),
+        FilledButton(
+          onPressed: _submit,
+          child: const Text('Send request'),
+        ),
+      ],
+    );
   }
 }
 

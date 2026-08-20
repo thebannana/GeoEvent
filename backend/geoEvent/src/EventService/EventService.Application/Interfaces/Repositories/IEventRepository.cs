@@ -38,7 +38,9 @@ public interface IEventRepository
     Task<Event?> GetByIdAsync(int eventId);
     Task<Event?> GetByIdWithDetailsAsync(int eventId);
     Task<PagedResult<Event>> GetAllAsync(EventFilterDto filter);
-    Task<List<Event>> GetNearbyAsync(NearbyEventSearchDto dto);
+    Task<List<Event>> GetNearbyAsync(
+        NearbyEventSearchDto dto,
+        IReadOnlyList<UserPreferenceDto>? preferences = null);
 
     Task<Event> CreateAsync(Event entity);
     Task UpdateAsync(Event entity);

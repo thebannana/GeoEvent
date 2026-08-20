@@ -19,101 +19,161 @@ class AdminSidebar extends StatelessWidget {
   final ValueChanged<AdminShellPage> onSelectPage;
   final VoidCallback onLogout;
 
-  @override
-Widget build(BuildContext context) {
-  final colors = Theme.of(context).appColors;
+  Future<void> _confirmLogout(BuildContext context) async {
+    final colors = Theme.of(context).appColors;
+    final colorScheme = Theme.of(context).colorScheme;
 
-  return Container(
-    decoration: BoxDecoration(
-      color: colors.surface,
-      border: Border(
-        right: BorderSide(color: colors.border),
-      ),
-    ),
-    child: TweenAnimationBuilder<double>(
-      tween: Tween<double>(begin: isExpanded ? 84 : 250, end: isExpanded ? 250 : 84),
-      duration: const Duration(milliseconds: 220),
-      curve: Curves.easeOut,
-      builder: (context, width, child) {
-        return SizedBox(
-          width: width,
-          child: child,
+    final shouldLogout = await showDialog<bool>(
+      context: context,
+      barrierDismissible: true,
+      builder: (dialogContext) {
+        return AlertDialog(
+          backgroundColor: colors.surface,
+          surfaceTintColor: Colors.transparent,
+          title: Text(
+            'Logout',
+            style: Theme.of(dialogContext).textTheme.titleLarge?.copyWith(
+                  color: colors.textPrimary,
+                  fontWeight: FontWeight.w700,
+                ),
+          ),
+          content: Text(
+            'Are you sure you want to logout?',
+            style: Theme.of(dialogContext).textTheme.bodyMedium?.copyWith(
+                  color: colors.textSecondary,
+                ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop(false);
+              },
+              child: Text(
+                'Cancel',
+                style: TextStyle(
+                  color: colorScheme.primary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop(true);
+              },
+              style: FilledButton.styleFrom(
+                backgroundColor: colorScheme.primary,
+                foregroundColor: colorScheme.onPrimary,
+              ),
+              child: const Text('Logout'),
+            ),
+          ],
         );
       },
-      child: Column(
-        children: [
-          const SizedBox(height: 18),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Padding(
-              padding: const EdgeInsets.only(left: 16),
-              child: Material(
-                color: colors.inputFill,
-                borderRadius: BorderRadius.circular(14),
-                child: InkWell(
+    );
+
+    if (shouldLogout == true) {
+      onLogout();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).appColors;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: colors.surface,
+        border: Border(
+          right: BorderSide(color: colors.border),
+        ),
+      ),
+      child: TweenAnimationBuilder<double>(
+        tween: Tween<double>(
+          begin: isExpanded ? 84 : 250,
+          end: isExpanded ? 250 : 84,
+        ),
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOut,
+        builder: (context, width, child) {
+          return SizedBox(
+            width: width,
+            child: child,
+          );
+        },
+        child: Column(
+          children: [
+            const SizedBox(height: 18),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Padding(
+                padding: const EdgeInsets.only(left: 16),
+                child: Material(
+                  color: colors.inputFill,
                   borderRadius: BorderRadius.circular(14),
-                  onTap: onToggle,
-                  child: SizedBox(
-                    width: 40,
-                    height: 40,
-                    child: Icon(
-                      isExpanded
-                          ? Icons.keyboard_double_arrow_left_rounded
-                          : Icons.keyboard_double_arrow_right_rounded,
-                      color: Theme.of(context).colorScheme.primary,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(14),
+                    onTap: onToggle,
+                    child: SizedBox(
+                      width: 40,
+                      height: 40,
+                      child: Icon(
+                        isExpanded
+                            ? Icons.keyboard_double_arrow_left_rounded
+                            : Icons.keyboard_double_arrow_right_rounded,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
-          ),
-          const SizedBox(height: 18),
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _Section(
-                    title: null,
-                    isExpanded: isExpanded,
-                    children: AdminShellItems.menu.map((item) {
-                      return _SidebarItem(
-                        item: item,
-                        isExpanded: isExpanded,
-                        isSelected: selectedPage == item.page,
-                        onTap: () => onSelectPage(item.page),
-                      );
-                    }).toList(),
-                  ),
-                  const SizedBox(height: 22),
-                  _Section(
-                    title: 'General',
-                    isExpanded: isExpanded,
-                    children: [
-                      ...AdminShellItems.general.map((item) {
+            const SizedBox(height: 18),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _Section(
+                      title: null,
+                      isExpanded: isExpanded,
+                      children: AdminShellItems.menu.map((item) {
                         return _SidebarItem(
                           item: item,
                           isExpanded: isExpanded,
                           isSelected: selectedPage == item.page,
                           onTap: () => onSelectPage(item.page),
                         );
-                      }),
-                      _LogoutItem(
-                        isExpanded: isExpanded,
-                        onTap: onLogout,
-                      ),
-                    ],
-                  ),
-                ],
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 22),
+                    _Section(
+                      title: 'General',
+                      isExpanded: isExpanded,
+                      children: [
+                        ...AdminShellItems.general.map((item) {
+                          return _SidebarItem(
+                            item: item,
+                            isExpanded: isExpanded,
+                            isSelected: selectedPage == item.page,
+                            onTap: () => onSelectPage(item.page),
+                          );
+                        }),
+                        _LogoutItem(
+                          isExpanded: isExpanded,
+                          onTap: () => _confirmLogout(context),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
-    ),
-  );
-}
+    );
+  }
 }
 
 class _Section extends StatelessWidget {
@@ -188,7 +248,9 @@ class _SidebarItem extends StatelessWidget {
           onTap: onTap,
           child: Container(
             height: 48,
-            padding: EdgeInsets.symmetric(horizontal: isExpanded ? 10 : 0),
+            padding: EdgeInsets.symmetric(
+              horizontal: isExpanded ? 10 : 0,
+            ),
             decoration: BoxDecoration(
               color: isSelected
                   ? colorScheme.primary.withValues(alpha: 0.10)
@@ -201,8 +263,9 @@ class _SidebarItem extends StatelessWidget {
                   : null,
             ),
             child: Row(
-              mainAxisAlignment:
-                  isExpanded ? MainAxisAlignment.start : MainAxisAlignment.center,
+              mainAxisAlignment: isExpanded
+                  ? MainAxisAlignment.start
+                  : MainAxisAlignment.center,
               children: [
                 if (isSelected)
                   Container(
@@ -268,14 +331,17 @@ class _LogoutItem extends StatelessWidget {
           onTap: onTap,
           child: Container(
             height: 48,
-            padding: EdgeInsets.symmetric(horizontal: isExpanded ? 10 : 0),
+            padding: EdgeInsets.symmetric(
+              horizontal: isExpanded ? 10 : 0,
+            ),
             decoration: BoxDecoration(
               color: Colors.transparent,
               borderRadius: BorderRadius.circular(14),
             ),
             child: Row(
-              mainAxisAlignment:
-                  isExpanded ? MainAxisAlignment.start : MainAxisAlignment.center,
+              mainAxisAlignment: isExpanded
+                  ? MainAxisAlignment.start
+                  : MainAxisAlignment.center,
               children: [
                 if (isExpanded) const SizedBox(width: 14),
                 Icon(

@@ -94,7 +94,7 @@ class CommentMetaText extends StatelessWidget {
 }
 
 String commentAuthorName(CommentItem comment) {
-  if (comment.isDeleted) return 'Deleted user';
+  if (comment.isDeleted) return 'Unknown user';
 
   final displayName = comment.displayName?.trim();
   if (displayName != null && displayName.isNotEmpty) return displayName;

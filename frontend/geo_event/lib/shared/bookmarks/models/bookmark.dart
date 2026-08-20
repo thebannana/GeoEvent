@@ -26,7 +26,7 @@ class Bookmark {
           ? json['title'].toString().trim()
           : 'Saved event',
       imageUrl: json['imageUrl']?.toString() ?? '',
-      savedAt: DateTime.tryParse(savedAtRaw?.toString() ?? '') ?? DateTime.now(),
+      savedAt: DateTime.tryParse(savedAtRaw?.toString() ?? '') ?? DateTime.now().toUtc(),
       memo: normalizeNullableString(json['memo']),
       eventId: (json['eventId'] as num?)?.toInt(),
       userId: (json['userId'] as num?)?.toInt(),

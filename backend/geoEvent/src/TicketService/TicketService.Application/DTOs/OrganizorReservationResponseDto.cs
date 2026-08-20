@@ -32,4 +32,6 @@
     public bool HasValidatedTicket { get; set; }
     public DateTime? ValidatedAt { get; set; }
     public bool CanCollectCash { get; set; }
+    public int TotalTickets { get; set; }
+    public int ValidatedTicketCount { get; set; }
 }

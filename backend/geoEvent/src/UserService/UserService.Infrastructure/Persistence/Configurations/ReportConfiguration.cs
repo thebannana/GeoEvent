@@ -21,7 +21,7 @@ public class ReportConfiguration : IEntityTypeConfiguration<Report>
 
             table.HasCheckConstraint(
                 "CK_Report_TargetType_Valid",
-                $"[TargetType] IN ('{ReportTargetType.User}', '{ReportTargetType.Event}', '{ReportTargetType.Comment}', '{ReportTargetType.Review}')");
+                $"[TargetType] IN ('{ReportTargetType.User}', '{ReportTargetType.Event}', '{ReportTargetType.Comment}')");
         });
 
         builder.HasKey(r => r.ReportId);
@@ -71,13 +71,6 @@ public class ReportConfiguration : IEntityTypeConfiguration<Report>
             .HasForeignKey(r => r.ResolvedById)
             .OnDelete(DeleteBehavior.NoAction);
 
-        builder.HasOne(r => r.TargetUser)
-            .WithMany()
-            .HasForeignKey(r => r.TargetId)
-            .HasPrincipalKey(u => u.PersonId)
-            .OnDelete(DeleteBehavior.NoAction)
-            .IsRequired(false);
-
         builder.HasIndex(r => r.Status);
         builder.HasIndex(r => r.ReporterId);
         builder.HasIndex(r => r.ResolvedById);
@@ -85,5 +78,9 @@ public class ReportConfiguration : IEntityTypeConfiguration<Report>
         builder.HasIndex(r => r.CreatedAt);
         builder.HasIndex(r => new { r.Status, r.CreatedAt });
         builder.HasIndex(r => new { r.ReporterId, r.TargetType, r.TargetId, r.Status });
+
+        builder.HasQueryFilter(r =>
+            (r.Reporter == null || !r.Reporter.Person!.IsDeleted) &&
+            (r.ResolvedBy == null || !r.ResolvedBy.Person!.IsDeleted));
     }
 }

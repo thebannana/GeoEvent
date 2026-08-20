@@ -99,11 +99,16 @@ public class UserServiceImpl : IUserService
             query.Page,
             query.PageSize);
 
-        var mappedItems = await Task.WhenAll(result.Items.Select(MapAdminReportAsync));
+        var mappedItems = new List<AdminReportResponseDto>();
+
+        foreach (var report in result.Items)
+        {
+            mappedItems.Add(await MapAdminReportAsync(report));
+        }
 
         return ServiceResult<PagedResult<AdminReportResponseDto>>.Ok(new PagedResult<AdminReportResponseDto>
         {
-            Items = mappedItems.ToList(),
+            Items = mappedItems,
             TotalCount = result.TotalCount,
             Page = result.Page,
             PageSize = result.PageSize
@@ -204,16 +209,6 @@ public class UserServiceImpl : IUserService
                         : (string.IsNullOrWhiteSpace(lookup.UserDisplayName) ? $"Comment #{targetId}" : lookup.UserDisplayName!,
                            lookup.Username,
                            string.IsNullOrWhiteSpace(lookup.Preview) ? $"Comment #{targetId}" : lookup.Preview);
-                }
-
-            case ReportTargetType.Review:
-                {
-                    var lookup = await _externalValidationService.GetReviewLookupAsync(targetId);
-                    return lookup is null
-                        ? ($"Review #{targetId}", null, BuildPreview(r.Description, r.Reason))
-                        : (string.IsNullOrWhiteSpace(lookup.UserDisplayName) ? $"Review #{targetId}" : lookup.UserDisplayName!,
-                           lookup.Username,
-                           string.IsNullOrWhiteSpace(lookup.Preview) ? $"Rating {lookup.Value}/5" : lookup.Preview);
                 }
 
             default:
@@ -347,11 +342,6 @@ public class UserServiceImpl : IUserService
                 await _externalValidationService.CommentExistsAsync(dto.TargetId)
                     ? ServiceResult<bool>.Ok(true)
                     : ServiceResult<bool>.NotFound("Comment not found."),
-
-            ReportTargetType.Review =>
-                await _externalValidationService.ReviewExistsAsync(dto.TargetId)
-                    ? ServiceResult<bool>.Ok(true)
-                    : ServiceResult<bool>.NotFound("Review not found."),
 
             _ => ServiceResult<bool>.Fail("Unsupported report target type.", 400)
         };
@@ -530,7 +520,7 @@ public class UserServiceImpl : IUserService
             if (!string.Equals(user.Username, normalizedUsername, StringComparison.OrdinalIgnoreCase))
             {
                 if (await _userRepository.UsernameExistsAsync(normalizedUsername))
-                    throw new UsernameTakenException(normalizedUsername);
+                    return ServiceResult<UserProfileDto>.Fail("This username is already taken.", 409);
 
                 user.Username = normalizedUsername;
             }
@@ -543,7 +533,7 @@ public class UserServiceImpl : IUserService
             if (!string.Equals(user.Email, normalizedEmail, StringComparison.OrdinalIgnoreCase))
             {
                 if (await _userRepository.EmailExistsAsync(normalizedEmail))
-                    throw new EmailAlreadyTakenException(normalizedEmail);
+                    return ServiceResult<UserProfileDto>.Fail("This email address is already in use.", 409);
 
                 user.Email = normalizedEmail;
             }
@@ -624,10 +614,10 @@ public class UserServiceImpl : IUserService
         if (user is null)
             return ServiceResult<bool>.NotFound($"User {userId} not found.");
 
-        if (!_passwordService.VerifyPassword(dto.CurrentPassword, user.PasswordHash, user.PasswordSalt))
+        if (!PasswordService.VerifyPassword(dto.CurrentPassword, user.PasswordHash, user.PasswordSalt))
             return ServiceResult<bool>.Unauthorized("Current password is incorrect.");
 
-        var (hash, salt) = _passwordService.HashPassword(dto.NewPassword);
+        var (hash, salt) = PasswordService.HashPassword(dto.NewPassword);
         user.ChangePassword(hash, salt);
 
         await _userRepository.RevokeAllUserTokensAsync(userId);
@@ -651,14 +641,17 @@ public class UserServiceImpl : IUserService
         return ServiceResult<PagedResult<UserProfileDto>>.Ok(mapped);
     }
 
-    public async Task<ServiceResult<PagedResult<UserPreferenceResponseDto>>> GetUserPreferencesAsync(
-        int userId,
-        PreferencesFilterDto filter)
+    public async Task<ServiceResult<PagedResult<UserPreferenceResponseDto>>>
+        GetUserPreferencesAsync(
+            int userId,
+            PreferencesFilterDto filter)
     {
         filter ??= new PreferencesFilterDto();
 
         var page = filter.Page < 1 ? 1 : filter.Page;
-        var pageSize = filter.PageSize < 1 ? 20 : Math.Min(filter.PageSize, 100);
+        var pageSize = filter.PageSize < 1
+            ? 20
+            : Math.Min(filter.PageSize, 100);
 
         var pagedPrefs = await _userRepository.GetUserPreferencesAsync(userId);
         var filtered = pagedPrefs.AsEnumerable();
@@ -681,24 +674,20 @@ public class UserServiceImpl : IUserService
                 "subgenre" => filtered.Where(p =>
                     p.SubGenreId != null),
 
-                _ => filtered
+                _ => filtered,
             };
         }
 
         if (filter.MinScore.HasValue)
-            filtered = filtered.Where(p => p.Score >= filter.MinScore.Value);
+        {
+            filtered = filtered.Where(
+                p => p.Score >= filter.MinScore.Value);
+        }
 
         if (filter.MaxScore.HasValue)
-            filtered = filtered.Where(p => p.Score <= filter.MaxScore.Value);
-
-        if (!string.IsNullOrWhiteSpace(filter.Search))
         {
-            var search = filter.Search.Trim().ToLowerInvariant();
-
-            filtered = filtered.Where(p =>
-                (p.SegmentId?.ToString().Contains(search) ?? false) ||
-                (p.GenreId?.ToString().Contains(search) ?? false) ||
-                (p.SubGenreId?.ToString().Contains(search) ?? false));
+            filtered = filtered.Where(
+                p => p.Score <= filter.MaxScore.Value);
         }
 
         var ordered = filtered
@@ -721,7 +710,7 @@ public class UserServiceImpl : IUserService
             Items = items,
             TotalCount = totalCount,
             Page = page,
-            PageSize = pageSize
+            PageSize = pageSize,
         };
 
         return ServiceResult<PagedResult<UserPreferenceResponseDto>>.Ok(result);

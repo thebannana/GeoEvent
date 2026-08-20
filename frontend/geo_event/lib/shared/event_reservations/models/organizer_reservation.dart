@@ -26,10 +26,11 @@ class OrganizerReservationDto {
   final String? paymentMethod;
   final String? paymentStatus;
   final String? paymentMessage;
-  final bool hasIssuedTickets;
-  final bool hasValidatedTicket;
   final DateTime? validatedAt;
   final bool canCollectCash;
+
+  final int totalTickets;
+  final int validatedTicketCount;
 
   const OrganizerReservationDto({
     required this.reservationId,
@@ -58,10 +59,10 @@ class OrganizerReservationDto {
     this.paymentMethod,
     this.paymentStatus,
     this.paymentMessage,
-    required this.hasIssuedTickets,
-    required this.hasValidatedTicket,
     required this.validatedAt,
     required this.canCollectCash,
+    required this.totalTickets,
+    required this.validatedTicketCount,
   });
 
   factory OrganizerReservationDto.fromJson(Map<String, dynamic> json) {
@@ -69,7 +70,7 @@ class OrganizerReservationDto {
       if (value == null) return null;
       final raw = value.toString().trim();
       if (raw.isEmpty) return null;
-      return DateTime.tryParse(raw)?.toLocal();
+      return DateTime.tryParse(raw)?.toUtc();
     }
 
     bool readBool(dynamic value) {
@@ -88,11 +89,11 @@ class OrganizerReservationDto {
       totalAmount: (json['totalAmount'] as num).toDouble(),
       currency: json['currency']?.toString() ?? '',
       status: json['status']?.toString() ?? '',
-      createdAt: DateTime.parse(json['createdAt'].toString()).toLocal(),
+      createdAt: DateTime.parse(json['createdAt'].toString()).toUtc(),
       confirmedAt: tryParse(json['confirmedAt']),
       cancelledAt: tryParse(json['cancelledAt']),
       expiredAt: tryParse(json['expiredAt']),
-      expiresAt: DateTime.parse(json['expiresAt'].toString()).toLocal(),
+      expiresAt: DateTime.parse(json['expiresAt'].toString()).toUtc(),
       paymentReference: json['paymentReference']?.toString(),
       notes: json['notes']?.toString(),
       participantUsername: json['participantUsername']?.toString(),
@@ -106,10 +107,10 @@ class OrganizerReservationDto {
       paymentMethod: json['paymentMethod']?.toString(),
       paymentStatus: json['paymentStatus']?.toString(),
       paymentMessage: json['paymentMessage']?.toString(),
-      hasIssuedTickets: readBool(json['hasIssuedTickets']),
-      hasValidatedTicket: readBool(json['hasValidatedTicket']),
       validatedAt: tryParse(json['validatedAt']),
       canCollectCash: readBool(json['canCollectCash']),
+      totalTickets: (json['totalTickets'] as num?)?.toInt() ?? 1,
+      validatedTicketCount: (json['validatedTicketCount'] as num?)?.toInt() ?? 0,
     );
   }
 
@@ -131,5 +132,9 @@ class OrganizerReservationDto {
       (paymentMethod ?? '').trim().toLowerCase() == 'paypal' &&
       (paymentStatus ?? '').trim().toLowerCase() == 'completed';
 
-bool get isValidated => hasValidatedTicket || validatedAt != null;
+  bool get allTicketsValidated =>
+      totalTickets > 0 && validatedTicketCount == totalTickets;
+
+  bool get hasPartialValidation =>
+      validatedTicketCount > 0 && validatedTicketCount < totalTickets;
 }

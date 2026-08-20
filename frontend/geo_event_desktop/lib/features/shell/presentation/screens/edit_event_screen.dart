@@ -7,9 +7,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/config/environment.dart';
+import '../../../../core/constants/event_status.dart';
 import '../../../../core/errors/error_mapper.dart';
 import '../../../../core/theme/app_theme_metrics.dart';
 import '../../../../core/utils/date_time_extensions.dart';
+import '../../../../core/utils/debouncer.dart';
 import '../../../../core/utils/logger.dart';
 import '../../../../core/utils/validators.dart';
 import '../../../../shared/admin_profile/data/admin_events_repository.dart';
@@ -46,7 +48,9 @@ class _EditEventScreenState extends ConsumerState<EditEventScreen> {
   final _locationSearchController = TextEditingController();
   final _scrollController = ScrollController();
 
-  Timer? _locationDebounce;
+  final Debouncer _locationDebouncer = Debouncer(
+    delay: const Duration(milliseconds: 350),
+  );
 
   bool _isSubmitting = false;
   bool _isLoadingCategories = true;
@@ -69,6 +73,8 @@ class _EditEventScreenState extends ConsumerState<EditEventScreen> {
 
   MapboxPlace? _selectedPlace;
   List<MapboxPlace> _locationResults = const [];
+  int _locationSearchRequestId = 0;
+
 
   final List<ExistingImageItem> _existingImages = [];
   PendingUploadImage? _newCoverImage;
@@ -127,7 +133,7 @@ class _EditEventScreenState extends ConsumerState<EditEventScreen> {
 
   @override
   void dispose() {
-    _locationDebounce?.cancel();
+    _locationDebouncer.dispose();
     _titleController.dispose();
     _descriptionController.dispose();
     _capacityController.dispose();
@@ -223,77 +229,89 @@ class _EditEventScreenState extends ConsumerState<EditEventScreen> {
   }
 
   Future<void> _searchLocations(String query) async {
-    _locationDebounce?.cancel();
+  _locationDebouncer.cancel();
 
-    if (!AppEnvironment.hasMapbox) {
-      setState(() {
-        _locationResults = const [];
-        _isSearchingLocations = false;
-      });
-      return;
-    }
+  final requestId = ++_locationSearchRequestId;
 
-    if (query.trim().length < 2) {
-      setState(() {
-        _locationResults = const [];
-        _isSearchingLocations = false;
-      });
-      return;
-    }
+  if (!AppEnvironment.hasMapbox) {
+    if (!mounted) return;
 
-    _locationDebounce = Timer(const Duration(milliseconds: 350), () async {
-      if (!mounted) return;
-
-      setState(() => _isSearchingLocations = true);
-
-      try {
-        final service = ref.read(mapboxPlacesServiceProvider);
-        final found = await service.searchLocations(query.trim());
-
-        if (!mounted) return;
-
-        setState(() {
-          _locationResults = found;
-          _isSearchingLocations = false;
-        });
-      } catch (error, stackTrace) {
-        AppLogger.error(
-          'Location search failed for admin edit event.',
-          tag: 'EditEventScreen',
-          error: error,
-          stackTrace: stackTrace,
-        );
-
-        if (!mounted) return;
-
-        setState(() {
-          _locationResults = const [];
-          _isSearchingLocations = false;
-        });
-
-        _showMessage(
-          ErrorMapper.toMessage(
-            error,
-            stackTrace: stackTrace,
-            fallbackMessage: 'Could not search locations.',
-          ),
-        );
-      }
-    });
-  }
-
-  void _selectLocation(MapboxPlace place) {
     setState(() {
-      _selectedPlace = place;
       _locationResults = const [];
-      _locationSearchController.text =
-          place.subtitle?.trim().isNotEmpty == true
-              ? place.subtitle!
-              : place.title;
+      _isSearchingLocations = false;
     });
 
-    FocusScope.of(context).unfocus();
+    return;
   }
+
+  final trimmedQuery = query.trim();
+
+  if (trimmedQuery.length < 2) {
+    if (!mounted) return;
+
+    setState(() {
+      _locationResults = const [];
+      _isSearchingLocations = false;
+    });
+
+    return;
+  }
+
+  _locationDebouncer.run(() async {
+    if (!mounted || requestId != _locationSearchRequestId) return;
+
+    setState(() => _isSearchingLocations = true);
+
+    try {
+      final service = ref.read(mapboxPlacesServiceProvider);
+      final found = await service.searchLocations(trimmedQuery);
+
+      if (!mounted || requestId != _locationSearchRequestId) return;
+
+      setState(() {
+        _locationResults = found;
+        _isSearchingLocations = false;
+      });
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'Location search failed for admin edit event.',
+        tag: 'EditEventScreen',
+        error: error,
+        stackTrace: stackTrace,
+      );
+
+      if (!mounted || requestId != _locationSearchRequestId) return;
+
+      setState(() {
+        _locationResults = const [];
+        _isSearchingLocations = false;
+      });
+
+      _showMessage(
+        ErrorMapper.toMessage(
+          error,
+          stackTrace: stackTrace,
+          fallbackMessage: 'Could not search locations.',
+        ),
+      );
+    }
+  });
+}
+
+void _selectLocation(MapboxPlace place) {
+  _locationSearchRequestId++;
+
+  setState(() {
+    _selectedPlace = place;
+    _locationResults = const [];
+    _locationSearchController.text =
+        place.subtitle?.trim().isNotEmpty == true
+            ? place.subtitle!
+            : place.title;
+  });
+
+  FocusScope.of(context).unfocus();
+}
 
   Future<void> _pickCoverImage() async {
     if (_isSubmitting || _isUploadingCover) return;
@@ -424,24 +442,42 @@ class _EditEventScreenState extends ConsumerState<EditEventScreen> {
     });
   }
 
+  Future<void> _reloadEventImages() async {
+  final refreshedEvent = await widget.repository.getEventById(
+    widget.event.eventId,
+  );
+
+  if (!mounted) return;
+
+  setState(() {
+    _existingImages
+      ..clear()
+      ..addAll(
+        refreshedEvent.images
+            .where((image) => image.imageUrl.trim().isNotEmpty)
+            .map(
+              (image) => ExistingImageItem(
+                imageId: image.imageId,
+                imageUrl: image.imageUrl.trim(),
+                isCover: image.isCover,
+              ),
+            ),
+      );
+  });
+}
+
   Future<void> _removeExistingImage(ExistingImageItem image) async {
   if (_isSubmitting || _isUploadingCover || _isUploadingGallery) return;
 
   try {
-    await widget.repository.deleteEventImage(
+    await widget.repository.adminDeleteEventImage(
       eventId: widget.event.eventId,
       imageId: image.imageId,
     );
 
+    await _reloadEventImages();
+
     if (!mounted) return;
-
-    setState(() {
-      _existingImages.removeWhere((e) => e.imageId == image.imageId);
-
-      if (image.isCover) {
-        _uploadedCoverUrl = null;
-      }
-    });
 
     _showMessage('Image removed successfully.');
   } catch (error, stackTrace) {
@@ -458,7 +494,7 @@ class _EditEventScreenState extends ConsumerState<EditEventScreen> {
       ErrorMapper.toMessage(
         error,
         stackTrace: stackTrace,
-        fallbackMessage: 'Could not remove image.',
+        fallbackMessage: 'Could not remove the image. Please try again.',
       ),
     );
   }
@@ -569,30 +605,31 @@ class _EditEventScreenState extends ConsumerState<EditEventScreen> {
       );
 
       context.pop(eventWithImages);
-    } catch (error, stackTrace) {
-      AppLogger.error(
-        'Failed to submit edited admin event.',
-        tag: 'EditEventScreen',
-        error: error,
-        stackTrace: stackTrace,
-      );
-
-      if (!mounted) return;
-
-      _showMessage(
-        ErrorMapper.toMessage(
-          error,
+      } catch (error, stackTrace) {
+        AppLogger.error(
+          'Failed to submit edited admin event.',
+          tag: 'EditEventScreen',
+          error: error,
           stackTrace: stackTrace,
-          fallbackMessage: 'Could not save event changes.',
-        ),
-      );
+        );
 
-      await _scrollToTop();
-    } finally {
-      if (mounted) {
-        setState(() => _isSubmitting = false);
+        if (!mounted) return;
+
+        _showMessage(
+          ErrorMapper.toMessage(
+            error,
+            stackTrace: stackTrace,
+            fallbackMessage:
+                'Could not save event changes. Please try again.',
+          ),
+        );
+
+        await _scrollToTop();
+      } finally {
+        if (mounted) {
+          setState(() => _isSubmitting = false);
+        }
       }
-    }
   }
 
   Future<AdminEvent> _uploadPendingImages(AdminEvent updatedEvent) async {
@@ -603,44 +640,39 @@ class _EditEventScreenState extends ConsumerState<EditEventScreen> {
     setState(() => _isUploadingCover = true);
 
     try {
+      final newCover = _newCoverImage!;
+
       final uploadedUrl = await widget.repository.uploadEventImage(
-        _newCoverImage!.localPath,
-        fileName: _newCoverImage!.fileName,
-        bytes: _newCoverImage!.bytes,
+        newCover.localPath,
+        fileName: newCover.fileName,
+        bytes: newCover.bytes,
       );
 
-      final existingCover = _existingImages.where((e) => e.isCover).firstOrNull;
-      if (existingCover != null) {
-        await widget.repository.deleteEventImage(
-          eventId: eventId,
-          imageId: existingCover.imageId,
-        );
+      final existingCover = _existingImages
+          .where((image) => image.isCover)
+          .firstOrNull;
 
-        _existingImages.removeWhere((e) => e.imageId == existingCover.imageId);
-      }
-
-      await widget.repository.addEventImage(
+      await widget.repository.adminAddEventImage(
         eventId: eventId,
         imageUrl: uploadedUrl,
         isCover: true,
       );
 
+      if (existingCover != null) {
+        await widget.repository.adminDeleteEventImage(
+          eventId: eventId,
+          imageId: existingCover.imageId,
+        );
+      }
+
+      await _reloadEventImages();
+
       if (!mounted) return refreshedEvent;
 
       setState(() {
         _uploadedCoverUrl = uploadedUrl;
-        _isUploadingCover = false;
-
-        _existingImages.removeWhere((e) => e.isCover);
-        _existingImages.add(
-          ExistingImageItem(
-            imageId: -DateTime.now().microsecondsSinceEpoch,
-            imageUrl: uploadedUrl,
-            isCover: true,
-          ),
-        );
-
         _newCoverImage = null;
+        _isUploadingCover = false;
       });
     } catch (error, stackTrace) {
       if (mounted) {
@@ -653,6 +685,18 @@ class _EditEventScreenState extends ConsumerState<EditEventScreen> {
         error: error,
         stackTrace: stackTrace,
       );
+
+      if (mounted) {
+        _showMessage(
+          ErrorMapper.toMessage(
+            error,
+            stackTrace: stackTrace,
+            fallbackMessage:
+                'Could not upload the cover image. Please try again.',
+          ),
+        );
+      }
+
       rethrow;
     }
   }
@@ -662,18 +706,26 @@ class _EditEventScreenState extends ConsumerState<EditEventScreen> {
 
     try {
       final uploadedUrls = await widget.repository.uploadEventImages(
-        _newGalleryImages.map((e) => e.localPath).toList(growable: false),
-        fileNames: _newGalleryImages.map((e) => e.fileName).toList(growable: false),
-        bytesList: _newGalleryImages.map((e) => e.bytes).toList(growable: false),
+        _newGalleryImages.map((image) => image.localPath).toList(
+              growable: false,
+            ),
+        fileNames: _newGalleryImages.map((image) => image.fileName).toList(
+              growable: false,
+            ),
+        bytesList: _newGalleryImages.map((image) => image.bytes).toList(
+              growable: false,
+            ),
       );
 
-      for (final url in uploadedUrls) {
-        await widget.repository.addEventImage(
+      for (final uploadedUrl in uploadedUrls) {
+        await widget.repository.adminAddEventImage(
           eventId: eventId,
-          imageUrl: url,
+          imageUrl: uploadedUrl,
           isCover: false,
         );
       }
+
+      await _reloadEventImages();
 
       if (!mounted) return refreshedEvent;
 
@@ -682,19 +734,8 @@ class _EditEventScreenState extends ConsumerState<EditEventScreen> {
           ..clear()
           ..addAll(uploadedUrls);
 
-        _isUploadingGallery = false;
-
-        for (final url in uploadedUrls) {
-          _existingImages.add(
-            ExistingImageItem(
-              imageId: -DateTime.now().microsecondsSinceEpoch - _existingImages.length,
-              imageUrl: url,
-              isCover: false,
-            ),
-          );
-        }
-
         _newGalleryImages.clear();
+        _isUploadingGallery = false;
       });
     } catch (error, stackTrace) {
       if (mounted) {
@@ -707,6 +748,18 @@ class _EditEventScreenState extends ConsumerState<EditEventScreen> {
         error: error,
         stackTrace: stackTrace,
       );
+
+      if (mounted) {
+        _showMessage(
+          ErrorMapper.toMessage(
+            error,
+            stackTrace: stackTrace,
+            fallbackMessage:
+                'Could not upload gallery images. Please try again.',
+          ),
+        );
+      }
+
       rethrow;
     }
   }
@@ -725,7 +778,7 @@ class _EditEventScreenState extends ConsumerState<EditEventScreen> {
   }
 
   Future<DateTime?> _pickDateTime(DateTime? initial) async {
-    final now = DateTime.now();
+    final now = DateTime.now().toUtc();
     final today = now.dateOnly;
     final seed = initial ?? now.add(const Duration(hours: 1));
     final safeInitialDate = seed.isBefore(today) ? today : seed;
@@ -777,18 +830,7 @@ class _EditEventScreenState extends ConsumerState<EditEventScreen> {
   }
 
   Color _statusColor(ThemeData theme, String status) {
-    switch (status.trim().toLowerCase()) {
-      case 'confirmed':
-        return theme.colorScheme.primary;
-      case 'pending':
-        return Colors.orange.shade800;
-      case 'cancelled':
-        return theme.colorScheme.error;
-      case 'completed':
-        return const Color(0xFF2B7A4B);
-      default:
-        return theme.colorScheme.onSurfaceVariant;
-    }
+    return EventStatus.displayColor(status);
   }
 
   Widget _buildSectionCard({
@@ -1664,7 +1706,7 @@ class ExistingImagePreviewTile extends StatelessWidget {
               width: 72,
               height: 72,
               fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => Container(
+              errorBuilder: (_, _, _) => Container(
                 width: 72,
                 height: 72,
                 color: theme.colorScheme.surfaceContainerHighest,
@@ -1726,7 +1768,7 @@ class RemoteGalleryCard extends StatelessWidget {
               width: 112,
               height: 112,
               fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => Container(
+              errorBuilder: (_, _, _) => Container(
                 width: 112,
                 height: 112,
                 color: theme.colorScheme.surfaceContainerHighest,
@@ -1782,7 +1824,7 @@ class LocalImagePreviewTile extends StatelessWidget {
               width: 72,
               height: 72,
               fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => Container(
+              errorBuilder: (_, _, _) => Container(
                 width: 72,
                 height: 72,
                 color: theme.colorScheme.surfaceContainerHighest,
@@ -1841,7 +1883,7 @@ class GalleryUploadCard extends StatelessWidget {
               width: 96,
               height: 96,
               fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => Container(
+              errorBuilder: (_, _, _) => Container(
                 width: 96,
                 height: 96,
                 color: theme.colorScheme.surfaceContainerHighest,
@@ -2122,7 +2164,7 @@ class DropdownField<T> extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         DropdownButtonFormField<T>(
-          value: items.any((item) => item.value == value) ? value : null,
+          initialValue: items.any((item) => item.value == value) ? value : null,
           isExpanded: true,
           items: items,
           onChanged: enabled ? onChanged : null,

@@ -5,7 +5,6 @@ class PreferencesQuery {
     this.type,
     this.minScore,
     this.maxScore,
-    this.search,
   });
 
   final int page;
@@ -13,7 +12,6 @@ class PreferencesQuery {
   final String? type;
   final double? minScore;
   final double? maxScore;
-  final String? search;
 
   PreferencesQuery copyWith({
     int? page,
@@ -21,11 +19,9 @@ class PreferencesQuery {
     String? type,
     double? minScore,
     double? maxScore,
-    String? search,
     bool clearType = false,
     bool clearMinScore = false,
     bool clearMaxScore = false,
-    bool clearSearch = false,
   }) {
     return PreferencesQuery(
       page: page ?? this.page,
@@ -33,7 +29,6 @@ class PreferencesQuery {
       type: clearType ? null : (type ?? this.type),
       minScore: clearMinScore ? null : (minScore ?? this.minScore),
       maxScore: clearMaxScore ? null : (maxScore ?? this.maxScore),
-      search: clearSearch ? null : (search ?? this.search),
     );
   }
 
@@ -44,7 +39,6 @@ class PreferencesQuery {
       if (type != null && type!.trim().isNotEmpty) 'type': type!.trim(),
       if (minScore != null) 'minScore': minScore,
       if (maxScore != null) 'maxScore': maxScore,
-      if (search != null && search!.trim().isNotEmpty) 'search': search!.trim(),
     };
   }
 }

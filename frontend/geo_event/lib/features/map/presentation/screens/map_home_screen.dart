@@ -7,11 +7,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart' as geo;
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 
+import '../../../../shared/events/models/recommendation_scoring.dart';
+import '../../../../shared/profile/providers/profile_providers.dart';
 import '../../../../core/config/app_environment.dart';
 import '../../../../core/errors/error_mapper.dart';
 import '../../../../core/utils/logger.dart';
 import '../../../../core/widgets/feedback/app_loading_indicator.dart';
-import '../../../../shared/events/models/create_event_models.dart';
 import '../../../../shared/events/models/event_map_pin_data.dart';
 import '../../../../shared/events/providers/event_providers.dart';
 import '../../../../shared/events/providers/event_refresh_providers.dart';
@@ -22,7 +23,6 @@ import '../../../../shared/location/models/event_directions_request.dart';
 import '../../../../shared/location/models/map_filter_selection.dart';
 import '../../../../shared/location/providers/directions_providers.dart';
 import '../../../../shared/location/providers/location_providers.dart';
-import '../../../../shared/profile/providers/profile_providers.dart';
 import '../../../event/presentation/screens/event_detail_screen.dart';
 import '../../application/map_settings_controller.dart';
 import '../widgets/active_navigation_card.dart';
@@ -316,7 +316,7 @@ class MapHomeScreenState extends ConsumerState<MapHomeScreen>
   String get baseStyleUri => MapboxStyles.STANDARD;
 
   String resolveLightPreset() {
-    final hour = DateTime.now().hour;
+    final hour = DateTime.now().toUtc().hour;
     if (hour >= 5 && hour < 8) return 'dawn';
     if (hour >= 8 && hour < 18) return 'day';
     if (hour >= 18 && hour < 20) return 'dusk';
@@ -508,105 +508,136 @@ class MapHomeScreenState extends ConsumerState<MapHomeScreen>
     );
   }
 
-  ui.Size pinSizeForPriority(EventPinPriority priority) {
-    switch (priority) {
-      case EventPinPriority.high:
-        return const ui.Size(220, 150);
-      case EventPinPriority.medium:
-        return const ui.Size(196, 136);
-      case EventPinPriority.low:
-        return const ui.Size(176, 124);
+ui.Size pinSizeForRecommendationScore(int score) {
+  const baseMin = 60;
+  const baseMax = 120;
+
+  final clamped = score.clamp(baseMin, baseMax);
+  final t = (clamped - baseMin) / (baseMax - baseMin);
+
+  const minSize = ui.Size(150, 100);
+  const maxSize = ui.Size(280, 180);
+
+  final width = minSize.width + (maxSize.width - minSize.width) * t;
+  final height = minSize.height + (maxSize.height - minSize.height) * t;
+
+  return ui.Size(width, height);
+}
+
+List<EventMapPinData> visiblePinsForZoom({
+  required List<EventMapPinData> pins,
+  required double zoom,
+  required bool usePreferences,
+}) {
+  if (!usePreferences || zoom >= 15) {
+    return pins;
+  }
+
+  if (zoom < 12) {
+    return pins
+        .where((pin) => pin.priority == EventPinPriority.high)
+        .toList();
+  }
+
+  final maxCount = zoom >= 13.5 ? 40 : 20;
+
+  final filtered = pins.where((pin) {
+    if (zoom < 13.5) {
+      return pin.priority != EventPinPriority.low;
     }
-  }
+    return true;
+  }).toList();
 
-  List<EventMapPinData> visiblePinsForZoom({
-    required List<EventMapPinData> pins,
-    required double zoom,
-  }) {
-    if (zoom >= 15) return pins;
-
-    final maxCount = zoom >= 13.5
-        ? 40
-        : zoom >= 12
-            ? 20
-            : 10;
-
-    final filtered = pins.where((pin) {
-      if (zoom < 12) return pin.priority == EventPinPriority.high;
-      if (zoom < 13.5) return pin.priority != EventPinPriority.low;
-      return true;
-    }).toList();
-
-    return filtered.take(maxCount).toList();
-  }
+  return filtered.take(maxCount).toList();
+}
 
   Future<List<EventMapPinData>> fetchMapPins() async {
-    try {
-      final filters = widget.filterSelection;
-      final api = ref.read(eventsApiProvider);
+  try {
+    final filters = widget.filterSelection;
+    final api = ref.read(eventsApiProvider);
 
-      final devicePosition = await getCurrentDeviceLocation();
-      final userLat = devicePosition?.latitude ?? currentLatitude ?? defaultLat;
-      final userLng = devicePosition?.longitude ?? currentLongitude ?? defaultLng;
+    final devicePosition = await getCurrentDeviceLocation();
+    final userLat =
+        devicePosition?.latitude ?? currentLatitude ?? defaultLat;
+    final userLng =
+        devicePosition?.longitude ?? currentLongitude ?? defaultLng;
 
-      final items = filters.showGlobalEvents
-          ? await api.getGlobalEvents(
-              pageSize: 100,
-              segmentId: filters.segmentId,
-              genreId: filters.genreId,
-              subGenreId: filters.subGenreId,
-              minPrice: filters.minPrice,
-              maxPrice: filters.maxPrice,
-              freeOnly: filters.freeOnly,
-              todayOnly: filters.todayOnly,
-            )
-          : await api.getNearbyEvents(
-              latitude: userLat,
-              longitude: userLng,
-              radiusKm: filters.radiusKm,
-              limit: 100,
-              segmentId: filters.segmentId,
-              genreId: filters.genreId,
-              subGenreId: filters.subGenreId,
-              minPrice: filters.minPrice,
-              maxPrice: filters.maxPrice,
-              freeOnly: filters.freeOnly,
-              todayOnly: filters.todayOnly,
-            );
-
-      final preferredSegmentIds = ref.read(preferredSegmentIdsProvider);
-      final preferredGenreIds = ref.read(preferredGenreIdsProvider);
-      final preferredSubGenreIds = ref.read(preferredSubGenreIdsProvider);
-
-      final scoredItems = items.map((item) {
-        final score = filters.usePreferences
-            ? mapRecommendationScore(
-                item: item,
-                userLatitude: userLat,
-                userLongitude: userLng,
-                preferredSegmentIds: preferredSegmentIds,
-                preferredGenreIds: preferredGenreIds,
-                preferredSubGenreIds: preferredSubGenreIds,
-              )
-            : 0;
-
-        return (item: item, score: score);
-      }).toList();
-
-      scoredItems.sort((a, b) => b.score.compareTo(a.score));
-
-      return scoredItems
-          .map(
-            (e) => EventMapPinData.fromEventItem(
-              e.item,
-              recommendationScore: e.score,
-            ),
+    final items = filters.showGlobalEvents
+        ? await api.getGlobalEvents(
+            pageSize: 100,
+            segmentId: filters.segmentId,
+            genreId: filters.genreId,
+            subGenreId: filters.subGenreId,
+            minPrice: filters.minPrice,
+            maxPrice: filters.maxPrice,
+            freeOnly: filters.freeOnly,
+            todayOnly: filters.todayOnly,
+            usePreferences: filters.usePreferences,
           )
-          .toList();
-    } catch (_) {
-      return [];
-    }
+        : await api.getNearbyEvents(
+            latitude: userLat,
+            longitude: userLng,
+            radiusKm: filters.radiusKm,
+            limit: 100,
+            segmentId: filters.segmentId,
+            genreId: filters.genreId,
+            subGenreId: filters.subGenreId,
+            minPrice: filters.minPrice,
+            maxPrice: filters.maxPrice,
+            freeOnly: filters.freeOnly,
+            todayOnly: filters.todayOnly,
+            usePreferences: filters.usePreferences,
+          );
+
+    final preferredSegmentIds = ref.read(preferredSegmentIdsProvider);
+final preferredGenreIds = ref.read(preferredGenreIdsProvider);
+final preferredSubGenreIds = ref.read(preferredSubGenreIdsProvider);
+
+final scoredItems = items.map((item) {
+  final breakdown = filters.usePreferences
+      ? RecommendationScorer.score(
+          item: item,
+          userLatitude: userLat,
+          userLongitude: userLng,
+          preferredSegmentIds: preferredSegmentIds,
+          preferredGenreIds: preferredGenreIds,
+          preferredSubGenreIds: preferredSubGenreIds,
+        )
+      : RecommendationScoreBreakdown(
+          preference: 0,
+          distance: 0,
+          popularity: 0,
+          featured: 0,
+          text: 0,
+        );
+
+  return (
+    item: item,
+    score: breakdown.roundedTotal,
+  );
+}).toList();
+
+scoredItems.sort((a, b) => b.score.compareTo(a.score));
+
+return scoredItems
+    .map(
+      (entry) => EventMapPinData.fromEventItem(
+        entry.item,
+        recommendationScore: entry.score,
+      ),
+    )
+    .toList();
+  } catch (error, stackTrace) {
+    AppLogger.error(
+      'Failed to fetch map pins.',
+      tag: 'MapHomeScreen',
+      error: error,
+      stackTrace: stackTrace,
+    );
+
+    return [];
   }
+}
 
   Future<void> reloadMapPins({
     bool silent = false,
@@ -659,31 +690,32 @@ class MapHomeScreenState extends ConsumerState<MapHomeScreen>
   }
 
   Future<void> syncEventPins() async {
-    final settings = ref.read(mapSettingsControllerProvider);
-    if (!settings.eventPins || !_canSyncPins) return;
+  final settings = ref.read(mapSettingsControllerProvider);
+  if (!settings.eventPins || !_canSyncPins) return;
 
-    isSyncingPins = true;
+  isSyncingPins = true;
 
-    try {
-      final visiblePins = visiblePinsForZoom(
-        pins: events,
-        zoom: _currentZoom,
-      );
+  try {
+    final visiblePins = visiblePinsForZoom(
+      pins: events,
+      zoom: _currentZoom,
+      usePreferences: widget.filterSelection.usePreferences,
+    );
 
-      await pinService.syncPins(
-        events: visiblePins,
-        capturePinBytes: (eventId) async {
-          final key = pinKeys[eventId];
-          if (key == null) return null;
-          return pinService.capturePinBytes(key: key);
-        },
-      );
-    } finally {
-      isSyncingPins = false;
-      if (!mounted) return;
-      setState(() {});
-    }
+    await pinService.syncPins(
+      events: visiblePins,
+      capturePinBytes: (eventId) async {
+        final key = pinKeys[eventId];
+        if (key == null) return null;
+        return pinService.capturePinBytes(key: key);
+      },
+    );
+  } finally {
+    isSyncingPins = false;
+    if (!mounted) return;
+    setState(() {});
   }
+}
 
   Future<void> tryAddEventPins() async {
     await syncEventPins();
@@ -1037,36 +1069,59 @@ void _setFetchingRoute(bool value) {
         ?.call(activeNavigationRequest != null);
   }
 
-  Widget buildHiddenMarkerLayer() {
-    return Positioned(
-      left: -10000,
-      top: 0,
-      child: IgnorePointer(
-        child: Material(
-          type: MaterialType.transparency,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: events.map((event) {
-              final size = pinSizeForPriority(event.priority);
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: RepaintBoundary(
-                  key: pinKeys[event.id],
-                  child: EventPinMarker(
-                    title: event.title,
-                    imageUrl: event.imageUrl ?? '',
-                    color: event.categoryColor,
-                    width: size.width,
-                    height: size.height,
-                  ),
+Widget buildHiddenMarkerLayer() {
+  if (events.isEmpty) {
+    return const SizedBox.shrink();
+  }
+
+  final scores = events.map((e) => e.recommendationScore).toList();
+  final baseMin = scores.reduce((a, b) => a < b ? a : b);
+  final baseMax = scores.reduce((a, b) => a > b ? a : b);
+
+  final range = (baseMax - baseMin).clamp(1, double.infinity);
+
+  ui.Size sizeForScore(int score) {
+    final t = ((score - baseMin) / range).clamp(0.0, 1.0);
+
+    const minSize = ui.Size(150, 100);
+    const maxSize = ui.Size(280, 180);
+
+    final width = minSize.width + (maxSize.width - minSize.width) * t;
+    final height = minSize.height + (maxSize.height - minSize.height) * t;
+
+    return ui.Size(width, height);
+  }
+
+  return Positioned(
+    left: -10000,
+    top: 0,
+    child: IgnorePointer(
+      child: Material(
+        type: MaterialType.transparency,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: events.map((event) {
+            final size = sizeForScore(event.recommendationScore);
+
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: RepaintBoundary(
+                key: pinKeys[event.id],
+                child: EventPinMarker(
+                  title: event.title,
+                  imageUrl: event.imageUrl ?? '',
+                  color: event.categoryColor,
+                  width: size.width,
+                  height: size.height,
                 ),
-              );
-            }).toList(),
-          ),
+              ),
+            );
+          }).toList(),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildMap(MapSettingsState settings) {
   return Positioned.fill(

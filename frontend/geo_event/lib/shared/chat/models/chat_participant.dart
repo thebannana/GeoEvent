@@ -25,10 +25,10 @@ class ChatParticipant {
       avatarUrl: json['avatarUrl']?.toString(),
       isOnline: json['isOnline'] as bool? ?? false,
       lastActiveAt: json['lastActiveAt'] != null
-          ? DateTime.tryParse(json['lastActiveAt'].toString())?.toLocal()
+          ? DateTime.tryParse(json['lastActiveAt'].toString())?.toUtc()
           : null,
       joinedAt: json['joinedAt'] != null
-          ? DateTime.tryParse(json['joinedAt'].toString())?.toLocal()
+          ? DateTime.tryParse(json['joinedAt'].toString())?.toUtc()
           : null,
     );
   }

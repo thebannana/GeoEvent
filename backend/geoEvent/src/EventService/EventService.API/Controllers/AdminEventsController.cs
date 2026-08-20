@@ -42,6 +42,43 @@ public class AdminEventsController : ControllerBase
         return ToDataResult(result);
     }
 
+    [HttpPost("{eventId:int}/images")]
+    public async Task<IActionResult> AddImage(
+    int eventId,
+    [FromBody] AddImageDto dto)
+    {
+        var result = await _eventService.AdminAddImageAsync(
+            eventId,
+            dto.ImageUrl,
+            dto.IsCover);
+
+        return ToMessageResult(result, "Image added.");
+    }
+
+    [HttpDelete("{eventId:int}/images/{imageId:int}")]
+    public async Task<IActionResult> DeleteImage(
+        int eventId,
+        int imageId)
+    {
+        var result = await _eventService.AdminDeleteImageAsync(
+            eventId,
+            imageId);
+
+        return ToMessageResult(result, "Image deleted.");
+    }
+
+    [HttpPatch("{eventId:int}/images/{imageId:int}/cover")]
+    public async Task<IActionResult> SetCover(
+        int eventId,
+        int imageId)
+    {
+        var result = await _eventService.AdminSetCoverImageAsync(
+            eventId,
+            imageId);
+
+        return ToMessageResult(result, "Cover image set.");
+    }
+
     [HttpDelete("{eventId:int}")]
     public async Task<IActionResult> Delete(int eventId)
     {

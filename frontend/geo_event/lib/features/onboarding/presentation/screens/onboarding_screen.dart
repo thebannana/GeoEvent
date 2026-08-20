@@ -153,7 +153,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                             _logoAssetPath,
                             fit: BoxFit.contain,
                             alignment: Alignment.centerLeft,
-                            errorBuilder: (_, __, ___) {
+                            errorBuilder: (_, _, _) {
                               return Align(
                                 alignment: Alignment.centerLeft,
                                 child: Icon(

@@ -210,9 +210,9 @@ class AdminCategoriesApi {
     final response = await dio.put(
       ApiEndpoints.genreById(genreId),
       data: {
-        if (segmentId != null) 'segmentId': segmentId,
+        'segmentId': ?segmentId,
         if (name != null) 'name': name.trim(),
-        if (isActive != null) 'isActive': isActive,
+        'isActive': ?isActive,
       },
       options: Options(
         contentType: Headers.jsonContentType,
@@ -259,9 +259,9 @@ class AdminCategoriesApi {
     final response = await dio.put(
       ApiEndpoints.subGenreById(subGenreId),
       data: {
-        if (genreId != null) 'genreId': genreId,
+        'genreId': ?genreId,
         if (name != null) 'name': name.trim(),
-        if (isActive != null) 'isActive': isActive,
+        'isActive': ?isActive,
       },
       options: Options(
         contentType: Headers.jsonContentType,

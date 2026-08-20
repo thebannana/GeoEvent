@@ -261,8 +261,6 @@ namespace UserService.Infrastructure.Migrations
 
                     b.HasIndex("Status");
 
-                    b.HasIndex("TargetId");
-
                     b.HasIndex("Status", "CreatedAt");
 
                     b.HasIndex("TargetType", "TargetId");
@@ -275,7 +273,7 @@ namespace UserService.Infrastructure.Migrations
 
                             t.HasCheckConstraint("CK_Report_TargetId_Positive", "[TargetId] > 0");
 
-                            t.HasCheckConstraint("CK_Report_TargetType_Valid", "[TargetType] IN ('User', 'Event', 'Comment', 'Review')");
+                            t.HasCheckConstraint("CK_Report_TargetType_Valid", "[TargetType] IN ('User', 'Event', 'Comment')");
                         });
                 });
 
@@ -432,16 +430,9 @@ namespace UserService.Infrastructure.Migrations
                         .HasForeignKey("ResolvedById")
                         .OnDelete(DeleteBehavior.NoAction);
 
-                    b.HasOne("UserService.Domain.Entities.User", "TargetUser")
-                        .WithMany()
-                        .HasForeignKey("TargetId")
-                        .OnDelete(DeleteBehavior.NoAction);
-
                     b.Navigation("Reporter");
 
                     b.Navigation("ResolvedBy");
-
-                    b.Navigation("TargetUser");
                 });
 
             modelBuilder.Entity("UserService.Domain.Entities.User", b =>

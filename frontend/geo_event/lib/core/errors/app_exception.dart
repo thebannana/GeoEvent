@@ -189,9 +189,18 @@ class AppException implements Exception {
     }
 
     if (data is Map<String, dynamic>) {
+      // Prefer explicit message/error fields first
+      final message = data['message'];
+      if (message is String && message.trim().isNotEmpty) {
+        return message.trim();
+      }
+
+      final error = data['error'];
+      if (error is String && error.trim().isNotEmpty) {
+        return error.trim();
+      }
+
       final candidates = [
-        data['message'],
-        data['error'],
         data['title'],
         data['detail'],
       ];

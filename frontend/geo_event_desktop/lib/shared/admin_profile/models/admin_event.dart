@@ -1,6 +1,15 @@
+import '../../../../core/utils/date_time_extensions.dart';
+import '../../../../core/utils/json_helpers.dart';
+
 enum AdminEventViewStyle { list, grid2, grid3 }
 
-enum AdminEventStatusFilter { all, pending, confirmed, cancelled, completed }
+enum AdminEventStatusFilter {
+  all,
+  pending,
+  confirmed,
+  cancelled,
+  completed,
+}
 
 enum AdminEventSortField {
   startDateTime,
@@ -24,17 +33,20 @@ class EventImageResponse {
   });
 
   factory EventImageResponse.fromJson(Map<String, dynamic> json) {
-    final imageIdRaw = json['imageId'] ?? json['ImageId'] ?? 0;
-    final isCoverRaw = json['isCover'] ?? json['IsCover'] ?? false;
-    final uploadedAtRaw = json['uploadedAt'] ?? json['UploadedAt'];
-
     return EventImageResponse(
-      imageId: (imageIdRaw as num?)?.toInt() ?? 0,
+      imageId: JsonHelpers.asInt(
+            json['imageId'] ?? json['ImageId'],
+          ) ??
+          0,
       imageUrl: (json['imageUrl'] ?? json['ImageUrl'] ?? '')
           .toString()
           .trim(),
-      isCover: _parseBool(isCoverRaw),
-      uploadedAt: _parseDateTime(uploadedAtRaw),
+      isCover: JsonHelpers.asBool(
+        json['isCover'] ?? json['IsCover'],
+      ),
+      uploadedAt: JsonHelpers.parseDateTime(
+        json['uploadedAt'] ?? json['UploadedAt'],
+      ),
     );
   }
 
@@ -45,24 +57,6 @@ class EventImageResponse {
       'isCover': isCover,
       'uploadedAt': uploadedAt?.toUtc().toIso8601String(),
     };
-  }
-
-  static DateTime? _parseDateTime(dynamic value) {
-    if (value == null) return null;
-    if (value is DateTime) return value;
-
-    final text = value.toString().trim();
-    if (text.isEmpty) return null;
-
-    return DateTime.tryParse(text);
-  }
-
-  static bool _parseBool(dynamic value) {
-    if (value is bool) return value;
-    if (value is num) return value != 0;
-
-    final normalized = value.toString().toLowerCase().trim();
-    return normalized == 'true' || normalized == '1';
   }
 }
 
@@ -160,16 +154,24 @@ class AdminEvent {
 
   String? get displayImageUrl {
     final cover = coverImageUrl?.trim();
-    if (cover != null && cover.isNotEmpty) return cover;
+    if (cover != null && cover.isNotEmpty) {
+      return cover;
+    }
 
     for (final image in images) {
       final normalized = image.imageUrl.trim();
-      if (normalized.isNotEmpty) return normalized;
+
+      if (normalized.isNotEmpty) {
+        return normalized;
+      }
     }
 
     for (final image in imageUrls) {
       final normalized = image.trim();
-      if (normalized.isNotEmpty) return normalized;
+
+      if (normalized.isNotEmpty) {
+        return normalized;
+      }
     }
 
     return null;
@@ -181,7 +183,11 @@ class AdminEvent {
 
   String get displayTitleWithSegment {
     final segment = segmentName?.trim();
-    if (segment == null || segment.isEmpty) return displayTitle;
+
+    if (segment == null || segment.isEmpty) {
+      return displayTitle;
+    }
+
     return '$segment: $displayTitle';
   }
 
@@ -190,6 +196,7 @@ class AdminEvent {
       if ((genreName ?? '').trim().isNotEmpty) genreName!.trim(),
       if ((subGenreName ?? '').trim().isNotEmpty) subGenreName!.trim(),
     ];
+
     return values.join(' • ');
   }
 
@@ -201,122 +208,149 @@ class AdminEvent {
 
   String get dateLabel {
     final value = startDateTime;
-    if (value == null) return 'No date';
 
-    const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-    ];
+    if (value == null) {
+      return 'No date';
+    }
 
-    final hh = value.hour.toString().padLeft(2, '0');
-    final mm = value.minute.toString().padLeft(2, '0');
-    return '${value.day} ${months[value.month - 1]} ${value.year} • $hh:$mm';
+    return value.formatDateTime(
+      pattern: 'dd MMM yyyy • HH:mm',
+    );
   }
 
   factory AdminEvent.fromJson(Map<String, dynamic> json) {
-    final eventIdRaw = json['eventId'] ?? json['EventId'] ?? 0;
-    final organizerIdRaw = json['organizerId'] ?? json['OrganizerId'];
-    final segmentIdRaw = json['segmentId'] ?? json['SegmentId'];
-    final genreIdRaw = json['genreId'] ?? json['GenreId'];
-    final subGenreIdRaw = json['subGenreId'] ?? json['SubGenreId'];
-    final capacityRaw = json['capacity'] ?? json['Capacity'] ?? 0;
-    final priceRaw = json['price'] ?? json['Price'] ?? 0;
-    final latitudeRaw = json['latitude'] ?? json['Latitude'] ?? 0;
-    final longitudeRaw = json['longitude'] ?? json['Longitude'] ?? 0;
-    final featuredRaw = json['isFeatured'] ?? json['IsFeatured'] ?? false;
-    final viewCountRaw = json['viewCount'] ?? json['ViewCount'] ?? 0;
-    final likesCountRaw = json['likesCount'] ?? json['LikesCount'] ?? 0;
-    final isLikedRaw = json['isLiked'] ?? json['IsLiked'] ?? false;
-    final createdAtRaw = json['createdAt'] ?? json['CreatedAt'];
-    final updatedAtRaw = json['updatedAt'] ?? json['UpdatedAt'];
-    final startDateTimeRaw = json['startDateTime'] ?? json['StartDateTime'];
-    final endDateTimeRaw = json['endDateTime'] ?? json['EndDateTime'];
-
     final rawImages = json['images'] ?? json['Images'];
+
     final images = rawImages is List
         ? rawImages
             .whereType<Map>()
-            .map((e) => EventImageResponse.fromJson(Map<String, dynamic>.from(e)))
-            .where((e) => e.imageUrl.trim().isNotEmpty)
+            .map(
+              (item) => EventImageResponse.fromJson(
+                Map<String, dynamic>.from(item),
+              ),
+            )
+            .where((image) => image.imageUrl.trim().isNotEmpty)
             .toList(growable: false)
         : <EventImageResponse>[];
 
-    final rawImageUrls = json['imageUrls'] ?? json['ImageUrls'];
-    final parsedImageUrls = rawImageUrls is List
-        ? rawImageUrls
-            .map((e) => e.toString().trim())
-            .where((e) => e.isNotEmpty)
-            .toList(growable: false)
-        : <String>[];
+    final parsedImageUrls = JsonHelpers.asStringList(
+      json['imageUrls'] ?? json['ImageUrls'],
+    );
 
     final derivedImageUrls = images
-        .map((e) => e.imageUrl.trim())
-        .where((e) => e.isNotEmpty)
+        .map((image) => image.imageUrl.trim())
+        .where((url) => url.isNotEmpty)
         .toList(growable: false);
 
     final mergedImageUrls = <String>[
       ...parsedImageUrls,
       ...derivedImageUrls.where(
-        (url) => !parsedImageUrls.any((existing) => existing == url),
+        (url) => !parsedImageUrls.contains(url),
       ),
     ];
 
-    final rawCoverImageUrl = _normalizeNullableString(
+    final rawCoverImageUrl = JsonHelpers.normalize(
       json['coverImageUrl'] ?? json['CoverImageUrl'],
     );
 
     final derivedCoverImageUrl = images
-        .where((e) => e.isCover && e.imageUrl.trim().isNotEmpty)
-        .map((e) => e.imageUrl.trim())
+        .where(
+          (image) =>
+              image.isCover &&
+              image.imageUrl.trim().isNotEmpty,
+        )
+        .map((image) => image.imageUrl.trim())
         .cast<String?>()
         .firstWhere(
-          (e) => e != null && e.isNotEmpty,
+          (url) => url != null && url.isNotEmpty,
           orElse: () => null,
         );
 
     return AdminEvent(
-      eventId: (eventIdRaw as num?)?.toInt() ?? 0,
-      organizerId: (organizerIdRaw as num?)?.toInt(),
-      segmentId: (segmentIdRaw as num?)?.toInt(),
-      segmentName: _normalizeNullableString(
+      eventId: JsonHelpers.asInt(
+            json['eventId'] ?? json['EventId'],
+          ) ??
+          0,
+      organizerId: JsonHelpers.asInt(
+        json['organizerId'] ?? json['OrganizerId'],
+      ),
+      segmentId: JsonHelpers.asInt(
+        json['segmentId'] ?? json['SegmentId'],
+      ),
+      segmentName: JsonHelpers.normalize(
         json['segmentName'] ?? json['SegmentName'],
       ),
-      segmentColor: _normalizeNullableString(
+      segmentColor: JsonHelpers.normalize(
         json['segmentColor'] ?? json['SegmentColor'],
       ),
-      genreId: (genreIdRaw as num?)?.toInt(),
-      genreName: _normalizeNullableString(
+      genreId: JsonHelpers.asInt(
+        json['genreId'] ?? json['GenreId'],
+      ),
+      genreName: JsonHelpers.normalize(
         json['genreName'] ?? json['GenreName'],
       ),
-      subGenreId: (subGenreIdRaw as num?)?.toInt(),
-      subGenreName: _normalizeNullableString(
+      subGenreId: JsonHelpers.asInt(
+        json['subGenreId'] ?? json['SubGenreId'],
+      ),
+      subGenreName: JsonHelpers.normalize(
         json['subGenreName'] ?? json['SubGenreName'],
       ),
       title: (json['title'] ?? json['Title'] ?? '').toString().trim(),
       description: (json['description'] ?? json['Description'] ?? '')
           .toString()
           .trim(),
-      latitude: (latitudeRaw as num?)?.toDouble() ?? 0,
-      longitude: (longitudeRaw as num?)?.toDouble() ?? 0,
-      startDateTime: _parseDateTime(startDateTimeRaw),
-      endDateTime: _parseDateTime(endDateTimeRaw),
-      capacity: (capacityRaw as num?)?.toInt() ?? 0,
-      price: (priceRaw as num?)?.toDouble() ?? 0,
+      latitude: JsonHelpers.asDouble(
+        json['latitude'] ?? json['Latitude'],
+      ),
+      longitude: JsonHelpers.asDouble(
+        json['longitude'] ?? json['Longitude'],
+      ),
+      startDateTime: JsonHelpers.parseDateTime(
+        json['startDateTime'] ?? json['StartDateTime'],
+      ),
+      endDateTime: JsonHelpers.parseDateTime(
+        json['endDateTime'] ?? json['EndDateTime'],
+      ),
+      capacity: JsonHelpers.asInt(
+            json['capacity'] ?? json['Capacity'],
+          ) ??
+          0,
+      price: JsonHelpers.asDouble(
+        json['price'] ?? json['Price'],
+      ),
       status: (json['status'] ?? json['Status'] ?? '').toString().trim(),
-      isFeatured: _parseBool(featuredRaw),
-      viewCount: (viewCountRaw as num?)?.toInt() ?? 0,
-      likesCount: (likesCountRaw as num?)?.toInt() ?? 0,
-      isLiked: _parseBool(isLikedRaw),
-      tags: _normalizeNullableString(json['tags'] ?? json['Tags']),
-      accessibilityInfo: _normalizeNullableString(
+      isFeatured: JsonHelpers.asBool(
+        json['isFeatured'] ?? json['IsFeatured'],
+      ),
+      viewCount: JsonHelpers.asInt(
+            json['viewCount'] ?? json['ViewCount'],
+          ) ??
+          0,
+      likesCount: JsonHelpers.asInt(
+            json['likesCount'] ?? json['LikesCount'],
+          ) ??
+          0,
+      isLiked: JsonHelpers.asBool(
+        json['isLiked'] ?? json['IsLiked'],
+      ),
+      tags: JsonHelpers.normalize(
+        json['tags'] ?? json['Tags'],
+      ),
+      accessibilityInfo: JsonHelpers.normalize(
         json['accessibilityInfo'] ?? json['AccessibilityInfo'],
       ),
-      promoterName: _normalizeNullableString(
+      promoterName: JsonHelpers.normalize(
         json['promoterName'] ?? json['PromoterName'],
       ),
-      locale: (json['locale'] ?? json['Locale'] ?? 'bs-BA').toString().trim(),
-      createdAt: _parseDateTime(createdAtRaw),
-      updatedAt: _parseDateTime(updatedAtRaw),
+      locale: (json['locale'] ?? json['Locale'] ?? 'bs-BA')
+          .toString()
+          .trim(),
+      createdAt: JsonHelpers.parseDateTime(
+        json['createdAt'] ?? json['CreatedAt'],
+      ),
+      updatedAt: JsonHelpers.parseDateTime(
+        json['updatedAt'] ?? json['UpdatedAt'],
+      ),
       imageUrls: mergedImageUrls,
       coverImageUrl: rawCoverImageUrl ?? derivedCoverImageUrl,
       images: images,
@@ -355,7 +389,7 @@ class AdminEvent {
       'updatedAt': updatedAt?.toUtc().toIso8601String(),
       'imageUrls': imageUrls,
       'coverImageUrl': coverImageUrl,
-      'images': images.map((e) => e.toJson()).toList(),
+      'images': images.map((image) => image.toJson()).toList(),
     };
   }
 
@@ -434,30 +468,6 @@ class AdminEvent {
       images: images ?? this.images,
     );
   }
-
-  static String? _normalizeNullableString(dynamic value) {
-    final text = value?.toString().trim();
-    if (text == null || text.isEmpty) return null;
-    return text;
-  }
-
-  static DateTime? _parseDateTime(dynamic value) {
-    if (value == null) return null;
-    if (value is DateTime) return value;
-
-    final text = value.toString().trim();
-    if (text.isEmpty) return null;
-
-    return DateTime.tryParse(text);
-  }
-
-  static bool _parseBool(dynamic value) {
-    if (value is bool) return value;
-    if (value is num) return value != 0;
-
-    final normalized = value.toString().toLowerCase().trim();
-    return normalized == 'true' || normalized == '1';
-  }
 }
 
 class EventReservationSummary {
@@ -482,37 +492,55 @@ class EventReservationSummary {
   final bool isSoldOut;
 
   double get progress {
-    if (capacity <= 0) return 0;
+    if (capacity <= 0) {
+      return 0;
+    }
+
     return (reservedCount / capacity).clamp(0, 1).toDouble();
   }
 
   String get occupancyLabel {
-    if (capacity <= 0) return '$reservedCount reserved';
+    if (capacity <= 0) {
+      return '$reservedCount reserved';
+    }
+
     return '$reservedCount/$capacity';
   }
 
   factory EventReservationSummary.fromJson(Map<String, dynamic> json) {
-    int toInt(dynamic value) => (value as num?)?.toInt() ?? 0;
-
     return EventReservationSummary(
-      eventId: toInt(json['eventId'] ?? json['EventId']),
-      capacity: toInt(json['capacity'] ?? json['Capacity']),
-      reservedCount: toInt(json['reservedCount'] ?? json['ReservedCount']),
-      confirmedCount: toInt(json['confirmedCount'] ?? json['ConfirmedCount']),
-      pendingCount: toInt(json['pendingCount'] ?? json['PendingCount']),
-      availableCount: toInt(json['availableCount'] ?? json['AvailableCount']),
-      reservationCount:
-          toInt(json['reservationCount'] ?? json['ReservationCount']),
-      isSoldOut: _parseBool(json['isSoldOut'] ?? json['IsSoldOut'] ?? false),
+      eventId: JsonHelpers.asInt(
+            json['eventId'] ?? json['EventId'],
+          ) ??
+          0,
+      capacity: JsonHelpers.asInt(
+            json['capacity'] ?? json['Capacity'],
+          ) ??
+          0,
+      reservedCount: JsonHelpers.asInt(
+            json['reservedCount'] ?? json['ReservedCount'],
+          ) ??
+          0,
+      confirmedCount: JsonHelpers.asInt(
+            json['confirmedCount'] ?? json['ConfirmedCount'],
+          ) ??
+          0,
+      pendingCount: JsonHelpers.asInt(
+            json['pendingCount'] ?? json['PendingCount'],
+          ) ??
+          0,
+      availableCount: JsonHelpers.asInt(
+            json['availableCount'] ?? json['AvailableCount'],
+          ) ??
+          0,
+      reservationCount: JsonHelpers.asInt(
+            json['reservationCount'] ?? json['ReservationCount'],
+          ) ??
+          0,
+      isSoldOut: JsonHelpers.asBool(
+        json['isSoldOut'] ?? json['IsSoldOut'],
+      ),
     );
-  }
-
-  static bool _parseBool(dynamic value) {
-    if (value is bool) return value;
-    if (value is num) return value != 0;
-
-    final normalized = value.toString().toLowerCase().trim();
-    return normalized == 'true' || normalized == '1';
   }
 }
 
@@ -536,25 +564,29 @@ class ManageableEventAttendeePreview {
     return value.isEmpty ? 'Unknown user' : value;
   }
 
-  factory ManageableEventAttendeePreview.fromJson(Map<String, dynamic> json) {
+  factory ManageableEventAttendeePreview.fromJson(
+    Map<String, dynamic> json,
+  ) {
     return ManageableEventAttendeePreview(
-      reservationId: ((json['reservationId'] ?? json['ReservationId']) as num?)
-              ?.toInt() ??
+      reservationId: JsonHelpers.asInt(
+            json['reservationId'] ?? json['ReservationId'],
+          ) ??
           0,
-      userId: ((json['userId'] ?? json['UserId']) as num?)?.toInt() ?? 0,
+      userId: JsonHelpers.asInt(
+            json['userId'] ?? json['UserId'],
+          ) ??
+          0,
       username: (json['username'] ?? json['Username'] ?? '')
           .toString()
           .trim(),
-      avatarUrl:
-          _normalizeNullableString(json['avatarUrl'] ?? json['AvatarUrl']),
-      quantity: ((json['quantity'] ?? json['Quantity']) as num?)?.toInt() ?? 0,
+      avatarUrl: JsonHelpers.normalize(
+        json['avatarUrl'] ?? json['AvatarUrl'],
+      ),
+      quantity: JsonHelpers.asInt(
+            json['quantity'] ?? json['Quantity'],
+          ) ??
+          0,
     );
-  }
-
-  static String? _normalizeNullableString(dynamic value) {
-    final text = value?.toString().trim();
-    if (text == null || text.isEmpty) return null;
-    return text;
   }
 }
 
@@ -595,36 +627,85 @@ class AdminComment {
   final String? avatarUrl;
   final bool isLiked;
 
-  String get authorLabel =>
-      (displayName?.trim().isNotEmpty ?? false)
-          ? displayName!.trim()
-          : (username?.trim().isNotEmpty ?? false)
-              ? username!.trim()
-              : 'Deleted user';
+  String get authorLabel {
+    if (displayName?.trim().isNotEmpty ?? false) {
+      return displayName!.trim();
+    }
+
+    if (username?.trim().isNotEmpty ?? false) {
+      return username!.trim();
+    }
+
+    return 'Deleted user';
+  }
 
   factory AdminComment.fromJson(Map<String, dynamic> json) {
+    final rawReplies = json['replies'] ?? json['Replies'];
+
     return AdminComment(
-      commentId: (json['commentId'] as num).toInt(),
-      content: (json['content'] ?? '').toString(),
-      likesCount: ((json['likesCount'] ?? 0) as num).toInt(),
-      userId: (json['userId'] as num?)?.toInt(),
-      eventId: (json['eventId'] as num).toInt(),
-      createdAt: DateTime.parse(json['createdAt'].toString()).toLocal(),
-      updatedAt: json['updatedAt'] == null
-          ? null
-          : DateTime.parse(json['updatedAt'].toString()).toLocal(),
-      isDeleted: json['isDeleted'] == true,
-      isReply: json['isReply'] == true,
-      parentCommentId: (json['parentCommentId'] as num?)?.toInt(),
-      replyCount: ((json['replyCount'] ?? 0) as num).toInt(),
-      replies: ((json['replies'] as List?) ?? const [])
-          .whereType<Map>()
-          .map((e) => AdminComment.fromJson(Map<String, dynamic>.from(e)))
-          .toList(growable: false),
-      username: json['username']?.toString(),
-      displayName: json['displayName']?.toString(),
-      avatarUrl: json['avatarUrl']?.toString(),
-      isLiked: json['isLiked'] == true,
+      commentId: JsonHelpers.asInt(
+            json['commentId'] ?? json['CommentId'],
+          ) ??
+          0,
+      content: (json['content'] ?? json['Content'] ?? '')
+          .toString()
+          .trim(),
+      likesCount: JsonHelpers.asInt(
+            json['likesCount'] ?? json['LikesCount'],
+          ) ??
+          0,
+      userId: JsonHelpers.asInt(
+        json['userId'] ?? json['UserId'],
+      ),
+      eventId: JsonHelpers.asInt(
+            json['eventId'] ?? json['EventId'],
+          ) ??
+          0,
+      createdAt: JsonHelpers.parseDateTimeRequired(
+        json['createdAt'] ?? json['CreatedAt'],
+        DateTime.fromMillisecondsSinceEpoch(
+          0,
+          isUtc: true,
+        ),
+      ),
+      updatedAt: JsonHelpers.parseDateTime(
+        json['updatedAt'] ?? json['UpdatedAt'],
+      ),
+      isDeleted: JsonHelpers.asBool(
+        json['isDeleted'] ?? json['IsDeleted'],
+      ),
+      isReply: JsonHelpers.asBool(
+        json['isReply'] ?? json['IsReply'],
+      ),
+      parentCommentId: JsonHelpers.asInt(
+        json['parentCommentId'] ?? json['ParentCommentId'],
+      ),
+      replyCount: JsonHelpers.asInt(
+            json['replyCount'] ?? json['ReplyCount'],
+          ) ??
+          0,
+      replies: rawReplies is List
+          ? rawReplies
+              .whereType<Map>()
+              .map(
+                (item) => AdminComment.fromJson(
+                  Map<String, dynamic>.from(item),
+                ),
+              )
+              .toList(growable: false)
+          : const [],
+      username: JsonHelpers.normalize(
+        json['username'] ?? json['Username'],
+      ),
+      displayName: JsonHelpers.normalize(
+        json['displayName'] ?? json['DisplayName'],
+      ),
+      avatarUrl: JsonHelpers.normalize(
+        json['avatarUrl'] ?? json['AvatarUrl'],
+      ),
+      isLiked: JsonHelpers.asBool(
+        json['isLiked'] ?? json['IsLiked'],
+      ),
     );
   }
 

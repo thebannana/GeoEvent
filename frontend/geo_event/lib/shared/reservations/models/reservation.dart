@@ -54,7 +54,7 @@ class Reservation {
 
   ReservationStatus get typedStatus {
   final normalized = status.trim().toLowerCase();
-  final now = DateTime.now();
+  final now = DateTime.now().toUtc();
 
   if (normalized == ReservationStatus.cancelled.apiValue.toLowerCase()) {
     return ReservationStatus.cancelled;
@@ -105,7 +105,7 @@ String get displayStatus {
       return false;
     }
 
-    final now = DateTime.now();
+    final now = DateTime.now().toUtc();
     return expiresAt.isBefore(now) || expiresAt.isAtSameMomentAs(now);
   }
 
@@ -150,7 +150,7 @@ bool get canRequestRefund {
   factory Reservation.fromJson(Map<String, dynamic> json) {
   DateTime? tryParse(dynamic value) {
     if (value == null) return null;
-    return DateTime.tryParse(value.toString())?.toLocal();
+    return DateTime.tryParse(value.toString())?.toUtc();
   }
 
   return Reservation(
@@ -162,11 +162,11 @@ bool get canRequestRefund {
     totalAmount: (json['totalAmount'] as num).toDouble(),
     currency: (json['currency'] ?? '').toString(),
     status: (json['status'] ?? '').toString(),
-    createdAt: DateTime.parse((json['createdAt'] ?? '').toString()).toLocal(),
+    createdAt: DateTime.parse((json['createdAt'] ?? '').toString()).toUtc(),
     confirmedAt: tryParse(json['confirmedAt']),
     cancelledAt: tryParse(json['cancelledAt']),
     expiredAt: tryParse(json['expiredAt']),
-    expiresAt: DateTime.parse((json['expiresAt'] ?? '').toString()).toLocal(),
+    expiresAt: DateTime.parse((json['expiresAt'] ?? '').toString()).toUtc(),
     paymentReference: json['paymentReference']?.toString(),
     notes: json['notes']?.toString(),
     tickets: (json['tickets'] as List<dynamic>? ?? const [])

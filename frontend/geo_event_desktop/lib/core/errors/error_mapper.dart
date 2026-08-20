@@ -9,7 +9,10 @@ class ErrorMapper {
     Object error, {
     StackTrace? stackTrace,
   }) {
-    return AppException.from(error, stackTrace: stackTrace);
+    return AppException.from(
+      error,
+      stackTrace: stackTrace,
+    );
   }
 
   static Failure toFailure(
@@ -17,7 +20,10 @@ class ErrorMapper {
     StackTrace? stackTrace,
   }) {
     return Failure.fromException(
-      toAppException(error, stackTrace: stackTrace),
+      toAppException(
+        error,
+        stackTrace: stackTrace,
+      ),
     );
   }
 

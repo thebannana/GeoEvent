@@ -451,15 +451,17 @@ class _MapFilterPanelState extends ConsumerState<MapFilterPanel>
     });
   }
 
-  void _toggleFreeOnly(bool value) {
-    setState(() {
+void _toggleFreeOnly(bool value) {
+  setState(
+    () {
       _selection = _selection.copyWith(
         freeOnly: value,
-        clearMinPrice: value,
-        clearMaxPrice: value,
+        minPrice: value ? 0 : _selection.minPrice,
+        maxPrice: value ? 0 : _selection.maxPrice,
       );
-    });
-  }
+    },
+  );
+}
 
   void _toggleTodayOnly(bool value) {
     setState(() {
@@ -473,17 +475,17 @@ class _MapFilterPanelState extends ConsumerState<MapFilterPanel>
     });
   }
 
-  void _updatePriceRange(RangeValues values) {
-    setState(() {
+void _updatePriceRange(RangeValues values) {
+  setState(
+    () {
       _selection = _selection.copyWith(
         minPrice: values.start > 0 ? values.start : null,
         maxPrice: values.end < _priceMax ? values.end : null,
-        clearMinPrice: values.start == 0,
-        clearMaxPrice: values.end == _priceMax,
         freeOnly: false,
       );
-    });
-  }
+    },
+  );
+}
 
   Widget _buildSegmentSection() {
     return MapFilterGroupCard(

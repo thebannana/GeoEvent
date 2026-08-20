@@ -8,12 +8,14 @@ class SearchResultCard extends StatelessWidget {
   final EventItem item;
   final ValueChanged<EventItem>? onOpenDirections;
   final VoidCallback? onCloseParentSearchSheet;
+  final String? recommendationLabel;
 
   const SearchResultCard({
     super.key,
     required this.item,
     this.onOpenDirections,
     this.onCloseParentSearchSheet,
+    this.recommendationLabel,
   });
 
   static Color _segmentColor(EventItem item) {
@@ -101,6 +103,7 @@ class SearchResultCard extends StatelessWidget {
                       subtitle: _subtitle(item),
                       onOpenDirections: onOpenDirections,
                       accent: accent,
+                      recommendationLabel: recommendationLabel,
                     ),
                   ),
                 ),
@@ -152,12 +155,14 @@ class _SearchResultCardContent extends StatelessWidget {
   final String subtitle;
   final ValueChanged<EventItem>? onOpenDirections;
   final Color accent;
+  final String? recommendationLabel;
 
   const _SearchResultCardContent({
     required this.item,
     required this.subtitle,
     required this.onOpenDirections,
     required this.accent,
+    this.recommendationLabel,
   });
 
   @override
@@ -176,6 +181,30 @@ class _SearchResultCardContent extends StatelessWidget {
             fontWeight: FontWeight.w700,
           ),
         ),
+        if (recommendationLabel != null && recommendationLabel!.isNotEmpty) ...[
+          const SizedBox(height: 5),
+          Row(
+            children: [
+              Icon(
+                Icons.auto_awesome_rounded,
+                size: 15,
+                color: colorScheme.primary,
+              ),
+              const SizedBox(width: 5),
+              Expanded(
+                child: Text(
+                  recommendationLabel!,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: colorScheme.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
         if (subtitle.isNotEmpty) ...[
           const SizedBox(height: 4),
           Text(
@@ -245,7 +274,7 @@ class _SearchResultMetrics extends StatelessWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    TextStyle? style = theme.textTheme.bodySmall?.copyWith(
+    final style = theme.textTheme.bodySmall?.copyWith(
       color: colorScheme.onSurfaceVariant,
     );
 

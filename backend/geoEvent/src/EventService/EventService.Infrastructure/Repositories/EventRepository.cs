@@ -580,42 +580,68 @@ public class EventRepository : IEventRepository
         await _context.SaveChangesAsync();
     }
 
-    public async Task<List<Event>> GetPublicCandidatesAsync(EventFilterDto filter)
+    public async Task<List<Event>> GetPublicCandidatesAsync(
+    EventFilterDto filter)
     {
         filter ??= new EventFilterDto();
 
-        var query = _context.Events
+        IQueryable<Event> query = _context.Events
             .AsNoTracking()
             .Include(e => e.Images)
             .Include(e => e.Segment)
             .Include(e => e.Genre)
             .Include(e => e.SubGenre)
-            .Where(e => e.Status == EventStatus.Confirmed)
-            .AsQueryable();
+            .Where(e =>
+                e.Status == EventStatus.Confirmed &&
+                e.EndDateTime > DateTime.UtcNow);
 
         if (filter.SegmentId.HasValue)
-            query = query.Where(e => e.SegmentId == filter.SegmentId.Value);
+        {
+            query = query.Where(e =>
+                e.SegmentId == filter.SegmentId.Value);
+        }
 
         if (filter.GenreId.HasValue)
-            query = query.Where(e => e.GenreId == filter.GenreId.Value);
+        {
+            query = query.Where(e =>
+                e.GenreId == filter.GenreId.Value);
+        }
 
         if (filter.SubGenreId.HasValue)
-            query = query.Where(e => e.SubGenreId == filter.SubGenreId.Value);
+        {
+            query = query.Where(e =>
+                e.SubGenreId == filter.SubGenreId.Value);
+        }
 
         if (filter.MinPrice.HasValue)
-            query = query.Where(e => e.Price >= filter.MinPrice.Value);
+        {
+            query = query.Where(e =>
+                e.Price >= filter.MinPrice.Value);
+        }
 
         if (filter.MaxPrice.HasValue)
-            query = query.Where(e => e.Price <= filter.MaxPrice.Value);
+        {
+            query = query.Where(e =>
+                e.Price <= filter.MaxPrice.Value);
+        }
 
         if (filter.FromDate.HasValue)
-            query = query.Where(e => e.StartDateTime >= filter.FromDate.Value);
+        {
+            query = query.Where(e =>
+                e.StartDateTime >= filter.FromDate.Value);
+        }
 
         if (filter.ToDate.HasValue)
-            query = query.Where(e => e.StartDateTime <= filter.ToDate.Value);
+        {
+            query = query.Where(e =>
+                e.StartDateTime <= filter.ToDate.Value);
+        }
 
         if (filter.IsFeatured.HasValue)
-            query = query.Where(e => e.IsFeatured == filter.IsFeatured.Value);
+        {
+            query = query.Where(e =>
+                e.IsFeatured == filter.IsFeatured.Value);
+        }
 
         if (!string.IsNullOrWhiteSpace(filter.SearchTerm))
         {
@@ -730,25 +756,62 @@ public class EventRepository : IEventRepository
                 (e.Tags != null && e.Tags.Contains(term)));
         }
 
-        var sortBy = filter.SortBy?.Trim().ToLowerInvariant() ?? "startdatetime";
+        var sortBy = filter.SortBy?.Trim().ToLowerInvariant()
+             ?? "startdatetime";
 
         query = sortBy switch
         {
+            "createdat" => filter.SortDescending
+                ? query
+                    .OrderByDescending(e => e.CreatedAt)
+                    .ThenByDescending(e => e.EventId)
+                : query
+                    .OrderBy(e => e.CreatedAt)
+                    .ThenBy(e => e.EventId),
+
+            "title" => filter.SortDescending
+                ? query
+                    .OrderByDescending(e => e.Title)
+                    .ThenByDescending(e => e.EventId)
+                : query
+                    .OrderBy(e => e.Title)
+                    .ThenBy(e => e.EventId),
+
             "price" => filter.SortDescending
-                ? query.OrderByDescending(e => e.Price).ThenByDescending(e => e.EventId)
-                : query.OrderBy(e => e.Price).ThenBy(e => e.EventId),
+                ? query
+                    .OrderByDescending(e => e.Price)
+                    .ThenByDescending(e => e.EventId)
+                : query
+                    .OrderBy(e => e.Price)
+                    .ThenBy(e => e.EventId),
 
             "likescount" => filter.SortDescending
-                ? query.OrderByDescending(e => e.LikesCount).ThenByDescending(e => e.EventId)
-                : query.OrderBy(e => e.LikesCount).ThenBy(e => e.EventId),
+                ? query
+                    .OrderByDescending(e => e.LikesCount)
+                    .ThenByDescending(e => e.EventId)
+                : query
+                    .OrderBy(e => e.LikesCount)
+                    .ThenBy(e => e.EventId),
 
             "viewcount" => filter.SortDescending
-                ? query.OrderByDescending(e => e.ViewCount).ThenByDescending(e => e.EventId)
-                : query.OrderBy(e => e.ViewCount).ThenBy(e => e.EventId),
+                ? query
+                    .OrderByDescending(e => e.ViewCount)
+                    .ThenByDescending(e => e.EventId)
+                : query
+                    .OrderBy(e => e.ViewCount)
+                    .ThenBy(e => e.EventId),
 
-            _ => filter.SortDescending
-                ? query.OrderByDescending(e => e.StartDateTime).ThenByDescending(e => e.EventId)
-                : query.OrderBy(e => e.StartDateTime).ThenBy(e => e.EventId)
+            "startdatetime" => filter.SortDescending
+                ? query
+                    .OrderByDescending(e => e.StartDateTime)
+                    .ThenByDescending(e => e.EventId)
+                : query
+                    .OrderBy(e => e.StartDateTime)
+                    .ThenBy(e => e.EventId),
+
+            _ => query
+                .OrderBy(e => e.StartDateTime)
+                .ThenBy(e => e.EventId),
         };
 
         var page = NormalizePage(filter.Page);
@@ -770,7 +833,9 @@ public class EventRepository : IEventRepository
         };
     }
 
-    public async Task<List<Event>> GetNearbyAsync(NearbyEventSearchDto dto)
+    public async Task<List<Event>> GetNearbyAsync(
+    NearbyEventSearchDto dto,
+    IReadOnlyList<UserPreferenceDto>? preferences = null)
     {
         var latitude = dto.Latitude!.Value;
         var longitude = dto.Longitude!.Value;
@@ -785,11 +850,17 @@ public class EventRepository : IEventRepository
 
         var latDelta = (decimal)(radiusKm / 111.0);
 
-        var cosLatitude = Math.Cos((double)latitude * Math.PI / 180.0);
-        if (Math.Abs(cosLatitude) < MinCosLatitude)
-            cosLatitude = MinCosLatitude;
+        var cosLatitude =
+            Math.Cos((double)latitude * Math.PI / 180.0);
 
-        var lonDelta = (decimal)(radiusKm / 111.0 / Math.Abs(cosLatitude));
+        if (Math.Abs(cosLatitude) < MinCosLatitude)
+        {
+            cosLatitude = MinCosLatitude;
+        }
+
+        var lonDelta = (decimal)(
+            radiusKm / 111.0 / Math.Abs(cosLatitude));
+
         var nowUtc = DateTime.UtcNow;
 
         IQueryable<Event> query = _context.Events
@@ -807,35 +878,148 @@ public class EventRepository : IEventRepository
                 e.Longitude <= longitude + lonDelta);
 
         if (dto.SegmentId.HasValue)
-            query = query.Where(e => e.SegmentId == dto.SegmentId.Value);
+        {
+            query = query.Where(e =>
+                e.SegmentId == dto.SegmentId.Value);
+        }
 
         if (dto.GenreId.HasValue)
-            query = query.Where(e => e.GenreId == dto.GenreId.Value);
+        {
+            query = query.Where(e =>
+                e.GenreId == dto.GenreId.Value);
+        }
 
         if (dto.SubGenreId.HasValue)
-            query = query.Where(e => e.SubGenreId == dto.SubGenreId.Value);
+        {
+            query = query.Where(e =>
+                e.SubGenreId == dto.SubGenreId.Value);
+        }
 
         if (dto.MinPrice.HasValue)
-            query = query.Where(e => e.Price >= dto.MinPrice.Value);
+        {
+            query = query.Where(e =>
+                e.Price >= dto.MinPrice.Value);
+        }
 
         if (dto.MaxPrice.HasValue)
-            query = query.Where(e => e.Price <= dto.MaxPrice.Value);
+        {
+            query = query.Where(e =>
+                e.Price <= dto.MaxPrice.Value);
+        }
 
         if (dto.TodayOnly)
         {
-            var today = nowUtc.Date;
-            var tomorrow = today.AddDays(1);
+            var todayUtc = nowUtc.Date;
+            var tomorrowUtc = todayUtc.AddDays(1);
 
             query = query.Where(e =>
-                e.StartDateTime >= today &&
-                e.StartDateTime < tomorrow);
+                e.StartDateTime >= todayUtc &&
+                e.StartDateTime < tomorrowUtc);
         }
 
-        return await query
-            .OrderBy(e => e.StartDateTime)
-            .ThenBy(e => e.EventId)
-            .Take(limit)
+        var candidates = await query
             .ToListAsync();
+
+        var activePreferences = preferences?
+            .Where(p =>
+                p.SegmentId.HasValue ||
+                p.GenreId.HasValue ||
+                p.SubGenreId.HasValue)
+            .ToList()
+            ?? [];
+
+        if (activePreferences.Count == 0)
+        {
+            return candidates
+                .OrderBy(e => e.StartDateTime)
+                .ThenBy(e => e.EventId)
+                .Take(limit)
+                .ToList();
+        }
+
+        return candidates
+            .Select(e => new
+            {
+                Event = e,
+                Score = CalculatePreferenceScore(
+                    e,
+                    activePreferences)
+            })
+            .OrderByDescending(x => x.Score)
+            .ThenBy(x => x.Event.StartDateTime)
+            .ThenByDescending(x => x.Event.LikesCount)
+            .ThenBy(x => x.Event.EventId)
+            .Take(limit)
+            .Select(x => x.Event)
+            .ToList();
+    }
+
+    private static double CalculatePreferenceScore(
+    Event ev,
+    IReadOnlyList<UserPreferenceDto> preferences)
+    {
+        if (preferences.Count == 0)
+        {
+            return 0;
+        }
+
+        var score = 0d;
+
+        foreach (var preference in preferences)
+        {
+            var matchesSegment =
+                !preference.SegmentId.HasValue ||
+                preference.SegmentId == ev.SegmentId;
+
+            var matchesGenre =
+                !preference.GenreId.HasValue ||
+                preference.GenreId == ev.GenreId;
+
+            var matchesSubGenre =
+                !preference.SubGenreId.HasValue ||
+                preference.SubGenreId == ev.SubGenreId;
+
+            if (!matchesSegment ||
+                !matchesGenre ||
+                !matchesSubGenre)
+            {
+                continue;
+            }
+
+            var specificity = 0;
+
+            if (preference.SegmentId.HasValue)
+            {
+                specificity++;
+            }
+
+            if (preference.GenreId.HasValue)
+            {
+                specificity++;
+            }
+
+            if (preference.SubGenreId.HasValue)
+            {
+                specificity++;
+            }
+
+            var specificityMultiplier = specificity switch
+            {
+                3 => 3.0,
+                2 => 2.0,
+                1 => 1.0,
+                _ => 0.25
+            };
+
+            score += preference.Score * specificityMultiplier;
+        }
+
+        if (ev.IsFeatured)
+        {
+            score += 0.5;
+        }
+
+        return score;
     }
 
     public async Task<Event> CreateAsync(Event entity)

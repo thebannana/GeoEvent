@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:geo_event_desktop/shared/admin_profile/data/admin_refunds_repository.dart';
 
+import '../../../../core/utils/json_helpers.dart';
 import '../providers/admin_refunds_providers.dart';
 
 enum AdminRefundQueueFilter {
@@ -25,7 +26,10 @@ class AdminRefundRequestsPage {
   });
 
   int get totalPages {
-    if (totalCount <= 0 || pageSize <= 0) return 1;
+    if (totalCount <= 0 || pageSize <= 0) {
+      return 1;
+    }
+
     return (totalCount / pageSize).ceil();
   }
 
@@ -35,19 +39,26 @@ class AdminRefundRequestsPage {
     return AdminRefundRequestsPage(
       items: rawItems is List
           ? rawItems
+              .whereType<Map>()
               .map(
-                (e) => AdminRefundRequest.fromJson(
-                  e is Map<String, dynamic>
-                      ? e
-                      : Map<String, dynamic>.from(e as Map),
+                (item) => AdminRefundRequest.fromJson(
+                  Map<String, dynamic>.from(item),
                 ),
               )
               .toList(growable: false)
           : const [],
-      totalCount:
-          ((json['totalCount'] ?? json['TotalCount']) as num?)?.toInt() ?? 0,
-      page: ((json['page'] ?? json['Page']) as num?)?.toInt() ?? 1,
-      pageSize: ((json['pageSize'] ?? json['PageSize']) as num?)?.toInt() ?? 10,
+      totalCount: JsonHelpers.asInt(
+            json['totalCount'] ?? json['TotalCount'],
+          ) ??
+          0,
+      page: JsonHelpers.asInt(
+            json['page'] ?? json['Page'],
+          ) ??
+          1,
+      pageSize: JsonHelpers.asInt(
+            json['pageSize'] ?? json['PageSize'],
+          ) ??
+          10,
     );
   }
 }
@@ -79,9 +90,11 @@ class AdminRefundRequest {
   final String queueStatusRaw;
   final String refundRequestStatusRaw;
 
+  /// All API dates are parsed and retained as UTC.
   final DateTime? createdAt;
   final DateTime? requestedAt;
   final DateTime? reviewedAt;
+
   final int? reviewedByUserId;
   final String? decisionReason;
   final String? moderatorAction;
@@ -122,56 +135,83 @@ class AdminRefundRequest {
   AdminRefundQueueFilter get queueFilter {
     switch (queueStatusRaw.trim().toLowerCase()) {
       case 'open':
+      case 'pending':
         return AdminRefundQueueFilter.open;
+
       case 'inreview':
       case 'in_review':
       case 'in review':
+      case 'processing':
         return AdminRefundQueueFilter.inReview;
+
       case 'resolved':
+      case 'approved':
+      case 'refunded':
         return AdminRefundQueueFilter.resolved;
+
       case 'rejected':
+      case 'failed':
         return AdminRefundQueueFilter.rejected;
+
       default:
         return AdminRefundQueueFilter.open;
     }
   }
 
-  bool get isClosed =>
-      queueFilter == AdminRefundQueueFilter.resolved ||
-      queueFilter == AdminRefundQueueFilter.rejected;
+  bool get isClosed {
+    return queueFilter == AdminRefundQueueFilter.resolved ||
+        queueFilter == AdminRefundQueueFilter.rejected;
+  }
 
-  bool get canTakeAction =>
-      queueFilter == AdminRefundQueueFilter.open &&
-      refundRequestStatusRaw.trim().toLowerCase() == 'pending';
+  bool get canTakeAction {
+    return queueFilter == AdminRefundQueueFilter.open &&
+        refundRequestStatusRaw.trim().toLowerCase() == 'pending';
+  }
 
   String get requesterHandle {
     final value = requesterUsername.trim();
-    if (value.isEmpty) return '@unknown';
+
+    if (value.isEmpty) {
+      return '@unknown';
+    }
+
     return value.startsWith('@') ? value : '@$value';
   }
 
   String get targetHandle {
     final value = targetUsername.trim();
-    if (value.isEmpty) return '';
+
+    if (value.isEmpty) {
+      return '';
+    }
+
     return value.startsWith('@') ? value : '@$value';
   }
 
   factory AdminRefundRequest.fromJson(Map<String, dynamic> json) {
     return AdminRefundRequest(
-      reservationId:
-          ((json['reservationId'] ?? json['ReservationId']) as num?)?.toInt() ?? 0,
+      reservationId: JsonHelpers.asInt(
+            json['reservationId'] ?? json['ReservationId'],
+          ) ??
+          0,
       refundRequestId:
           (json['refundRequestId'] ?? json['RefundRequestId'] ?? '')
               .toString()
               .trim(),
-      eventId: ((json['eventId'] ?? json['EventId']) as num?)?.toInt() ?? 0,
+      eventId: JsonHelpers.asInt(
+            json['eventId'] ?? json['EventId'],
+          ) ??
+          0,
       eventTitle: (json['eventTitle'] ?? json['EventTitle'] ?? '')
           .toString()
           .trim(),
-      eventImageUrl: _normalizeNullableString(
+      eventImageUrl: JsonHelpers.normalize(
         json['eventImageUrl'] ?? json['EventImageUrl'],
       ),
-      userId: ((json['userId'] ?? json['UserId']) as num?)?.toInt() ?? 0,
+      userId: JsonHelpers.asInt(
+            json['userId'] ?? json['UserId'],
+          ) ??
+          0,
       requesterName: (json['requesterName'] ?? json['RequesterName'] ?? '')
           .toString()
           .trim(),
@@ -179,7 +219,7 @@ class AdminRefundRequest {
           (json['requesterUsername'] ?? json['RequesterUsername'] ?? '')
               .toString()
               .trim(),
-      requesterAvatarUrl: _normalizeNullableString(
+      requesterAvatarUrl: JsonHelpers.normalize(
         json['requesterAvatarUrl'] ?? json['RequesterAvatarUrl'],
       ),
       targetName: (json['targetName'] ?? json['TargetName'] ?? '')
@@ -193,50 +233,53 @@ class AdminRefundRequest {
       preview: (json['preview'] ?? json['Preview'] ?? '').toString().trim(),
       fullContent:
           (json['fullContent'] ?? json['FullContent'] ?? '').toString().trim(),
-      amount: ((json['amount'] ?? json['Amount']) as num?)?.toDouble() ?? 0,
-      currency: (json['currency'] ?? json['Currency'] ?? '').toString().trim(),
-      amountLabel:
-          (json['amountLabel'] ?? json['AmountLabel'] ?? '').toString().trim(),
+      amount: JsonHelpers.asDouble(
+        json['amount'] ?? json['Amount'],
+      ),
+      currency: (json['currency'] ?? json['Currency'] ?? '')
+          .toString()
+          .trim(),
+      amountLabel: (json['amountLabel'] ?? json['AmountLabel'] ?? '')
+          .toString()
+          .trim(),
       queueStatusRaw:
-          (json['queueStatus'] ?? json['QueueStatus'] ?? '').toString().trim(),
-      refundRequestStatusRaw:
-          (json['refundRequestStatus'] ?? json['RefundRequestStatus'] ?? '')
+          (json['queueStatus'] ?? json['QueueStatus'] ?? '')
               .toString()
               .trim(),
-      createdAt: _parseDateTime(json['createdAt'] ?? json['CreatedAt']),
-      requestedAt: _parseDateTime(json['requestedAt'] ?? json['RequestedAt']),
-      reviewedAt: _parseDateTime(json['reviewedAt'] ?? json['ReviewedAt']),
-      reviewedByUserId:
-          ((json['reviewedByUserId'] ?? json['ReviewedByUserId']) as num?)
-              ?.toInt(),
-      decisionReason: _normalizeNullableString(
+      refundRequestStatusRaw:
+          (json['refundRequestStatus'] ??
+                  json['RefundRequestStatus'] ??
+                  '')
+              .toString()
+              .trim(),
+
+      // JsonHelpers.parseDateTime returns a UTC DateTime.
+      createdAt: JsonHelpers.parseDateTime(
+        json['createdAt'] ?? json['CreatedAt'],
+      ),
+      requestedAt: JsonHelpers.parseDateTime(
+        json['requestedAt'] ?? json['RequestedAt'],
+      ),
+      reviewedAt: JsonHelpers.parseDateTime(
+        json['reviewedAt'] ?? json['ReviewedAt'],
+      ),
+
+      reviewedByUserId: JsonHelpers.asInt(
+        json['reviewedByUserId'] ?? json['ReviewedByUserId'],
+      ),
+      decisionReason: JsonHelpers.normalize(
         json['decisionReason'] ?? json['DecisionReason'],
       ),
-      moderatorAction: _normalizeNullableString(
+      moderatorAction: JsonHelpers.normalize(
         json['moderatorAction'] ?? json['ModeratorAction'],
       ),
-      paymentMethod: _normalizeNullableString(
+      paymentMethod: JsonHelpers.normalize(
         json['paymentMethod'] ?? json['PaymentMethod'],
       ),
-      paymentStatus: _normalizeNullableString(
+      paymentStatus: JsonHelpers.normalize(
         json['paymentStatus'] ?? json['PaymentStatus'],
       ),
     );
-  }
-
-  static String? _normalizeNullableString(dynamic value) {
-    final text = value?.toString().trim();
-    if (text == null || text.isEmpty) return null;
-    return text;
-  }
-
-  static DateTime? _parseDateTime(dynamic value) {
-    if (value == null) return null;
-    if (value is DateTime) return value;
-
-    final text = value.toString().trim();
-    if (text.isEmpty) return null;
-    return DateTime.tryParse(text);
   }
 }
 
@@ -290,7 +333,7 @@ class AdminRefundRequestsQuery {
   Map<String, dynamic> toQueryParameters() {
     final map = <String, dynamic>{
       'status': _statusToApi(status),
-      'search': _normalizeNullableString(search),
+      'search': JsonHelpers.normalize(search),
       'sortBy': _sortByToApi(sortBy),
       'descending': descending,
       'page': page,
@@ -299,6 +342,7 @@ class AdminRefundRequestsQuery {
     };
 
     map.removeWhere((key, value) => value == null);
+
     return map;
   }
 
@@ -306,12 +350,16 @@ class AdminRefundRequestsQuery {
     switch (value) {
       case AdminRefundQueueFilter.all:
         return null;
+
       case AdminRefundQueueFilter.open:
         return 'Open';
+
       case AdminRefundQueueFilter.inReview:
         return 'InReview';
+
       case AdminRefundQueueFilter.resolved:
         return 'Resolved';
+
       case AdminRefundQueueFilter.rejected:
         return 'Rejected';
     }
@@ -321,17 +369,13 @@ class AdminRefundRequestsQuery {
     switch (value) {
       case AdminRefundSortField.createdAt:
         return 'createdAt';
+
       case AdminRefundSortField.status:
         return 'status';
+
       case AdminRefundSortField.amount:
         return 'amount';
     }
-  }
-
-  static String? _normalizeNullableString(dynamic value) {
-    final text = value?.toString().trim();
-    if (text == null || text.isEmpty) return null;
-    return text;
   }
 }
 
@@ -361,8 +405,11 @@ class AdminRefundsState {
   }
 
   List<AdminRefundRequest> get items => pageData?.items ?? const [];
+
   int get totalCount => pageData?.totalCount ?? 0;
+
   int get page => pageData?.page ?? query.page;
+
   int get totalPages => pageData?.totalPages ?? 1;
 
   AdminRefundsState copyWith({
@@ -385,7 +432,8 @@ class AdminRefundsState {
 }
 
 class AdminRefundsNotifier extends StateNotifier<AdminRefundsState> {
-  AdminRefundsNotifier(this.repository) : super(AdminRefundsState.initial());
+  AdminRefundsNotifier(this.repository)
+      : super(AdminRefundsState.initial());
 
   final AdminRefundsRepository repository;
 
@@ -397,14 +445,15 @@ class AdminRefundsNotifier extends StateNotifier<AdminRefundsState> {
 
     try {
       final result = await repository.getRefundRequests(state.query);
+
       state = state.copyWith(
         isLoading: false,
         pageData: result,
       );
-    } catch (e) {
+    } catch (error) {
       state = state.copyWith(
         isLoading: false,
-        errorMessage: e.toString(),
+        errorMessage: error.toString(),
       );
     }
   }
@@ -419,6 +468,7 @@ class AdminRefundsNotifier extends StateNotifier<AdminRefundsState> {
         clearSearch: value.trim().isEmpty,
       ),
     );
+
     await load();
   }
 
@@ -429,6 +479,7 @@ class AdminRefundsNotifier extends StateNotifier<AdminRefundsState> {
         page: 1,
       ),
     );
+
     await load();
   }
 
@@ -442,15 +493,19 @@ class AdminRefundsNotifier extends StateNotifier<AdminRefundsState> {
         page: 1,
       ),
     );
+
     await load();
   }
 
   Future<void> goToPage(int page) async {
-    if (page <= 0) return;
+    if (page <= 0) {
+      return;
+    }
 
     state = state.copyWith(
       query: state.query.copyWith(page: page),
     );
+
     await load();
   }
 
@@ -473,12 +528,15 @@ class AdminRefundsNotifier extends StateNotifier<AdminRefundsState> {
         moderatorAction: moderatorAction,
       );
 
-      state = state.copyWith(isActionLoading: false);
-      await load();
-    } catch (e) {
       state = state.copyWith(
         isActionLoading: false,
-        errorMessage: e.toString(),
+      );
+
+      await load();
+    } catch (error) {
+      state = state.copyWith(
+        isActionLoading: false,
+        errorMessage: error.toString(),
       );
     }
   }
@@ -502,12 +560,15 @@ class AdminRefundsNotifier extends StateNotifier<AdminRefundsState> {
         moderatorAction: moderatorAction,
       );
 
-      state = state.copyWith(isActionLoading: false);
-      await load();
-    } catch (e) {
       state = state.copyWith(
         isActionLoading: false,
-        errorMessage: e.toString(),
+      );
+
+      await load();
+    } catch (error) {
+      state = state.copyWith(
+        isActionLoading: false,
+        errorMessage: error.toString(),
       );
     }
   }
@@ -515,5 +576,7 @@ class AdminRefundsNotifier extends StateNotifier<AdminRefundsState> {
 
 final adminRefundsNotifierProvider =
     StateNotifierProvider<AdminRefundsNotifier, AdminRefundsState>((ref) {
-  return AdminRefundsNotifier(ref.watch(adminRefundsRepositoryProvider));
+  return AdminRefundsNotifier(
+    ref.watch(adminRefundsRepositoryProvider),
+  );
 });

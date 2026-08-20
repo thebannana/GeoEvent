@@ -140,7 +140,7 @@ class ChatThreadController extends StateNotifier<ChatThreadState> {
 
     final sessionUserId = ref.read(sessionUserIdProvider);
     final replyingTo = state.replyingTo;
-    final now = DateTime.now();
+    final now = DateTime.now().toUtc();
     final tempId = -now.microsecondsSinceEpoch;
     final clientTag = 'temp_$tempId';
 
@@ -214,8 +214,8 @@ class ChatThreadController extends StateNotifier<ChatThreadState> {
 
     final retryClientTag =
         failedItem.clientTag?.trim().isNotEmpty == true
-            ? '${failedItem.clientTag}_retry_${DateTime.now().microsecondsSinceEpoch}'
-            : 'retry_${DateTime.now().microsecondsSinceEpoch}_${failedItem.id}';
+            ? '${failedItem.clientTag}_retry_${DateTime.now().toUtc().microsecondsSinceEpoch}'
+            : 'retry_${DateTime.now().toUtc().microsecondsSinceEpoch}_${failedItem.id}';
 
     current[index] = current[index].copyWith(
       isPending: true,
@@ -518,7 +518,7 @@ class ChatThreadController extends StateNotifier<ChatThreadState> {
     final userId = (raw['userId'] as num?)?.toInt();
     final isOnline = raw['isOnline'] as bool? ?? false;
     final lastActiveAt = raw['lastActiveAt'] != null
-        ? DateTime.tryParse(raw['lastActiveAt'].toString())?.toLocal()
+        ? (DateTime.tryParse(raw['lastActiveAt'].toString())?.toUtc())
         : null;
 
     final current = state.details.valueOrNull;

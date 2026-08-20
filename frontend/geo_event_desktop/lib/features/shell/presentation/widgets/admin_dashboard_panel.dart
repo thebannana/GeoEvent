@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-
 import 'package:file_saver/file_saver.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -11,6 +9,8 @@ import 'package:flutter/widgets.dart' as widgets;
 import 'package:printing/printing.dart';
 
 import '../../../../core/theme/app_theme_colors.dart';
+import '../../../../core/utils/date_time_extensions.dart';
+import '../../../../core/utils/logger.dart';
 import '../../../../shared/admin_profile/models/admin_dashboard_stats.dart';
 import '../../../../shared/admin_profile/providers/admin_dashboard_providers.dart';
 
@@ -34,451 +34,491 @@ class _AdminDashboardPanelState extends ConsumerState<AdminDashboardPanel> {
   bool _isGeneratingMoneyReport = false;
   bool _isGeneratingStatsReport = false;
 
+  Future<void> _downloadMoneyAndSalesReport(
+    AdminDashboardStatsBundle bundle,
+  ) async {
+    if (_isGeneratingMoneyReport) return;
+    setState(() => _isGeneratingMoneyReport = true);
 
-Future<void> _downloadMoneyAndSalesReport(
-  AdminDashboardStatsBundle bundle,
-) async {
-  if (_isGeneratingMoneyReport) return;
-  setState(() => _isGeneratingMoneyReport = true);
+    try {
+      AppLogger.info(
+        'Generating money and sales report.',
+        tag: 'AdminDashboardPanel',
+      );
 
-  try {
-    final bytes = await _buildMoneyAndSalesReport(bundle);
-    final reportDate = DateFormat('yyyy-MM-dd').format(DateTime.now());
+      final bytes = await _buildMoneyAndSalesReport(bundle);
+      final reportDate = DateTime.now().toUtc().formatDate(pattern: 'yyyy-MM-dd');
 
-    await FileSaver.instance.saveFile(
-      name: 'GeoEvent sales report $reportDate',
-      bytes: bytes,
-      ext: 'pdf',
-      mimeType: MimeType.pdf,
-    );
+      await FileSaver.instance.saveFile(
+        name: 'GeoEvent sales report $reportDate',
+        bytes: bytes,
+        ext: 'pdf',
+        mimeType: MimeType.pdf,
+      );
 
-    if (!mounted) return;
-    _showSnack(
-      'Money and sales report downloaded. Check your browser Downloads folder or your system Downloads directory.',
-    );
-  } catch (_) {
-    if (!mounted) return;
-    _showSnack('Failed to download money and sales report.');
-  } finally {
-    if (mounted) {
-      setState(() => _isGeneratingMoneyReport = false);
+      if (!mounted) return;
+      AppLogger.info(
+        'Money and sales report downloaded successfully.',
+        tag: 'AdminDashboardPanel',
+      );
+      _showSnack(
+        'Money and sales report downloaded. Check your browser Downloads folder or your system Downloads directory.',
+      );
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'Failed to download money and sales report.',
+        tag: 'AdminDashboardPanel',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      if (!mounted) return;
+      _showSnack('Failed to download money and sales report.');
+    } finally {
+      if (mounted) {
+        setState(() => _isGeneratingMoneyReport = false);
+      }
     }
   }
-}
 
-Future<void> _downloadStatisticsReport(
-  AdminDashboardStatsBundle bundle,
-) async {
-  if (_isGeneratingStatsReport) return;
-  setState(() => _isGeneratingStatsReport = true);
+  Future<void> _downloadStatisticsReport(
+    AdminDashboardStatsBundle bundle,
+  ) async {
+    if (_isGeneratingStatsReport) return;
+    setState(() => _isGeneratingStatsReport = true);
 
-  try {
-    final bytes = await _buildStatisticsReport(bundle);
-    final reportDate = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    try {
+      AppLogger.info(
+        'Generating statistics report.',
+        tag: 'AdminDashboardPanel',
+      );
 
-    await FileSaver.instance.saveFile(
-      name: 'GeoEvent statistics report $reportDate',
-      bytes: bytes,
-      ext: 'pdf',
-      mimeType: MimeType.pdf,
-    );
+      final bytes = await _buildStatisticsReport(bundle);
+      final reportDate = DateTime.now().toUtc().formatDate(pattern: 'yyyy-MM-dd');
 
-    if (!mounted) return;
-    _showSnack(
-      'Statistics report downloaded. Check your browser Downloads folder or your system Downloads directory.',
-    );
-  } catch (_) {
-    if (!mounted) return;
-    _showSnack('Failed to download statistics report.');
-  } finally {
-    if (mounted) {
-      setState(() => _isGeneratingStatsReport = false);
+      await FileSaver.instance.saveFile(
+        name: 'GeoEvent statistics report $reportDate',
+        bytes: bytes,
+        ext: 'pdf',
+        mimeType: MimeType.pdf,
+      );
+
+      if (!mounted) return;
+      AppLogger.info(
+        'Statistics report downloaded successfully.',
+        tag: 'AdminDashboardPanel',
+      );
+      _showSnack(
+        'Statistics report downloaded. Check your browser Downloads folder or your system Downloads directory.',
+      );
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'Failed to download statistics report.',
+        tag: 'AdminDashboardPanel',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      if (!mounted) return;
+      _showSnack('Failed to download statistics report.');
+    } finally {
+      if (mounted) {
+        setState(() => _isGeneratingStatsReport = false);
+      }
     }
   }
-}
 
-Future<(pw.MemoryImage?, pw.Font, pw.Font, String)> _loadReportAssets() async {
-  pw.MemoryImage? logo;
-  try {
-    final logoBytes = await rootBundle.load('assets/images/geovent.png');
-    logo = pw.MemoryImage(logoBytes.buffer.asUint8List());
-  } catch (_) {
-    logo = null;
+  Future<(pw.MemoryImage?, pw.Font, pw.Font, String)> _loadReportAssets() async {
+    pw.MemoryImage? logo;
+    try {
+      final logoBytes = await rootBundle.load('assets/images/geovent.png');
+      logo = pw.MemoryImage(logoBytes.buffer.asUint8List());
+    } catch (error, stackTrace) {
+      AppLogger.warning(
+        'Report logo could not be loaded.',
+        tag: 'AdminDashboardPanel',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      logo = null;
+    }
+
+    final baseFont = await PdfGoogleFonts.interRegular();
+    final boldFont = await PdfGoogleFonts.interBold();
+    final generatedAt = DateTime.now().toUtc().formatDateTime(
+      pattern: 'dd.MM.yyyy. HH:mm',
+    );
+
+    return (logo, baseFont, boldFont, generatedAt);
   }
 
-  final baseFont = await PdfGoogleFonts.interRegular();
-  final boldFont = await PdfGoogleFonts.interBold();
-  final generatedAt = DateFormat(
-    'dd.MM.yyyy. HH:mm',
-  ).format(DateTime.now());
-
-  return (logo, baseFont, boldFont, generatedAt);
-}
-
-pw.Widget _reportHeader({
-  required pw.MemoryImage? logo,
-  required pw.Font baseFont,
-  required pw.Font boldFont,
-  required String title,
-  required String subtitle,
-  required String generatedAt,
-}) {
-  return pw.Container(
-    padding: const pw.EdgeInsets.only(bottom: 18),
-    decoration: const pw.BoxDecoration(
-      border: pw.Border(
-        bottom: pw.BorderSide(color: PdfColors.grey300, width: 1),
+  pw.Widget _reportHeader({
+    required pw.MemoryImage? logo,
+    required pw.Font baseFont,
+    required pw.Font boldFont,
+    required String title,
+    required String subtitle,
+    required String generatedAt,
+  }) {
+    return pw.Container(
+      padding: const pw.EdgeInsets.only(bottom: 18),
+      decoration: const pw.BoxDecoration(
+        border: pw.Border(
+          bottom: pw.BorderSide(color: PdfColors.grey300, width: 1),
+        ),
       ),
-    ),
-    child: pw.Row(
-      crossAxisAlignment: pw.CrossAxisAlignment.start,
-      children: [
-        if (logo != null)
+      child: pw.Row(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          if (logo != null)
+            pw.Container(
+              width: 62,
+              height: 62,
+              margin: const pw.EdgeInsets.only(right: 16),
+              child: pw.Image(logo, fit: pw.BoxFit.contain),
+            ),
+          pw.Expanded(
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Text(
+                  'GeoEvent',
+                  style: pw.TextStyle(
+                    font: boldFont,
+                    fontSize: 11,
+                    color: PdfColors.blueGrey700,
+                  ),
+                ),
+                pw.SizedBox(height: 4),
+                pw.Text(
+                  title,
+                  style: pw.TextStyle(
+                    font: boldFont,
+                    fontSize: 22,
+                    color: PdfColors.blueGrey900,
+                  ),
+                ),
+                pw.SizedBox(height: 6),
+                pw.Text(
+                  subtitle,
+                  style: pw.TextStyle(
+                    font: baseFont,
+                    fontSize: 10.5,
+                    color: PdfColors.blueGrey600,
+                    lineSpacing: 2,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          pw.SizedBox(width: 16),
           pw.Container(
-            width: 62,
-            height: 62,
-            margin: const pw.EdgeInsets.only(right: 16),
-            child: pw.Image(logo, fit: pw.BoxFit.contain),
+            padding: const pw.EdgeInsets.all(10),
+            decoration: pw.BoxDecoration(
+              color: PdfColors.blueGrey50,
+              borderRadius: pw.BorderRadius.circular(8),
+            ),
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Text(
+                  'Report date',
+                  style: pw.TextStyle(
+                    font: boldFont,
+                    fontSize: 9,
+                    color: PdfColors.blueGrey700,
+                  ),
+                ),
+                pw.SizedBox(height: 4),
+                pw.Text(
+                  generatedAt,
+                  style: pw.TextStyle(
+                    font: baseFont,
+                    fontSize: 10,
+                    color: PdfColors.blueGrey900,
+                  ),
+                ),
+              ],
+            ),
           ),
-        pw.Expanded(
-          child: pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              pw.Text(
-                'GeoEvent',
-                style: pw.TextStyle(
-                  font: boldFont,
-                  fontSize: 11,
-                  color: PdfColors.blueGrey700,
-                ),
-              ),
-              pw.SizedBox(height: 4),
-              pw.Text(
-                title,
-                style: pw.TextStyle(
-                  font: boldFont,
-                  fontSize: 22,
-                  color: PdfColors.blueGrey900,
-                ),
-              ),
-              pw.SizedBox(height: 6),
-              pw.Text(
-                subtitle,
-                style: pw.TextStyle(
-                  font: baseFont,
-                  fontSize: 10.5,
-                  color: PdfColors.blueGrey600,
-                  lineSpacing: 2,
-                ),
-              ),
+        ],
+      ),
+    );
+  }
+
+  pw.Widget _reportSummaryBox({
+    required pw.Font baseFont,
+    required pw.Font boldFont,
+    required String title,
+    required String text,
+  }) {
+    return pw.Container(
+      width: double.infinity,
+      padding: const pw.EdgeInsets.all(14),
+      decoration: pw.BoxDecoration(
+        color: PdfColors.blueGrey50,
+        borderRadius: pw.BorderRadius.circular(10),
+        border: pw.Border.all(color: PdfColors.blueGrey100),
+      ),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Text(
+            title,
+            style: pw.TextStyle(
+              font: boldFont,
+              fontSize: 11,
+              color: PdfColors.blueGrey800,
+            ),
+          ),
+          pw.SizedBox(height: 6),
+          pw.Text(
+            text,
+            style: pw.TextStyle(
+              font: baseFont,
+              fontSize: 10.5,
+              color: PdfColors.blueGrey700,
+              lineSpacing: 2,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  pw.Widget _sectionTitle(String text, pw.Font boldFont) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.only(bottom: 8, top: 4),
+      child: pw.Text(
+        text,
+        style: pw.TextStyle(
+          font: boldFont,
+          fontSize: 14,
+          color: PdfColors.blueGrey900,
+        ),
+      ),
+    );
+  }
+
+  Future<Uint8List> _buildMoneyAndSalesReport(
+    AdminDashboardStatsBundle bundle,
+  ) async {
+    final pdf = pw.Document();
+    final tickets = bundle.tickets;
+    final formatter = NumberFormat.currency(
+      locale: 'bs_BA',
+      symbol: 'BAM ',
+      decimalDigits: 2,
+    );
+
+    final (logo, baseFont, boldFont, generatedAt) = await _loadReportAssets();
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(28),
+        theme: pw.ThemeData.withFont(
+          base: baseFont,
+          bold: boldFont,
+        ),
+        build: (context) => [
+          _reportHeader(
+            logo: logo,
+            baseFont: baseFont,
+            boldFont: boldFont,
+            title: 'Money and Sales Report',
+            subtitle:
+                'This report provides a structured financial overview of revenue, refunds, payments, reservations, and issued tickets for the current dashboard snapshot.',
+            generatedAt: generatedAt,
+          ),
+          pw.SizedBox(height: 16),
+          _reportSummaryBox(
+            baseFont: baseFont,
+            boldFont: boldFont,
+            title: 'Report scope',
+            text:
+                'All monetary values are displayed in BAM. This document is intended for administrative review, export, and printing.',
+          ),
+          pw.SizedBox(height: 18),
+          _sectionTitle('Financial overview', boldFont),
+          pw.TableHelper.fromTextArray(
+            headers: const ['Metric', 'Value'],
+            data: [
+              ['Gross revenue', formatter.format(tickets.grossRevenue)],
+              ['Net revenue', formatter.format(tickets.netRevenue)],
+              ['Refunded amount', formatter.format(tickets.refundedAmount)],
+              ['PayPal revenue', formatter.format(tickets.payPalRevenue)],
+              ['Cash revenue', formatter.format(tickets.cashRevenue)],
+              ['Pending cash revenue', formatter.format(tickets.pendingCashRevenue)],
             ],
+            headerStyle: pw.TextStyle(font: boldFont, color: PdfColors.white),
+            headerDecoration: const pw.BoxDecoration(color: PdfColors.blueGrey700),
+            cellStyle: pw.TextStyle(font: baseFont, fontSize: 10.5),
+            cellPadding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            rowDecoration: const pw.BoxDecoration(color: PdfColors.white),
+            oddRowDecoration: const pw.BoxDecoration(color: PdfColors.blueGrey50),
+            border: pw.TableBorder.all(color: PdfColors.blueGrey100),
           ),
-        ),
-        pw.SizedBox(width: 16),
-        pw.Container(
-          padding: const pw.EdgeInsets.all(10),
-          decoration: pw.BoxDecoration(
-            color: PdfColors.blueGrey50,
-            borderRadius: pw.BorderRadius.circular(8),
-          ),
-          child: pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              pw.Text(
-                'Report date',
-                style: pw.TextStyle(
-                  font: boldFont,
-                  fontSize: 9,
-                  color: PdfColors.blueGrey700,
-                ),
-              ),
-              pw.SizedBox(height: 4),
-              pw.Text(
-                generatedAt,
-                style: pw.TextStyle(
-                  font: baseFont,
-                  fontSize: 10,
-                  color: PdfColors.blueGrey900,
-                ),
-              ),
+          pw.SizedBox(height: 18),
+          _sectionTitle('Payments', boldFont),
+          pw.TableHelper.fromTextArray(
+            headers: const ['Metric', 'Value'],
+            data: [
+              ['Total payments', '${tickets.totalPayments}'],
+              ['Completed payments', '${tickets.completedPayments}'],
+              ['Pending payments', '${tickets.pendingPayments}'],
+              ['Refunded payments', '${tickets.refundedPayments}'],
             ],
+            headerStyle: pw.TextStyle(font: boldFont, color: PdfColors.white),
+            headerDecoration: const pw.BoxDecoration(color: PdfColors.blueGrey700),
+            cellStyle: pw.TextStyle(font: baseFont, fontSize: 10.5),
+            cellPadding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            oddRowDecoration: const pw.BoxDecoration(color: PdfColors.blueGrey50),
+            border: pw.TableBorder.all(color: PdfColors.blueGrey100),
           ),
-        ),
-      ],
-    ),
-  );
-}
-
-pw.Widget _reportSummaryBox({
-  required pw.Font baseFont,
-  required pw.Font boldFont,
-  required String title,
-  required String text,
-}) {
-  return pw.Container(
-    width: double.infinity,
-    padding: const pw.EdgeInsets.all(14),
-    decoration: pw.BoxDecoration(
-      color: PdfColors.blueGrey50,
-      borderRadius: pw.BorderRadius.circular(10),
-      border: pw.Border.all(color: PdfColors.blueGrey100),
-    ),
-    child: pw.Column(
-      crossAxisAlignment: pw.CrossAxisAlignment.start,
-      children: [
-        pw.Text(
-          title,
-          style: pw.TextStyle(
-            font: boldFont,
-            fontSize: 11,
-            color: PdfColors.blueGrey800,
+          pw.SizedBox(height: 18),
+          _sectionTitle('Reservations and tickets', boldFont),
+          pw.TableHelper.fromTextArray(
+            headers: const ['Metric', 'Value'],
+            data: [
+              ['Total reservations', '${tickets.totalReservations}'],
+              ['Confirmed reservations', '${tickets.confirmedReservations}'],
+              ['Pending reservations', '${tickets.pendingReservations}'],
+              ['Cancelled reservations', '${tickets.cancelledReservations}'],
+              ['Expired reservations', '${tickets.expiredReservations}'],
+              ['Total tickets', '${tickets.totalTickets}'],
+              ['Active tickets', '${tickets.activeTickets}'],
+              ['Used tickets', '${tickets.usedTickets}'],
+              ['Cancelled tickets', '${tickets.cancelledTickets}'],
+            ],
+            headerStyle: pw.TextStyle(font: boldFont, color: PdfColors.white),
+            headerDecoration: const pw.BoxDecoration(color: PdfColors.blueGrey700),
+            cellStyle: pw.TextStyle(font: baseFont, fontSize: 10.5),
+            cellPadding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            oddRowDecoration: const pw.BoxDecoration(color: PdfColors.blueGrey50),
+            border: pw.TableBorder.all(color: PdfColors.blueGrey100),
           ),
+        ],
+      ),
+    );
+
+    return pdf.save();
+  }
+
+  Future<Uint8List> _buildStatisticsReport(
+    AdminDashboardStatsBundle bundle,
+  ) async {
+    final pdf = pw.Document();
+    final users = bundle.users;
+    final events = bundle.events;
+    final tickets = bundle.tickets;
+
+    final (logo, baseFont, boldFont, generatedAt) = await _loadReportAssets();
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(28),
+        theme: pw.ThemeData.withFont(
+          base: baseFont,
+          bold: boldFont,
         ),
-        pw.SizedBox(height: 6),
-        pw.Text(
-          text,
-          style: pw.TextStyle(
-            font: baseFont,
-            fontSize: 10.5,
-            color: PdfColors.blueGrey700,
-            lineSpacing: 2,
+        build: (context) => [
+          _reportHeader(
+            logo: logo,
+            baseFont: baseFont,
+            boldFont: boldFont,
+            title: 'Platform Statistics Report',
+            subtitle:
+                'This report summarizes platform activity across users, events, reservations, and tickets using the latest data visible on the admin dashboard.',
+            generatedAt: generatedAt,
           ),
-        ),
-      ],
-    ),
-  );
-}
-
-pw.Widget _sectionTitle(String text, pw.Font boldFont) {
-  return pw.Padding(
-    padding: const pw.EdgeInsets.only(bottom: 8, top: 4),
-    child: pw.Text(
-      text,
-      style: pw.TextStyle(
-        font: boldFont,
-        fontSize: 14,
-        color: PdfColors.blueGrey900,
+          pw.SizedBox(height: 16),
+          _reportSummaryBox(
+            baseFont: baseFont,
+            boldFont: boldFont,
+            title: 'Administrative note',
+            text:
+                'Use this document for internal monitoring, operational review, and export-ready reporting during meetings or audits.',
+          ),
+          pw.SizedBox(height: 18),
+          _sectionTitle('Users', boldFont),
+          pw.TableHelper.fromTextArray(
+            headers: const ['Metric', 'Value'],
+            data: [
+              ['Active users', '${users.activeUsersCount}'],
+              ['Total reports', '${users.totalReportsCount}'],
+              ['Bookmarks', '${users.bookmarksCount}'],
+              ['Comments', '${users.commentsCount}'],
+              ['Liked events', '${users.likedEventsCount}'],
+            ],
+            headerStyle: pw.TextStyle(font: boldFont, color: PdfColors.white),
+            headerDecoration: const pw.BoxDecoration(color: PdfColors.blueGrey700),
+            cellStyle: pw.TextStyle(font: baseFont, fontSize: 10.5),
+            cellPadding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            oddRowDecoration: const pw.BoxDecoration(color: PdfColors.blueGrey50),
+            border: pw.TableBorder.all(color: PdfColors.blueGrey100),
+          ),
+          pw.SizedBox(height: 18),
+          _sectionTitle('Events', boldFont),
+          pw.TableHelper.fromTextArray(
+            headers: const ['Metric', 'Value'],
+            data: [
+              ['Total events', '${events.totalEventsCount}'],
+              ['Confirmed events', '${events.confirmedEventsCount}'],
+              ['Pending events', '${events.pendingEventsCount}'],
+              ['Cancelled events', '${events.cancelledEventsCount}'],
+              ['Completed events', '${events.completedEventsCount}'],
+              ['Total likes', '${events.totalLikesCount}'],
+              ['Total bookmarks', '${events.totalBookmarksCount}'],
+              ['Total comments', '${events.totalCommentsCount}'],
+              ['Total views', '${events.totalViewsCount}'],
+            ],
+            headerStyle: pw.TextStyle(font: boldFont, color: PdfColors.white),
+            headerDecoration: const pw.BoxDecoration(color: PdfColors.blueGrey700),
+            cellStyle: pw.TextStyle(font: baseFont, fontSize: 10.5),
+            cellPadding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            oddRowDecoration: const pw.BoxDecoration(color: PdfColors.blueGrey50),
+            border: pw.TableBorder.all(color: PdfColors.blueGrey100),
+          ),
+          pw.SizedBox(height: 18),
+          _sectionTitle('Reservations and tickets', boldFont),
+          pw.TableHelper.fromTextArray(
+            headers: const ['Metric', 'Value'],
+            data: [
+              ['Total reservations', '${tickets.totalReservations}'],
+              ['Pending reservations', '${tickets.pendingReservations}'],
+              ['Confirmed reservations', '${tickets.confirmedReservations}'],
+              ['Cancelled reservations', '${tickets.cancelledReservations}'],
+              ['Expired reservations', '${tickets.expiredReservations}'],
+              ['Total tickets', '${tickets.totalTickets}'],
+              ['Active tickets', '${tickets.activeTickets}'],
+              ['Used tickets', '${tickets.usedTickets}'],
+              ['Cancelled tickets', '${tickets.cancelledTickets}'],
+            ],
+            headerStyle: pw.TextStyle(font: boldFont, color: PdfColors.white),
+            headerDecoration: const pw.BoxDecoration(color: PdfColors.blueGrey700),
+            cellStyle: pw.TextStyle(font: baseFont, fontSize: 10.5),
+            cellPadding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            oddRowDecoration: const pw.BoxDecoration(color: PdfColors.blueGrey50),
+            border: pw.TableBorder.all(color: PdfColors.blueGrey100),
+          ),
+        ],
       ),
-    ),
-  );
-}
+    );
 
-Future<Uint8List> _buildMoneyAndSalesReport(
-  AdminDashboardStatsBundle bundle,
-) async {
-  final pdf = pw.Document();
-  final tickets = bundle.tickets;
-  final formatter = NumberFormat.currency(
-    locale: 'bs_BA',
-    symbol: 'BAM ',
-    decimalDigits: 2,
-  );
-
-  final (logo, baseFont, boldFont, generatedAt) = await _loadReportAssets();
-
-  pdf.addPage(
-    pw.MultiPage(
-      pageFormat: PdfPageFormat.a4,
-      margin: const pw.EdgeInsets.all(28),
-      theme: pw.ThemeData.withFont(
-        base: baseFont,
-        bold: boldFont,
-      ),
-      build: (context) => [
-        _reportHeader(
-          logo: logo,
-          baseFont: baseFont,
-          boldFont: boldFont,
-          title: 'Money and Sales Report',
-          subtitle:
-              'This report provides a structured financial overview of revenue, refunds, payments, reservations, and issued tickets for the current dashboard snapshot.',
-          generatedAt: generatedAt,
-        ),
-        pw.SizedBox(height: 16),
-        _reportSummaryBox(
-          baseFont: baseFont,
-          boldFont: boldFont,
-          title: 'Report scope',
-          text:
-              'All monetary values are displayed in BAM. This document is intended for administrative review, export, and printing.',
-        ),
-        pw.SizedBox(height: 18),
-        _sectionTitle('Financial overview', boldFont),
-        pw.TableHelper.fromTextArray(
-          headers: const ['Metric', 'Value'],
-          data: [
-            ['Gross revenue', formatter.format(tickets.grossRevenue)],
-            ['Net revenue', formatter.format(tickets.netRevenue)],
-            ['Refunded amount', formatter.format(tickets.refundedAmount)],
-            ['PayPal revenue', formatter.format(tickets.payPalRevenue)],
-            ['Cash revenue', formatter.format(tickets.cashRevenue)],
-            ['Pending cash revenue', formatter.format(tickets.pendingCashRevenue)],
-          ],
-          headerStyle: pw.TextStyle(font: boldFont, color: PdfColors.white),
-          headerDecoration: const pw.BoxDecoration(color: PdfColors.blueGrey700),
-          cellStyle: pw.TextStyle(font: baseFont, fontSize: 10.5),
-          cellPadding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          rowDecoration: const pw.BoxDecoration(color: PdfColors.white),
-          oddRowDecoration: const pw.BoxDecoration(color: PdfColors.blueGrey50),
-          border: pw.TableBorder.all(color: PdfColors.blueGrey100),
-        ),
-        pw.SizedBox(height: 18),
-        _sectionTitle('Payments', boldFont),
-        pw.TableHelper.fromTextArray(
-          headers: const ['Metric', 'Value'],
-          data: [
-            ['Total payments', '${tickets.totalPayments}'],
-            ['Completed payments', '${tickets.completedPayments}'],
-            ['Pending payments', '${tickets.pendingPayments}'],
-            ['Refunded payments', '${tickets.refundedPayments}'],
-          ],
-          headerStyle: pw.TextStyle(font: boldFont, color: PdfColors.white),
-          headerDecoration: const pw.BoxDecoration(color: PdfColors.blueGrey700),
-          cellStyle: pw.TextStyle(font: baseFont, fontSize: 10.5),
-          cellPadding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          oddRowDecoration: const pw.BoxDecoration(color: PdfColors.blueGrey50),
-          border: pw.TableBorder.all(color: PdfColors.blueGrey100),
-        ),
-        pw.SizedBox(height: 18),
-        _sectionTitle('Reservations and tickets', boldFont),
-        pw.TableHelper.fromTextArray(
-          headers: const ['Metric', 'Value'],
-          data: [
-            ['Total reservations', '${tickets.totalReservations}'],
-            ['Confirmed reservations', '${tickets.confirmedReservations}'],
-            ['Pending reservations', '${tickets.pendingReservations}'],
-            ['Cancelled reservations', '${tickets.cancelledReservations}'],
-            ['Expired reservations', '${tickets.expiredReservations}'],
-            ['Total tickets', '${tickets.totalTickets}'],
-            ['Active tickets', '${tickets.activeTickets}'],
-            ['Used tickets', '${tickets.usedTickets}'],
-            ['Cancelled tickets', '${tickets.cancelledTickets}'],
-          ],
-          headerStyle: pw.TextStyle(font: boldFont, color: PdfColors.white),
-          headerDecoration: const pw.BoxDecoration(color: PdfColors.blueGrey700),
-          cellStyle: pw.TextStyle(font: baseFont, fontSize: 10.5),
-          cellPadding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          oddRowDecoration: const pw.BoxDecoration(color: PdfColors.blueGrey50),
-          border: pw.TableBorder.all(color: PdfColors.blueGrey100),
-        ),
-      ],
-    ),
-  );
-
-  return pdf.save();
-}
-
-Future<Uint8List> _buildStatisticsReport(
-  AdminDashboardStatsBundle bundle,
-) async {
-  final pdf = pw.Document();
-  final users = bundle.users;
-  final events = bundle.events;
-  final tickets = bundle.tickets;
-
-  final (logo, baseFont, boldFont, generatedAt) = await _loadReportAssets();
-
-  pdf.addPage(
-    pw.MultiPage(
-      pageFormat: PdfPageFormat.a4,
-      margin: const pw.EdgeInsets.all(28),
-      theme: pw.ThemeData.withFont(
-        base: baseFont,
-        bold: boldFont,
-      ),
-      build: (context) => [
-        _reportHeader(
-          logo: logo,
-          baseFont: baseFont,
-          boldFont: boldFont,
-          title: 'Platform Statistics Report',
-          subtitle:
-              'This report summarizes platform activity across users, events, reservations, and tickets using the latest data visible on the admin dashboard.',
-          generatedAt: generatedAt,
-        ),
-        pw.SizedBox(height: 16),
-        _reportSummaryBox(
-          baseFont: baseFont,
-          boldFont: boldFont,
-          title: 'Administrative note',
-          text:
-              'Use this document for internal monitoring, operational review, and export-ready reporting during meetings or audits.',
-        ),
-        pw.SizedBox(height: 18),
-        _sectionTitle('Users', boldFont),
-        pw.TableHelper.fromTextArray(
-          headers: const ['Metric', 'Value'],
-          data: [
-            ['Active users', '${users.activeUsersCount}'],
-            ['Total reports', '${users.totalReportsCount}'],
-            ['Bookmarks', '${users.bookmarksCount}'],
-            ['Comments', '${users.commentsCount}'],
-            ['Liked events', '${users.likedEventsCount}'],
-          ],
-          headerStyle: pw.TextStyle(font: boldFont, color: PdfColors.white),
-          headerDecoration: const pw.BoxDecoration(color: PdfColors.blueGrey700),
-          cellStyle: pw.TextStyle(font: baseFont, fontSize: 10.5),
-          cellPadding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          oddRowDecoration: const pw.BoxDecoration(color: PdfColors.blueGrey50),
-          border: pw.TableBorder.all(color: PdfColors.blueGrey100),
-        ),
-        pw.SizedBox(height: 18),
-        _sectionTitle('Events', boldFont),
-        pw.TableHelper.fromTextArray(
-          headers: const ['Metric', 'Value'],
-          data: [
-            ['Total events', '${events.totalEventsCount}'],
-            ['Confirmed events', '${events.confirmedEventsCount}'],
-            ['Pending events', '${events.pendingEventsCount}'],
-            ['Cancelled events', '${events.cancelledEventsCount}'],
-            ['Completed events', '${events.completedEventsCount}'],
-            ['Total likes', '${events.totalLikesCount}'],
-            ['Total bookmarks', '${events.totalBookmarksCount}'],
-            ['Total comments', '${events.totalCommentsCount}'],
-            ['Total views', '${events.totalViewsCount}'],
-          ],
-          headerStyle: pw.TextStyle(font: boldFont, color: PdfColors.white),
-          headerDecoration: const pw.BoxDecoration(color: PdfColors.blueGrey700),
-          cellStyle: pw.TextStyle(font: baseFont, fontSize: 10.5),
-          cellPadding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          oddRowDecoration: const pw.BoxDecoration(color: PdfColors.blueGrey50),
-          border: pw.TableBorder.all(color: PdfColors.blueGrey100),
-        ),
-        pw.SizedBox(height: 18),
-        _sectionTitle('Reservations and tickets', boldFont),
-        pw.TableHelper.fromTextArray(
-          headers: const ['Metric', 'Value'],
-          data: [
-            ['Total reservations', '${tickets.totalReservations}'],
-            ['Pending reservations', '${tickets.pendingReservations}'],
-            ['Confirmed reservations', '${tickets.confirmedReservations}'],
-            ['Cancelled reservations', '${tickets.cancelledReservations}'],
-            ['Expired reservations', '${tickets.expiredReservations}'],
-            ['Total tickets', '${tickets.totalTickets}'],
-            ['Active tickets', '${tickets.activeTickets}'],
-            ['Used tickets', '${tickets.usedTickets}'],
-            ['Cancelled tickets', '${tickets.cancelledTickets}'],
-          ],
-          headerStyle: pw.TextStyle(font: boldFont, color: PdfColors.white),
-          headerDecoration: const pw.BoxDecoration(color: PdfColors.blueGrey700),
-          cellStyle: pw.TextStyle(font: baseFont, fontSize: 10.5),
-          cellPadding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          oddRowDecoration: const pw.BoxDecoration(color: PdfColors.blueGrey50),
-          border: pw.TableBorder.all(color: PdfColors.blueGrey100),
-        ),
-      ],
-    ),
-  );
-
-  return pdf.save();
-}
+    return pdf.save();
+  }
 
   Future<void> _printMoneyAndSalesReport(
     AdminDashboardStatsBundle bundle,
   ) async {
     try {
+      AppLogger.info(
+        'Opening print dialog for money and sales report.',
+        tag: 'AdminDashboardPanel',
+      );
+
       final bytes = await _buildMoneyAndSalesReport(bundle);
-      final reportDate = DateFormat('yyyy-MM-dd').format(DateTime.now());
+      final reportDate = DateTime.now().toUtc().formatDate(pattern: 'yyyy-MM-dd');
 
       await Printing.layoutPdf(
         onLayout: (_) async => bytes,
@@ -487,7 +527,13 @@ Future<Uint8List> _buildStatisticsReport(
 
       if (!mounted) return;
       _showSnack('Printer dialog opened for money and sales report.');
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'Failed to open print dialog for money and sales report.',
+        tag: 'AdminDashboardPanel',
+        error: error,
+        stackTrace: stackTrace,
+      );
       if (!mounted) return;
       _showSnack('Failed to open printer for money and sales report.');
     }
@@ -497,8 +543,13 @@ Future<Uint8List> _buildStatisticsReport(
     AdminDashboardStatsBundle bundle,
   ) async {
     try {
+      AppLogger.info(
+        'Opening print dialog for statistics report.',
+        tag: 'AdminDashboardPanel',
+      );
+
       final bytes = await _buildStatisticsReport(bundle);
-      final reportDate = DateFormat('yyyy-MM-dd').format(DateTime.now());
+      final reportDate = DateTime.now().toUtc().formatDate(pattern: 'yyyy-MM-dd');
 
       await Printing.layoutPdf(
         onLayout: (_) async => bytes,
@@ -507,110 +558,124 @@ Future<Uint8List> _buildStatisticsReport(
 
       if (!mounted) return;
       _showSnack('Printer dialog opened for statistics report.');
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'Failed to open print dialog for statistics report.',
+        tag: 'AdminDashboardPanel',
+        error: error,
+        stackTrace: stackTrace,
+      );
       if (!mounted) return;
       _showSnack('Failed to open printer for statistics report.');
     }
   }
 
+  void _showSnack(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
 
-void _showSnack(String message) {
-  ScaffoldMessenger.of(context)
-    ..hideCurrentSnackBar()
-    ..showSnackBar(SnackBar(content: Text(message)));
-}
+  String _formatWholeNumber(num value) {
+    return NumberFormat.decimalPattern('bs_BA').format(value);
+  }
 
-String _formatWholeNumber(num value) {
-  return NumberFormat.decimalPattern('bs_BA').format(value);
-}
+  String _formatCurrency(num value) {
+    return NumberFormat.currency(
+      locale: 'bs_BA',
+      symbol: 'BAM ',
+      decimalDigits: 2,
+    ).format(value);
+  }
 
-String _formatCurrency(num value) {
-  return NumberFormat.currency(
-    locale: 'bs_BA',
-    symbol: 'BAM ',
-    decimalDigits: 2,
-  ).format(value);
-}
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.appColors;
+    final textTheme = theme.textTheme;
+    final colorScheme = theme.colorScheme;
 
-@override
-Widget build(BuildContext context) {
-  final theme = Theme.of(context);
-  final colors = theme.appColors;
-  final textTheme = theme.textTheme;
-  final colorScheme = theme.colorScheme;
+    final dashboardAsync = ref.watch(adminDashboardStatsProvider);
 
-  final dashboardAsync = ref.watch(adminDashboardStatsProvider);
-
-  return dashboardAsync.when(
-    loading: () => Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: colors.card.withValues(alpha: 0.96),
-        borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: colors.border),
-        boxShadow: [
-          BoxShadow(
-            color: theme.brightness == Brightness.dark
-                ? const Color(0x16000000)
-                : const Color(0x12000000),
-            blurRadius: 18,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: const Center(
-        child: Padding(
-          padding: EdgeInsets.all(48),
-          child: CircularProgressIndicator(),
-        ),
-      ),
-    ),
-    error: (_, __) => Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: colors.card.withValues(alpha: 0.96),
-        borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: colors.border),
-      ),
-      child: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'Failed to load dashboard statistics.',
-              style: textTheme.titleMedium?.copyWith(
-                color: colors.textSecondary,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 12),
-            FilledButton(
-              onPressed: () => ref.refresh(adminDashboardStatsProvider),
-              child: const Text('Retry'),
+    return dashboardAsync.when(
+      loading: () => Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: colors.card.withValues(alpha: 0.96),
+          borderRadius: BorderRadius.circular(28),
+          border: Border.all(color: colors.border),
+          boxShadow: [
+            BoxShadow(
+              color: theme.brightness == Brightness.dark
+                  ? const Color(0x16000000)
+                  : const Color(0x12000000),
+              blurRadius: 18,
+              offset: const Offset(0, 8),
             ),
           ],
         ),
-      ),
-    ),
-    data: (bundle) {
-      final users = bundle.users;
-      final events = bundle.events;
-      final tickets = bundle.tickets;
-
-      final chartData = switch (_selectedTabIndex) {
-        0 => _ChartSeriesData(
-            title: 'Users overview',
-            subtitle: 'Platform engagement and moderation indicators.',
-            values: [
-              users.activeUsersCount.toDouble(),
-              users.totalReportsCount.toDouble(),
-              users.bookmarksCount.toDouble(),
-              users.commentsCount.toDouble(),
-              users.likedEventsCount.toDouble(),
-            ],
-            labels: const ['Active', 'Reports', 'Bookmarks', 'Comments', 'Likes'],
+        child: const Center(
+          child: Padding(
+            padding: EdgeInsets.all(48),
+            child: CircularProgressIndicator(),
           ),
-        1 => _ChartSeriesData(
+        ),
+      ),
+      error: (error, stackTrace) {
+        AppLogger.error(
+          'Failed to load dashboard statistics.',
+          tag: 'AdminDashboardPanel',
+          error: error,
+          stackTrace: stackTrace,
+        );
+
+        return Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: colors.card.withValues(alpha: 0.96),
+            borderRadius: BorderRadius.circular(28),
+            border: Border.all(color: colors.border),
+          ),
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Failed to load dashboard statistics.',
+                  style: textTheme.titleMedium?.copyWith(
+                    color: colors.textSecondary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                FilledButton(
+                  onPressed: () => ref.refresh(adminDashboardStatsProvider),
+                  child: const Text('Retry'),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+      data: (bundle) {
+        final users = bundle.users;
+        final events = bundle.events;
+        final tickets = bundle.tickets;
+
+        final chartData = switch (_selectedTabIndex) {
+          0 => _ChartSeriesData(
+              title: 'Users overview',
+              subtitle: 'Platform engagement and moderation indicators.',
+              values: [
+                users.activeUsersCount.toDouble(),
+                users.totalReportsCount.toDouble(),
+                users.bookmarksCount.toDouble(),
+                users.commentsCount.toDouble(),
+                users.likedEventsCount.toDouble(),
+              ],
+              labels: const ['Active', 'Reports', 'Bookmarks', 'Comments', 'Likes'],
+            ),
+          1 => _ChartSeriesData(
               title: 'Events overview',
               subtitle: 'Current event lifecycle and engagement distribution.',
               values: [
@@ -622,319 +687,319 @@ Widget build(BuildContext context) {
               ],
               labels: const ['Total', 'Confirmed', 'Pending', 'Cancelled', 'Completed'],
             ),
-        2 => _ChartSeriesData(
-            title: 'Revenue overview',
-            subtitle: 'BAM-based financial overview for payments and sales.',
-            values: [
-              tickets.grossRevenue,
-              tickets.netRevenue,
-              tickets.refundedAmount,
-              tickets.payPalRevenue,
-              tickets.cashRevenue,
-            ],
-            labels: const ['Gross', 'Net', 'Refunded', 'PayPal', 'Cash'],
-            currency: true,
-          ),
-        _ => _ChartSeriesData(
-            title: 'Reservations overview',
-            subtitle: 'Reservation and ticket status distribution.',
-            values: [
-              tickets.totalReservations.toDouble(),
-              tickets.pendingReservations.toDouble(),
-              tickets.confirmedReservations.toDouble(),
-              tickets.cancelledReservations.toDouble(),
-              tickets.expiredReservations.toDouble(),
-            ],
-            labels: const ['Total', 'Pending', 'Confirmed', 'Cancelled', 'Expired'],
-          ),
-      };
-
-      return LayoutBuilder(
-        builder: (context, constraints) {
-          final width = constraints.maxWidth;
-          final isMobile = width < 760;
-          final isTablet = width >= 760 && width < 1180;
-          final isWide = width >= 1180;
-
-          final statCardWidth = isMobile
-              ? double.infinity
-              : isTablet
-                  ? (width - 64) / 2
-                  : 220.0;
-
-          final horizontalPadding = isMobile ? 16.0 : 24.0;
-          final outerRadius = isMobile ? 22.0 : 28.0;
-          final sectionSpacing = isMobile ? 16.0 : 22.0;
-
-          Widget analyticsPanel = Container(
-            padding: EdgeInsets.fromLTRB(
-              isMobile ? 16 : 22,
-              isMobile ? 16 : 20,
-              isMobile ? 16 : 22,
-              isMobile ? 16 : 20,
-            ),
-            decoration: BoxDecoration(
-              color: colors.surface.withValues(alpha: 0.88),
-              borderRadius: BorderRadius.circular(26),
-              border: Border.all(
-                color: colors.borderSoft.withValues(alpha: 0.92),
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.04),
-                  blurRadius: 14,
-                  offset: const Offset(0, 6),
-                ),
+          2 => _ChartSeriesData(
+              title: 'Revenue overview',
+              subtitle: 'BAM-based financial overview for payments and sales.',
+              values: [
+                tickets.grossRevenue,
+                tickets.netRevenue,
+                tickets.refundedAmount,
+                tickets.payPalRevenue,
+                tickets.cashRevenue,
               ],
+              labels: const ['Gross', 'Net', 'Refunded', 'PayPal', 'Cash'],
+              currency: true,
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Analytics',
-                  style: textTheme.titleLarge?.copyWith(
-                    color: colors.textPrimary,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'Switch between sections to review the most important platform metrics.',
-                  style: textTheme.bodyMedium?.copyWith(
-                    color: colors.textSecondary,
-                    fontWeight: FontWeight.w600,
-                    height: 1.4,
-                  ),
-                ),
-                const SizedBox(height: 18),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: List.generate(
-                    _tabs.length,
-                    (index) => _ChartTabButton(
-                      label: _tabs[index],
-                      isSelected: index == _selectedTabIndex,
-                      onTap: () {
-                        setState(() {
-                          _selectedTabIndex = index;
-                        });
-                      },
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 18),
-                SizedBox(
-                  height: isMobile ? 320 : 380,
-                  child: _DashboardChartCard(
-                    data: chartData,
-                    currencyFormatter: _formatCurrency,
-                    numberFormatter: _formatWholeNumber,
-                  ),
-                ),
+          _ => _ChartSeriesData(
+              title: 'Reservations overview',
+              subtitle: 'Reservation and ticket status distribution.',
+              values: [
+                tickets.totalReservations.toDouble(),
+                tickets.pendingReservations.toDouble(),
+                tickets.confirmedReservations.toDouble(),
+                tickets.cancelledReservations.toDouble(),
+                tickets.expiredReservations.toDouble(),
               ],
+              labels: const ['Total', 'Pending', 'Confirmed', 'Cancelled', 'Expired'],
             ),
-          );
+        };
 
-          Widget reportsPanel = Column(
-            children: [
-              _DashboardReportCard(
-                title: 'Money and sales report',
-                subtitle:
-                    'Gross revenue, net revenue, refunds, payments, reservations, and ticket sales in BAM.',
-                icon: Icons.receipt_long_outlined,
-                buttonLabel:
-                    _isGeneratingMoneyReport ? 'Preparing...' : 'Download PDF',
-                accentColor: colorScheme.primary,
-                onPressed: _isGeneratingMoneyReport
-                    ? null
-                    : () => _downloadMoneyAndSalesReport(bundle),
-                secondaryActionLabel: 'Print',
-                onSecondaryPressed: () => _printMoneyAndSalesReport(bundle),
-              ),
-              const SizedBox(height: 18),
-              _DashboardReportCard(
-                title: 'Platform statistics report',
-                subtitle:
-                    'Users, events, reservations, tickets, and operational platform statistics in PDF format.',
-                icon: Icons.analytics_outlined,
-                buttonLabel:
-                    _isGeneratingStatsReport ? 'Preparing...' : 'Download PDF',
-                accentColor: const Color(0xFF5B8FB4),
-                onPressed: _isGeneratingStatsReport
-                    ? null
-                    : () => _downloadStatisticsReport(bundle),
-                secondaryActionLabel: 'Print',
-                onSecondaryPressed: () => _printStatisticsReport(bundle),
-              ),
-              const SizedBox(height: 18),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(22),
-                decoration: BoxDecoration(
-                  color: colors.surface.withValues(alpha: 0.70),
-                  borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: colors.borderSoft),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Reporting tools',
-                      style: textTheme.titleMedium?.copyWith(
-                        color: colors.textPrimary,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Text(
-                      'Reports are exported as PDF files and can also be sent directly to your system print dialog.',
-                      style: textTheme.bodyMedium?.copyWith(
-                        color: colors.textSecondary,
-                        fontWeight: FontWeight.w600,
-                        height: 1.45,
-                      ),
-                    ),
-                    const SizedBox(height: 18),
-                    _MiniInfoRow(
-                      icon: Icons.folder_outlined,
-                      label: 'Download location',
-                      value: 'Browser / system Downloads',
-                    ),
-                    const SizedBox(height: 12),
-                    _MiniInfoRow(
-                      icon: Icons.payments_outlined,
-                      label: 'Currency',
-                      value: 'BAM',
-                    ),
-                    const SizedBox(height: 18),
-                    Wrap(
-                      spacing: 10,
-                      runSpacing: 10,
-                      children: [
-                        OutlinedButton.icon(
-                          onPressed: () => _printStatisticsReport(bundle),
-                          icon: const Icon(Icons.print_outlined, size: 18),
-                          label: const Text('Print statistics'),
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 14,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                          ),
-                        ),
-                        OutlinedButton.icon(
-                          onPressed: () => _printMoneyAndSalesReport(bundle),
-                          icon: const Icon(Icons.receipt_long_outlined, size: 18),
-                          label: const Text('Print sales report'),
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 14,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          );
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            final width = constraints.maxWidth;
+            final isMobile = width < 760;
+            final isTablet = width >= 760 && width < 1180;
+            final isWide = width >= 1180;
 
-          return Container(
-            padding: EdgeInsets.all(horizontalPadding),
-            decoration: BoxDecoration(
-              color: colors.card.withValues(alpha: 0.96),
-              borderRadius: BorderRadius.circular(outerRadius),
-              border: Border.all(color: colors.border),
-              boxShadow: [
-                BoxShadow(
-                  color: theme.brightness == Brightness.dark
-                      ? const Color(0x16000000)
-                      : const Color(0x12000000),
-                  blurRadius: 18,
-                  offset: const Offset(0, 8),
+            final statCardWidth = isMobile
+                ? double.infinity
+                : isTablet
+                    ? (width - 64) / 2
+                    : 220.0;
+
+            final horizontalPadding = isMobile ? 16.0 : 24.0;
+            final outerRadius = isMobile ? 22.0 : 28.0;
+            final sectionSpacing = isMobile ? 16.0 : 22.0;
+
+            Widget analyticsPanel = Container(
+              padding: EdgeInsets.fromLTRB(
+                isMobile ? 16 : 22,
+                isMobile ? 16 : 20,
+                isMobile ? 16 : 22,
+                isMobile ? 16 : 20,
+              ),
+              decoration: BoxDecoration(
+                color: colors.surface.withValues(alpha: 0.88),
+                borderRadius: BorderRadius.circular(26),
+                border: Border.all(
+                  color: colors.borderSoft.withValues(alpha: 0.92),
                 ),
-              ],
-            ),
-            child: SingleChildScrollView(
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.04),
+                    blurRadius: 14,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Text(
+                    'Analytics',
+                    style: textTheme.titleLarge?.copyWith(
+                      color: colors.textPrimary,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Switch between sections to review the most important platform metrics.',
+                    style: textTheme.bodyMedium?.copyWith(
+                      color: colors.textSecondary,
+                      fontWeight: FontWeight.w600,
+                      height: 1.4,
+                    ),
+                  ),
+                  const SizedBox(height: 18),
                   Wrap(
-                    spacing: 16,
-                    runSpacing: 16,
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: List.generate(
+                      _tabs.length,
+                      (index) => _ChartTabButton(
+                        label: _tabs[index],
+                        isSelected: index == _selectedTabIndex,
+                        onTap: () {
+                          setState(() {
+                            _selectedTabIndex = index;
+                          });
+                        },
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  SizedBox(
+                    height: isMobile ? 320 : 380,
+                    child: _DashboardChartCard(
+                      data: chartData,
+                      currencyFormatter: _formatCurrency,
+                      numberFormatter: _formatWholeNumber,
+                    ),
+                  ),
+                ],
+              ),
+            );
+
+            Widget reportsPanel = Column(
+              children: [
+                _DashboardReportCard(
+                  title: 'Money and sales report',
+                  subtitle:
+                      'Gross revenue, net revenue, refunds, payments, reservations, and ticket sales in BAM.',
+                  icon: Icons.receipt_long_outlined,
+                  buttonLabel:
+                      _isGeneratingMoneyReport ? 'Preparing...' : 'Download PDF',
+                  accentColor: colorScheme.primary,
+                  onPressed: _isGeneratingMoneyReport
+                      ? null
+                      : () => _downloadMoneyAndSalesReport(bundle),
+                  secondaryActionLabel: 'Print',
+                  onSecondaryPressed: () => _printMoneyAndSalesReport(bundle),
+                ),
+                const SizedBox(height: 18),
+                _DashboardReportCard(
+                  title: 'Platform statistics report',
+                  subtitle:
+                      'Users, events, reservations, tickets, and operational platform statistics in PDF format.',
+                  icon: Icons.analytics_outlined,
+                  buttonLabel:
+                      _isGeneratingStatsReport ? 'Preparing...' : 'Download PDF',
+                  accentColor: const Color(0xFF5B8FB4),
+                  onPressed: _isGeneratingStatsReport
+                      ? null
+                      : () => _downloadStatisticsReport(bundle),
+                  secondaryActionLabel: 'Print',
+                  onSecondaryPressed: () => _printStatisticsReport(bundle),
+                ),
+                const SizedBox(height: 18),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(22),
+                  decoration: BoxDecoration(
+                    color: colors.surface.withValues(alpha: 0.70),
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(color: colors.borderSoft),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      SizedBox(
-                        width: statCardWidth,
-                        child: _DashboardStatCard(
-                          title: 'Active users',
-                          value: _formatWholeNumber(users.activeUsersCount),
-                          icon: Icons.group_outlined,
-                          accent: const Color(0xFF4F8FA8),
+                      Text(
+                        'Reporting tools',
+                        style: textTheme.titleMedium?.copyWith(
+                          color: colors.textPrimary,
+                          fontWeight: FontWeight.w800,
                         ),
                       ),
-                      SizedBox(
-                        width: statCardWidth,
-                        child: _DashboardStatCard(
-                          title: 'Confirmed events',
-                          value: _formatWholeNumber(events.confirmedEventsCount),
-                          icon: Icons.event_available_outlined,
-                          accent: const Color(0xFF6E8F6A),
+                      const SizedBox(height: 10),
+                      Text(
+                        'Reports are exported as PDF files and can also be sent directly to your system print dialog.',
+                        style: textTheme.bodyMedium?.copyWith(
+                          color: colors.textSecondary,
+                          fontWeight: FontWeight.w600,
+                          height: 1.45,
                         ),
                       ),
-                      SizedBox(
-                        width: statCardWidth,
-                        child: _DashboardStatCard(
-                          title: 'Net revenue',
-                          value: _formatCurrency(tickets.netRevenue),
-                          icon: Icons.payments_outlined,
-                          accent: const Color(0xFF98724A),
-                        ),
+                      const SizedBox(height: 18),
+                      _MiniInfoRow(
+                        icon: Icons.folder_outlined,
+                        label: 'Download location',
+                        value: 'Browser / system Downloads',
                       ),
-                      SizedBox(
-                        width: statCardWidth,
-                        child: _DashboardStatCard(
-                          title: 'Reservations',
-                          value: _formatWholeNumber(tickets.totalReservations),
-                          icon: Icons.confirmation_number_outlined,
-                          accent: const Color(0xFF8A667A),
-                        ),
+                      const SizedBox(height: 12),
+                      _MiniInfoRow(
+                        icon: Icons.payments_outlined,
+                        label: 'Currency',
+                        value: 'BAM',
+                      ),
+                      const SizedBox(height: 18),
+                      Wrap(
+                        spacing: 10,
+                        runSpacing: 10,
+                        children: [
+                          OutlinedButton.icon(
+                            onPressed: () => _printStatisticsReport(bundle),
+                            icon: const Icon(Icons.print_outlined, size: 18),
+                            label: const Text('Print statistics'),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 14,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                            ),
+                          ),
+                          OutlinedButton.icon(
+                            onPressed: () => _printMoneyAndSalesReport(bundle),
+                            icon: const Icon(Icons.receipt_long_outlined, size: 18),
+                            label: const Text('Print sales report'),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 14,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
-                  SizedBox(height: sectionSpacing),
-                  if (isWide)
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(flex: 8, child: analyticsPanel),
-                        const SizedBox(width: 22),
-                        Expanded(flex: 4, child: reportsPanel),
-                      ],
-                    )
-                  else
-                    Column(
-                      children: [
-                        analyticsPanel,
-                        const SizedBox(height: 18),
-                        reportsPanel,
-                      ],
-                    ),
+                ),
+              ],
+            );
+
+            return Container(
+              padding: EdgeInsets.all(horizontalPadding),
+              decoration: BoxDecoration(
+                color: colors.card.withValues(alpha: 0.96),
+                borderRadius: BorderRadius.circular(outerRadius),
+                border: Border.all(color: colors.border),
+                boxShadow: [
+                  BoxShadow(
+                    color: theme.brightness == Brightness.dark
+                        ? const Color(0x16000000)
+                        : const Color(0x12000000),
+                    blurRadius: 18,
+                    offset: const Offset(0, 8),
+                  ),
                 ],
               ),
-            ),
-          );
-        },
-      );
-    }
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Wrap(
+                      spacing: 16,
+                      runSpacing: 16,
+                      children: [
+                        SizedBox(
+                          width: statCardWidth,
+                          child: _DashboardStatCard(
+                            title: 'Active users',
+                            value: _formatWholeNumber(users.activeUsersCount),
+                            icon: Icons.group_outlined,
+                            accent: const Color(0xFF4F8FA8),
+                          ),
+                        ),
+                        SizedBox(
+                          width: statCardWidth,
+                          child: _DashboardStatCard(
+                            title: 'Confirmed events',
+                            value: _formatWholeNumber(events.confirmedEventsCount),
+                            icon: Icons.event_available_outlined,
+                            accent: const Color(0xFF6E8F6A),
+                          ),
+                        ),
+                        SizedBox(
+                          width: statCardWidth,
+                          child: _DashboardStatCard(
+                            title: 'Net revenue',
+                            value: _formatCurrency(tickets.netRevenue),
+                            icon: Icons.payments_outlined,
+                            accent: const Color(0xFF98724A),
+                          ),
+                        ),
+                        SizedBox(
+                          width: statCardWidth,
+                          child: _DashboardStatCard(
+                            title: 'Reservations',
+                            value: _formatWholeNumber(tickets.totalReservations),
+                            icon: Icons.confirmation_number_outlined,
+                            accent: const Color(0xFF8A667A),
+                          ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: sectionSpacing),
+                    if (isWide)
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(flex: 8, child: analyticsPanel),
+                          const SizedBox(width: 22),
+                          Expanded(flex: 4, child: reportsPanel),
+                        ],
+                      )
+                    else
+                      Column(
+                        children: [
+                          analyticsPanel,
+                          const SizedBox(height: 18),
+                          reportsPanel,
+                        ],
+                      ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 }
@@ -1397,7 +1462,7 @@ class _DashboardLineChartPainter extends CustomPainter {
           text: value.toStringAsFixed(0),
           style: axisTextStyle,
         ),
-          textDirection: widgets.TextDirection.ltr,
+        textDirection: widgets.TextDirection.ltr,
       )..layout();
 
       tp.paint(canvas, Offset(0, dy - tp.height / 2));

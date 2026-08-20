@@ -69,7 +69,7 @@ class CommentItem {
       likesCount: _asInt(json['likesCount']),
       userId: _asNullableInt(json['userId']),
       eventId: _asNullableInt(json['eventId']),
-      createdAt: _asDateTime(json['createdAt']) ?? DateTime.now(),
+      createdAt: _asDateTime(json['createdAt']) ?? DateTime.now().toUtc(),
       updatedAt: _asDateTime(json['updatedAt']),
       isDeleted: _asBool(json['isDeleted']),
       isReply: _asBool(json['isReply']),
@@ -167,7 +167,7 @@ class CommentItem {
     if (raw.isEmpty) return null;
     final parsed = DateTime.tryParse(raw);
     if (parsed == null) return null;
-    if (raw.endsWith('Z') || raw.contains('+')) return parsed.toLocal();
+    if (raw.endsWith('Z') || raw.contains('+')) return parsed.toUtc();
     return DateTime.utc(
       parsed.year,
       parsed.month,
@@ -177,7 +177,7 @@ class CommentItem {
       parsed.second,
       parsed.millisecond,
       parsed.microsecond,
-    ).toLocal();
+    ).toUtc();
   }
 
   static String? _asNullableString(dynamic v) {

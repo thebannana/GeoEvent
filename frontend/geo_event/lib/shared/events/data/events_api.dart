@@ -136,6 +136,7 @@ class EventsApi {
     double? maxPrice,
     bool? freeOnly,
     bool? todayOnly,
+    bool usePreferences = false,
   }) async {
     final response = await dio.get(
       '${ApiEndpoints.publicEventsBase}/nearby',
@@ -151,6 +152,7 @@ class EventsApi {
         if (freeOnly != true && minPrice != null) 'minPrice': minPrice,
         if (freeOnly != true && maxPrice != null) 'maxPrice': maxPrice,
         if (todayOnly == true) 'todayOnly': true,
+        if (usePreferences) 'usePreferences': true,
       },
     );
 
@@ -171,6 +173,7 @@ class EventsApi {
     double? maxPrice,
     bool? freeOnly,
     bool? todayOnly,
+    bool usePreferences = false,
   }) async {
     final response = await dio.get(
       ApiEndpoints.publicEventsBase,
@@ -188,6 +191,7 @@ class EventsApi {
         if (freeOnly != true && minPrice != null) 'minPrice': minPrice,
         if (freeOnly != true && maxPrice != null) 'maxPrice': maxPrice,
         if (todayOnly == true) 'todayOnly': true,
+        if (usePreferences) 'usePreferences': true,
       },
     );
 
@@ -295,7 +299,6 @@ class EventsApi {
 
     if (raw is Map) {
       final map = Map<String, dynamic>.from(raw);
-
       for (final key in [
         'items',
         'Items',

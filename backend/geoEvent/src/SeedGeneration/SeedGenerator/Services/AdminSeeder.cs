@@ -108,7 +108,7 @@ public class AdminSeeder : ISeeder
                 Person = person
             };
 
-            var (hash, salt) = _passwordService.HashPassword(admin.Password);
+            var (hash, salt) = PasswordService.HashPassword(admin.Password);
             user.ChangePassword(hash, salt);
             user.SetRole(UserRole.Admin);
             user.RecordConsent(admin.ConsentVersion);

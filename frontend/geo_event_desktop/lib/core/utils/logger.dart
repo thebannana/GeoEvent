@@ -1,5 +1,12 @@
 import 'package:flutter/foundation.dart';
 
+enum AppLogLevel {
+  debug,
+  info,
+  warning,
+  error,
+}
+
 class AppLogger {
   const AppLogger._();
 
@@ -7,21 +14,37 @@ class AppLogger {
     String message, {
     String? tag,
   }) {
-    _print('DEBUG', message, tag: tag);
+    _write(
+      AppLogLevel.debug,
+      message,
+      tag: tag,
+    );
   }
 
   static void info(
     String message, {
     String? tag,
   }) {
-    _print('INFO', message, tag: tag);
+    _write(
+      AppLogLevel.info,
+      message,
+      tag: tag,
+    );
   }
 
   static void warning(
     String message, {
     String? tag,
+    Object? error,
+    StackTrace? stackTrace,
   }) {
-    _print('WARN', message, tag: tag);
+    _write(
+      AppLogLevel.warning,
+      message,
+      tag: tag,
+      error: error,
+      stackTrace: stackTrace,
+    );
   }
 
   static void error(
@@ -30,28 +53,43 @@ class AppLogger {
     Object? error,
     StackTrace? stackTrace,
   }) {
-    _print('ERROR', message, tag: tag);
+    _write(
+      AppLogLevel.error,
+      message,
+      tag: tag,
+      error: error,
+      stackTrace: stackTrace,
+    );
+  }
+
+  static void _write(
+    AppLogLevel level,
+    String message, {
+    String? tag,
+    Object? error,
+    StackTrace? stackTrace,
+  }) {
+    if (!kDebugMode && level != AppLogLevel.error) {
+      return;
+    }
+
+    final normalizedTag = tag?.trim();
+    final prefix = normalizedTag == null || normalizedTag.isEmpty
+        ? '[${level.name.toUpperCase()}]'
+        : '[${level.name.toUpperCase()}][$normalizedTag]';
+
+    debugPrint('$prefix $message');
 
     if (error != null) {
-      _print('ERROR', 'Cause: $error', tag: tag);
+      debugPrint('$prefix Cause: $error');
     }
 
     if (stackTrace != null && kDebugMode) {
-      debugPrintStack(stackTrace: stackTrace);
+      debugPrintStack(
+        stackTrace: stackTrace,
+        label: '$prefix Stack trace',
+      );
     }
-  }
 
-  static void _print(
-    String level,
-    String message, {
-    String? tag,
-  }) {
-    if (!kDebugMode) return;
-
-    final prefix = tag == null || tag.isEmpty
-        ? '[$level]'
-        : '[$level][$tag]';
-
-    debugPrint('$prefix $message', wrapWidth: 1024);
   }
 }

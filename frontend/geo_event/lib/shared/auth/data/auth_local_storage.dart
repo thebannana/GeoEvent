@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import '../../../core/utils/json_helpers.dart';
 import '../models/auth_response.dart';
 import '../models/auth_state.dart';
 import '../models/auth_user.dart';
@@ -18,8 +19,14 @@ class AuthLocalStorage {
 
   Future<void> saveSession(AuthResponse response) async {
     await Future.wait([
-      _storage.write(key: _accessTokenKey, value: response.accessToken),
-      _storage.write(key: _refreshTokenKey, value: response.refreshToken),
+      _storage.write(
+        key: _accessTokenKey,
+        value: response.accessToken,
+      ),
+      _storage.write(
+        key: _refreshTokenKey,
+        value: response.refreshToken,
+      ),
       _storage.write(
         key: _expiresAtKey,
         value: response.expiresAt?.toUtc().toIso8601String(),
@@ -48,9 +55,9 @@ class AuthLocalStorage {
     final userRaw = values[3];
 
     return AuthState(
-      accessToken: _normalize(accessToken),
-      refreshToken: _normalize(refreshToken),
-      expiresAt: _parseDate(expiresAtRaw),
+      accessToken: JsonHelpers.normalize(accessToken),
+      refreshToken: JsonHelpers.normalize(refreshToken),
+      expiresAt: JsonHelpers.parseDateTime(expiresAtRaw),
       user: _parseUser(userRaw),
       isLoading: false,
       isInitialized: true,
@@ -66,21 +73,9 @@ class AuthLocalStorage {
     ]);
   }
 
-  String? _normalize(String? value) {
-    final trimmed = value?.trim();
-    return (trimmed == null || trimmed.isEmpty) ? null : trimmed;
-  }
-
-  DateTime? _parseDate(String? raw) {
-    final normalized = _normalize(raw);
-    if (normalized == null) {
-      return null;
-    }
-    return DateTime.tryParse(normalized);
-  }
-
   AuthUser? _parseUser(String? raw) {
-    final normalized = _normalize(raw);
+    final normalized = JsonHelpers.normalize(raw);
+
     if (normalized == null) {
       return null;
     }
@@ -93,12 +88,13 @@ class AuthLocalStorage {
       }
 
       if (decoded is Map) {
-        return AuthUser.fromJson(Map<String, dynamic>.from(decoded));
+        return AuthUser.fromJson(
+          Map<String, dynamic>.from(decoded),
+        );
       }
-
-      return null;
     } catch (_) {
-      return null;
     }
+
+    return null;
   }
 }

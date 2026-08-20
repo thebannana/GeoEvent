@@ -38,8 +38,6 @@ public class UserRepository : IUserRepository
                 .ThenInclude(u => u!.Person)
             .Include(r => r.ResolvedBy)
                 .ThenInclude(u => u!.Person)
-            .Include(r => r.TargetUser)
-                .ThenInclude(u => u!.Person)
             .FirstOrDefaultAsync(r => r.ReportId == reportId);
     }
 
@@ -49,8 +47,6 @@ public class UserRepository : IUserRepository
             .Include(r => r.Reporter)
                 .ThenInclude(u => u!.Person)
             .Include(r => r.ResolvedBy)
-                .ThenInclude(u => u!.Person)
-            .Include(r => r.TargetUser)
                 .ThenInclude(u => u!.Person)
             .FirstOrDefaultAsync(r => r.ReportId == reportId);
     }
@@ -72,8 +68,6 @@ public class UserRepository : IUserRepository
                 .ThenInclude(u => u!.Person)
             .Include(r => r.ResolvedBy)
                 .ThenInclude(u => u!.Person)
-            .Include(r => r.TargetUser)
-                .ThenInclude(u => u!.Person)
             .AsQueryable();
 
         if (status.HasValue)
@@ -84,28 +78,25 @@ public class UserRepository : IUserRepository
 
         if (!string.IsNullOrWhiteSpace(search))
         {
-            var term = search.Trim().ToLower();
+            var term = search.Trim().ToLowerInvariant();
 
             query = query.Where(r =>
                 r.ReportId.ToString().Contains(term) ||
-                r.Reason.ToLower().Contains(term) ||
-                (!string.IsNullOrEmpty(r.Description) && r.Description.ToLower().Contains(term)) ||
-                r.Reporter != null && (
-                    r.Reporter.Username.ToLower().Contains(term) ||
-                    ((r.Reporter.Person!.FirstName ?? string.Empty) + " " + (r.Reporter.Person!.LastName ?? string.Empty))
-                        .Trim()
-                        .ToLower()
-                        .Contains(term)
-                ) ||
-                (r.TargetType == ReportTargetType.User && r.TargetUser != null && (
-                    r.TargetUser.Username.ToLower().Contains(term) ||
-                    ((r.TargetUser.Person!.FirstName ?? string.Empty) + " " + (r.TargetUser.Person!.LastName ?? string.Empty))
-                        .Trim()
-                        .ToLower()
-                        .Contains(term)
-                )) ||
-                (r.TargetId.HasValue && r.TargetId.Value.ToString().Contains(term))
-            );
+                r.Reason.Contains(term, StringComparison.CurrentCultureIgnoreCase) ||
+                (r.Description != null &&
+                 r.Description.Contains(term, StringComparison.CurrentCultureIgnoreCase)) ||
+                (r.Reporter != null &&
+                 r.Reporter.Username.Contains(term, StringComparison.CurrentCultureIgnoreCase)) ||
+                (r.Reporter != null &&
+                 r.Reporter.Person != null &&
+                 (
+                     (r.Reporter.Person.FirstName + " " +
+                      r.Reporter.Person.LastName)
+                     .Trim()
+.Contains(term, StringComparison.CurrentCultureIgnoreCase)
+                 )) ||
+                (r.TargetId.HasValue &&
+                 r.TargetId.Value.ToString().Contains(term)));
         }
 
         var normalizedSort = sortBy?.Trim().ToLowerInvariant();
@@ -128,28 +119,6 @@ public class UserRepository : IUserRepository
                 ? query.OrderByDescending(r => r.Reporter != null ? r.Reporter.Username : string.Empty)
                        .ThenByDescending(r => r.ReportId)
                 : query.OrderBy(r => r.Reporter != null ? r.Reporter.Username : string.Empty)
-                       .ThenBy(r => r.ReportId),
-
-            "reporteduser" => descending
-                ? query.OrderByDescending(r =>
-                        r.TargetType == ReportTargetType.User && r.TargetUser != null
-                            ? r.TargetUser.Username
-                            : string.Empty)
-                       .ThenByDescending(r => r.ReportId)
-                : query.OrderBy(r =>
-                        r.TargetType == ReportTargetType.User && r.TargetUser != null
-                            ? r.TargetUser.Username
-                            : string.Empty)
-                       .ThenBy(r => r.ReportId),
-
-            "targetdisplay" => descending
-                ? query.OrderByDescending(r => r.TargetType == ReportTargetType.User && r.TargetUser != null
-                        ? ((r.TargetUser.Person!.FirstName ?? string.Empty) + " " + (r.TargetUser.Person!.LastName ?? string.Empty)).Trim()
-                        : (r.TargetId.HasValue ? r.TargetId.Value.ToString() : string.Empty))
-                       .ThenByDescending(r => r.ReportId)
-                : query.OrderBy(r => r.TargetType == ReportTargetType.User && r.TargetUser != null
-                        ? ((r.TargetUser.Person!.FirstName ?? string.Empty) + " " + (r.TargetUser.Person!.LastName ?? string.Empty)).Trim()
-                        : (r.TargetId.HasValue ? r.TargetId.Value.ToString() : string.Empty))
                        .ThenBy(r => r.ReportId),
 
             _ => descending
@@ -602,12 +571,12 @@ public class UserRepository : IUserRepository
             var term = filter.Search.Trim().ToLower();
 
             query = query.Where(u =>
-                u.Username.ToLower().Contains(term) ||
+                u.Username.Contains(term, StringComparison.CurrentCultureIgnoreCase) ||
                 u.Email.ToLower().Contains(term) ||
-                u.Person!.FirstName.ToLower().Contains(term) ||
-                u.Person.LastName.ToLower().Contains(term) ||
-                ((u.Person.FirstName + " " + u.Person.LastName).ToLower().Contains(term)) ||
-                ((u.Person.PhoneNumber ?? string.Empty).ToLower().Contains(term)));
+                u.Person!.FirstName.Contains(term, StringComparison.CurrentCultureIgnoreCase) ||
+                u.Person.LastName.Contains(term, StringComparison.CurrentCultureIgnoreCase) ||
+                ((u.Person.FirstName + " " + u.Person.LastName).Contains(term, StringComparison.CurrentCultureIgnoreCase)) ||
+                ((u.Person.PhoneNumber ?? string.Empty).Contains(term, StringComparison.CurrentCultureIgnoreCase)));
         }
 
         if (!string.IsNullOrWhiteSpace(filter.Role) &&

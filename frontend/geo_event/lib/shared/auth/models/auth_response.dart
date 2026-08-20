@@ -1,9 +1,12 @@
+import '../../../core/utils/json_helpers.dart';
 import 'auth_user.dart';
 
 class AuthResponse {
   final String accessToken;
   final String refreshToken;
+
   final DateTime? expiresAt;
+
   final AuthUser? user;
 
   const AuthResponse({
@@ -14,12 +17,13 @@ class AuthResponse {
   });
 
   bool get hasAccessToken => accessToken.trim().isNotEmpty;
+
   bool get hasRefreshToken => refreshToken.trim().isNotEmpty;
+
   bool get hasTokens => hasAccessToken && hasRefreshToken;
 
   factory AuthResponse.fromJson(Map<String, dynamic> json) {
     final rawUser = json['user'] ?? json['User'];
-    final rawExpiresAt = json['expiresAt'] ?? json['ExpiresAt'];
 
     return AuthResponse(
       accessToken: (json['accessToken'] ?? json['AccessToken'] ?? '')
@@ -28,7 +32,9 @@ class AuthResponse {
       refreshToken: (json['refreshToken'] ?? json['RefreshToken'] ?? '')
           .toString()
           .trim(),
-      expiresAt: _parseDate(rawExpiresAt),
+      expiresAt: JsonHelpers.parseDateTime(
+        json['expiresAt'] ?? json['ExpiresAt'],
+      ),
       user: _parseUser(rawUser),
     );
   }
@@ -42,30 +48,15 @@ class AuthResponse {
     };
   }
 
-  static DateTime? _parseDate(dynamic raw) {
-    if (raw == null) {
-      return null;
-    }
-
-    if (raw is DateTime) {
-      return raw;
-    }
-
-    final value = raw.toString().trim();
-    if (value.isEmpty) {
-      return null;
-    }
-
-    return DateTime.tryParse(value);
-  }
-
   static AuthUser? _parseUser(dynamic raw) {
     if (raw is Map<String, dynamic>) {
       return AuthUser.fromJson(raw);
     }
 
     if (raw is Map) {
-      return AuthUser.fromJson(Map<String, dynamic>.from(raw));
+      return AuthUser.fromJson(
+        Map<String, dynamic>.from(raw),
+      );
     }
 
     return null;

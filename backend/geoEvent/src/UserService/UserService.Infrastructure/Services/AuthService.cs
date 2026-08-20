@@ -48,7 +48,7 @@ public class AuthService : IAuthService
         if (await _userRepository.UsernameExistsAsync(normalizedUsername))
             return ServiceResult<AuthResponseDto>.Conflict("Username already taken.");
 
-        var (hash, salt) = _passwordService.HashPassword(request.Password);
+        var (hash, salt) = PasswordService.HashPassword(request.Password);
 
         var person = new Person
         {
@@ -118,7 +118,7 @@ public class AuthService : IAuthService
                 $"Account locked until {user.LockoutUntil:HH:mm} UTC.");
         }
 
-        if (!_passwordService.VerifyPassword(request.Password, user.PasswordHash, user.PasswordSalt))
+        if (!PasswordService.VerifyPassword(request.Password, user.PasswordHash, user.PasswordSalt))
         {
             _logger.LogWarning("Invalid password for user: {Identifier}", identifier);
             user.RegisterFailedLogin();
@@ -221,7 +221,7 @@ public class AuthService : IAuthService
         if (resetToken is null)
             return ServiceResult<bool>.Fail("Invalid reset request.", 400);
 
-        var (hash, salt) = _passwordService.HashPassword(dto.NewPassword);
+        var (hash, salt) = PasswordService.HashPassword(dto.NewPassword);
 
         user.ChangePassword(hash, salt);
         resetToken.MarkAsUsed();
@@ -260,7 +260,7 @@ public class AuthService : IAuthService
                 $"Account locked until {user.LockoutUntil:HH:mm} UTC.");
         }
 
-        if (!_passwordService.VerifyPassword(request.Password, user.PasswordHash, user.PasswordSalt))
+        if (!PasswordService.VerifyPassword(request.Password, user.PasswordHash, user.PasswordSalt))
         {
             _logger.LogWarning("Invalid password for admin login: {Identifier}", identifier);
             user.RegisterFailedLogin();
@@ -291,7 +291,7 @@ public class AuthService : IAuthService
         string? deviceInfo = null)
     {
         var accessToken = _tokenService.GenerateAccessToken(user);
-        var (rawToken, tokenHash) = _tokenService.GenerateRefreshToken();
+        var (rawToken, tokenHash) = TokenService.GenerateRefreshToken();
 
         var refreshToken = new RefreshToken
         {

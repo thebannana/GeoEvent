@@ -37,35 +37,27 @@ class PreferencesController extends AsyncNotifier<PreferencesListState> {
   }
 
   Future<void> applyFilters({
-    String? type,
-    double? minScore,
-    double? maxScore,
-    String? search,
-    bool clearType = false,
-    bool clearMinScore = false,
-    bool clearMaxScore = false,
-    bool clearSearch = false,
-  }) async {
-    final current = state.valueOrNull ?? PreferencesListState.initial();
+  String? type,
+  double? minScore,
+  double? maxScore,
+  bool clearType = false,
+  bool clearMinScore = false,
+  bool clearMaxScore = false,
+}) async {
+  final currentState = state.valueOrNull ?? PreferencesListState.initial();
 
-    final nextQuery = current.query.copyWith(
-      page: 1,
-      type: type,
-      minScore: minScore,
-      maxScore: maxScore,
-      search: search,
-      clearType: clearType,
-      clearMinScore: clearMinScore,
-      clearMaxScore: clearMaxScore,
-      clearSearch: clearSearch,
-    );
+  final query = currentState.query.copyWith(
+    page: 1,
+    type: type,
+    minScore: minScore,
+    maxScore: maxScore,
+    clearType: clearType,
+    clearMinScore: clearMinScore,
+    clearMaxScore: clearMaxScore,
+  );
 
-    state = AsyncLoading<PreferencesListState>().copyWithPrevious(
-      AsyncData(current),
-    );
-
-    state = await AsyncValue.guard(() => _load(nextQuery));
-  }
+  await _load(query);
+}
 
   Future<void> goToPage(int page) async {
     final current = state.valueOrNull ?? PreferencesListState.initial();

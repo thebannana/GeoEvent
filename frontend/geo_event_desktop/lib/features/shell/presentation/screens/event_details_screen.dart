@@ -3,7 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/config/environment.dart';
+import '../../../../core/constants/event_status.dart';
 import '../../../../core/theme/app_theme_colors.dart';
+import '../../../../core/utils/date_time_extensions.dart';
+import '../../../../core/utils/logger.dart';
+import '../../../../core/utils/price_formatter.dart';
 import '../../../../shared/admin_profile/data/admin_events_repository.dart';
 import '../../../../shared/admin_profile/data/admin_users_repository.dart';
 import '../../../../shared/admin_profile/models/admin_event.dart';
@@ -97,7 +101,13 @@ class _EventDetailsScreenState extends ConsumerState<EventDetailsScreen> {
         try {
           organizerProfile =
               await widget.usersRepository.getUserProfileDetails(organizerId);
-        } catch (_) {
+        } catch (e, st) {
+          AppLogger.error(
+            'Failed to load organizer profile',
+            tag: 'EventDetails',
+            error: e,
+            stackTrace: st,
+          );
           organizerProfile = null;
         }
       }
@@ -111,7 +121,13 @@ class _EventDetailsScreenState extends ConsumerState<EventDetailsScreen> {
             latitude: event.latitude,
             longitude: event.longitude,
           );
-        } catch (_) {
+        } catch (e, st) {
+          AppLogger.error(
+            'Failed to reverse geocode event location',
+            tag: 'EventDetails',
+            error: e,
+            stackTrace: st,
+          );
           resolvedPlace = null;
         }
       }
@@ -126,7 +142,13 @@ class _EventDetailsScreenState extends ConsumerState<EventDetailsScreen> {
         _resolvedPlace = resolvedPlace;
         _currentImageIndex = 0;
       });
-    } catch (_) {
+    } catch (e, st) {
+      AppLogger.error(
+        'Failed to load event details',
+        tag: 'EventDetails',
+        error: e,
+        stackTrace: st,
+      );
       if (!mounted) return;
       setState(() {
         _errorMessage = 'Failed to load event details.';
@@ -166,7 +188,13 @@ class _EventDetailsScreenState extends ConsumerState<EventDetailsScreen> {
         );
         _loadedRepliesFor.add(comment.commentId);
       });
-    } catch (_) {
+    } catch (e, st) {
+      AppLogger.error(
+        'Failed to load comment replies',
+        tag: 'EventDetails',
+        error: e,
+        stackTrace: st,
+      );
       if (!mounted) return;
       _showSnack('Failed to load replies.');
     } finally {
@@ -197,274 +225,284 @@ class _EventDetailsScreenState extends ConsumerState<EventDetailsScreen> {
     }
   }
 
-void _showSnack(
-  String message, {
-  bool isError = false,
-}) {
-  final theme = Theme.of(context);
-  final colorScheme = theme.colorScheme;
+  void _showSnack(
+    String message, {
+    bool isError = false,
+  }) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
 
-  final backgroundColor = isError
-      ? colorScheme.error
-      : colorScheme.inverseSurface;
+    final backgroundColor = isError
+        ? colorScheme.error
+        : colorScheme.inverseSurface;
 
-  final foregroundColor = isError
-      ? colorScheme.onError
-      : colorScheme.onInverseSurface;
+    final foregroundColor = isError
+        ? colorScheme.onError
+        : colorScheme.onInverseSurface;
 
-  ScaffoldMessenger.of(context)
-    ..hideCurrentSnackBar()
-    ..showSnackBar(
-      SnackBar(
-        behavior: SnackBarBehavior.floating,
-        backgroundColor: backgroundColor,
-        content: Text(
-          message,
-          style: theme.textTheme.bodyMedium?.copyWith(
-            color: foregroundColor,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        closeIconColor: foregroundColor,
-        action: SnackBarAction(
-          label: 'Close',
-          textColor: foregroundColor,
-          onPressed: () {
-            ScaffoldMessenger.of(context).hideCurrentSnackBar();
-          },
-        ),
-      ),
-    );
-}
-
-Future<bool> _showDeleteCommentDialog() async {
-  final theme = Theme.of(context);
-  final colorScheme = theme.colorScheme;
-  final textTheme = theme.textTheme;
-
-  return await showDialog<bool>(
-        context: context,
-        builder: (dialogContext) {
-          return AlertDialog(
-            backgroundColor: colorScheme.surface,
-            surfaceTintColor: Colors.transparent,
-            title: Text(
-              'Delete comment',
-              style: textTheme.titleLarge?.copyWith(
-                color: colorScheme.onSurface,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            content: Text(
-              'Are you sure you want to delete this comment?',
-              style: textTheme.bodyMedium?.copyWith(
-                color: colorScheme.onSurfaceVariant,
-                height: 1.5,
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(dialogContext).pop(false),
-                style: TextButton.styleFrom(
-                  foregroundColor: colorScheme.onSurface,
-                ),
-                child: Text(
-                  'Cancel',
-                  style: textTheme.labelLarge?.copyWith(
-                    color: colorScheme.onSurface,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-              FilledButton(
-                style: FilledButton.styleFrom(
-                  backgroundColor: colorScheme.error,
-                  foregroundColor: colorScheme.onError,
-                ),
-                onPressed: () => Navigator.of(dialogContext).pop(true),
-                child: Text(
-                  'Delete',
-                  style: textTheme.labelLarge?.copyWith(
-                    color: colorScheme.onError,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ],
-          );
-        },
-      ) ??
-      false;
-}
-
-Future<String?> _showEditCommentDialog(AdminComment comment) async {
-  final controller = TextEditingController(text: comment.content);
-  final formKey = GlobalKey<FormState>();
-
-  final theme = Theme.of(context);
-  final colorScheme = theme.colorScheme;
-  final textTheme = theme.textTheme;
-
-  final result = await showDialog<String>(
-    context: context,
-    builder: (dialogContext) {
-      return AlertDialog(
-        backgroundColor: colorScheme.surface,
-        surfaceTintColor: Colors.transparent,
-        title: Text(
-          'Edit comment',
-          style: textTheme.titleLarge?.copyWith(
-            color: colorScheme.onSurface,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-        content: Form(
-          key: formKey,
-          child: TextFormField(
-            controller: controller,
-            autofocus: true,
-            minLines: 3,
-            maxLines: 6,
-            maxLength: 1000,
-            style: textTheme.bodyMedium?.copyWith(
-              color: colorScheme.onSurface,
-            ),
-            decoration: InputDecoration(
-              hintText: 'Enter updated comment',
-              hintStyle: textTheme.bodyMedium?.copyWith(
-                color: colorScheme.onSurfaceVariant,
-              ),
-              filled: true,
-              fillColor: colorScheme.surfaceContainerHighest,
-              border: const OutlineInputBorder(),
-              enabledBorder: OutlineInputBorder(
-                borderSide: BorderSide(color: colorScheme.outlineVariant),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderSide: BorderSide(
-                  color: colorScheme.primary,
-                  width: 1.2,
-                ),
-              ),
-            ),
-            validator: (value) {
-              final text = value?.trim() ?? '';
-              if (text.isEmpty) return 'Comment cannot be empty.';
-              return null;
-            },
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            style: TextButton.styleFrom(
-              foregroundColor: colorScheme.onSurface,
-            ),
-            child: Text(
-              'Cancel',
-              style: textTheme.labelLarge?.copyWith(
-                color: colorScheme.onSurface,
-                fontWeight: FontWeight.w700,
-              ),
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: backgroundColor,
+          content: Text(
+            message,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: foregroundColor,
+              fontWeight: FontWeight.w600,
             ),
           ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: colorScheme.primary,
-              foregroundColor: colorScheme.onPrimary,
-            ),
+          closeIconColor: foregroundColor,
+          action: SnackBarAction(
+            label: 'Close',
+            textColor: foregroundColor,
             onPressed: () {
-              if (formKey.currentState?.validate() != true) return;
-              Navigator.of(dialogContext).pop(controller.text.trim());
+              ScaffoldMessenger.of(context).hideCurrentSnackBar();
             },
-            child: Text(
-              'Save',
-              style: textTheme.labelLarge?.copyWith(
-                color: colorScheme.onPrimary,
-                fontWeight: FontWeight.w700,
+          ),
+        ),
+      );
+  }
+
+  Future<bool> _showDeleteCommentDialog() async {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final textTheme = theme.textTheme;
+
+    return await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) {
+            return AlertDialog(
+              backgroundColor: colorScheme.surface,
+              surfaceTintColor: Colors.transparent,
+              title: Text(
+                'Delete comment',
+                style: textTheme.titleLarge?.copyWith(
+                  color: colorScheme.onSurface,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
+              content: Text(
+                'Are you sure you want to delete this comment?',
+                style: textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                  height: 1.5,
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  style: TextButton.styleFrom(
+                    foregroundColor: colorScheme.onSurface,
+                  ),
+                  child: Text(
+                    'Cancel',
+                    style: textTheme.labelLarge?.copyWith(
+                      color: colorScheme.onSurface,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: colorScheme.error,
+                    foregroundColor: colorScheme.onError,
+                  ),
+                  onPressed: () => Navigator.of(dialogContext).pop(true),
+                  child: Text(
+                    'Delete',
+                    style: textTheme.labelLarge?.copyWith(
+                      color: colorScheme.onError,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        ) ??
+        false;
+  }
+
+  Future<String?> _showEditCommentDialog(AdminComment comment) async {
+    final controller = TextEditingController(text: comment.content);
+    final formKey = GlobalKey<FormState>();
+
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final textTheme = theme.textTheme;
+
+    final result = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          backgroundColor: colorScheme.surface,
+          surfaceTintColor: Colors.transparent,
+          title: Text(
+            'Edit comment',
+            style: textTheme.titleLarge?.copyWith(
+              color: colorScheme.onSurface,
+              fontWeight: FontWeight.w800,
             ),
           ),
-        ],
-      );
-    },
-  );
+          content: Form(
+            key: formKey,
+            child: TextFormField(
+              controller: controller,
+              autofocus: true,
+              minLines: 3,
+              maxLines: 6,
+              maxLength: 1000,
+              style: textTheme.bodyMedium?.copyWith(
+                color: colorScheme.onSurface,
+              ),
+              decoration: InputDecoration(
+                hintText: 'Enter updated comment',
+                hintStyle: textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+                filled: true,
+                fillColor: colorScheme.surfaceContainerHighest,
+                border: const OutlineInputBorder(),
+                enabledBorder: OutlineInputBorder(
+                  borderSide: BorderSide(color: colorScheme.outlineVariant),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderSide: BorderSide(
+                    color: colorScheme.primary,
+                    width: 1.2,
+                  ),
+                ),
+              ),
+              validator: (value) {
+                final text = value?.trim() ?? '';
+                if (text.isEmpty) return 'Comment cannot be empty.';
+                return null;
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              style: TextButton.styleFrom(
+                foregroundColor: colorScheme.onSurface,
+              ),
+              child: Text(
+                'Cancel',
+                style: textTheme.labelLarge?.copyWith(
+                  color: colorScheme.onSurface,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: colorScheme.primary,
+                foregroundColor: colorScheme.onPrimary,
+              ),
+              onPressed: () {
+                if (formKey.currentState?.validate() != true) return;
+                Navigator.of(dialogContext).pop(controller.text.trim());
+              },
+              child: Text(
+                'Save',
+                style: textTheme.labelLarge?.copyWith(
+                  color: colorScheme.onPrimary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
 
-  controller.dispose();
-  return result;
-}
-
-
+    controller.dispose();
+    return result;
+  }
 
   Future<void> _editComment(AdminComment comment) async {
-  if (_busyCommentIds.contains(comment.commentId)) return;
+    if (_busyCommentIds.contains(comment.commentId)) return;
 
-  final updatedText = await _showEditCommentDialog(comment);
+    final updatedText = await _showEditCommentDialog(comment);
 
-  if (updatedText == null || updatedText == comment.content.trim()) return;
-
-  setState(() {
-    _busyCommentIds.add(comment.commentId);
-  });
-
-  try {
-    final updated = await _eventsRepository.updateComment(
-      commentId: comment.commentId,
-      content: updatedText,
-    );
-
-    if (!mounted) return;
+    if (updatedText == null || updatedText == comment.content.trim()) return;
 
     setState(() {
-      _comments = _replaceCommentInTree(
-        _comments,
-        comment.commentId,
-        (_) => updated,
+      _busyCommentIds.add(comment.commentId);
+    });
+
+    try {
+      final updated = await _eventsRepository.updateComment(
+        commentId: comment.commentId,
+        content: updatedText,
       );
-    });
 
-    _showSnack('Comment updated.');
-  } catch (_) {
-    if (!mounted) return;
-    _showSnack('Failed to update comment.', isError: true);
-  } finally {
-    if (!mounted) return;
-    setState(() {
-      _busyCommentIds.remove(comment.commentId);
-    });
+      if (!mounted) return;
+
+      setState(() {
+        _comments = _replaceCommentInTree(
+          _comments,
+          comment.commentId,
+          (_) => updated,
+        );
+      });
+
+      _showSnack('Comment updated.');
+    } catch (e, st) {
+      AppLogger.error(
+        'Failed to update comment',
+        tag: 'EventDetails',
+        error: e,
+        stackTrace: st,
+      );
+      if (!mounted) return;
+      _showSnack('Failed to update comment.', isError: true);
+    } finally {
+      if (!mounted) return;
+      setState(() {
+        _busyCommentIds.remove(comment.commentId);
+      });
+    }
   }
-}
 
   Future<void> _deleteComment(AdminComment comment) async {
-  if (_busyCommentIds.contains(comment.commentId)) return;
+    if (_busyCommentIds.contains(comment.commentId)) return;
 
-  final confirmed = await _showDeleteCommentDialog();
-  if (!confirmed) return;
-
-  setState(() {
-    _busyCommentIds.add(comment.commentId);
-  });
-
-  try {
-    await _eventsRepository.deleteComment(commentId: comment.commentId);
-
-    if (!mounted) return;
+    final confirmed = await _showDeleteCommentDialog();
+    if (!confirmed) return;
 
     setState(() {
-      _comments = _markCommentDeletedInTree(_comments, comment.commentId);
+      _busyCommentIds.add(comment.commentId);
     });
 
-    _showSnack('Comment deleted.');
-  } catch (_) {
-    if (!mounted) return;
-    _showSnack('Failed to delete comment.', isError: true);
-  } finally {
-    if (!mounted) return;
-    setState(() {
-      _busyCommentIds.remove(comment.commentId);
-    });
+    try {
+      await _eventsRepository.deleteComment(commentId: comment.commentId);
+
+      if (!mounted) return;
+
+      setState(() {
+        _comments = _markCommentDeletedInTree(_comments, comment.commentId);
+      });
+
+      _showSnack('Comment deleted.');
+    } catch (e, st) {
+      AppLogger.error(
+        'Failed to delete comment',
+        tag: 'EventDetails',
+        error: e,
+        stackTrace: st,
+      );
+      if (!mounted) return;
+      _showSnack('Failed to delete comment.', isError: true);
+    } finally {
+      if (!mounted) return;
+      setState(() {
+        _busyCommentIds.remove(comment.commentId);
+      });
+    }
   }
-}
 
   Future<void> _openUserProfile() async {
     final organizerId = _event?.organizerId;
@@ -707,9 +745,9 @@ Future<String?> _showEditCommentDialog(AdminComment comment) async {
                       runSpacing: 10,
                       children: [
                         _InfoChip(
-                          label: event.displayStatus,
-                          background: colorScheme.primary.withValues(alpha: 0.10),
-                          foreground: colorScheme.primary,
+                          label: EventStatus.displayLabel(event.displayStatus),
+                          background: EventStatus.displayColor(event.displayStatus).withValues(alpha: 0.12),
+                          foreground: EventStatus.displayColor(event.displayStatus),
                         ),
                         _InfoChip(
                           label: event.category,
@@ -744,9 +782,7 @@ Future<String?> _showEditCommentDialog(AdminComment comment) async {
                     _InfoRow(label: 'Date', value: event.dateLabel),
                     _InfoRow(
                       label: 'Price',
-                      value: event.price <= 0
-                          ? 'Free'
-                          : '${event.price.toStringAsFixed(2)} KM',
+                      value: PriceFormatter.formatPriceWithBam(event.price),
                     ),
                     _InfoRow(label: 'Category', value: event.category),
                     _InfoRow(label: 'Locale', value: _fallback(event.locale)),
@@ -911,7 +947,7 @@ Future<String?> _showEditCommentDialog(AdminComment comment) async {
                         Image.network(
                           images[index],
                           fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) {
+                          errorBuilder: (_, _, _) {
                             return Container(
                               color: colors.inputFill,
                               alignment: Alignment.center,
@@ -1192,7 +1228,8 @@ Future<String?> _showEditCommentDialog(AdminComment comment) async {
                       ),
                       const SizedBox(height: 3),
                       Text(
-                        _formatDate(comment.updatedAt ?? comment.createdAt),
+                        comment.updatedAt?.formatEventDateTime() ??
+                            comment.createdAt.formatEventDateTime(),
                         style: textTheme.bodySmall?.copyWith(
                           color: colors.textSecondary,
                         ),
@@ -1317,16 +1354,6 @@ Future<String?> _showEditCommentDialog(AdminComment comment) async {
     return normalized.isEmpty ? 'Not provided' : normalized;
   }
 
-  String _formatDate(DateTime dateTime) {
-    final local = dateTime.toLocal();
-    final dd = local.day.toString().padLeft(2, '0');
-    final mm = local.month.toString().padLeft(2, '0');
-    final yyyy = local.year.toString();
-    final hh = local.hour.toString().padLeft(2, '0');
-    final min = local.minute.toString().padLeft(2, '0');
-    return '$dd.$mm.$yyyy $hh:$min';
-  }
-
   List<AdminComment> _replaceCommentInTree(
     List<AdminComment> comments,
     int commentId,
@@ -1357,7 +1384,7 @@ Future<String?> _showEditCommentDialog(AdminComment comment) async {
             return comment.copyWith(
               content: '',
               isDeleted: true,
-              updatedAt: DateTime.now(),
+              updatedAt: DateTime.now().toUtc(),
             );
           }
 

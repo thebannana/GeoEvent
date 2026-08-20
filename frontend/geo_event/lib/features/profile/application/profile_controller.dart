@@ -62,50 +62,59 @@ class ProfileController extends AutoDisposeAsyncNotifier<UserProfile> {
   }
 
   Future<bool> updateProfile({
-    required String username,
-    required String email,
-    required String firstName,
-    required String lastName,
-    String? phoneNumber,
-    String? imageUrl,
-  }) async {
-    final authState = ref.read(authStateProvider);
+  required String username,
+  required String email,
+  required String firstName,
+  required String lastName,
+  String? phoneNumber,
+  String? imageUrl,
+}) async {
+  final authState = ref.read(authStateProvider);
 
-    if (!authState.isAuthenticated) {
-      final fallback = profileFromAuthState();
-      if (fallback != null) {
-        state = AsyncData(fallback);
-      } else {
-        state = AsyncError(
-          const AppException(
-            type: AppExceptionType.unauthorized,
-            message: 'You need to sign in again.',
-          ),
-          StackTrace.current,
-        );
-      }
-      return false;
+  if (!authState.isAuthenticated) {
+    final fallback = profileFromAuthState();
+    if (fallback != null) {
+      state = AsyncData(fallback);
+    } else {
+      state = AsyncError(
+        const AppException(
+          type: AppExceptionType.unauthorized,
+          message: 'You need to sign in again.',
+        ),
+        StackTrace.current,
+      );
     }
-
-    final previous = state.valueOrNull;
-    state = previous != null
-        ? AsyncLoading<UserProfile>().copyWithPrevious(AsyncData(previous))
-        : const AsyncLoading();
-
-    final result = await AsyncValue.guard(
-      () => repository.updateProfile(
-        username: username.trim(),
-        email: email.trim(),
-        firstName: firstName.trim(),
-        lastName: lastName.trim(),
-        phoneNumber: normalize(phoneNumber),
-        imageUrl: imageUrl == null ? null : normalize(imageUrl),
-      ),
-    );
-
-    state = result;
-    return !result.hasError;
+    return false;
   }
+
+  final previous = state.valueOrNull;
+  state = previous != null
+      ? AsyncLoading<UserProfile>().copyWithPrevious(AsyncData(previous))
+      : const AsyncLoading();
+
+  final result = await AsyncValue.guard(
+    () => repository.updateProfile(
+      username: username.trim(),
+      email: email.trim(),
+      firstName: firstName.trim(),
+      lastName: lastName.trim(),
+      phoneNumber: normalize(phoneNumber),
+      imageUrl: imageUrl == null ? null : normalize(imageUrl),
+    ),
+  );
+
+  if (result.hasError) {
+    if (previous != null) {
+      state = AsyncData(previous);
+    } else {
+      state = result;
+    }
+    throw result.error!;
+  }
+
+  state = result;
+  return true;
+}
 
   Future<String> uploadProfileImage(XFile file) {
     return repository.uploadProfileImage(file.path);

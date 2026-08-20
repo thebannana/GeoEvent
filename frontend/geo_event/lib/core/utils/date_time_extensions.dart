@@ -2,20 +2,26 @@ import 'package:intl/intl.dart';
 
 DateTime parseApiDateTime(dynamic value) {
   final raw = value?.toString().trim();
+
   if (raw == null || raw.isEmpty) {
     throw const FormatException('Invalid datetime value');
   }
 
   final hasExplicitZone =
       raw.endsWith('Z') ||
-      RegExp(r'([+-]\d{2}:\d{2})$').hasMatch(raw);
+      RegExp(r'[+-]\d{2}:?\d{2}$').hasMatch(raw);
 
   final normalized = hasExplicitZone ? raw : '${raw}Z';
-  return DateTime.parse(normalized);
+
+  final parsed = DateTime.parse(normalized);
+
+  return parsed.isUtc ? parsed : parsed.toUtc();
 }
 
 extension DateTimeExtensions on DateTime {
   DateTime get local => toLocal();
+
+  DateTime get utc => isUtc ? this : toUtc();
 
   DateTime get dateOnly {
     final value = local;
@@ -23,37 +29,53 @@ extension DateTimeExtensions on DateTime {
   }
 
   bool get isToday {
+    final value = local;
     final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    return dateOnly == today;
+
+    return value.year == now.year &&
+        value.month == now.month &&
+        value.day == now.day;
   }
 
   bool get isTomorrow {
+    final value = local;
     final now = DateTime.now();
-    final tomorrow =
-        DateTime(now.year, now.month, now.day).add(const Duration(days: 1));
-    return dateOnly == tomorrow;
+    final tomorrow = DateTime(now.year, now.month, now.day)
+        .add(const Duration(days: 1));
+
+    return value.year == tomorrow.year &&
+        value.month == tomorrow.month &&
+        value.day == tomorrow.day;
   }
 
   bool get isYesterday {
+    final value = local;
     final now = DateTime.now();
-    final yesterday =
-        DateTime(now.year, now.month, now.day).subtract(const Duration(days: 1));
-    return dateOnly == yesterday;
+    final yesterday = DateTime(now.year, now.month, now.day)
+        .subtract(const Duration(days: 1));
+
+    return value.year == yesterday.year &&
+        value.month == yesterday.month &&
+        value.day == yesterday.day;
   }
 
-  bool get isPast => local.isBefore(DateTime.now());
-  bool get isFuture => local.isAfter(DateTime.now());
+  bool get isPast => utc.isBefore(DateTime.now().toUtc());
+
+  bool get isFuture => utc.isAfter(DateTime.now().toUtc());
 
   bool isSameDate(DateTime other) {
-    final otherLocal = other.toLocal();
-    return dateOnly ==
-        DateTime(otherLocal.year, otherLocal.month, otherLocal.day);
+    final a = local;
+    final b = other.local;
+
+    return a.year == b.year &&
+        a.month == b.month &&
+        a.day == b.day;
   }
 
   bool isSameMinute(DateTime other) {
     final a = local;
-    final b = other.toLocal();
+    final b = other.local;
+
     return a.year == b.year &&
         a.month == b.month &&
         a.day == b.day &&
@@ -77,27 +99,30 @@ extension DateTimeExtensions on DateTime {
     if (isToday) return 'Today';
     if (isTomorrow) return 'Tomorrow';
     if (isYesterday) return 'Yesterday';
+
     return DateFormat('EEE, dd MMM').format(local);
   }
 
   String formatEventDateTime() {
+    final value = local;
+
     if (isToday) {
-      return 'Today • ${DateFormat('HH:mm').format(local)}';
+      return 'Today • ${DateFormat('HH:mm').format(value)}';
     }
 
     if (isTomorrow) {
-      return 'Tomorrow • ${DateFormat('HH:mm').format(local)}';
+      return 'Tomorrow • ${DateFormat('HH:mm').format(value)}';
     }
 
     if (isYesterday) {
-      return 'Yesterday • ${DateFormat('HH:mm').format(local)}';
+      return 'Yesterday • ${DateFormat('HH:mm').format(value)}';
     }
 
-    return DateFormat('EEE, dd MMM • HH:mm').format(local);
+    return DateFormat('EEE, dd MMM • HH:mm').format(value);
   }
 
   String timeAgo({bool short = false}) {
-    final difference = DateTime.now().difference(local);
+    final difference = DateTime.now().toUtc().difference(utc);
 
     if (difference.inSeconds < 0) {
       return until(short: short);
@@ -143,13 +168,14 @@ extension DateTimeExtensions on DateTime {
     }
 
     final years = (difference.inDays / 365).floor();
+
     return short
         ? '${years}y'
         : '$years year${years == 1 ? '' : 's'} ago';
   }
 
   String until({bool short = false}) {
-    final difference = local.difference(DateTime.now());
+    final difference = utc.difference(DateTime.now().toUtc());
 
     if (difference.inSeconds <= 0) {
       return 'now';
@@ -187,6 +213,6 @@ extension DateTimeExtensions on DateTime {
   }
 
   Duration differenceFrom(DateTime other) {
-    return local.difference(other.toLocal());
+    return utc.difference(other.utc);
   }
 }

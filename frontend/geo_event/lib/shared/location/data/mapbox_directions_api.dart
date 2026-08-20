@@ -100,7 +100,6 @@ class MapRouteDrawer {
     }
 
     try {
-      // ignore: deprecated_member_use
       await style.setStyleLayerProperty(_layerId, 'line-color', _routeColor.value);
       await style.setStyleLayerProperty(_layerId, 'line-width', _routeWidth);
       await style.setStyleLayerProperty(_layerId, 'line-join', 'round');

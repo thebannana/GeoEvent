@@ -296,8 +296,8 @@ class _EventDetailsScreenState extends ConsumerState<EventDetailsScreen> {
   }
 
   String countdownText(EventItem item) {
-    final now = DateTime.now();
-    final start = item.startDateTime.toLocal();
+    final now = DateTime.now().toUtc();
+    final start = item.startDateTime.toUtc();
 
     if (!start.isAfter(now)) {
       return 'Event started or finished';
@@ -439,7 +439,7 @@ class _EventDetailsScreenState extends ConsumerState<EventDetailsScreen> {
       return ReserveAvailabilityState.noTicketsConfigured();
     }
 
-    final now = DateTime.now();
+    final now = DateTime.now().toUtc();
     final sortedTickets = [...tickets]..sort((a, b) => a.price.compareTo(b.price));
 
     final directlyAvailable = sortedTickets

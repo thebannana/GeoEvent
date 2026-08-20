@@ -1,3 +1,4 @@
+import '../../../core/utils/json_helpers.dart';
 import 'chat_thread_type.dart';
 
 class ConversationSummary {
@@ -34,58 +35,60 @@ class ConversationSummary {
   });
 
   factory ConversationSummary.fromJson(Map<String, dynamic> json) {
-    DateTime parseDate(dynamic value) {
-      if (value == null) return DateTime.fromMillisecondsSinceEpoch(0);
-      final parsed =
-          DateTime.tryParse(value.toString()) ??
-          DateTime.fromMillisecondsSinceEpoch(0);
-      return parsed.toLocal();
-    }
-
-    DateTime? parseNullableDate(dynamic value) {
-      if (value == null) return null;
-      return DateTime.tryParse(value.toString())?.toLocal();
-    }
-
-    String? parseNullableString(dynamic value) {
+    String? nullableString(dynamic value) {
       final text = value?.toString().trim();
-      if (text == null || text.isEmpty) return null;
+
+      if (text == null || text.isEmpty) {
+        return null;
+      }
+
       return text;
     }
 
-    final otherUserDisplayName = parseNullableString(
+    final displayName = nullableString(
       json['otherUserDisplayName'],
     );
-    final otherUserUsername = parseNullableString(
+
+    final username = nullableString(
       json['otherUserUsername'],
     );
 
-    final title = parseNullableString(json['title']) ??
-        otherUserDisplayName ??
-        otherUserUsername ??
+    final title = nullableString(json['title']) ??
+        displayName ??
+        username ??
         '';
 
     return ConversationSummary(
-      threadId: (json['threadId'] as num?)?.toInt() ?? 0,
+      threadId: JsonHelpers.asInt(json['threadId']) ?? 0,
       type: ChatThreadTypeX.fromJson(
-        json['threadType']?.toString() ?? json['type']?.toString(),
+        json['threadType']?.toString() ??
+            json['type']?.toString(),
       ),
       title: title,
-      imageUrl: parseNullableString(
-        json['imageUrl'] ?? json['otherUserAvatarUrl'],
+      imageUrl: nullableString(
+        json['imageUrl'] ??
+            json['otherUserAvatarUrl'],
       ),
-      otherUserId: (json['otherUserId'] as num?)?.toInt(),
-      otherUserDisplayName: otherUserDisplayName,
-      otherUserUsername: otherUserUsername,
-      eventId: (json['eventId'] as num?)?.toInt(),
-      lastMessageContent: json['lastMessageContent']?.toString() ?? '',
-      lastMessageSentAt: parseDate(json['lastMessageSentAt']),
-      unreadCount: (json['unreadCount'] as num?)?.toInt() ?? 0,
-      isLastMessageFromMe: json['isLastMessageFromMe'] as bool? ?? false,
-      isOnline:
-          (json['isOnline'] ?? json['otherUserIsOnline']) as bool? ?? false,
-      lastActiveAt: parseNullableDate(
-        json['lastActiveAt'] ?? json['otherUserLastActiveAt'],
+      otherUserId: JsonHelpers.asInt(json['otherUserId']),
+      otherUserDisplayName: displayName,
+      otherUserUsername: username,
+      eventId: JsonHelpers.asInt(json['eventId']),
+      lastMessageContent:
+          json['lastMessageContent']?.toString() ?? '',
+      lastMessageSentAt:
+          JsonHelpers.parseDateTime(json['lastMessageSentAt']) ??
+          DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
+      unreadCount:
+          JsonHelpers.asInt(json['unreadCount']) ?? 0,
+      isLastMessageFromMe:
+          JsonHelpers.asBool(json['isLastMessageFromMe']),
+      isOnline: JsonHelpers.asBool(
+        json['isOnline'] ??
+            json['otherUserIsOnline'],
+      ),
+      lastActiveAt: JsonHelpers.parseDateTime(
+        json['lastActiveAt'] ??
+            json['otherUserLastActiveAt'],
       ),
     );
   }
@@ -116,22 +119,35 @@ class ConversationSummary {
       threadId: threadId ?? this.threadId,
       type: type ?? this.type,
       title: title ?? this.title,
-      imageUrl: clearImageUrl ? null : imageUrl ?? this.imageUrl,
-      otherUserId: clearOtherUserId ? null : otherUserId ?? this.otherUserId,
+      imageUrl: clearImageUrl
+          ? null
+          : imageUrl ?? this.imageUrl,
+      otherUserId: clearOtherUserId
+          ? null
+          : otherUserId ?? this.otherUserId,
       otherUserDisplayName: clearOtherUserDisplayName
           ? null
-          : otherUserDisplayName ?? this.otherUserDisplayName,
+          : otherUserDisplayName ??
+              this.otherUserDisplayName,
       otherUserUsername: clearOtherUserUsername
           ? null
-          : otherUserUsername ?? this.otherUserUsername,
-      eventId: clearEventId ? null : eventId ?? this.eventId,
-      lastMessageContent: lastMessageContent ?? this.lastMessageContent,
-      lastMessageSentAt: lastMessageSentAt ?? this.lastMessageSentAt,
+          : otherUserUsername ??
+              this.otherUserUsername,
+      eventId: clearEventId
+          ? null
+          : eventId ?? this.eventId,
+      lastMessageContent:
+          lastMessageContent ?? this.lastMessageContent,
+      lastMessageSentAt:
+          lastMessageSentAt ?? this.lastMessageSentAt,
       unreadCount: unreadCount ?? this.unreadCount,
-      isLastMessageFromMe: isLastMessageFromMe ?? this.isLastMessageFromMe,
+      isLastMessageFromMe:
+          isLastMessageFromMe ??
+              this.isLastMessageFromMe,
       isOnline: isOnline ?? this.isOnline,
-      lastActiveAt:
-          clearLastActiveAt ? null : lastActiveAt ?? this.lastActiveAt,
+      lastActiveAt: clearLastActiveAt
+          ? null
+          : lastActiveAt ?? this.lastActiveAt,
     );
   }
 }

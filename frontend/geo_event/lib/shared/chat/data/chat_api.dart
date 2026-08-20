@@ -143,7 +143,7 @@ Future<MessageItem> sendThreadMessage({
     ApiEndpoints.threadMessages(threadId),
     data: {
       'content': content.trim(),
-      if (replyToMessageId != null) 'replyToMessageId': replyToMessageId,
+      'replyToMessageId': ?replyToMessageId,
       if (clientTag != null && clientTag.trim().isNotEmpty)
         'clientTag': clientTag.trim(),
     },

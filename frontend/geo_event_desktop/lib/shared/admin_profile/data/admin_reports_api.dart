@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 
+import '../../../../core/errors/error_mapper.dart';
 import '../../../../core/network/api_endpoints.dart';
 import '../../../../core/network/auth_interceptor.dart';
 import '../models/admin_report.dart';
@@ -27,8 +28,11 @@ class AdminReportsApi {
           fallbackMessage: 'Invalid admin reports response.',
         ),
       );
-    } on DioException catch (e) {
-      _throwApiError(e, fallbackMessage: 'Failed to load reports.');
+    } catch (error, stackTrace) {
+      throw ErrorMapper.toAppException(
+        error,
+        stackTrace: stackTrace,
+      );
     }
   }
 
@@ -49,8 +53,11 @@ class AdminReportsApi {
           fallbackMessage: 'Invalid admin report detail response.',
         ),
       );
-    } on DioException catch (e) {
-      _throwApiError(e, fallbackMessage: 'Failed to load report details.');
+    } catch (error, stackTrace) {
+      throw ErrorMapper.toAppException(
+        error,
+        stackTrace: stackTrace,
+      );
     }
   }
 
@@ -60,9 +67,9 @@ class AdminReportsApi {
     String? resolutionNote,
     String? moderatorAction,
   }) async {
-    _assertUpdatableStatus(status);
-
     try {
+      _assertUpdatableStatus(status);
+
       final response = await dio.post(
         '${ApiEndpoints.adminReports}/$reportId/status',
         data: {
@@ -72,7 +79,9 @@ class AdminReportsApi {
         }..removeWhere((key, value) => value == null),
         options: Options(
           contentType: Headers.jsonContentType,
-          headers: const {'Accept': 'application/json'},
+          headers: const {
+            'Accept': 'application/json',
+          },
           extra: const {
             AuthInterceptor.allowRefreshKey: true,
           },
@@ -85,8 +94,11 @@ class AdminReportsApi {
           fallbackMessage: 'Invalid report status update response.',
         ),
       );
-    } on DioException catch (e) {
-      _throwApiError(e, fallbackMessage: 'Failed to update report status.');
+    } catch (error, stackTrace) {
+      throw ErrorMapper.toAppException(
+        error,
+        stackTrace: stackTrace,
+      );
     }
   }
 
@@ -104,14 +116,19 @@ class AdminReportsApi {
     switch (status) {
       case AdminReportQueueFilter.inReview:
         return 'UnderReview';
+
       case AdminReportQueueFilter.resolved:
         return 'Resolved';
+
       case AdminReportQueueFilter.rejected:
         return 'Dismissed';
+
       case AdminReportQueueFilter.all:
       case AdminReportQueueFilter.open:
       case AdminReportQueueFilter.unknown:
-        throw const FormatException('Unsupported report update status.');
+        throw const FormatException(
+          'Unsupported report update status.',
+        );
     }
   }
 
@@ -119,36 +136,24 @@ class AdminReportsApi {
     dynamic raw, {
     required String fallbackMessage,
   }) {
-    if (raw is Map<String, dynamic>) return raw;
-    if (raw is Map) return Map<String, dynamic>.from(raw);
+    if (raw is Map<String, dynamic>) {
+      return raw;
+    }
+
+    if (raw is Map) {
+      return Map<String, dynamic>.from(raw);
+    }
+
     throw FormatException(fallbackMessage);
   }
 
   String? _normalizeNullableString(dynamic value) {
     final text = value?.toString().trim();
-    if (text == null || text.isEmpty) return null;
+
+    if (text == null || text.isEmpty) {
+      return null;
+    }
+
     return text;
-  }
-
-  Never _throwApiError(
-    DioException e, {
-    required String fallbackMessage,
-  }) {
-    final data = e.response?.data;
-
-    if (data is Map) {
-      final map = Map<String, dynamic>.from(data);
-      final message = map['error']?.toString().trim();
-      if (message != null && message.isNotEmpty) {
-        throw Exception(message);
-      }
-    }
-
-    final message = e.message?.trim();
-    if (message != null && message.isNotEmpty) {
-      throw Exception(message);
-    }
-
-    throw Exception(fallbackMessage);
   }
 }

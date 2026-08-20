@@ -157,6 +157,14 @@ class AppException implements Exception {
           error: error,
           stackTrace: stackTrace,
         );
+        case 405:
+          return AppException(
+            type: AppExceptionType.validation,
+            message: message ?? 'This action is not supported by the server.',
+            statusCode: statusCode,
+            error: error,
+            stackTrace: stackTrace,
+          );
       case 409:
         return AppException(
           type: AppExceptionType.conflict,

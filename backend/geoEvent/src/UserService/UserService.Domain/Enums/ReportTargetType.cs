@@ -4,6 +4,5 @@ public enum ReportTargetType
 {
     User,
     Event,
-    Comment,
-    Review
+    Comment
 }

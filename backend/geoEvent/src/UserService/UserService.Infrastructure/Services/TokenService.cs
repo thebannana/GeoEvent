@@ -57,7 +57,7 @@ public class TokenService
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
 
-    public (string raw, string hash) GenerateRefreshToken()
+    public static (string raw, string hash) GenerateRefreshToken()
     {
         var raw = Convert.ToBase64String(RandomNumberGenerator.GetBytes(64));
         var hash = Convert.ToBase64String(

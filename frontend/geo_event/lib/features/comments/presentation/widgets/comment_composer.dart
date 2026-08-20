@@ -3,13 +3,13 @@ import 'package:flutter/material.dart';
 import '../../../../core/widgets/feedback/app_spinner.dart';
 import 'comment_avatar.dart';
 
-class CommentComposer extends StatelessWidget {
+class CommentComposer extends StatefulWidget {
   final GlobalKey<FormState> formKey;
   final TextEditingController controller;
   final bool isEditing;
   final bool isReplying;
   final bool isSubmitting;
-  final Future<void> Function() onSubmit;
+  final Future<bool> Function() onSubmit;
   final ValueChanged<String> onChanged;
   final VoidCallback? onCancelMode;
   final String? currentUserAvatarUrl;
@@ -36,23 +36,46 @@ class CommentComposer extends StatelessWidget {
   });
 
   @override
+  State<CommentComposer> createState() => _CommentComposerState();
+}
+
+class _CommentComposerState extends State<CommentComposer> {
+  bool _busy = false;
+
+  Future<void> _handleTap() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+
+    final success = await widget.onSubmit();
+
+    if (success) {
+      widget.controller.clear();
+      widget.formKey.currentState?.reset();
+    }
+
+    if (mounted) {
+      setState(() => _busy = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (onCancelMode != null)
+        if (widget.onCancelMode != null)
           ComposerStateBanner(
-            isEditing: isEditing,
-            onCancel: onCancelMode!,
+            isEditing: widget.isEditing,
+            onCancel: widget.onCancelMode!,
           ),
         Form(
-          key: formKey,
+          key: widget.formKey,
           child: ValueListenableBuilder<TextEditingValue>(
-            valueListenable: controller,
+            valueListenable: widget.controller,
             builder: (context, value, _) {
-              final canSubmit = !isSubmitting && value.text.trim().isNotEmpty;
+              final canSubmit = !widget.isSubmitting && !_busy && value.text.trim().isNotEmpty;
 
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -62,8 +85,8 @@ class CommentComposer extends StatelessWidget {
                     children: [
                       CommentAvatar(
                         size: 36,
-                        avatarUrl: currentUserAvatarUrl,
-                        fallbackText: currentUserDisplayName,
+                        avatarUrl: widget.currentUserAvatarUrl,
+                        fallbackText: widget.currentUserDisplayName,
                       ),
                       const SizedBox(width: 10),
                       Expanded(
@@ -76,22 +99,22 @@ class CommentComposer extends StatelessWidget {
                             ),
                           ),
                           child: TextFormField(
-                            controller: controller,
+                            controller: widget.controller,
                             minLines: 1,
                             maxLines: 5,
-                            enabled: !isSubmitting,
+                            enabled: !widget.isSubmitting && !_busy,
                             textInputAction: TextInputAction.newline,
-                            autovalidateMode: autovalidateMode,
-                            validator: validator,
-                            onChanged: onChanged,
+                            autovalidateMode: widget.autovalidateMode,
+                            validator: widget.validator,
+                            onChanged: widget.onChanged,
                             style: TextStyle(
                               color: colorScheme.onSurface,
                               height: 1.3,
                             ),
                             decoration: InputDecoration(
-                              hintText: isEditing
+                              hintText: widget.isEditing
                                   ? 'Edit your comment...'
-                                  : isReplying
+                                  : widget.isReplying
                                       ? 'Write a reply...'
                                       : 'Add a comment...',
                               hintStyle: TextStyle(
@@ -118,31 +141,31 @@ class CommentComposer extends StatelessWidget {
                       ),
                       const SizedBox(width: 10),
                       Tooltip(
-                        message: submitDisabledReason ??
-                            (isEditing ? 'Save comment' : 'Post comment'),
+                        message: widget.submitDisabledReason ??
+                            (widget.isEditing ? 'Save comment' : 'Post comment'),
                         child: FilledButton(
-                          onPressed: canSubmit ? onSubmit : null,
+                          onPressed: canSubmit ? _handleTap : null,
                           style: FilledButton.styleFrom(
                             minimumSize: const Size(0, 42),
                             padding: const EdgeInsets.symmetric(horizontal: 14),
                           ),
-                          child: isSubmitting
+                          child: (widget.isSubmitting || _busy)
                               ? const AppSpinner(
                                   size: 16,
                                   strokeWidth: 2,
                                   color: Colors.white,
                                 )
-                              : Text(isEditing ? 'Save' : 'Post'),
+                              : Text(widget.isEditing ? 'Save' : 'Post'),
                         ),
                       ),
                     ],
                   ),
-                  if (submitDisabledReason != null) ...[
+                  if (widget.submitDisabledReason != null) ...[
                     const SizedBox(height: 6),
                     Padding(
                       padding: const EdgeInsets.only(left: 46),
                       child: Text(
-                        submitDisabledReason!,
+                        widget.submitDisabledReason!,
                         style: TextStyle(
                           color: colorScheme.onSurfaceVariant,
                           fontSize: 12,

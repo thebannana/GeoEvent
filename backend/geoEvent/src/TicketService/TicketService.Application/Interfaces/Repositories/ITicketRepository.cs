@@ -8,6 +8,8 @@ namespace TicketService.Application.Interfaces.Repositories;
 
 public interface ITicketRepository
 {
+    Task<List<ManageableEventAttendeePreviewDto>>
+    GetManageableEventAttendeesForEventAsync(int eventId);
     Task<PagedResult<Reservation>> GetRefundRequestsAsync(AdminRefundRequestsQueryDto query);
     Task<Reservation?> GetReservationByIdAsync(int reservationId);
     Task<Reservation?> GetReservationByIdForUpdateAsync(int reservationId);

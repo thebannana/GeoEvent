@@ -1,3 +1,5 @@
+import '../../../../core/utils/json_helpers.dart';
+
 class UserProfile {
   final int userId;
   final String username;
@@ -9,6 +11,8 @@ class UserProfile {
   final String role;
   final bool isVerified;
   final bool isBanned;
+
+  /// Parsed from the API and retained as UTC.
   final DateTime? createdAt;
 
   const UserProfile({
@@ -36,6 +40,7 @@ class UserProfile {
 
   String get displayUsername {
     final value = username.trim();
+
     if (value.isEmpty) {
       return '@user';
     }
@@ -50,7 +55,10 @@ class UserProfile {
 
   String get displayPhoneNumber {
     final value = phoneNumber?.trim();
-    return value == null || value.isEmpty ? 'No phone number' : value;
+
+    return value == null || value.isEmpty
+        ? 'No phone number'
+        : value;
   }
 
   bool get hasProfileImage {
@@ -60,36 +68,50 @@ class UserProfile {
 
   String get displayJoinedYear {
     final date = createdAt;
+
     if (date == null) {
       return 'recently';
     }
 
-    return date.year.toString();
+    return date.toUtc().year.toString();
   }
 
   factory UserProfile.fromJson(Map<String, dynamic> json) {
-    final createdAtRaw = json['createdAt'] ?? json['CreatedAt'];
-    final userIdRaw = json['userId'] ?? json['UserId'] ?? 0;
-    final verifiedRaw = json['isVerified'] ?? json['IsVerified'] ?? false;
-    final bannedRaw = json['isBanned'] ?? json['IsBanned'] ?? false;
-
     return UserProfile(
-      userId: (userIdRaw as num?)?.toInt() ?? 0,
-      username: (json['username'] ?? json['Username'] ?? '').toString().trim(),
-      email: (json['email'] ?? json['Email'] ?? '').toString().trim(),
-      firstName:
-          (json['firstName'] ?? json['FirstName'] ?? '').toString().trim(),
-      lastName: (json['lastName'] ?? json['LastName'] ?? '').toString().trim(),
-      phoneNumber: _normalizeNullableString(
+      userId: JsonHelpers.asInt(
+            json['userId'] ?? json['UserId'],
+          ) ??
+          0,
+      username: (json['username'] ?? json['Username'] ?? '')
+          .toString()
+          .trim(),
+      email: (json['email'] ?? json['Email'] ?? '')
+          .toString()
+          .trim(),
+      firstName: (json['firstName'] ?? json['FirstName'] ?? '')
+          .toString()
+          .trim(),
+      lastName: (json['lastName'] ?? json['LastName'] ?? '')
+          .toString()
+          .trim(),
+      phoneNumber: JsonHelpers.normalize(
         json['phoneNumber'] ?? json['PhoneNumber'],
       ),
-      imageUrl: _normalizeNullableString(
+      imageUrl: JsonHelpers.normalize(
         json['imageUrl'] ?? json['ImageUrl'],
       ),
-      role: (json['role'] ?? json['Role'] ?? 'User').toString().trim(),
-      isVerified: _parseBool(verifiedRaw),
-      isBanned: _parseBool(bannedRaw),
-      createdAt: _parseDateTime(createdAtRaw),
+      role: (json['role'] ?? json['Role'] ?? 'User')
+          .toString()
+          .trim(),
+      isVerified: JsonHelpers.asBool(
+        json['isVerified'] ?? json['IsVerified'],
+      ),
+      isBanned: JsonHelpers.asBool(
+        json['isBanned'] ?? json['IsBanned'],
+      ),
+      createdAt: JsonHelpers.parseDateTime(
+        json['createdAt'] ?? json['CreatedAt'],
+      ),
     );
   }
 
@@ -130,52 +152,17 @@ class UserProfile {
       email: email ?? this.email,
       firstName: firstName ?? this.firstName,
       lastName: lastName ?? this.lastName,
-      phoneNumber: clearPhoneNumber ? null : phoneNumber ?? this.phoneNumber,
-      imageUrl: clearImageUrl ? null : imageUrl ?? this.imageUrl,
+      phoneNumber: clearPhoneNumber
+          ? null
+          : phoneNumber ?? this.phoneNumber,
+      imageUrl: clearImageUrl
+          ? null
+          : imageUrl ?? this.imageUrl,
       role: role ?? this.role,
       isVerified: isVerified ?? this.isVerified,
       isBanned: isBanned ?? this.isBanned,
       createdAt: createdAt ?? this.createdAt,
     );
-  }
-
-  static String? _normalizeNullableString(dynamic value) {
-    final text = value?.toString().trim();
-    if (text == null || text.isEmpty) {
-      return null;
-    }
-
-    return text;
-  }
-
-  static DateTime? _parseDateTime(dynamic value) {
-    if (value == null) {
-      return null;
-    }
-
-    if (value is DateTime) {
-      return value;
-    }
-
-    final text = value.toString().trim();
-    if (text.isEmpty) {
-      return null;
-    }
-
-    return DateTime.tryParse(text);
-  }
-
-  static bool _parseBool(dynamic value) {
-    if (value is bool) {
-      return value;
-    }
-
-    if (value is num) {
-      return value != 0;
-    }
-
-    final normalized = value.toString().toLowerCase().trim();
-    return normalized == 'true' || normalized == '1';
   }
 }
 
@@ -190,7 +177,10 @@ class AdminUserProfileDetails {
   final String? bio;
   final String role;
   final bool isBanned;
+
+  /// Parsed from the API and retained as UTC.
   final DateTime? createdAt;
+
   final int eventsCount;
   final double averageRating;
   final int ratingsCount;
@@ -219,7 +209,11 @@ class AdminUserProfileDetails {
 
   String get displayUsername {
     final value = username.trim();
-    if (value.isEmpty) return '@user';
+
+    if (value.isEmpty) {
+      return '@user';
+    }
+
     return value.startsWith('@') ? value : '@$value';
   }
 
@@ -230,12 +224,18 @@ class AdminUserProfileDetails {
 
   String get displayPhoneNumber {
     final value = phoneNumber?.trim();
-    return value == null || value.isEmpty ? 'No phone number' : value;
+
+    return value == null || value.isEmpty
+        ? 'No phone number'
+        : value;
   }
 
   String get displayBio {
     final value = bio?.trim();
-    return value == null || value.isEmpty ? 'No bio added.' : value;
+
+    return value == null || value.isEmpty
+        ? 'No bio added.'
+        : value;
   }
 
   bool get hasProfileImage {
@@ -244,60 +244,52 @@ class AdminUserProfileDetails {
   }
 
   factory AdminUserProfileDetails.fromJson(Map<String, dynamic> json) {
-    final userIdRaw = json['userId'] ?? json['UserId'] ?? 0;
-    final bannedRaw = json['isBanned'] ?? json['IsBanned'] ?? false;
-    final createdAtRaw = json['createdAt'] ?? json['CreatedAt'];
-    final eventsCountRaw = json['eventsCount'] ?? json['EventsCount'] ?? 0;
-    final averageRatingRaw =
-        json['averageRating'] ?? json['AverageRating'] ?? 0;
-    final ratingsCountRaw = json['ratingsCount'] ?? json['RatingsCount'] ?? 0;
-
     return AdminUserProfileDetails(
-      userId: (userIdRaw as num?)?.toInt() ?? 0,
-      username: (json['username'] ?? json['Username'] ?? '').toString().trim(),
-      email: (json['email'] ?? json['Email'] ?? '').toString().trim(),
-      firstName:
-          (json['firstName'] ?? json['FirstName'] ?? '').toString().trim(),
-      lastName: (json['lastName'] ?? json['LastName'] ?? '').toString().trim(),
-      phoneNumber: _normalizeNullableString(
+      userId: JsonHelpers.asInt(
+            json['userId'] ?? json['UserId'],
+          ) ??
+          0,
+      username: (json['username'] ?? json['Username'] ?? '')
+          .toString()
+          .trim(),
+      email: (json['email'] ?? json['Email'] ?? '')
+          .toString()
+          .trim(),
+      firstName: (json['firstName'] ?? json['FirstName'] ?? '')
+          .toString()
+          .trim(),
+      lastName: (json['lastName'] ?? json['LastName'] ?? '')
+          .toString()
+          .trim(),
+      phoneNumber: JsonHelpers.normalize(
         json['phoneNumber'] ?? json['PhoneNumber'],
       ),
-      imageUrl: _normalizeNullableString(
+      imageUrl: JsonHelpers.normalize(
         json['imageUrl'] ?? json['ImageUrl'],
       ),
-      bio: _normalizeNullableString(
+      bio: JsonHelpers.normalize(
         json['bio'] ?? json['Bio'],
       ),
-      role: (json['role'] ?? json['Role'] ?? 'User').toString().trim(),
-      isBanned: _parseBool(bannedRaw),
-      createdAt: _parseDateTime(createdAtRaw),
-      eventsCount: (eventsCountRaw as num?)?.toInt() ?? 0,
-      averageRating: (averageRatingRaw as num?)?.toDouble() ?? 0,
-      ratingsCount: (ratingsCountRaw as num?)?.toInt() ?? 0,
+      role: (json['role'] ?? json['Role'] ?? 'User')
+          .toString()
+          .trim(),
+      isBanned: JsonHelpers.asBool(
+        json['isBanned'] ?? json['IsBanned'],
+      ),
+      createdAt: JsonHelpers.parseDateTime(
+        json['createdAt'] ?? json['CreatedAt'],
+      ),
+      eventsCount: JsonHelpers.asInt(
+            json['eventsCount'] ?? json['EventsCount'],
+          ) ??
+          0,
+      averageRating: JsonHelpers.asDouble(
+        json['averageRating'] ?? json['AverageRating'],
+      ),
+      ratingsCount: JsonHelpers.asInt(
+            json['ratingsCount'] ?? json['RatingsCount'],
+          ) ??
+          0,
     );
-  }
-
-  static String? _normalizeNullableString(dynamic value) {
-    final text = value?.toString().trim();
-    if (text == null || text.isEmpty) return null;
-    return text;
-  }
-
-  static DateTime? _parseDateTime(dynamic value) {
-    if (value == null) return null;
-    if (value is DateTime) return value;
-
-    final text = value.toString().trim();
-    if (text.isEmpty) return null;
-
-    return DateTime.tryParse(text);
-  }
-
-  static bool _parseBool(dynamic value) {
-    if (value is bool) return value;
-    if (value is num) return value != 0;
-
-    final normalized = value.toString().toLowerCase().trim();
-    return normalized == 'true' || normalized == '1';
   }
 }

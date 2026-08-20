@@ -34,8 +34,6 @@ public class PasswordResetRequestedConsumer : IConsumer<PasswordResetRequestedMe
             <h2>Reset your password</h2>
             <p>You requested a password reset for your GeoEvent account.</p>
             <p><a href="{resetLink}">Reset password</a></p>
-            <p>If the app link does not open, use this token manually:</p>
-            <p><strong>{message.Token}</strong></p>
             <p>This token expires at {message.ExpiresAt:yyyy-MM-dd HH:mm:ss} UTC.</p>
             """;
 

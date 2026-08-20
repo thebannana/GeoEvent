@@ -104,13 +104,28 @@ class EventReservationCard extends StatelessWidget {
                               label: 'Cash due at entry',
                               tone: _ReservationStatusTone.warning,
                             ),
-                            if (reservation.hasPendingRefundRequest)
+                          if (reservation.hasPendingRefundRequest)
                             const _ReservationStatusChip(
                               icon: Icons.undo_rounded,
                               label: 'Refund under admin review',
                               tone: _ReservationStatusTone.warning,
                             ),
-                          if (reservation.isValidated)
+                          if (reservation.quantity > 1)
+                            _ReservationStatusChip(
+                              icon: reservation.allTicketsValidated
+                                  ? Icons.task_alt_rounded
+                                  : reservation.hasPartialValidation
+                                      ? Icons.hourglass_bottom_rounded
+                                      : Icons.qr_code_2_rounded,
+                              label:
+                                  '${reservation.validatedTicketCount} of ${reservation.totalTickets} validated',
+                              tone: reservation.allTicketsValidated
+                                  ? _ReservationStatusTone.success
+                                  : reservation.hasPartialValidation
+                                      ? _ReservationStatusTone.warning
+                                      : _ReservationStatusTone.neutral,
+                            )
+                          else if (reservation.allTicketsValidated)
                             _ReservationStatusChip(
                               icon: Icons.task_alt_rounded,
                               label: reservation.validatedAt != null

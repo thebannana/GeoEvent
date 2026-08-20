@@ -1,9 +1,9 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/theme/app_theme_colors.dart';
+import '../../../../core/utils/debouncer.dart';
+import '../../../../core/utils/logger.dart';
 import '../../../../shared/admin_profile/models/admin_refund.dart';
 import '../../../../shared/admin_profile/models/admin_report.dart' as report_model;
 import '../../../../shared/admin_profile/models/admin_report.dart';
@@ -34,7 +34,6 @@ enum AdminReportSortField {
   status,
   type,
   reporter,
-  reportedUser,
 }
 
 class AdminReportsPanel extends ConsumerStatefulWidget {
@@ -45,8 +44,12 @@ class AdminReportsPanel extends ConsumerStatefulWidget {
 }
 
 class _AdminReportsPanelState extends ConsumerState<AdminReportsPanel> {
+  static const _loggerTag = 'AdminReportsPanel';
+
   final TextEditingController searchController = TextEditingController();
-  Timer? searchDebounce;
+  final Debouncer _searchDebouncer = Debouncer(
+    delay: const Duration(milliseconds: 350),
+  );
 
   AdminModerationTab activeTab = AdminModerationTab.reports;
   final Set<String> expandedIds = <String>{};
@@ -56,24 +59,33 @@ class _AdminReportsPanelState extends ConsumerState<AdminReportsPanel> {
     super.initState();
 
     Future.microtask(() async {
-      await ref.read(adminReportsNotifierProvider.notifier).load();
-      if (!mounted) return;
-      await ref.read(adminRefundsNotifierProvider.notifier).load();
+      try {
+        await ref.read(adminReportsNotifierProvider.notifier).load();
+        if (!mounted) return;
+        await ref.read(adminRefundsNotifierProvider.notifier).load();
 
-      if (!mounted) return;
-      final activeSearch =
-          ref.read(adminReportsNotifierProvider).query.search ?? '';
-      searchController.text = activeSearch;
-      searchController.selection = TextSelection.fromPosition(
-        TextPosition(offset: searchController.text.length),
-      );
-      setState(() {});
+        if (!mounted) return;
+        final activeSearch =
+            ref.read(adminReportsNotifierProvider).query.search ?? '';
+        searchController.text = activeSearch;
+        searchController.selection = TextSelection.fromPosition(
+          TextPosition(offset: searchController.text.length),
+        );
+        setState(() {});
+      } catch (error, stackTrace) {
+        AppLogger.error(
+          'Failed to initialize moderation panel.',
+          tag: _loggerTag,
+          error: error,
+          stackTrace: stackTrace,
+        );
+      }
     });
   }
 
   @override
   void dispose() {
-    searchDebounce?.cancel();
+    _searchDebouncer.dispose();
     searchController.dispose();
     super.dispose();
   }
@@ -183,22 +195,28 @@ class _AdminReportsPanelState extends ConsumerState<AdminReportsPanel> {
     await ref.read(adminReportsNotifierProvider.notifier).load();
   }
 
-  void onSearchChanged(String value) {
-    setState(() {});
-    searchDebounce?.cancel();
-    searchDebounce = Timer(const Duration(milliseconds: 350), () async {
-      if (!mounted) return;
+void onSearchChanged(String value) {
+  setState(() {});
 
-      if (_isRefundTab) {
-        await ref.read(adminRefundsNotifierProvider.notifier).setSearch(value);
-      } else {
-        await ref.read(adminReportsNotifierProvider.notifier).setSearch(value);
-      }
-    });
-  }
+  _searchDebouncer.run(() async {
+    if (!mounted) return;
+
+    final trimmed = value.trim();
+
+    if (_isRefundTab) {
+      await ref
+          .read(adminRefundsNotifierProvider.notifier)
+          .setSearch(trimmed);
+    } else {
+      await ref
+          .read(adminReportsNotifierProvider.notifier)
+          .setSearch(trimmed);
+    }
+  });
+}
 
   Future<void> clearSearch() async {
-    searchDebounce?.cancel();
+    _searchDebouncer.cancel();
     searchController.clear();
     setState(() {});
 
@@ -360,18 +378,28 @@ class _AdminReportsPanelState extends ConsumerState<AdminReportsPanel> {
     if (dialogResult == null || !dialogResult.confirmed) return;
     if (!mounted) return;
 
-    await ref.read(adminReportsNotifierProvider.notifier).updateStatus(
-          reportId: item.reportNumericId!,
-          status: _mapUiFilterToReport(status),
-          resolutionNote: dialogResult.note?.trim().isEmpty == true
-              ? null
-              : dialogResult.note?.trim(),
-          moderatorAction: dialogResult.moderatorAction?.trim().isEmpty == true
-              ? null
-              : dialogResult.moderatorAction?.trim(),
-        );
+    try {
+      await ref.read(adminReportsNotifierProvider.notifier).updateStatus(
+            reportId: item.reportNumericId!,
+            status: _mapUiFilterToReport(status),
+            resolutionNote: dialogResult.note?.trim().isEmpty == true
+                ? null
+                : dialogResult.note?.trim(),
+            moderatorAction: dialogResult.moderatorAction?.trim().isEmpty == true
+                ? null
+                : dialogResult.moderatorAction?.trim(),
+          );
 
-    showSnack('Report status updated.');
+      showSnack('Report status updated.');
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'Failed to update report status.',
+        tag: _loggerTag,
+        error: error,
+        stackTrace: stackTrace,
+      );
+      showSnack('Failed to update report status.');
+    }
   }
 
   Future<void> _handleRefundStatusChange(
@@ -423,25 +451,35 @@ class _AdminReportsPanelState extends ConsumerState<AdminReportsPanel> {
         ? dialogResult.moderatorAction!.trim()
         : null;
 
-    if (status == AdminReportQueueFilter.resolved) {
-      await ref.read(adminRefundsNotifierProvider.notifier).approveRefund(
-            eventId: item.eventId!,
-            reservationId: item.reservationNumericId!,
-            decisionReason: note,
-            moderatorAction: moderatorAction,
-          );
-      showSnack('Refund approved.');
-      return;
-    }
+    try {
+      if (status == AdminReportQueueFilter.resolved) {
+        await ref.read(adminRefundsNotifierProvider.notifier).approveRefund(
+              eventId: item.eventId!,
+              reservationId: item.reservationNumericId!,
+              decisionReason: note,
+              moderatorAction: moderatorAction,
+            );
+        showSnack('Refund approved.');
+        return;
+      }
 
-    if (status == AdminReportQueueFilter.rejected) {
-      await ref.read(adminRefundsNotifierProvider.notifier).rejectRefund(
-            eventId: item.eventId!,
-            reservationId: item.reservationNumericId!,
-            decisionReason: note,
-            moderatorAction: moderatorAction,
-          );
-      showSnack('Refund rejected.');
+      if (status == AdminReportQueueFilter.rejected) {
+        await ref.read(adminRefundsNotifierProvider.notifier).rejectRefund(
+              eventId: item.eventId!,
+              reservationId: item.reservationNumericId!,
+              decisionReason: note,
+              moderatorAction: moderatorAction,
+            );
+        showSnack('Refund rejected.');
+      }
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'Failed to process refund decision.',
+        tag: _loggerTag,
+        error: error,
+        stackTrace: stackTrace,
+      );
+      showSnack('Failed to process refund decision.');
     }
   }
 
@@ -489,8 +527,6 @@ class _AdminReportsPanelState extends ConsumerState<AdminReportsPanel> {
         return 'Type';
       case AdminReportSortField.reporter:
         return _isRefundTab ? 'Requester' : 'Reporter';
-      case AdminReportSortField.reportedUser:
-        return _isRefundTab ? 'Target' : 'Reported user';
     }
   }
 
@@ -626,64 +662,6 @@ class _AdminReportsPanelState extends ConsumerState<AdminReportsPanel> {
             ),
           ),
         ),
-        PopupMenuButton<AdminReportQueueFilter>(
-          tooltip: 'Filter by queue',
-          initialValue: _queueFilter,
-          onSelected: setQueueFilter,
-          itemBuilder: (context) => const [
-            PopupMenuItem(
-              value: AdminReportQueueFilter.all,
-              child: Text('All items'),
-            ),
-            PopupMenuItem(
-              value: AdminReportQueueFilter.open,
-              child: Text('Open'),
-            ),
-            PopupMenuItem(
-              value: AdminReportQueueFilter.inReview,
-              child: Text('In review'),
-            ),
-            PopupMenuItem(
-              value: AdminReportQueueFilter.resolved,
-              child: Text('Resolved'),
-            ),
-            PopupMenuItem(
-              value: AdminReportQueueFilter.rejected,
-              child: Text('Rejected'),
-            ),
-          ],
-          child: Container(
-            height: 46,
-            padding: const EdgeInsets.symmetric(horizontal: 14),
-            decoration: BoxDecoration(
-              color: colors.inputFill,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: colors.borderSoft),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.tune_rounded,
-                  size: 18,
-                  color: _queueFilter == AdminReportQueueFilter.all
-                      ? colors.textSecondary
-                      : colorScheme.primary,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  queueFilterLabel(_queueFilter),
-                  style: textTheme.labelLarge?.copyWith(
-                    color: _queueFilter == AdminReportQueueFilter.all
-                        ? colors.textSecondary
-                        : colorScheme.primary,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
         PopupMenuButton<AdminReportSortField>(
           tooltip: 'Sort moderation items',
           initialValue: _sortField,
@@ -706,11 +684,6 @@ class _AdminReportsPanelState extends ConsumerState<AdminReportsPanel> {
               PopupMenuItem(
                 value: AdminReportSortField.reporter,
                 child: const Text('Sort by reporter'),
-              ),
-            if (!_isRefundTab)
-              PopupMenuItem(
-                value: AdminReportSortField.reportedUser,
-                child: const Text('Sort by reported user'),
               ),
           ],
           child: Container(
@@ -972,8 +945,6 @@ class _AdminReportsPanelState extends ConsumerState<AdminReportsPanel> {
         return AdminReportSortField.type;
       case report_model.AdminReportSortField.reporter:
         return AdminReportSortField.reporter;
-      case report_model.AdminReportSortField.reportedUser:
-        return AdminReportSortField.reportedUser;
     }
   }
 
@@ -989,8 +960,6 @@ class _AdminReportsPanelState extends ConsumerState<AdminReportsPanel> {
         return report_model.AdminReportSortField.type;
       case AdminReportSortField.reporter:
         return report_model.AdminReportSortField.reporter;
-      case AdminReportSortField.reportedUser:
-        return report_model.AdminReportSortField.reportedUser;
     }
   }
 
@@ -1013,7 +982,6 @@ class _AdminReportsPanelState extends ConsumerState<AdminReportsPanel> {
         return AdminRefundSortField.status;
       case AdminReportSortField.type:
       case AdminReportSortField.reporter:
-      case AdminReportSortField.reportedUser:
         return null;
     }
   }
@@ -1430,7 +1398,7 @@ class AdminModerationItemRowData {
   String get dateTimeLabel {
     if (createdAt.millisecondsSinceEpoch == 0) return '—';
 
-    final local = createdAt.toLocal();
+    final local = createdAt.toUtc();
     final dd = local.day.toString().padLeft(2, '0');
     final mm = local.month.toString().padLeft(2, '0');
     final yyyy = local.year.toString();

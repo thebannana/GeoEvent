@@ -165,7 +165,7 @@ class Validators {
       return 'Birth date is required.';
     }
 
-    final now = DateTime.now();
+    final now = DateTime.now().toUtc();
     final cutoff = DateTime(now.year - minimumAge, now.month, now.day);
 
     if (value.isAfter(cutoff)) {

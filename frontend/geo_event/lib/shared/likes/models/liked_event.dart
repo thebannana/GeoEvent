@@ -22,7 +22,7 @@ class LikedEvent {
           ? json['title'].toString().trim()
           : 'Liked event',
       imageUrl: json['imageUrl']?.toString(),
-      likedAt: parsedLikedAt ?? DateTime.now(),
+      likedAt: parsedLikedAt ?? DateTime.now().toUtc(),
       isLiked: json['isLiked'] == true,
     );
   }

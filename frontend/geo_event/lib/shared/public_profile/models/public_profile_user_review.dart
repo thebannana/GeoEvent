@@ -34,9 +34,9 @@ class UserReview {
       ratedUserId: (json['ratedUserId'] as num).toInt(),
       value: (json['value'] as num).toInt(),
       comment: _normalizeNullable(json['comment']),
-      createdAt: DateTime.parse(json['createdAt'] as String).toLocal(),
+      createdAt: DateTime.parse(json['createdAt'] as String).toUtc(),
       updatedAt: json['updatedAt'] != null
-          ? DateTime.parse(json['updatedAt'] as String).toLocal()
+          ? DateTime.parse(json['updatedAt'] as String).toUtc()
           : null,
     );
   }

@@ -1,27 +1,6 @@
 name: geoevent
 
 services:
-  rabbitmq:
-    image: rabbitmq:3.13-management
-    container_name: geoevent-rabbitmq
-    environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS}
-    ports:
-      - "5672:5672"
-      - "15672:15672"
-    volumes:
-      - rabbitmq_data:/var/lib/rabbitmq
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
-      interval: 15s
-      timeout: 10s
-      retries: 10
-      start_period: 60s
-    restart: unless-stopped
-    networks:
-      - geoevent-network
-
   sqlserver:
     image: mcr.microsoft.com/mssql/server:2022-CU14-ubuntu-22.04
     container_name: geoevent-sqlserver
@@ -44,6 +23,56 @@ services:
       timeout: 10s
       retries: 20
       start_period: 120s
+    restart: unless-stopped
+    networks:
+      - geoevent-network
+
+  seed-generator:
+    build:
+      context: .
+      dockerfile: src/SeedGeneration/SeedGenerator/Dockerfile
+    image: geoevent-seed-generator:1.0.0
+    container_name: geoevent-seed-generator
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT}
+      ASPNETCORE_URLS: http://+:8080
+      USER_DB_CONNECTION: ${USER_DB_CONNECTION}
+      EVENT_DB_CONNECTION: ${EVENT_DB_CONNECTION}
+      MESSAGE_DB_CONNECTION: ${MESSAGE_DB_CONNECTION}
+      NOTIFICATION_DB_CONNECTION: ${NOTIFICATION_DB_CONNECTION}
+      TICKET_DB_CONNECTION: ${TICKET_DB_CONNECTION}
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    command: ["all"]
+    restart: "no"
+    networks:
+      - geoevent-network
+
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: geoevent-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS}
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "rabbitmq-diagnostics -q ping && rabbitmq-diagnostics -q check_port_listener 5672"
+        ]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 60s
+    depends_on:
+      seed-generator:
+        condition: service_completed_successfully
     restart: unless-stopped
     networks:
       - geoevent-network
@@ -77,8 +106,6 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
-      event-service:
-        condition: service_started
     restart: unless-stopped
     networks:
       - geoevent-network
@@ -156,10 +183,6 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
-      user-service:
-        condition: service_started
-      event-service:
-        condition: service_started
     restart: unless-stopped
     networks:
       - geoevent-network
@@ -233,10 +256,6 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
-      user-service:
-        condition: service_started
-      event-service:
-        condition: service_started
     restart: unless-stopped
     networks:
       - geoevent-network
@@ -277,20 +296,10 @@ services:
       Services__TicketService__BaseUrl: ${TICKET_SERVICE_BASE_URL}
       Services__TicketService__InternalApiKey: ${INTERNAL_API_KEY}
     depends_on:
-      rabbitmq:
-        condition: service_healthy
       sqlserver:
         condition: service_healthy
-      user-service:
-        condition: service_started
-      event-service:
-        condition: service_started
-      ticket-service:
-        condition: service_started
-      notification-service:
-        condition: service_started
-      message-service:
-        condition: service_started
+      rabbitmq:
+        condition: service_healthy
     restart: unless-stopped
     networks:
       - geoevent-network

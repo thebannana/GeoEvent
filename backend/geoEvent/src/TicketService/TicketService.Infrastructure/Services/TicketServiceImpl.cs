@@ -151,15 +151,33 @@ public class TicketServiceImpl : ITicketService
         return title.Length <= 120 ? title : title[..120];
     }
 
-    private static RefundQueueStatus MapRefundQueueStatus(RefundRequestStatus status) =>
-    status switch
+    private static RefundQueueStatus MapRefundQueueStatus(
+        RefundRequestStatus status)
     {
-        RefundRequestStatus.Pending => RefundQueueStatus.Open,
-        RefundRequestStatus.Processing => RefundQueueStatus.InReview,
-        RefundRequestStatus.Approved => RefundQueueStatus.Resolved,
-        RefundRequestStatus.Rejected => RefundQueueStatus.Rejected,
-        _ => RefundQueueStatus.Open
-    };
+        return status switch
+        {
+            RefundRequestStatus.Pending =>
+                RefundQueueStatus.Open,
+
+            RefundRequestStatus.Processing =>
+                RefundQueueStatus.InReview,
+
+            RefundRequestStatus.Approved =>
+                RefundQueueStatus.Resolved,
+
+            RefundRequestStatus.Refunded =>
+                RefundQueueStatus.Resolved,
+
+            RefundRequestStatus.Rejected =>
+                RefundQueueStatus.Rejected,
+
+            RefundRequestStatus.Failed =>
+                RefundQueueStatus.Rejected,
+
+            _ =>
+                RefundQueueStatus.Open,
+        };
+    }
 
     private static string BuildRefundPreview(Reservation reservation)
     {
@@ -482,56 +500,103 @@ public class TicketServiceImpl : ITicketService
         }
     }
 
-    public async Task<ServiceResult<PagedResult<ManageableEventAttendeePreviewDto>>> GetManageableEventAttendeesAsync(
-    int eventId,
-    ManageableEventAttendeesFilterDto? filter)
+    public async Task<
+    ServiceResult<PagedResult<ManageableEventAttendeePreviewDto>>>
+    GetManageableEventAttendeesAsync(
+        int eventId,
+        ManageableEventAttendeesFilterDto? filter)
     {
         filter ??= new ManageableEventAttendeesFilterDto();
 
         var page = filter.Page <= 0 ? 1 : filter.Page;
-        var pageSize = filter.PageSize <= 0 ? 20 : Math.Min(filter.PageSize, 50);
+        var pageSize = filter.PageSize <= 0
+            ? 20
+            : Math.Min(filter.PageSize, 50);
 
-        var pagedAttendees = await _repository.GetManageableEventAttendeesAsync(
-            eventId,
-            page,
-            pageSize,
-            filter.SearchTerm);
+        var allAttendees = await _repository
+            .GetManageableEventAttendeesForEventAsync(eventId);
 
-        var items = pagedAttendees.Items.ToList();
-
-        if (!items.Any())
+        if (allAttendees.Count == 0)
         {
-            return ServiceResult<PagedResult<ManageableEventAttendeePreviewDto>>.Ok(
+            return ServiceResult<
+                PagedResult<ManageableEventAttendeePreviewDto>>.Ok(
                 new PagedResult<ManageableEventAttendeePreviewDto>
                 {
-                    Items = items,
+                    Items = [],
                     TotalCount = 0,
                     Page = page,
-                    PageSize = pageSize
+                    PageSize = pageSize,
                 });
         }
 
-        var profiles = await _userDirectoryService.GetPublicProfilesAsync(
-            items.Select(x => x.UserId).Distinct().ToList());
+        var userIds = allAttendees
+            .Select(attendee => attendee.UserId)
+            .Where(userId => userId > 0)
+            .Distinct()
+            .ToList();
 
-        var profilesById = profiles.ToDictionary(x => x.UserId);
+        var profiles = userIds.Count == 0
+            ? []
+            : await _userDirectoryService.GetPublicProfilesAsync(userIds);
 
-        foreach (var attendee in items)
+        var profilesById = profiles
+            .GroupBy(profile => profile.UserId)
+            .ToDictionary(
+                group => group.Key,
+                group => group.First());
+
+        foreach (var attendee in allAttendees)
         {
-            if (!profilesById.TryGetValue(attendee.UserId, out var profile))
+            if (!profilesById.TryGetValue(
+                    attendee.UserId,
+                    out var profile))
+            {
+                attendee.Username = "Unknown user";
+                attendee.AvatarUrl = null;
                 continue;
+            }
 
-            attendee.Username = profile.Username;
-            attendee.AvatarUrl = profile.ImageUrl;
+            attendee.Username = string.IsNullOrWhiteSpace(profile.Username)
+                ? "Unknown user"
+                : profile.Username.Trim();
+
+            attendee.AvatarUrl = string.IsNullOrWhiteSpace(profile.ImageUrl)
+                ? null
+                : profile.ImageUrl.Trim();
         }
 
-        return ServiceResult<PagedResult<ManageableEventAttendeePreviewDto>>.Ok(
+        var searchTerm = filter.SearchTerm?.Trim();
+
+        if (!string.IsNullOrWhiteSpace(searchTerm))
+        {
+            allAttendees = allAttendees
+                .Where(attendee =>
+                    attendee.Username.Contains(
+                        searchTerm,
+                        StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+
+        var totalCount = allAttendees.Count;
+
+        var pagedItems = allAttendees
+            .OrderByDescending(attendee => attendee.Quantity)
+            .ThenBy(
+                attendee => attendee.Username,
+                StringComparer.OrdinalIgnoreCase)
+            .ThenBy(attendee => attendee.UserId)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToList();
+
+        return ServiceResult<
+            PagedResult<ManageableEventAttendeePreviewDto>>.Ok(
             new PagedResult<ManageableEventAttendeePreviewDto>
             {
-                Items = items,
-                TotalCount = pagedAttendees.TotalCount,
-                Page = pagedAttendees.Page,
-                PageSize = pagedAttendees.PageSize
+                Items = pagedItems,
+                TotalCount = totalCount,
+                Page = page,
+                PageSize = pageSize,
             });
     }
 
@@ -547,7 +612,7 @@ public class TicketServiceImpl : ITicketService
         var pagedAttendees = await _repository.GetPublicEventAttendeesAsync(eventId, page, pageSize);
         var items = pagedAttendees.Items.ToList();
 
-        if (!items.Any())
+        if (items.Count == 0)
         {
             return ServiceResult<PagedResult<EventAttendeePreviewDto>>.Ok(
                 new PagedResult<EventAttendeePreviewDto>
@@ -984,9 +1049,9 @@ public class TicketServiceImpl : ITicketService
     }
 
     public async Task<ServiceResult<ReservationResponseDto>> RequestRefundAsync(
-    int reservationId,
-    RequestRefundDto dto,
-    int userId)
+        int reservationId,
+        RequestRefundDto dto,
+        int userId)
     {
         var reservation = await _repository.GetReservationByIdAsync(reservationId);
         if (reservation is null)
@@ -1003,6 +1068,16 @@ public class TicketServiceImpl : ITicketService
         }
 
         var payments = await _repository.GetPaymentsByReservationAsync(reservationId);
+
+        var cashPayment = payments
+            .FirstOrDefault(p => p.Method == PaymentMethod.Cash);
+
+        if (cashPayment is not null)
+        {
+            return ServiceResult<ReservationResponseDto>.Fail(
+                "Cash payments cannot be refunded through the app. Please contact the event owner directly to arrange a refund.",
+                StatusCodes.Status400BadRequest);
+        }
 
         var payment = payments
             .OrderByDescending(p => p.PaidAt)
@@ -2140,21 +2215,26 @@ public class TicketServiceImpl : ITicketService
             .FirstOrDefault();
 
         var issuedTickets = r.Tickets?.ToList() ?? new List<Ticket>();
-        var validatedTicket = issuedTickets
+
+        var validatedTickets = issuedTickets
             .Where(t => t.UsedAt.HasValue)
-            .OrderByDescending(t => t.UsedAt)
-            .FirstOrDefault();
+            .ToList();
+
+        var latestValidatedAt = validatedTickets
+            .Select(t => t.UsedAt)
+            .Where(v => v.HasValue)
+            .Max();
 
         string? paymentMessage = payment switch
         {
             null => null,
             { Method: PaymentMethod.Cash, Status: PaymentStatus.Pending } =>
-                $"Cash payment is still due at the event venue: {payment.Amount:0.##} {payment.Currency}.",
+                $"Cash payment is still due at the event venue ({payment.Amount:0.00} {payment.Currency}).",
             { Method: PaymentMethod.Cash, Status: PaymentStatus.Completed } =>
-                $"Cash payment has already been collected: {payment.Amount:0.##} {payment.Currency}.",
+                $"Cash payment has already been collected ({payment.Amount:0.00} {payment.Currency}).",
             { Method: PaymentMethod.PayPal, Status: PaymentStatus.Completed } =>
-                $"PayPal payment completed: {payment.Amount:0.##} {payment.Currency}.",
-            _ => $"Payment status: {payment?.Status} via {payment?.Method}."
+                $"PayPal payment completed ({payment.Amount:0.00} {payment.Currency}).",
+            _ => $"Payment status {payment?.Status} via {payment?.Method}."
         };
 
         var canCollectCash =
@@ -2185,14 +2265,19 @@ public class TicketServiceImpl : ITicketService
             RefundReviewedAt = r.RefundReviewedAt,
             RefundReviewedByUserId = r.RefundReviewedByUserId,
             RefundDecisionReason = r.RefundDecisionReason,
-
             PaymentMethod = payment?.Method.ToString(),
             PaymentStatus = payment?.Status.ToString(),
             PaymentMessage = paymentMessage,
+
             HasIssuedTickets = issuedTickets.Count > 0,
-            HasValidatedTicket = validatedTicket is not null,
-            ValidatedAt = validatedTicket?.UsedAt,
-            CanCollectCash = canCollectCash
+            HasValidatedTicket = validatedTickets.Count > 0,
+
+            ValidatedAt = latestValidatedAt,
+
+            TotalTickets = issuedTickets.Count,
+            ValidatedTicketCount = validatedTickets.Count,
+
+            CanCollectCash = canCollectCash,
         };
     }
 }

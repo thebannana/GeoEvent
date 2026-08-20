@@ -256,7 +256,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       }
 
       if (!isLoggedIn && !isPublicRoute) {
-        return '/login';
+        return '/onboarding';
       }
 
       if (isLoggedIn && (isOnboarding || isAuthRoute)) {

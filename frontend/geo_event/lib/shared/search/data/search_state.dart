@@ -24,7 +24,7 @@ class SearchState {
     this.error,
     this.loadedInitial = false,
     this.filter = FilterSelection.empty,
-    this.sort = SortOption.soonest,
+    this.sort = SortOption.recommended,
     this.page = 1,
     this.pageSize = 20,
     this.totalCount = 0,
@@ -34,6 +34,7 @@ class SearchState {
   bool get hasQuery => query.trim().isNotEmpty;
   bool get hasActiveFilters => filter.hasActive;
   bool get isEmpty => !loading && error == null && results.isEmpty;
+  bool get isRecommendedSort => sort == SortOption.recommended;
 
   SearchState copyWith({
     String? query,

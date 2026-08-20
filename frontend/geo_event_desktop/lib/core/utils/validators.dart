@@ -16,7 +16,10 @@ class Validators {
     String? value, {
     String fieldName = 'This field',
   }) {
-    return required(value, fieldName: fieldName);
+    return required(
+      value,
+      fieldName: fieldName,
+    );
   }
 
   static String? email(String? value) {
@@ -51,6 +54,7 @@ class Validators {
     }
 
     final usernameRegex = RegExp(r'^[a-zA-Z0-9._]+$');
+
     if (!usernameRegex.hasMatch(trimmed)) {
       return 'Username may contain only letters, numbers, dots, and underscores.';
     }
@@ -58,7 +62,10 @@ class Validators {
     return null;
   }
 
-  static String? password(String? value, {bool required = true}) {
+  static String? password(
+    String? value, {
+    bool required = true,
+  }) {
     if (value == null || value.isEmpty) {
       return required ? 'Password is required.' : null;
     }
@@ -114,15 +121,24 @@ class Validators {
   }
 
   static String? firstName(String? value) {
-    return _personName(value, fieldName: 'First name');
+    return _personName(
+      value,
+      fieldName: 'First name',
+    );
   }
 
   static String? lastName(String? value) {
-    return _personName(value, fieldName: 'Last name');
+    return _personName(
+      value,
+      fieldName: 'Last name',
+    );
   }
 
   static String? fullName(String? value) {
-    return _personName(value, fieldName: 'Name');
+    return _personName(
+      value,
+      fieldName: 'Name',
+    );
   }
 
   static String? _personName(
@@ -144,6 +160,7 @@ class Validators {
     }
 
     final nameRegex = RegExp(r"^[A-Za-zÀ-ž\s'-]+$");
+
     if (!nameRegex.hasMatch(trimmed)) {
       return '$fieldName contains invalid characters.';
     }
@@ -156,7 +173,11 @@ class Validators {
       return 'Phone number is required.';
     }
 
-    final normalized = value.replaceAll(RegExp(r'[\s()-]'), '');
+    final normalized = value.replaceAll(
+      RegExp(r'[\s()-]'),
+      '',
+    );
+
     final phoneRegex = RegExp(r'^\+?[0-9]{8,15}$');
 
     if (!phoneRegex.hasMatch(normalized)) {
@@ -174,8 +195,12 @@ class Validators {
       return 'Birth date is required.';
     }
 
-    final now = DateTime.now();
-    final cutoff = DateTime(now.year - minimumAge, now.month, now.day);
+    final now = DateTime.now().toUtc();
+    final cutoff = DateTime(
+      now.year - minimumAge,
+      now.month,
+      now.day,
+    );
 
     if (value.isAfter(cutoff)) {
       return 'You must be at least $minimumAge years old.';
@@ -224,7 +249,9 @@ class Validators {
       return '$fieldName is required.';
     }
 
-    final parsed = double.tryParse(value.replaceAll(',', '.').trim());
+    final parsed = double.tryParse(
+      value.replaceAll(',', '.').trim(),
+    );
 
     if (parsed == null) {
       return '$fieldName must be a valid number.';
@@ -237,7 +264,10 @@ class Validators {
     return null;
   }
 
-  static String? url(String? value, {bool required = false}) {
+  static String? url(
+    String? value, {
+    bool required = false,
+  }) {
     final trimmed = value?.trim() ?? '';
 
     if (trimmed.isEmpty) {
@@ -245,6 +275,7 @@ class Validators {
     }
 
     final uri = Uri.tryParse(trimmed);
+
     final isValid = uri != null &&
         (uri.scheme == 'http' || uri.scheme == 'https') &&
         uri.host.isNotEmpty;
@@ -263,6 +294,7 @@ class Validators {
     if (value == null) {
       return '$fieldName is required.';
     }
+
     return null;
   }
 
@@ -273,6 +305,7 @@ class Validators {
     if (value == null) {
       return '$fieldName is required.';
     }
+
     return null;
   }
 
@@ -285,6 +318,7 @@ class Validators {
     }
 
     final parsed = int.tryParse(value.trim());
+
     if (parsed == null) {
       return '$fieldName must be a whole number.';
     }

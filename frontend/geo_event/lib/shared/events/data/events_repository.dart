@@ -33,14 +33,14 @@ class EventsRepository {
   }
 
   Future<void> deleteEventImage({
-  required int eventId,
-  required int imageId,
-}) {
-  return api.deleteEventImage(
-    eventId: eventId,
-    imageId: imageId,
-  );
-}
+    required int eventId,
+    required int imageId,
+  }) {
+    return api.deleteEventImage(
+      eventId: eventId,
+      imageId: imageId,
+    );
+  }
 
   Future<void> addEventImage({
     required int eventId,
@@ -78,6 +78,7 @@ class EventsRepository {
     double? maxPrice,
     bool? freeOnly,
     bool? todayOnly,
+    bool usePreferences = false,
   }) {
     return api.getNearbyEvents(
       latitude: latitude,
@@ -91,6 +92,7 @@ class EventsRepository {
       maxPrice: maxPrice,
       freeOnly: freeOnly,
       todayOnly: todayOnly,
+      usePreferences: usePreferences,
     );
   }
 
@@ -151,6 +153,7 @@ class EventsRepository {
     double? maxPrice,
     bool? freeOnly,
     bool? todayOnly,
+    bool usePreferences = false,
   }) {
     return api.getGlobalEvents(
       searchTerm: searchTerm,
@@ -165,6 +168,7 @@ class EventsRepository {
       maxPrice: maxPrice,
       freeOnly: freeOnly,
       todayOnly: todayOnly,
+      usePreferences: usePreferences,
     );
   }
 

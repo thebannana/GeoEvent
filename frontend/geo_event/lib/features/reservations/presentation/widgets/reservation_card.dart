@@ -59,7 +59,7 @@ class ReservationCard extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Reservation #${reservation.reservationId}',
+                        'Your reservation',
                         style: theme.textTheme.bodyMedium?.copyWith(
                           fontWeight: FontWeight.w700,
                         ),
@@ -82,7 +82,7 @@ class ReservationCard extends ConsumerWidget {
                           ),
                         ),
                         error: (_, _) => Text(
-                          'Event #${reservation.eventId}',
+                          'Event details are currently unavailable',
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: colorScheme.onSurfaceVariant,
                           ),
@@ -209,8 +209,10 @@ class ReservationCard extends ConsumerWidget {
                       label: Text(
                         '${reservation.tickets.length} ticket${reservation.tickets.length > 1 ? 's' : ''}',
                       ),
-                      onPressed: () =>
-                          _showTickets(context, eventAsync.valueOrNull?.title),
+                      onPressed: () => _showTickets(
+                        context,
+                        eventAsync.valueOrNull?.title,
+                      ),
                     ),
                   if (canCancel)
                     TextButton.icon(
@@ -253,6 +255,7 @@ class ReservationCard extends ConsumerWidget {
       useSafeArea: true,
       backgroundColor: Colors.transparent,
       builder: (_) => TicketBottomSheet(
+        // This is an internal value for application logic, not displayed here.
         reservationId: reservation.reservationId,
         eventTitle: eventTitle,
         tickets: reservation.tickets,

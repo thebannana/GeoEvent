@@ -7,59 +7,83 @@ class JsonHelpers {
     if (value == null) return null;
     if (value is int) return value;
     if (value is num) return value.toInt();
+
     return int.tryParse(value.toString().trim());
   }
 
-  static double asDouble(dynamic value, {double fallback = 0}) {
+  static double asDouble(
+    dynamic value, {
+    double fallback = 0,
+  }) {
     if (value == null) return fallback;
     if (value is double) return value;
     if (value is num) return value.toDouble();
 
     final normalized = value.toString().trim().replaceAll(',', '.');
+
     return double.tryParse(normalized) ?? fallback;
   }
 
-  static bool asBool(dynamic value, {bool fallback = false}) {
+  static bool asBool(
+    dynamic value, {
+    bool fallback = false,
+  }) {
     if (value == null) return fallback;
     if (value is bool) return value;
     if (value is num) return value != 0;
+
     if (value is String) {
-      final v = value.trim().toLowerCase();
-      if (v == 'true' || v == '1') return true;
-      if (v == 'false' || v == '0') return false;
+      final normalized = value.trim().toLowerCase();
+
+      if (normalized == 'true' || normalized == '1') {
+        return true;
+      }
+
+      if (normalized == 'false' || normalized == '0') {
+        return false;
+      }
     }
+
     return fallback;
   }
 
   static DateTime? parseDateTime(dynamic value) {
-    if (value == null) return null;
+    if (value == null) {
+      return null;
+    }
 
     try {
-      return parseApiDateTime(value).toLocal();
+      if (value is DateTime) {
+        return value.isUtc ? value : value.toUtc();
+      }
+
+      return parseApiDateTime(value);
     } catch (_) {
       return null;
     }
   }
 
-  static DateTime parseDateTimeRequired(dynamic value, DateTime fallback) {
-    return parseDateTime(value) ?? fallback;
+  static DateTime parseDateTimeRequired(
+    dynamic value,
+    DateTime fallback,
+  ) {
+    return parseDateTime(value) ?? fallback.toUtc();
   }
 
   static String? normalize(dynamic value) {
     final text = value?.toString().trim();
-    return (text == null || text.isEmpty) ? null : text;
+
+    return text == null || text.isEmpty ? null : text;
   }
 
   static List<String> asStringList(dynamic value) {
-    if (value == null) return const [];
-
-    if (value is List) {
-      return value
-          .map((e) => e?.toString().trim() ?? '')
-          .where((e) => e.isNotEmpty)
-          .toList();
+    if (value is! List) {
+      return const [];
     }
 
-    return const [];
+    return value
+        .map((item) => item?.toString().trim() ?? '')
+        .where((item) => item.isNotEmpty)
+        .toList(growable: false);
   }
 }

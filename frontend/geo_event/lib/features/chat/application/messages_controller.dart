@@ -66,11 +66,11 @@ class MessagesInboxController extends Notifier<MessagesInboxState> {
 
   @override
   MessagesInboxState build() {
+    Future.microtask(load);
     return const MessagesInboxState();
   }
 
   Future<void> loadInitial() async {
-    if (state.initialized) return;
     await load();
   }
 
@@ -157,9 +157,7 @@ class MessagesInboxController extends Notifier<MessagesInboxState> {
       ];
 
       state = state.copyWith(
-        conversations: AsyncData<List<ConversationSummary>>(
-          List<ConversationSummary>.unmodifiable(merged),
-        ),
+        conversations: AsyncData<List<ConversationSummary>>(merged),
         page: paged.page,
         pageSize: paged.pageSize,
         totalCount: paged.totalCount,

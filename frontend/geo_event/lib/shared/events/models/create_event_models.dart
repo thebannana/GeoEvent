@@ -92,17 +92,17 @@ class EventItem {
   bool get isCancelled => normalizedStatus == 'cancelled';
 
   bool get isFinished {
-    final now = DateTime.now();
-    final localEnd = endDateTime.toLocal();
+    final now = DateTime.now().toUtc();
+    final localEnd = endDateTime.toUtc();
     return localEnd.isBefore(now) || localEnd.isAtSameMomentAs(now);
   }
 
-  bool get isUpcoming => startDateTime.toLocal().isAfter(DateTime.now());
+  bool get isUpcoming => startDateTime.toUtc().isAfter(DateTime.now().toUtc());
 
   bool get isOngoing {
-    final now = DateTime.now();
-    final localStart = startDateTime.toLocal();
-    final localEnd = endDateTime.toLocal();
+    final now = DateTime.now().toUtc();
+    final localStart = startDateTime.toUtc();
+    final localEnd = endDateTime.toUtc();
     final started =
         localStart.isBefore(now) || localStart.isAtSameMomentAs(now);
     final notEnded = localEnd.isAfter(now);
@@ -131,11 +131,11 @@ class EventItem {
       latitude: JsonHelpers.asDouble(json['latitude']),
       longitude: JsonHelpers.asDouble(json['longitude']),
       startDateTime: JsonHelpers.parseDateTimeRequired(
-          json['startDateTime'], DateTime.fromMillisecondsSinceEpoch(0).toLocal()),
+          json['startDateTime'], DateTime.fromMillisecondsSinceEpoch(0).toUtc()),
       endDateTime: JsonHelpers.parseDateTimeRequired(
         json['endDateTime'],
         JsonHelpers.parseDateTimeRequired(
-            json['startDateTime'], DateTime.fromMillisecondsSinceEpoch(0).toLocal()),
+            json['startDateTime'], DateTime.fromMillisecondsSinceEpoch(0).toUtc()),
       ),
       capacity: JsonHelpers.asInt(json['capacity']) ?? 0,
       price: JsonHelpers.asDouble(json['price']),

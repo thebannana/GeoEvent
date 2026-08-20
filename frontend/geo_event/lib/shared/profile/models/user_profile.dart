@@ -1,3 +1,5 @@
+import '../../../core/utils/json_helpers.dart';
+
 class UserProfile {
   final int userId;
   final String username;
@@ -91,7 +93,7 @@ class UserProfile {
       ),
       role: (json['role'] ?? json['Role'] ?? 'User').toString().trim(),
       isVerified: _parseBool(verifiedRaw),
-      createdAt: _parseDateTime(createdAtRaw),
+      createdAt: JsonHelpers.parseDateTime(createdAtRaw),
       averageRating: (json['averageRating'] as num?)?.toDouble() ?? 0.0,
       ratingsCount: (json['ratingsCount'] as num?)?.toInt() ?? 0,
       myRating: (json['myRating'] as num?)?.toInt(),
@@ -158,23 +160,6 @@ class UserProfile {
     }
 
     return text;
-  }
-
-  static DateTime? _parseDateTime(dynamic value) {
-    if (value == null) {
-      return null;
-    }
-
-    if (value is DateTime) {
-      return value;
-    }
-
-    final text = value.toString().trim();
-    if (text.isEmpty) {
-      return null;
-    }
-
-    return DateTime.tryParse(text);
   }
 
   static bool _parseBool(dynamic value) {

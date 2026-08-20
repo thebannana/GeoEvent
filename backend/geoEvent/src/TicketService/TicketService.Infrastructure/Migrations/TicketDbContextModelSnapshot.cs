@@ -8,7 +8,7 @@ using TicketService.Infrastructure.Persistence;
 
 #nullable disable
 
-namespace TicketService.Infrastructure.Persistence.Migrations
+namespace TicketService.Infrastructure.Migrations
 {
     [DbContext(typeof(TicketDbContext))]
     partial class TicketDbContextModelSnapshot : ModelSnapshot

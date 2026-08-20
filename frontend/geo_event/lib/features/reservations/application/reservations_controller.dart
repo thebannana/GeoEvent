@@ -230,7 +230,7 @@ class ReservationsController extends AsyncNotifier<ReservationsState> {
     optimisticItems[index] = original.copyWith(
       refundRequestStatus: 'Pending',
       refundReason: reason?.trim().isEmpty == true ? null : reason?.trim(),
-      refundRequestedAt: DateTime.now(),
+      refundRequestedAt: DateTime.now().toUtc(),
     );
 
     state = AsyncData(
@@ -281,7 +281,7 @@ class ReservationsController extends AsyncNotifier<ReservationsState> {
     final updatedItems = [...current.items];
     updatedItems[index] = original.copyWith(
       status: ReservationStatus.cancelled.apiValue,
-      cancelledAt: DateTime.now(),
+      cancelledAt: DateTime.now().toUtc(),
     );
 
     state = AsyncData(

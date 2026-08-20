@@ -1,8 +1,9 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 
+import '../../../../core/errors/error_mapper.dart';
 import '../../../../core/theme/app_theme_colors.dart';
+import '../../../../core/utils/debouncer.dart';
+import '../../../../core/utils/logger.dart';
 import '../../../../shared/admin_profile/data/admin_events_repository.dart';
 import '../../../../shared/admin_profile/data/admin_users_repository.dart';
 import '../../../../shared/admin_profile/models/admin_event.dart';
@@ -18,6 +19,7 @@ class EventAttendeesDialog extends StatefulWidget {
     required this.summary,
     this.onAttendeeTap,
     this.onViewProfile,
+    this.onAttendeeRemoved,
   });
 
   final AdminEventRowData event;
@@ -26,60 +28,105 @@ class EventAttendeesDialog extends StatefulWidget {
   final EventReservationSummary? summary;
   final ValueChanged<ManageableEventAttendeePreview>? onAttendeeTap;
   final ValueChanged<ManageableEventAttendeePreview>? onViewProfile;
+  final Future<void> Function()? onAttendeeRemoved;
 
   @override
-  State<EventAttendeesDialog> createState() => _EventAttendeesDialogState();
+  State<EventAttendeesDialog> createState() =>
+      _EventAttendeesDialogState();
 }
 
-class _EventAttendeesDialogState extends State<EventAttendeesDialog> {
-  final TextEditingController _searchController = TextEditingController();
-  Timer? _debounce;
+class _EventAttendeesDialogState
+    extends State<EventAttendeesDialog> {
+  static const _loggerTag = 'EventAttendeesDialog';
+  static const _pageSize = 12;
+
+  final _searchController = TextEditingController();
+
+  final _searchDebouncer = Debouncer(
+    delay: const Duration(milliseconds: 400),
+  );
 
   bool _loading = true;
   bool _removing = false;
+
   String? _errorMessage;
   String? _actionMessage;
+
   int? _removingReservationId;
+  int _requestId = 0;
 
   int _page = 1;
-  final int _pageSize = 12;
   int _totalCount = 0;
 
   List<ManageableEventAttendeePreview> _items =
       const <ManageableEventAttendeePreview>[];
+
   EventReservationSummary? _liveSummary;
 
   @override
   void initState() {
     super.initState();
+
     _liveSummary = widget.summary;
+
+    AppLogger.debug(
+      'Event-attendees dialog initialized.',
+      tag: _loggerTag,
+    );
+
     _loadAttendees();
   }
 
   @override
   void dispose() {
-    _debounce?.cancel();
+    AppLogger.debug(
+      'Event-attendees dialog disposed.',
+      tag: _loggerTag,
+    );
+
+    _searchDebouncer.dispose();
     _searchController.dispose();
+
     super.dispose();
   }
 
-  Future<void> _loadAttendees({int page = 1}) async {
+  int get _totalPages {
+    if (_totalCount <= 0) {
+      return 1;
+    }
+
+    return (_totalCount / _pageSize).ceil();
+  }
+
+  Future<void> _loadAttendees({
+    int page = 1,
+  }) async {
+    final requestId = ++_requestId;
+
+    if (!mounted) return;
+
     setState(() {
       _loading = true;
       _errorMessage = null;
     });
 
+    AppLogger.debug(
+      'Loading event attendees. Page: $page.',
+      tag: _loggerTag,
+    );
+
     try {
-      final response = await widget.repository.getManageableEventAttendees(
+      final searchTerm = _searchController.text.trim();
+
+      final response =
+          await widget.repository.getManageableEventAttendees(
         eventId: widget.event.id,
         page: page,
         pageSize: _pageSize,
-        searchTerm: _searchController.text.trim().isEmpty
-            ? null
-            : _searchController.text.trim(),
+        searchTerm: searchTerm.isEmpty ? null : searchTerm,
       );
 
-      if (!mounted) return;
+      if (!mounted || requestId != _requestId) return;
 
       setState(() {
         _page = response.page <= 0 ? 1 : response.page;
@@ -87,137 +134,189 @@ class _EventAttendeesDialogState extends State<EventAttendeesDialog> {
         _items = response.items;
         _loading = false;
       });
-    } catch (_) {
-      if (!mounted) return;
+
+      AppLogger.info(
+        'Event attendees loaded successfully.',
+        tag: _loggerTag,
+      );
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'Failed to load event attendees.',
+        tag: _loggerTag,
+        error: error,
+        stackTrace: stackTrace,
+      );
+
+      if (!mounted || requestId != _requestId) return;
 
       setState(() {
         _loading = false;
-        _errorMessage = 'Failed to load attendees.';
+        _errorMessage = ErrorMapper.toMessage(
+          error,
+          stackTrace: stackTrace,
+          fallbackMessage: 'Could not load attendees. Please try again.',
+        );
       });
     }
   }
 
   Future<void> _reloadSummary() async {
     try {
-      final summary = await widget.repository.getEventReservationSummary(
-        widget.event.id,
-      );
+      final summary = await widget.repository
+          .getEventReservationSummary(widget.event.id);
 
       if (!mounted) return;
+
       setState(() {
         _liveSummary = summary;
       });
-    } catch (_) {
-      // Keep current summary if refresh fails.
+
+      AppLogger.debug(
+        'Event reservation summary refreshed.',
+        tag: _loggerTag,
+      );
+    } catch (error, stackTrace) {
+      AppLogger.warning(
+        'Could not refresh event reservation summary.',
+        tag: _loggerTag,
+        error: error,
+        stackTrace: stackTrace,
+      );
     }
   }
 
   void _onSearchChanged(String _) {
-    _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 400), () {
+    _searchDebouncer.cancel();
+
+    _searchDebouncer.run(() {
       if (!mounted) return;
       _loadAttendees(page: 1);
     });
+
     setState(() {});
   }
 
   void _clearSearch() {
-    _debounce?.cancel();
+    _searchDebouncer.cancel();
     _searchController.clear();
-    setState(() {});
-    _loadAttendees(page: 1);
-  }
 
-  int get _totalPages {
-    if (_totalCount <= 0) return 1;
-    return (_totalCount / _pageSize).ceil();
+    setState(() {
+      _errorMessage = null;
+      _actionMessage = null;
+    });
+
+    _loadAttendees(page: 1);
   }
 
   Future<String?> _showRemoveAttendeeDialog(
     BuildContext context,
     ManageableEventAttendeePreview attendee,
   ) async {
-    final controller = TextEditingController();
+    final reasonController = TextEditingController();
 
-    final result = await showDialog<String?>(
-      context: context,
-      builder: (dialogContext) {
-        final theme = Theme.of(dialogContext);
-        final colors = theme.appColors;
-        final textTheme = theme.textTheme;
-        final colorScheme = theme.colorScheme;
+    try {
+      return await showDialog<String?>(
+        context: context,
+        builder: (dialogContext) {
+          final theme = Theme.of(dialogContext);
+          final colors = theme.appColors;
+          final textTheme = theme.textTheme;
+          final colorScheme = theme.colorScheme;
 
-        final attendeeName = attendee.displayUsername;
-
-        return AlertDialog(
-          backgroundColor: colors.card,
-          surfaceTintColor: Colors.transparent,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(24),
-          ),
-          title: Text(
-            'Remove attendee',
-            style: textTheme.titleLarge?.copyWith(
-              color: colors.textPrimary,
-              fontWeight: FontWeight.w800,
+          return AlertDialog(
+            backgroundColor: colors.card,
+            surfaceTintColor: Colors.transparent,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24),
             ),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Remove $attendeeName from "${widget.event.title}"?',
-                style: textTheme.bodyMedium?.copyWith(
-                  color: colors.textSecondary,
-                  height: 1.45,
+            title: Text(
+              'Remove attendee',
+              style: textTheme.titleLarge?.copyWith(
+                color: colors.textPrimary,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            content: SizedBox(
+              width: 420,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Remove ${attendee.displayUsername} from '
+                    '"${widget.event.title}"?',
+                    style: textTheme.bodyMedium?.copyWith(
+                      color: colors.textSecondary,
+                      height: 1.45,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  TextField(
+                    controller: reasonController,
+                    maxLines: 3,
+                    decoration: InputDecoration(
+                      labelText: 'Reason (optional)',
+                      hintText: 'Example: Removed by administrator',
+                      alignLabelWithHint: true,
+                      filled: true,
+                      fillColor: colors.inputFill,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.of(dialogContext).pop(null);
+                },
+                child: Text(
+                  'Cancel',
+                  style: TextStyle(
+                    color: colors.textSecondary,
+                  ),
                 ),
               ),
-              const SizedBox(height: 14),
-              TextField(
-                controller: controller,
-                maxLines: 3,
-                decoration: InputDecoration(
-                  labelText: 'Reason (optional)',
-                  hintText: 'Example: Removed by organizer',
-                  alignLabelWithHint: true,
-                  filled: true,
-                  fillColor: colors.inputFill,
+              FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: colorScheme.error,
+                  foregroundColor: colorScheme.onError,
                 ),
+                onPressed: () {
+                  Navigator.of(dialogContext).pop(
+                    reasonController.text.trim(),
+                  );
+                },
+                child: const Text('Remove'),
               ),
             ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(null),
-              child: Text(
-                'Cancel',
-                style: TextStyle(color: colors.textSecondary),
-              ),
-            ),
-            FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: colorScheme.error,
-                foregroundColor: colorScheme.onError,
-              ),
-              onPressed: () =>
-                  Navigator.of(dialogContext).pop(controller.text.trim()),
-              child: const Text('Remove'),
-            ),
-          ],
-        );
-      },
-    );
-
-    controller.dispose();
-    return result;
+          );
+        },
+      );
+    } finally {
+      reasonController.dispose();
+    }
   }
 
-  Future<void> _removeAttendee(ManageableEventAttendeePreview attendee) async {
-    if (_removing) return;
+  Future<void> _removeAttendee(
+    ManageableEventAttendeePreview attendee,
+  ) async {
+    if (_removing) {
+      AppLogger.debug(
+        'Duplicate attendee-removal action ignored.',
+        tag: _loggerTag,
+      );
+      return;
+    }
 
-    final reason = await _showRemoveAttendeeDialog(context, attendee);
-    if (reason == null) return;
+    final reason = await _showRemoveAttendeeDialog(
+      context,
+      attendee,
+    );
+
+    if (reason == null || !mounted) {
+      return;
+    }
 
     setState(() {
       _removing = true;
@@ -225,6 +324,11 @@ class _EventAttendeesDialogState extends State<EventAttendeesDialog> {
       _actionMessage = null;
       _errorMessage = null;
     });
+
+    AppLogger.info(
+      'Attendee removal started.',
+      tag: _loggerTag,
+    );
 
     try {
       await widget.repository.removeAttendee(
@@ -236,52 +340,92 @@ class _EventAttendeesDialogState extends State<EventAttendeesDialog> {
       if (!mounted) return;
 
       final updatedItems = _items
-          .where((e) => e.reservationId != attendee.reservationId)
+          .where(
+            (item) =>
+                item.reservationId != attendee.reservationId,
+          )
           .toList(growable: false);
+
+      final nextPage = updatedItems.isEmpty && _page > 1
+          ? _page - 1
+          : _page;
 
       setState(() {
         _items = updatedItems;
         _totalCount = _totalCount > 0 ? _totalCount - 1 : 0;
         _removing = false;
         _removingReservationId = null;
-        _actionMessage = '${attendee.displayUsername} removed successfully.';
+        _actionMessage =
+            '${attendee.displayUsername} removed successfully.';
       });
+
+      AppLogger.info(
+        'Attendee removed successfully.',
+        tag: _loggerTag,
+      );
 
       await _reloadSummary();
 
-      if (_items.isEmpty && _page > 1) {
-        await _loadAttendees(page: _page - 1);
+      if (widget.onAttendeeRemoved != null) {
+        await widget.onAttendeeRemoved!();
       }
-    } catch (_) {
+
+      if (!mounted) return;
+
+      await _loadAttendees(page: nextPage);
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'Failed to remove attendee.',
+        tag: _loggerTag,
+        error: error,
+        stackTrace: stackTrace,
+      );
+
       if (!mounted) return;
 
       setState(() {
         _removing = false;
         _removingReservationId = null;
-        _errorMessage = 'Failed to remove attendee.';
+        _errorMessage = ErrorMapper.toMessage(
+          error,
+          stackTrace: stackTrace,
+          fallbackMessage: 'Could not remove attendee. Please try again.',
+        );
       });
     }
   }
 
-  Future<void> _handleViewProfile(ManageableEventAttendeePreview attendee) async {
+  Future<void> _handleViewProfile(
+    ManageableEventAttendeePreview attendee,
+  ) async {
     if (widget.onViewProfile != null) {
-      widget.onViewProfile!.call(attendee);
+      widget.onViewProfile!(attendee);
       return;
     }
 
     final userId = attendee.userId;
+
     if (userId <= 0) {
+      AppLogger.warning(
+        'Attendee profile was unavailable.',
+        tag: _loggerTag,
+      );
+
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          const SnackBar(content: Text('User profile is not available.')),
-        );
+
+      _showMessage(
+        'User profile is not available.',
+      );
       return;
     }
 
+    AppLogger.debug(
+      'Opening attendee profile.',
+      tag: _loggerTag,
+    );
+
     await Navigator.of(context).push<void>(
-      MaterialPageRoute(
+      MaterialPageRoute<void>(
         builder: (_) => UserProfileScreen(
           userId: userId,
           repository: widget.usersRepository,
@@ -290,32 +434,60 @@ class _EventAttendeesDialogState extends State<EventAttendeesDialog> {
     );
   }
 
+  void _showMessage(String message) {
+    if (!mounted) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+        ),
+      );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.appColors;
     final textTheme = theme.textTheme;
     final colorScheme = theme.colorScheme;
-    final screenWidth = MediaQuery.of(context).size.width;
-    final dialogWidth = screenWidth > 920 ? 820.0 : screenWidth - 32;
+
+    final screenSize = MediaQuery.sizeOf(context);
+
+    final dialogWidth = screenSize.width >= 900
+        ? 820.0
+        : (screenSize.width - 32).clamp(360.0, 820.0);
+
+    final dialogHeight = (screenSize.height - 40).clamp(420.0, 760.0);
 
     return Dialog(
-      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+      insetPadding: const EdgeInsets.symmetric(
+        horizontal: 16,
+        vertical: 20,
+      ),
       backgroundColor: Colors.transparent,
       child: ConstrainedBox(
         constraints: BoxConstraints(
+          minWidth: 360,
           maxWidth: dialogWidth,
-          maxHeight: 760,
+          maxHeight: dialogHeight,
         ),
         child: Container(
           padding: const EdgeInsets.all(22),
           decoration: BoxDecoration(
             color: colors.card,
             borderRadius: BorderRadius.circular(28),
-            border: Border.all(color: colors.border),
+            border: Border.all(
+              color: colors.border,
+            ),
             boxShadow: [
               BoxShadow(
-                color: colorScheme.shadow.withValues(alpha: 0.12),
+                color: colorScheme.shadow.withValues(
+                  alpha: 0.12,
+                ),
                 blurRadius: 20,
                 offset: const Offset(0, 10),
               ),
@@ -324,156 +496,52 @@ class _EventAttendeesDialogState extends State<EventAttendeesDialog> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.only(right: 12),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Attendees',
-                            style: textTheme.headlineSmall?.copyWith(
-                              color: colors.textPrimary,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            widget.event.title,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: textTheme.titleMedium?.copyWith(
-                              color: colors.textSecondary,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: 'Close',
-                    onPressed: () => Navigator.of(context).pop(),
-                    icon: const Icon(Icons.close_rounded),
-                  ),
-                ],
+              _buildHeader(
+                context,
+                textTheme: textTheme,
+                colors: colors,
               ),
               const SizedBox(height: 16),
-              Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: [
-                  _SummaryChip(
-                    label: 'Reserved',
-                    value: _liveSummary?.reservedCount.toString() ?? '-',
-                  ),
-                  _SummaryChip(
-                    label: 'Confirmed',
-                    value: _liveSummary?.confirmedCount.toString() ?? '-',
-                  ),
-                  _SummaryChip(
-                    label: 'Pending',
-                    value: _liveSummary?.pendingCount.toString() ?? '-',
-                  ),
-                  _SummaryChip(
-                    label: 'Available',
-                    value: _liveSummary?.availableCount.toString() ?? '-',
-                  ),
-                  _SummaryChip(
-                    label: 'Capacity',
-                    value: _liveSummary?.capacity.toString() ??
-                        widget.event.capacity.toString(),
-                  ),
-                ],
+              _buildSummary(
+                context,
+                textTheme: textTheme,
               ),
               const SizedBox(height: 16),
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 360),
-                child: TextField(
-                  controller: _searchController,
-                  onChanged: _onSearchChanged,
-                  decoration: InputDecoration(
-                    hintText: 'Search attendees',
-                    prefixIcon: Icon(
-                      Icons.search_rounded,
-                      color: colors.textSecondary,
-                    ),
-                    suffixIcon: _searchController.text.isEmpty
-                        ? null
-                        : IconButton(
-                            tooltip: 'Clear search',
-                            onPressed: _clearSearch,
-                            icon: const Icon(Icons.close_rounded),
-                          ),
-                  ),
-                ),
+              _buildSearchField(
+                context,
+                colors: colors,
               ),
               if (_actionMessage != null) ...[
                 const SizedBox(height: 14),
-                Container(
-                  width: double.infinity,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: colors.success.withValues(alpha: 0.10),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                      color: colors.success.withValues(alpha: 0.22),
-                    ),
-                  ),
-                  child: Text(
-                    _actionMessage!,
-                    style: textTheme.bodyMedium?.copyWith(
-                      color: colors.success,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
+                _MessageBanner(
+                  message: _actionMessage!,
+                  color: colors.success,
                 ),
               ],
               if (_errorMessage != null && !_loading) ...[
                 const SizedBox(height: 14),
-                Container(
-                  width: double.infinity,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: colorScheme.error.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                      color: colorScheme.error.withValues(alpha: 0.18),
-                    ),
-                  ),
-                  child: Text(
-                    _errorMessage!,
-                    style: textTheme.bodyMedium?.copyWith(
-                      color: colorScheme.error,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
+                _MessageBanner(
+                  message: _errorMessage!,
+                  color: colorScheme.error,
                 ),
               ],
               const SizedBox(height: 16),
               Expanded(
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: colors.surfaceSoft.withValues(alpha: 0.55),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: colors.borderSoft),
-                  ),
-                  child: _buildBody(colors, textTheme, colorScheme),
+                child: _buildBody(
+                  context,
+                  colors: colors,
+                  textTheme: textTheme,
+                  colorScheme: colorScheme,
                 ),
               ),
               const SizedBox(height: 14),
               _DialogPagination(
                 page: _page,
                 totalPages: _totalPages,
-                onPrevious: _page > 1 && !_loading
+                onPrevious: _page > 1 && !_loading && !_removing
                     ? () => _loadAttendees(page: _page - 1)
                     : null,
-                onNext: _page < _totalPages && !_loading
+                onNext: _page < _totalPages && !_loading && !_removing
                     ? () => _loadAttendees(page: _page + 1)
                     : null,
               ),
@@ -484,35 +552,157 @@ class _EventAttendeesDialogState extends State<EventAttendeesDialog> {
     );
   }
 
-  Widget _buildBody(
-    AppThemeColors colors,
-    TextTheme textTheme,
-    ColorScheme colorScheme,
-  ) {
-    if (_loading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    if (_items.isEmpty) {
-      return Center(
-        child: Text(
-          'No attendees found.',
-          style: textTheme.titleMedium?.copyWith(
-            color: colors.textSecondary,
-            fontWeight: FontWeight.w700,
+  Widget _buildHeader(
+    BuildContext context, {
+    required TextTheme textTheme,
+    required AppThemeColors colors,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Attendees',
+                  style: textTheme.headlineSmall?.copyWith(
+                    color: colors.textPrimary,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  widget.event.title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: textTheme.titleMedium?.copyWith(
+                    color: colors.textSecondary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
-      );
-    }
+        IconButton(
+          tooltip: 'Close',
+          onPressed: () => Navigator.of(context).pop(),
+          icon: const Icon(Icons.close_rounded),
+        ),
+      ],
+    );
+  }
 
-    return ListView.separated(
+  Widget _buildSummary(
+    BuildContext context, {
+    required TextTheme textTheme,
+  }) {
+    final summary = _liveSummary;
+
+    return Wrap(
+      spacing: 10,
+      runSpacing: 10,
+      children: [
+        _SummaryChip(
+          label: 'Reserved',
+          value: summary?.reservedCount.toString() ?? '-',
+        ),
+        _SummaryChip(
+          label: 'Confirmed',
+          value: summary?.confirmedCount.toString() ?? '-',
+        ),
+        _SummaryChip(
+          label: 'Pending',
+          value: summary?.pendingCount.toString() ?? '-',
+        ),
+        _SummaryChip(
+          label: 'Available',
+          value: summary?.availableCount.toString() ?? '-',
+        ),
+        _SummaryChip(
+          label: 'Capacity',
+          value: summary?.capacity.toString() ??
+              widget.event.capacity.toString(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSearchField(
+    BuildContext context, {
+    required AppThemeColors colors,
+  }) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(
+        maxWidth: 360,
+      ),
+      child: TextField(
+        controller: _searchController,
+        onChanged: _onSearchChanged,
+        decoration: InputDecoration(
+          hintText: 'Search attendees',
+          prefixIcon: Icon(
+            Icons.search_rounded,
+            color: colors.textSecondary,
+          ),
+          suffixIcon: _searchController.text.isEmpty
+              ? null
+              : IconButton(
+                  tooltip: 'Clear search',
+                  onPressed: _clearSearch,
+                  icon: const Icon(
+                    Icons.close_rounded,
+                  ),
+                ),
+        ),
+      ),
+    );
+  }
+
+Widget _buildBody(
+  BuildContext context, {
+  required AppThemeColors colors,
+  required TextTheme textTheme,
+  required ColorScheme colorScheme,
+}) {
+  if (_loading) {
+    return const Center(
+      child: CircularProgressIndicator(),
+    );
+  }
+
+  if (_items.isEmpty) {
+    return Center(
+      child: Text(
+        'No attendees found.',
+        style: textTheme.titleMedium?.copyWith(
+          color: colors.textSecondary,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+
+  return Container(
+    width: double.infinity,
+    decoration: BoxDecoration(
+      color: colors.surfaceSoft.withValues(alpha: 0.55),
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(
+        color: colors.borderSoft,
+      ),
+    ),
+    child: ListView.separated(
       padding: const EdgeInsets.all(14),
       itemCount: _items.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 10),
+      separatorBuilder: (_, _) => const SizedBox(height: 10),
       itemBuilder: (context, index) {
         final attendee = _items[index];
-        final isRemovingThisItem =
-            _removing && _removingReservationId == attendee.reservationId;
+        final isRemovingThisItem = _removing &&
+            _removingReservationId == attendee.reservationId;
 
         return _AttendeeListTile(
           attendee: attendee,
@@ -524,11 +714,14 @@ class _EventAttendeesDialogState extends State<EventAttendeesDialog> {
           onViewProfile: _removing
               ? null
               : () => _handleViewProfile(attendee),
-          onKick: isRemovingThisItem ? null : () => _removeAttendee(attendee),
+          onKick: _removing
+              ? null
+              : () => _removeAttendee(attendee),
         );
       },
-    );
-  }
+    ),
+  );
+}
 }
 
 class _AttendeeListTile extends StatelessWidget {
@@ -554,221 +747,163 @@ class _AttendeeListTile extends StatelessWidget {
     final colors = theme.appColors;
     final colorScheme = theme.colorScheme;
 
+    final username = attendee.displayUsername.trim().isEmpty
+        ? 'Unknown user'
+        : attendee.displayUsername.trim();
+
+    final ticketLabel = attendee.quantity == 1
+        ? '1 ticket'
+        : '${attendee.quantity} tickets';
+
     return Material(
       color: Colors.transparent,
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
         onTap: onTap,
         child: Container(
-          padding: const EdgeInsets.all(14),
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             color: colors.card,
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: colors.borderSoft),
+            border: Border.all(
+              color: colors.borderSoft,
+            ),
           ),
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final compact = constraints.maxWidth < 700;
-
-              if (compact) {
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        _AttendeeAvatar(
-                          username: attendee.displayUsername,
-                          avatarUrl: attendee.avatarUrl,
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _AttendeeTextBlock(attendee: attendee),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 14),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: Wrap(
-                        alignment: WrapAlignment.end,
-                        spacing: 10,
-                        runSpacing: 10,
-                        children: [
-                          _ProfileButton(
-                            onPressed: isBusy ? null : onViewProfile,
-                          ),
-                          _KickButton(
-                            isRemovingThisItem: isRemovingThisItem,
-                            colorScheme: colorScheme,
-                            onPressed: onKick,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                );
-              }
-
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
                 children: [
                   _AttendeeAvatar(
-                    username: attendee.displayUsername,
+                    username: username,
                     avatarUrl: attendee.avatarUrl,
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    flex: 4,
-                    child: _AttendeeTextBlock(attendee: attendee),
-                  ),
-                  const SizedBox(width: 16),
-                  const Spacer(),
-                  SizedBox(
-                    width: 250,
-                    child: Wrap(
-                      alignment: WrapAlignment.end,
-                      spacing: 10,
-                      runSpacing: 10,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _ProfileButton(onPressed: isBusy ? null : onViewProfile),
-                        _KickButton(
-                          isRemovingThisItem: isRemovingThisItem,
-                          colorScheme: colorScheme,
-                          onPressed: onKick,
+                        Text(
+                          username,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            color: colors.textPrimary,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          ticketLabel,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: colors.textSecondary,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
                       ],
                     ),
                   ),
                 ],
-              );
-            },
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _AttendeeTextBlock extends StatelessWidget {
-  const _AttendeeTextBlock({
-    required this.attendee,
-  });
-
-  final ManageableEventAttendeePreview attendee;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).appColors;
-    final textTheme = Theme.of(context).textTheme;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          attendee.displayUsername,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          softWrap: false,
-          style: textTheme.titleSmall?.copyWith(
-            color: colors.textPrimary,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          attendee.quantity == 1
-              ? '1 ticket'
-              : '${attendee.quantity} tickets',
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: textTheme.bodySmall?.copyWith(
-            color: colors.textSecondary,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _ProfileButton extends StatelessWidget {
-  const _ProfileButton({
-    required this.onPressed,
-  });
-
-  final VoidCallback? onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).appColors;
-
-    return SizedBox(
-      height: 40,
-      child: OutlinedButton.icon(
-        onPressed: onPressed,
-        style: OutlinedButton.styleFrom(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 0),
-          minimumSize: const Size(0, 40),
-          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          side: BorderSide(color: colors.borderSoft),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-        ),
-        icon: const Icon(Icons.person_outline_rounded, size: 18),
-        label: const Text(
-          'View profile',
-          overflow: TextOverflow.ellipsis,
-        ),
-      ),
-    );
-  }
-}
-
-class _KickButton extends StatelessWidget {
-  const _KickButton({
-    required this.isRemovingThisItem,
-    required this.colorScheme,
-    required this.onPressed,
-  });
-
-  final bool isRemovingThisItem;
-  final ColorScheme colorScheme;
-  final VoidCallback? onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 40,
-      child: FilledButton.tonalIcon(
-        onPressed: onPressed,
-        style: FilledButton.styleFrom(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 0),
-          minimumSize: const Size(0, 40),
-          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          backgroundColor: colorScheme.error.withValues(alpha: 0.10),
-          foregroundColor: colorScheme.error,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-        ),
-        icon: isRemovingThisItem
-            ? SizedBox(
-                width: 14,
-                height: 14,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation<Color>(
-                    colorScheme.error,
+              ),
+              const SizedBox(height: 14),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  SizedBox(
+                    height: 40,
+                    child: OutlinedButton.icon(
+                      onPressed: isBusy ? null : onViewProfile,
+                      icon: const Icon(
+                        Icons.person_outline_rounded,
+                        size: 18,
+                      ),
+                      label: const Text('Profile'),
+                    ),
                   ),
-                ),
-              )
-            : const Icon(Icons.person_remove_rounded, size: 18),
-        label: Text(
-          isRemovingThisItem ? 'Removing...' : 'Kick',
-          overflow: TextOverflow.ellipsis,
+                  SizedBox(
+                    height: 40,
+                    child: FilledButton.tonalIcon(
+                      onPressed: isBusy ? null : onKick,
+                      style: FilledButton.styleFrom(
+                        foregroundColor: colorScheme.error,
+                        backgroundColor:
+                            colorScheme.error.withValues(alpha: 0.10),
+                      ),
+                      icon: isRemovingThisItem
+                          ? SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor:
+                                    AlwaysStoppedAnimation<Color>(
+                                  colorScheme.error,
+                                ),
+                              ),
+                            )
+                          : const Icon(
+                              Icons.person_remove_rounded,
+                              size: 18,
+                            ),
+                      label: Text(
+                        isRemovingThisItem
+                            ? 'Removing...'
+                            : 'Remove attendee',
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
+      ),
+    );
+  }
+}
+
+class _AttendeeAvatar extends StatelessWidget {
+  const _AttendeeAvatar({
+    required this.username,
+    required this.avatarUrl,
+  });
+
+  final String username;
+  final String? avatarUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).appColors;
+    final normalizedUrl = avatarUrl?.trim();
+
+    if (normalizedUrl != null && normalizedUrl.isNotEmpty) {
+      return CircleAvatar(
+        radius: 22,
+        backgroundColor: colors.surfaceSoft,
+        backgroundImage: NetworkImage(normalizedUrl),
+      );
+    }
+
+    final normalizedUsername = username.trim();
+    final initial = normalizedUsername.isEmpty
+        ? 'U'
+        : normalizedUsername.characters.first.toUpperCase();
+
+    return CircleAvatar(
+      radius: 22,
+      backgroundColor: colors.selectedFill,
+      child: Text(
+        initial,
+        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+              color: colors.textPrimary,
+              fontWeight: FontWeight.w800,
+            ),
       ),
     );
   }
@@ -789,11 +924,16 @@ class _SummaryChip extends StatelessWidget {
     final textTheme = Theme.of(context).textTheme;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      padding: const EdgeInsets.symmetric(
+        horizontal: 12,
+        vertical: 10,
+      ),
       decoration: BoxDecoration(
         color: colors.inputFill,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: colors.borderSoft),
+        border: Border.all(
+          color: colors.borderSoft,
+        ),
       ),
       child: RichText(
         text: TextSpan(
@@ -819,43 +959,36 @@ class _SummaryChip extends StatelessWidget {
   }
 }
 
-class _AttendeeAvatar extends StatelessWidget {
-  const _AttendeeAvatar({
-    required this.username,
-    required this.avatarUrl,
+class _MessageBanner extends StatelessWidget {
+  const _MessageBanner({
+    required this.message,
+    required this.color,
   });
 
-  final String username;
-  final String? avatarUrl;
+  final String message;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).appColors;
-    final textTheme = Theme.of(context).textTheme;
-
-    final normalized = avatarUrl?.trim();
-    final hasImage = normalized != null && normalized.isNotEmpty;
-    final initial = username.trim().isEmpty
-        ? 'U'
-        : username.trim().characters.first.toUpperCase();
-
-    if (hasImage) {
-      return CircleAvatar(
-        radius: 22,
-        backgroundColor: colors.surfaceSoft,
-        backgroundImage: NetworkImage(normalized),
-      );
-    }
-
-    return CircleAvatar(
-      radius: 22,
-      backgroundColor: colors.selectedFill,
-      child: Text(
-        initial,
-        style: textTheme.titleSmall?.copyWith(
-          color: colors.textPrimary,
-          fontWeight: FontWeight.w800,
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(
+        horizontal: 12,
+        vertical: 10,
+      ),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: color.withValues(alpha: 0.22),
         ),
+      ),
+      child: Text(
+        message,
+        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: color,
+              fontWeight: FontWeight.w700,
+            ),
       ),
     );
   }
@@ -879,26 +1012,6 @@ class _DialogPagination extends StatelessWidget {
     final colors = Theme.of(context).appColors;
     final textTheme = Theme.of(context).textTheme;
 
-    Widget pageChip(String label, {bool active = false}) {
-      return Container(
-        width: 34,
-        height: 34,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: active ? colors.textPrimary : Colors.transparent,
-          borderRadius: BorderRadius.circular(10),
-          border: active ? null : Border.all(color: colors.borderSoft),
-        ),
-        child: Text(
-          label,
-          style: textTheme.labelMedium?.copyWith(
-            color: active ? colors.card : colors.textSecondary,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-      );
-    }
-
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
@@ -907,7 +1020,22 @@ class _DialogPagination extends StatelessWidget {
           child: const Text('Previous'),
         ),
         const SizedBox(width: 12),
-        pageChip('$page', active: true),
+        Container(
+          width: 34,
+          height: 34,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: colors.textPrimary,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Text(
+            '$page',
+            style: textTheme.labelMedium?.copyWith(
+              color: colors.card,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
         const SizedBox(width: 10),
         Text(
           'of $totalPages',

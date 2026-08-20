@@ -392,10 +392,21 @@ class _SearchSheetState extends ConsumerState<SearchSheet> {
         }
 
         final item = state.results[index - 1];
+
+        final showRecommendedLabel =
+            state.isRecommendedSort &&
+            state.query.trim().isEmpty &&
+            index == 1;
+
+        final recommendationLabel = showRecommendedLabel
+            ? 'Based on your activity'
+            : null;
+
         return SearchResultCard(
           item: item,
           onOpenDirections: _openDirections,
           onCloseParentSearchSheet: _closeParentSearchSheet,
+          recommendationLabel: recommendationLabel,
         );
       },
     );

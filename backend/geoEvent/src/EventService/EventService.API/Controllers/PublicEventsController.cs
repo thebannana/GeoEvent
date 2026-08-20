@@ -40,11 +40,22 @@ public class PublicEventsController : ControllerBase
     }
 
     [HttpGet("nearby")]
-    public async Task<IActionResult> GetNearby([FromQuery] NearbyEventSearchDto dto)
+    public async Task<IActionResult> GetNearby(
+        [FromQuery] NearbyEventSearchDto dto)
     {
-        var result = await _eventService.GetNearbyPublicAsync(dto);
+        int? requesterId =
+            User.Identity?.IsAuthenticated == true
+                ? User.GetUserId()
+                : null;
+
+        var result = await _eventService.GetNearbyPublicAsync(
+            dto,
+            requesterId);
+
         return result.Success
             ? Ok(result.Data)
-            : StatusCode(result.StatusCode, new { error = result.Error });
+            : StatusCode(
+                result.StatusCode,
+                new { error = result.Error });
     }
 }

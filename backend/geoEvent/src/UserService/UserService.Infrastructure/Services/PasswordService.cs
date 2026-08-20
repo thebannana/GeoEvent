@@ -8,7 +8,7 @@ public class PasswordService
     private const int HashSize = 32;
     private const int Iterations = 100_000;
 
-    public (byte[] hash, byte[] salt) HashPassword(string password)
+    public static (byte[] hash, byte[] salt) HashPassword(string password)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(password);
 
@@ -23,7 +23,7 @@ public class PasswordService
         return (hash, salt);
     }
 
-    public bool VerifyPassword(string password, byte[] hash, byte[] salt)
+    public static bool VerifyPassword(string password, byte[] hash, byte[] salt)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(password);
 

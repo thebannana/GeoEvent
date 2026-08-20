@@ -8,6 +8,7 @@ import '../../../shared/auth/models/login_request.dart';
 import '../../../shared/auth/models/register_request.dart';
 import '../../../shared/auth/models/reset_password_request.dart';
 import '../../../shared/auth/providers/auth_providers.dart';
+import '../../../shared/events/providers/event_refresh_providers.dart';
 
 final authStateProvider =
     StateNotifierProvider<AuthController, AuthState>((ref) {
@@ -27,6 +28,10 @@ class AuthController extends StateNotifier<AuthState> {
   static const String _defaultConsentVersion = '1.0';
 
   AuthRepository get _repository => ref.read(authRepositoryProvider);
+
+  void _refreshEventMap() {
+    ref.read(eventMapRefreshProvider.notifier).state++;
+  }
 
   Future<void> restoreSession() async {
     _setLoading(true, initialized: false);
@@ -74,6 +79,8 @@ class AuthController extends StateNotifier<AuthState> {
       );
 
       await setAuthenticated(response, preserveUser: response.user);
+      _refreshEventMap();
+
       return response;
     } catch (_) {
       _setLoading(false);
@@ -111,6 +118,8 @@ class AuthController extends StateNotifier<AuthState> {
       );
 
       await setAuthenticated(response, preserveUser: response.user);
+      _refreshEventMap();
+
       return response;
     } catch (_) {
       _setLoading(false);
@@ -225,12 +234,14 @@ class AuthController extends StateNotifier<AuthState> {
       await _repository.clearSession();
     } finally {
       state = const AuthState.unauthenticated(isInitialized: true);
+      _refreshEventMap();
     }
   }
 
   Future<void> clearSession() async {
     await _repository.clearSession();
     state = const AuthState.unauthenticated(isInitialized: true);
+    _refreshEventMap();
   }
 
   void _setLoading(bool value, {bool initialized = true}) {

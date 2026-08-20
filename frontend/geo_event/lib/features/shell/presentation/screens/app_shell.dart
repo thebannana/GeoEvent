@@ -5,9 +5,11 @@ import '../../../../core/errors/error_mapper.dart';
 import '../../../../core/utils/logger.dart';
 import '../../../../core/widgets/inputs/app_icon_circle_button.dart';
 import '../../../../core/widgets/layout/app_scaffold.dart';
+import '../../../../shared/auth/models/auth_state.dart';
 import '../../../../shared/location/models/map_filter_selection.dart';
 import '../../../../shared/shell/models/shell_overlay_page.dart';
 import '../../../../shared/shell/models/shell_tab.dart';
+import '../../../auth/application/auth_controller.dart';
 import '../../application/shell_controller.dart';
 import '../../application/shell_ui_controller.dart';
 import '../../../chat/presentation/screens/chat_screen.dart';
@@ -60,6 +62,31 @@ class _AppShellState extends ConsumerState<AppShell> {
   double _mapBearing = 0.0;
 
   MapFilterSelection _mapFilterSelection = MapFilterSelection.defaults();
+
+  ProviderSubscription<AuthState>? _authSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _authSubscription = ref.listenManual<AuthState>(
+      authStateProvider,
+      (previous, next) {
+        final wasAuthenticated = previous?.isAuthenticated ?? false;
+        final isAuthenticated = next.isAuthenticated;
+
+        if (wasAuthenticated != isAuthenticated) {
+          _resetMapFilters();
+        }
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _authSubscription?.close();
+    super.dispose();
+  }
 
   ShellController get _shellController =>
       ref.read(shellControllerProvider.notifier);
@@ -418,6 +445,13 @@ class _AppShellState extends ConsumerState<AppShell> {
       target,
       minExtent: minExtent,
     );
+  }
+
+  void _resetMapFilters() {
+    if (!mounted) return;
+    setState(() {
+      _mapFilterSelection = MapFilterSelection.defaults();
+    });
   }
 
   @override

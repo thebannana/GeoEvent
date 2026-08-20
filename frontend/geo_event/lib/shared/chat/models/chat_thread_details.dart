@@ -45,7 +45,7 @@ class ChatThreadDetails {
       otherUserAvatarUrl: json['otherUserAvatarUrl']?.toString(),
       otherUserIsOnline: json['otherUserIsOnline'] as bool? ?? false,
       otherUserLastActiveAt: json['otherUserLastActiveAt'] != null
-          ? DateTime.tryParse(json['otherUserLastActiveAt'].toString())?.toLocal()
+          ? DateTime.tryParse(json['otherUserLastActiveAt'].toString())?.toUtc()
           : null,
       eventInfo: json['eventInfo'] is Map
           ? ChatEventInfo.fromJson(

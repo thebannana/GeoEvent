@@ -2,7 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/errors/error_mapper.dart';
 import '../../../../core/theme/app_theme_colors.dart';
+import '../../../../core/utils/logger.dart';
+import '../../../../shared/admin_profile/models/admin_search_catalog.dart';
+import '../../../../shared/admin_profile/models/admin_search_result.dart';
 import '../../../../shared/admin_profile/providers/admin_categories_providers.dart';
 import '../../../../shared/admin_profile/providers/admin_events_providers.dart';
 import '../../../../shared/admin_profile/providers/admin_users_providers.dart';
@@ -22,82 +26,257 @@ import '../widgets/admin_sidebar.dart';
 import '../widgets/admin_users_panel.dart';
 
 class AdminShellScreen extends ConsumerStatefulWidget {
-  const AdminShellScreen({super.key});
+  const AdminShellScreen({
+    super.key,
+  });
 
   @override
-  ConsumerState<AdminShellScreen> createState() => _AdminShellScreenState();
+  ConsumerState<AdminShellScreen> createState() =>
+      _AdminShellScreenState();
 }
 
 class _AdminShellScreenState extends ConsumerState<AdminShellScreen> {
+  static const _loggerTag = 'AdminShellScreen';
+
   final TextEditingController _searchController = TextEditingController();
 
   bool _sidebarExpanded = true;
   bool _isLoggingOut = false;
   AdminShellPage _selectedPage = AdminShellPage.dashboard;
+  List<AdminSearchResult> _searchResults = const [];
+
+  @override
+  void initState() {
+    super.initState();
+
+    AppLogger.debug(
+      'Admin shell initialized.',
+      tag: _loggerTag,
+    );
+  }
 
   @override
   void dispose() {
+    AppLogger.debug(
+      'Admin shell disposed.',
+      tag: _loggerTag,
+    );
+
     _searchController.dispose();
     super.dispose();
   }
 
   Future<void> _handleAccountAction(String action) async {
-  if (action == 'password') {
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => const ChangePasswordScreen(),
-      ),
+    if (_isLoggingOut) {
+      AppLogger.debug(
+        'Account action ignored while logout is active.',
+        tag: _loggerTag,
+      );
+      return;
+    }
+
+    AppLogger.debug(
+      'Account action selected: $action.',
+      tag: _loggerTag,
     );
-    return;
-  }
 
-  if (action == 'info') {
-    final profileState = ref.read(profileControllerProvider);
-    final profile = profileState.asData?.value;
-
-    if (profile == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Profile is still loading. Please try again.'),
+    if (action == 'password') {
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => const ChangePasswordScreen(),
         ),
       );
       return;
     }
 
-    final updated = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
-        builder: (_) => EditProfileScreen(profile: profile),
-      ),
-    );
+    if (action == 'info') {
+      final profileState = ref.read(profileControllerProvider);
+      final profile = profileState.asData?.value;
 
-    if (updated == true) {
-      await ref.read(profileControllerProvider.notifier).refreshProfile();
+      if (profile == null) {
+        AppLogger.warning(
+          'Profile information was not available for editing.',
+          tag: _loggerTag,
+        );
+
+        _showMessage(
+          'Profile is still loading. Please try again.',
+        );
+        return;
+      }
+
+      final updated = await Navigator.of(context).push<bool>(
+        MaterialPageRoute<bool>(
+          builder: (_) => EditProfileScreen(
+            profile: profile,
+          ),
+        ),
+      );
+
+      if (updated == true) {
+        AppLogger.info(
+          'Profile was updated. Refreshing profile state.',
+          tag: _loggerTag,
+        );
+
+        try {
+          await ref
+              .read(profileControllerProvider.notifier)
+              .refreshProfile();
+        } catch (error, stackTrace) {
+          AppLogger.error(
+            'Profile refresh failed after profile update.',
+            tag: _loggerTag,
+            error: error,
+            stackTrace: stackTrace,
+          );
+
+          if (mounted) {
+            _showMessage(
+              ErrorMapper.toMessage(
+                error,
+                stackTrace: stackTrace,
+                fallbackMessage:
+                    'Profile was updated, but the latest data could not be loaded.',
+              ),
+            );
+          }
+        }
+      }
+
+      return;
     }
 
+    AppLogger.warning(
+      'Unknown account action received: $action.',
+      tag: _loggerTag,
+    );
+
+    _showMessage(
+      'Unknown account action.',
+    );
+  }
+
+  void _handleSearchChanged(String value) {
+    if (_isLoggingOut) {
+      return;
+    }
+
+    final query = value.trim().toLowerCase();
+
+    if (query.isEmpty) {
+      if (_searchResults.isEmpty) {
+        return;
+      }
+
+      setState(() {
+        _searchResults = const [];
+      });
+      return;
+    }
+
+    final queryTerms = query
+        .split(RegExp(r'\s+'))
+        .where((term) => term.isNotEmpty)
+        .toList(growable: false);
+
+    final matches = AdminSearchCatalog.results.where((result) {
+      final haystack = <String>[
+        result.title,
+        result.description,
+        ...result.keywords,
+      ].join(' ').toLowerCase();
+
+      return queryTerms.every(haystack.contains);
+    }).toList(growable: false);
+
+    setState(() {
+      _searchResults = matches;
+    });
+  }
+
+  void _handleSearchSubmitted(String value) {
+    if (_isLoggingOut) {
+      return;
+    }
+
+    final results = _searchResults;
+
+    if (results.isEmpty) {
+      _showMessage('No matching admin page found.');
+      return;
+    }
+
+    _selectSearchResult(results.first);
+  }
+
+  void _selectSearchResult(AdminSearchResult result) {
+  if (_isLoggingOut) {
     return;
   }
 
-  ScaffoldMessenger.of(context).showSnackBar(
-    const SnackBar(
-      content: Text('Unknown account action.'),
-    ),
+  setState(() {
+    _selectedPage = result.page;
+    _searchResults = const [];
+  });
+
+  _searchController.clear();
+
+  AppLogger.info(
+    'Admin search opened: ${result.title}.',
+    tag: _loggerTag,
   );
 }
 
   Future<void> _handleLogout() async {
-    if (_isLoggingOut) return;
+    if (_isLoggingOut) {
+      AppLogger.debug(
+        'Duplicate logout action ignored.',
+        tag: _loggerTag,
+      );
+      return;
+    }
 
     setState(() {
       _isLoggingOut = true;
+      _searchResults = const [];
     });
+
+    AppLogger.info(
+      'Logout started.',
+      tag: _loggerTag,
+    );
 
     try {
       await ref.read(authStateProvider.notifier).logout();
 
+      AppLogger.info(
+        'Logout completed successfully.',
+        tag: _loggerTag,
+      );
+
       if (!mounted) return;
+
       context.go('/login');
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'Logout request failed. Redirecting to login anyway.',
+        tag: _loggerTag,
+        error: error,
+        stackTrace: stackTrace,
+      );
+
       if (!mounted) return;
+
+      _showMessage(
+        ErrorMapper.toMessage(
+          error,
+          stackTrace: stackTrace,
+          fallbackMessage:
+              'Logout could not be confirmed. Returning to login.',
+        ),
+      );
+
       context.go('/login');
     } finally {
       if (mounted) {
@@ -105,44 +284,46 @@ class _AdminShellScreenState extends ConsumerState<AdminShellScreen> {
           _isLoggingOut = false;
         });
       }
+
+      AppLogger.debug(
+        'Logout state reset.',
+        tag: _loggerTag,
+      );
     }
   }
 
   String _pageTitle(AdminShellPage page) {
-    switch (page) {
-      case AdminShellPage.dashboard:
-        return 'Dashboard';
-      case AdminShellPage.users:
-        return 'Users';
-      case AdminShellPage.events:
-        return 'Events';
-      case AdminShellPage.categories:
-        return 'Categories';
-      case AdminShellPage.contentModeration:
-        return 'Content Moderation';
-      case AdminShellPage.settings:
-        return 'Settings';
-    }
+    return switch (page) {
+      AdminShellPage.dashboard => 'Dashboard',
+      AdminShellPage.users => 'Users',
+      AdminShellPage.events => 'Events',
+      AdminShellPage.categories => 'Categories',
+      AdminShellPage.contentModeration => 'Content Moderation',
+      AdminShellPage.settings => 'Settings',
+    };
   }
 
   String _pageDescription(AdminShellPage page) {
-    switch (page) {
-      case AdminShellPage.dashboard:
-        return 'Quick insight into users, events, and platform activity.';
-      case AdminShellPage.users:
-        return 'Monitor and manage platform users.';
-      case AdminShellPage.events:
-        return 'Oversee all events across the platform.';
-      case AdminShellPage.categories:
-        return 'Create, edit, and manage event categories.';
-      case AdminShellPage.contentModeration:
-        return 'Review and manage content reports.';
-      case AdminShellPage.settings:
-        return 'Manage desktop application settings.';
-    }
+    return switch (page) {
+      AdminShellPage.dashboard =>
+        'Quick insight into users, events, and platform activity.',
+      AdminShellPage.users =>
+        'Monitor and manage platform users.',
+      AdminShellPage.events =>
+        'Oversee all events across the platform.',
+      AdminShellPage.categories =>
+        'Create, edit, and manage event categories.',
+      AdminShellPage.contentModeration =>
+        'Review and manage content reports.',
+      AdminShellPage.settings =>
+        'Manage desktop application settings.',
+    };
   }
 
-  Widget _buildPageContent(BuildContext context, AdminShellPage page) {
+  Widget _buildPageContent(
+    BuildContext context,
+    AdminShellPage page,
+  ) {
     final theme = Theme.of(context);
     final colors = theme.appColors;
     final textTheme = theme.textTheme;
@@ -151,25 +332,41 @@ class _AdminShellScreenState extends ConsumerState<AdminShellScreen> {
     final title = _pageTitle(page);
     final description = _pageDescription(page);
 
-final Widget content = switch (page) {
-  AdminShellPage.dashboard => const AdminDashboardPanel(),
-  AdminShellPage.settings => const AdminSettingsPanel(),
-  AdminShellPage.users => AdminUsersPanel(
-      repository: ref.read(adminUsersRepositoryProvider),
-    ),
-  AdminShellPage.categories => AdminCategoriesPanel(
-      repository: ref.read(adminCategoriesRepositoryProvider),
-    ),
-  AdminShellPage.events => AdminEventsPanel(
-      repository: ref.read(adminEventsRepositoryProvider),
-      reverseGeocodingApi: ref.read(mapboxReverseGeocodingApiProvider),
-      usersRepository: ref.read(adminUsersRepositoryProvider),
-    ),
-  AdminShellPage.contentModeration => const AdminReportsPanel(),
-};
+    final Widget content = switch (page) {
+      AdminShellPage.dashboard => const AdminDashboardPanel(),
+      AdminShellPage.settings => const AdminSettingsPanel(),
+      AdminShellPage.users => AdminUsersPanel(
+          repository: ref.read(
+            adminUsersRepositoryProvider,
+          ),
+        ),
+      AdminShellPage.categories => AdminCategoriesPanel(
+          repository: ref.read(
+            adminCategoriesRepositoryProvider,
+          ),
+        ),
+      AdminShellPage.events => AdminEventsPanel(
+          repository: ref.read(
+            adminEventsRepositoryProvider,
+          ),
+          reverseGeocodingApi: ref.read(
+            mapboxReverseGeocodingApiProvider,
+          ),
+          usersRepository: ref.read(
+            adminUsersRepositoryProvider,
+          ),
+        ),
+      AdminShellPage.contentModeration =>
+        const AdminReportsPanel(),
+    };
 
     return Container(
-      margin: const EdgeInsets.fromLTRB(28, 24, 28, 28),
+      margin: const EdgeInsets.fromLTRB(
+        28,
+        24,
+        28,
+        28,
+      ),
       child: Stack(
         children: [
           Positioned.fill(
@@ -199,13 +396,17 @@ final Widget content = switch (page) {
                 ),
               ),
               const SizedBox(height: 24),
-              Expanded(child: content),
+              Expanded(
+                child: content,
+              ),
             ],
           ),
           if (_isLoggingOut)
             Positioned.fill(
-              child: Container(
-                color: Colors.black.withValues(alpha: 0.12),
+              child: ColoredBox(
+                color: Colors.black.withValues(
+                  alpha: 0.12,
+                ),
                 child: Center(
                   child: CircularProgressIndicator(
                     valueColor: AlwaysStoppedAnimation<Color>(
@@ -220,6 +421,55 @@ final Widget content = switch (page) {
     );
   }
 
+  void _toggleSidebar() {
+    if (_isLoggingOut) {
+      return;
+    }
+
+    setState(() {
+      _sidebarExpanded = !_sidebarExpanded;
+    });
+
+    AppLogger.debug(
+      'Sidebar state changed. Expanded: $_sidebarExpanded.',
+      tag: _loggerTag,
+    );
+  }
+
+  void _selectPage(AdminShellPage page) {
+    if (_isLoggingOut) {
+      return;
+    }
+
+    _searchController.clear();
+
+    if (_selectedPage == page && _searchResults.isEmpty) {
+      return;
+    }
+
+    setState(() {
+      _selectedPage = page;
+      _searchResults = const [];
+    });
+
+    AppLogger.debug(
+      'Admin page selected: ${_pageTitle(page)}.',
+      tag: _loggerTag,
+    );
+  }
+
+  void _showMessage(String message) {
+    final messenger = ScaffoldMessenger.of(context);
+
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+        ),
+      );
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).appColors;
@@ -230,6 +480,10 @@ final Widget content = switch (page) {
         children: [
           AdminNavbar(
             searchController: _searchController,
+            searchResults: _searchResults,
+            onSearchChanged: _handleSearchChanged,
+            onSearchSubmitted: _handleSearchSubmitted,
+            onSearchResultSelected: _selectSearchResult,
             onAccountSelected: _handleAccountAction,
           ),
           Expanded(
@@ -238,24 +492,23 @@ final Widget content = switch (page) {
                 AdminSidebar(
                   isExpanded: _sidebarExpanded,
                   selectedPage: _selectedPage,
-                  onToggle: () {
-                    setState(() {
-                      _sidebarExpanded = !_sidebarExpanded;
-                    });
-                  },
-                  onSelectPage: (page) {
-                    setState(() {
-                      _selectedPage = page;
-                    });
-                  },
+                  onToggle: _toggleSidebar,
+                  onSelectPage: _selectPage,
                   onLogout: _handleLogout,
                 ),
                 Expanded(
                   child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 220),
+                    duration: const Duration(
+                      milliseconds: 220,
+                    ),
                     child: KeyedSubtree(
-                      key: ValueKey(_selectedPage),
-                      child: _buildPageContent(context, _selectedPage),
+                      key: ValueKey<AdminShellPage>(
+                        _selectedPage,
+                      ),
+                      child: _buildPageContent(
+                        context,
+                        _selectedPage,
+                      ),
                     ),
                   ),
                 ),
@@ -284,9 +537,14 @@ class _ShellBackgroundPainter extends CustomPainter {
       ..style = PaintingStyle.fill;
 
     const spacing = 16.0;
+
     for (double x = 0; x < size.width; x += spacing) {
       for (double y = 0; y < size.height; y += spacing) {
-        canvas.drawCircle(Offset(x, y), 1.15, dotPaint);
+        canvas.drawCircle(
+          Offset(x, y),
+          1.15,
+          dotPaint,
+        );
       }
     }
 
@@ -340,11 +598,15 @@ class _ShellBackgroundPainter extends CustomPainter {
         size.height - 60,
       );
 
-    canvas.drawPath(path1, wavePaint);
-    canvas.drawPath(path2, wavePaint);
-    canvas.drawPath(path3, wavePaint);
+    canvas
+      ..drawPath(path1, wavePaint)
+      ..drawPath(path2, wavePaint)
+      ..drawPath(path3, wavePaint);
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant _ShellBackgroundPainter oldDelegate) {
+    return oldDelegate.dotColor != dotColor ||
+        oldDelegate.waveColor != waveColor;
+  }
 }

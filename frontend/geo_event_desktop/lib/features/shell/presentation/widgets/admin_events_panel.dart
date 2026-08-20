@@ -2,7 +2,13 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../../../core/constants/event_status.dart';
+import '../../../../core/errors/error_mapper.dart';
 import '../../../../core/theme/app_theme_colors.dart';
+import '../../../../core/utils/color_parser.dart';
+import '../../../../core/utils/debouncer.dart';
+import '../../../../core/utils/logger.dart';
+import '../../../../core/utils/price_formatter.dart';
 import '../../../../shared/admin_profile/data/admin_events_repository.dart';
 import '../../../../shared/admin_profile/data/admin_users_repository.dart';
 import '../../../../shared/admin_profile/models/admin_event.dart';
@@ -44,21 +50,27 @@ class AdminEventsPanel extends StatefulWidget {
 }
 
 class _AdminEventsPanelState extends State<AdminEventsPanel> {
+  static const _loggerTag = 'AdminEventsPanel';
+
   final TextEditingController _searchController = TextEditingController();
-  Timer? _searchDebounce;
+  final Debouncer _searchDebouncer = Debouncer(
+    delay: const Duration(milliseconds: 450),
+  );
 
-  List<AdminEventRowData> _events = const [];
-  bool _isLoading = true;
-  bool _isActionLoading = false;
-  String? _errorMessage;
+List<AdminEventRowData> _events = const [];
+bool _isLoading = true;
+bool _isActionLoading = false;
+String? _errorMessage;
 
-  int _page = 1;
-  final int _pageSize = 9;
-  int _totalCount = 0;
+int _loadRequestId = 0;
+
+int _page = 1;
+final int _pageSize = 9;
+int _totalCount = 0;
 
   AdminEventStatusFilter _statusFilter = AdminEventStatusFilter.all;
   AdminEventSortField _sortField = AdminEventSortField.startDateTime;
-  bool _sortDescending = true;
+  bool _sortDescending = false;
   AdminEventViewStyle _viewStyle = AdminEventViewStyle.grid3;
 
   final Map<String, String> _locationCache = <String, String>{};
@@ -80,61 +92,79 @@ class _AdminEventsPanelState extends State<AdminEventsPanel> {
 
   @override
   void dispose() {
-    _searchDebounce?.cancel();
+    _searchDebouncer.dispose();
     _searchController.dispose();
     super.dispose();
   }
 
-  Future<void> _loadEvents({int? page, bool showLoader = true}) async {
-    final targetPage = page ?? _page;
+  Future<void> _loadEvents({
+  int? page,
+  bool showLoader = true,
+}) async {
+  final targetPage = page ?? _page;
+  final requestId = ++_loadRequestId;
 
-    if (showLoader) {
-      setState(() {
-        _isLoading = true;
-        _errorMessage = null;
-      });
-    } else {
-      setState(() {
-        _errorMessage = null;
-      });
-    }
+  if (!mounted) return;
 
-    try {
-      final result = await widget.repository.getEvents(
-        page: targetPage,
-        pageSize: _pageSize,
-        searchTerm: _searchController.text.trim().isEmpty
-            ? null
-            : _searchController.text.trim(),
-        status: _mapStatus(_statusFilter),
-        sortBy: _mapSortBy(_sortField),
-        sortDescending: _sortDescending,
-      );
-
-      if (!mounted) return;
-
-      final mappedEvents = result.items
-          .map(AdminEventRowData.fromEvent)
-          .toList(growable: false);
-
-      setState(() {
-        _page = result.page <= 0 ? 1 : result.page;
-        _totalCount = result.totalCount;
-        _events = mappedEvents;
-        _isLoading = false;
-      });
-
-      unawaited(_resolveLocations(mappedEvents));
-      unawaited(_preloadSummaries(mappedEvents));
-      unawaited(_preloadOrganizers(mappedEvents));
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-        _errorMessage = 'Failed to load events.';
-      });
-    }
+  if (showLoader) {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+  } else {
+    setState(() {
+      _errorMessage = null;
+    });
   }
+
+  try {
+    final result = await widget.repository.getEvents(
+      page: targetPage,
+      pageSize: _pageSize,
+      searchTerm: _searchController.text.trim().isEmpty
+          ? null
+          : _searchController.text.trim(),
+      status: _mapStatus(_statusFilter),
+      sortBy: _mapSortBy(_sortField),
+      sortDescending: _sortDescending,
+    );
+
+    if (!mounted || requestId != _loadRequestId) return;
+
+    final mappedEvents = result.items
+        .map(AdminEventRowData.fromEvent)
+        .toList(growable: false);
+
+    setState(() {
+      _page = result.page <= 0 ? 1 : result.page;
+      _totalCount = result.totalCount;
+      _events = mappedEvents;
+      _isLoading = false;
+    });
+
+    unawaited(_resolveLocations(mappedEvents));
+    unawaited(_preloadSummaries(mappedEvents));
+    unawaited(_preloadOrganizers(mappedEvents));
+  } catch (error, stackTrace) {
+    AppLogger.error(
+      'Failed to load events.',
+      tag: _loggerTag,
+      error: error,
+      stackTrace: stackTrace,
+    );
+
+    if (!mounted || requestId != _loadRequestId) return;
+
+    setState(() {
+      _isLoading = false;
+      _errorMessage = ErrorMapper.toMessage(
+        error,
+        stackTrace: stackTrace,
+        fallbackMessage: 'Could not load events. Please try again.',
+      );
+    });
+  }
+}
 
   Future<void> _preloadSummaries(List<AdminEventRowData> events) async {
     for (final event in events) {
@@ -158,8 +188,13 @@ class _AdminEventsPanelState extends State<AdminEventsPanel> {
       setState(() {
         _summaryCache[eventId] = summary;
       });
-    } catch (_) {
-      // ignore
+    } catch (error, stackTrace) {
+      AppLogger.warning(
+        'Failed to load reservation summary for event $eventId',
+        tag: _loggerTag,
+        error: error,
+        stackTrace: stackTrace,
+      );
     } finally {
       _loadingSummaryIds.remove(eventId);
     }
@@ -190,7 +225,13 @@ class _AdminEventsPanelState extends State<AdminEventsPanel> {
       setState(() {
         _organizerCache[organizerId] = profile;
       });
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppLogger.warning(
+        'Failed to load organizer profile for user $organizerId',
+        tag: _loggerTag,
+        error: error,
+        stackTrace: stackTrace,
+      );
       if (!mounted) return;
       setState(() {
         _organizerCache[organizerId] = null;
@@ -202,15 +243,14 @@ class _AdminEventsPanelState extends State<AdminEventsPanel> {
 
   void _onSearchChanged(String _) {
     setState(() {});
-    _searchDebounce?.cancel();
-    _searchDebounce = Timer(const Duration(milliseconds: 450), () {
+    _searchDebouncer.run(() {
       if (!mounted) return;
       _loadEvents(page: 1);
     });
   }
 
   void _clearSearch() {
-    _searchDebounce?.cancel();
+    _searchDebouncer.cancel();
     _searchController.clear();
     setState(() {});
     _loadEvents(page: 1);
@@ -252,10 +292,10 @@ class _AdminEventsPanelState extends State<AdminEventsPanel> {
 
       final updatedEvent = await Navigator.of(context).push<AdminEvent>(
         MaterialPageRoute(
-          builder: (_) => EditEventScreen(
-            event: fullEvent,
-            repository: widget.repository,
-          ),
+            builder: (_) => EditEventScreen(
+                  event: fullEvent,
+                  repository: widget.repository,
+                ),
         ),
       );
 
@@ -269,9 +309,24 @@ class _AdminEventsPanelState extends State<AdminEventsPanel> {
         if (!mounted) return;
         _showSnack('${updatedEvent.displayTitle} updated successfully.');
       }
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'Failed to open edit screen.',
+        tag: _loggerTag,
+        error: error,
+        stackTrace: stackTrace,
+      );
+
       if (!mounted) return;
-      _showSnack('Failed to open edit screen.');
+
+      _showSnack(
+        ErrorMapper.toMessage(
+          error,
+          stackTrace: stackTrace,
+          fallbackMessage:
+              'Could not open the event editor. Please try again.',
+        ),
+      );
     } finally {
       if (mounted) {
         setState(() => _isActionLoading = false);
@@ -297,14 +352,14 @@ class _AdminEventsPanelState extends State<AdminEventsPanel> {
                 borderRadius: BorderRadius.circular(24),
               ),
               title: Text(
-                'Delete event',
+                'Cancel event',
                 style: textTheme.titleLarge?.copyWith(
                   color: colors.textPrimary,
                   fontWeight: FontWeight.w800,
                 ),
               ),
               content: Text(
-                'Are you sure you want to delete ${event.title}? This action cannot be undone.',
+                'Are you sure you want to cancel ${event.title}? Cancelled events are no longer visible in public event listings.',
                 style: textTheme.bodyMedium?.copyWith(
                   color: colors.textSecondary,
                   height: 1.45,
@@ -324,7 +379,7 @@ class _AdminEventsPanelState extends State<AdminEventsPanel> {
                     foregroundColor: colorScheme.onError,
                   ),
                   onPressed: () => Navigator.of(dialogContext).pop(true),
-                  child: const Text('Delete'),
+                  child: const Text('Confirm'),
                 ),
               ],
             );
@@ -344,10 +399,25 @@ class _AdminEventsPanelState extends State<AdminEventsPanel> {
       await _loadEvents(page: nextPage, showLoader: false);
 
       if (!mounted) return;
-      _showSnack('${event.title} deleted successfully.');
-    } catch (_) {
+      _showSnack('${event.title} cancelled successfully.');
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'Failed to cancel event ${event.id}',
+        tag: _loggerTag,
+        error: error,
+        stackTrace: stackTrace,
+      );
+
       if (!mounted) return;
-      _showSnack('Failed to delete ${event.title}.');
+
+      _showSnack(
+        ErrorMapper.toMessage(
+          error,
+          stackTrace: stackTrace,
+          fallbackMessage:
+              'Could not cancel ${event.title}. Please try again.',
+        ),
+      );
     } finally {
       if (mounted) {
         setState(() => _isActionLoading = false);
@@ -368,6 +438,15 @@ class _AdminEventsPanelState extends State<AdminEventsPanel> {
         usersRepository: widget.usersRepository,
         summary: _summaryCache[event.id],
         onAttendeeTap: widget.onAttendeeTap,
+        onAttendeeRemoved: () async {
+          _summaryCache.remove(event.id);
+
+          await _ensureSummaryLoaded(event.id);
+
+          if (!mounted) return;
+
+          setState(() {});
+        },
       ),
     );
   }
@@ -399,13 +478,13 @@ class _AdminEventsPanelState extends State<AdminEventsPanel> {
       case AdminEventStatusFilter.all:
         return null;
       case AdminEventStatusFilter.pending:
-        return 'Pending';
+        return EventStatus.pending;
       case AdminEventStatusFilter.confirmed:
-        return 'Confirmed';
+        return EventStatus.confirmed;
       case AdminEventStatusFilter.cancelled:
-        return 'Cancelled';
+        return EventStatus.cancelled;
       case AdminEventStatusFilter.completed:
-        return 'Completed';
+        return EventStatus.completed;
     }
   }
 
@@ -482,7 +561,13 @@ class _AdminEventsPanelState extends State<AdminEventsPanel> {
         setState(() {
           _locationCache[key] = resolved;
         });
-      } catch (_) {
+      } catch (error, stackTrace) {
+        AppLogger.warning(
+          'Failed to resolve location for event ${event.id}',
+          tag: _loggerTag,
+          error: error,
+          stackTrace: stackTrace,
+        );
         if (!mounted) return;
 
         setState(() {
@@ -548,7 +633,7 @@ class _AdminEventsPanelState extends State<AdminEventsPanel> {
 
     return OrganizerCardData(
       fullName: fallbackName,
-      username: organizerId != null && organizerId > 0 ? 'User ID $organizerId' : 'Unknown user',
+      username: 'Organizer',
       imageUrl: null,
     );
   }
@@ -1013,25 +1098,25 @@ class EventCard extends StatelessWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    event.title,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: textTheme.titleMedium?.copyWith(
-                                      color: colors.textPrimary,
-                                      fontWeight: FontWeight.w800,
-                                    ),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  event.title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: textTheme.titleMedium?.copyWith(
+                                    color: colors.textPrimary,
+                                    fontWeight: FontWeight.w800,
                                   ),
                                 ),
-                                const SizedBox(width: 10),
-                                Flexible(
-                                  child: EventStatusBadge(status: event.status),
-                                ),
-                              ],
-                            ),
+                              ),
+                              const SizedBox(width: 10),
+                              Flexible(
+                                child: EventStatusBadge(status: event.status),
+                              ),
+                            ],
+                          ),
                             const SizedBox(height: 4),
                             Text(
                               event.category,
@@ -1568,8 +1653,8 @@ class CardActions extends StatelessWidget {
         ),
         const SizedBox(width: 6),
         CardActionButton(
-          tooltip: 'Delete event',
-          icon: Icons.delete_outline_rounded,
+          tooltip: 'Cancel event',
+          icon: Icons.cancel_outlined,
           color: colorScheme.error,
           onTap: onDelete,
         ),
@@ -1679,7 +1764,7 @@ class EventCoverImage extends StatelessWidget {
           ? Image.network(
               normalizedUrl,
               fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => EventImageFallback(title: title),
+              errorBuilder: (_, _, _) => EventImageFallback(title: title),
               loadingBuilder: (context, child, progress) {
                 if (progress == null) return child;
                 return Container(
@@ -1894,6 +1979,7 @@ class AdminEventRowData {
     required this.organizerId,
     required this.promoterName,
     required this.displayPromoterName,
+    required this.isFeatured,
   });
 
   final int id;
@@ -1913,45 +1999,41 @@ class AdminEventRowData {
   final int? organizerId;
   final String? promoterName;
   final String displayPromoterName;
+  final bool isFeatured;
 
   String get fallbackLocationLabel =>
       '${latitude.toStringAsFixed(4)}, ${longitude.toStringAsFixed(4)}';
 
   String get priceLabel {
-    if (price <= 0) return 'Free';
-    final isWhole = price == price.roundToDouble();
-    return isWhole
-        ? '${price.toStringAsFixed(0)} KM'
-        : '${price.toStringAsFixed(2)} KM';
+    return PriceFormatter.formatPriceWithBam(price);
   }
 
-  String shortDescription({required int maxCharacters}) {
-    final normalized = description.trim().replaceAll(RegExp(r'\s+'), ' ');
-    if (normalized.isEmpty) return 'No description provided.';
-    if (normalized.length <= maxCharacters) return normalized;
+  String shortDescription({
+    required int maxCharacters,
+  }) {
+    final normalized = description.trim().replaceAll(
+          RegExp(r'\s+'),
+          ' ',
+        );
+
+    if (normalized.isEmpty) {
+      return 'No description provided.';
+    }
+
+    if (normalized.length <= maxCharacters) {
+      return normalized;
+    }
+
     return '${normalized.substring(0, maxCharacters).trimRight()}...';
   }
 
   Color segmentColorValue({
     required ColorScheme colorScheme,
   }) {
-    final raw = segmentColor?.trim();
-    if (raw == null || raw.isEmpty) {
-      return colorScheme.primary.withValues(alpha: 0.75);
-    }
-
-    final normalized = raw.startsWith('#') ? raw.substring(1) : raw;
-    if (normalized.length != 6 && normalized.length != 8) {
-      return colorScheme.primary.withValues(alpha: 0.75);
-    }
-
-    final hex = normalized.length == 6 ? 'FF$normalized' : normalized;
-
-    try {
-      return Color(int.parse(hex, radix: 16));
-    } catch (_) {
-      return colorScheme.primary.withValues(alpha: 0.75);
-    }
+    return ColorParser.parseHex(
+      segmentColor,
+      fallback: colorScheme.primary.withValues(alpha: 0.75),
+    );
   }
 
   factory AdminEventRowData.fromEvent(AdminEvent event) {
@@ -1961,7 +2043,9 @@ class AdminEventRowData {
       description: event.displayDescription,
       dateLabel: event.dateLabel,
       status: event.displayStatus,
-      category: event.hasGenreSubtitle ? event.genreSubtitle : event.category,
+      category: event.hasGenreSubtitle
+          ? event.genreSubtitle
+          : event.category,
       views: event.viewCount,
       likes: event.likesCount,
       capacity: event.capacity,
@@ -1973,6 +2057,7 @@ class AdminEventRowData {
       organizerId: event.organizerId,
       promoterName: event.promoterName,
       displayPromoterName: event.displayPromoterName,
+      isFeatured: event.isFeatured,
     );
   }
 }

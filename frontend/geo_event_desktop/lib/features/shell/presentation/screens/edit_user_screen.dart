@@ -4,8 +4,10 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/constants/app_roles.dart';
 import '../../../../core/theme/app_theme_colors.dart';
 import '../../../../core/theme/app_theme_metrics.dart';
+import '../../../../core/utils/logger.dart';
 import '../../../../core/utils/validators.dart';
 import '../../../../shared/admin_profile/data/admin_users_repository.dart';
 import '../../../../shared/admin_profile/models/user_profile.dart';
@@ -25,6 +27,8 @@ class EditUserScreen extends StatefulWidget {
 }
 
 class _EditUserScreenState extends State<EditUserScreen> {
+  static const _loggerTag = 'EditUserScreen';
+
   final _formKey = GlobalKey<FormState>();
 
   late final TextEditingController _firstNameController;
@@ -44,119 +48,304 @@ class _EditUserScreenState extends State<EditUserScreen> {
   @override
   void initState() {
     super.initState();
-    _firstNameController = TextEditingController(text: widget.profile.firstName);
-    _lastNameController = TextEditingController(text: widget.profile.lastName);
-    _phoneController =
-        TextEditingController(text: widget.profile.phoneNumber ?? '');
-    _usernameController = TextEditingController(text: widget.profile.username);
-    _emailController = TextEditingController(text: widget.profile.email);
+
+    _firstNameController = TextEditingController(
+      text: widget.profile.firstName,
+    );
+    _lastNameController = TextEditingController(
+      text: widget.profile.lastName,
+    );
+    _phoneController = TextEditingController(
+      text: widget.profile.phoneNumber ?? '',
+    );
+    _usernameController = TextEditingController(
+      text: widget.profile.username,
+    );
+    _emailController = TextEditingController(
+      text: widget.profile.email,
+    );
+
     _uploadedImageUrl = widget.profile.imageUrl;
     _selectedRole = _normalizeRole(widget.profile.role);
+
+    AppLogger.debug(
+      'Edit-user screen initialized.',
+      tag: _loggerTag,
+    );
   }
 
   @override
   void dispose() {
+    AppLogger.debug(
+      'Edit-user screen disposed.',
+      tag: _loggerTag,
+    );
+
     _firstNameController.dispose();
     _lastNameController.dispose();
     _phoneController.dispose();
     _usernameController.dispose();
     _emailController.dispose();
+
     super.dispose();
   }
 
   String _normalizeRole(String role) {
     final normalized = role.trim().toLowerCase();
-    if (normalized == 'admin') return 'Admin';
-    return 'User';
+
+    if (normalized == AppRoles.admin.toLowerCase()) {
+      return AppRoles.admin;
+    }
+
+    return AppRoles.user;
   }
 
   String? _validateOptionalPhone(String? value) {
     final text = (value ?? '').trim();
-    if (text.isEmpty) return null;
+
+    if (text.isEmpty) {
+      return null;
+    }
+
     return Validators.phoneNumber(text);
   }
 
   String? _normalizeOptionalPhone(String? value) {
     final text = (value ?? '').trim();
-    if (text.isEmpty) return null;
-    return text.replaceAll(RegExp(r'[\s\-\(\)]'), '');
+
+    if (text.isEmpty) {
+      return null;
+    }
+
+    return text.replaceAll(
+      RegExp(r'[\s\-\(\)]'),
+      '',
+    );
   }
 
   Future<void> _pickAvatar() async {
-    if (_isSubmitting || _isUploadingAvatar) return;
+    if (_isSubmitting || _isUploadingAvatar) {
+      AppLogger.debug(
+        'Avatar selection ignored because the screen is busy.',
+        tag: _loggerTag,
+      );
+      return;
+    }
 
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowMultiple: false,
-      withData: true,
-      allowedExtensions: ['png', 'jpg', 'jpeg', 'webp'],
+    AppLogger.debug(
+      'Avatar picker opened.',
+      tag: _loggerTag,
     );
 
-    if (!mounted || result == null || result.files.isEmpty) return;
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowMultiple: false,
+        withData: true,
+        allowedExtensions: const [
+          'png',
+          'jpg',
+          'jpeg',
+          'webp',
+        ],
+      );
 
-    final file = result.files.single;
-    final bytes = file.bytes;
-    final path = file.path;
+      if (!mounted || result == null || result.files.isEmpty) {
+        AppLogger.debug(
+          'Avatar selection was cancelled.',
+          tag: _loggerTag,
+        );
+        return;
+      }
 
-    if (bytes == null || bytes.isEmpty) {
-      _showMessage('Unable to read the selected image.');
-      return;
+      final file = result.files.single;
+      final bytes = file.bytes;
+      final path = file.path;
+
+      if (bytes == null || bytes.isEmpty) {
+        AppLogger.warning(
+          'Selected avatar did not contain readable bytes.',
+          tag: _loggerTag,
+        );
+
+        _showMessage(
+          'Unable to read the selected image.',
+        );
+        return;
+      }
+
+      if (path == null || path.trim().isEmpty) {
+        AppLogger.warning(
+          'Selected avatar did not contain a valid file path.',
+          tag: _loggerTag,
+        );
+
+        _showMessage(
+          'Unable to access the selected image path.',
+        );
+        return;
+      }
+
+      setState(() {
+        _selectedAvatarBytes = bytes;
+        _selectedAvatarPath = path;
+      });
+
+      AppLogger.info(
+        'Avatar selected successfully.',
+        tag: _loggerTag,
+      );
+
+      await _uploadSelectedAvatar();
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'Avatar picker failed.',
+        tag: _loggerTag,
+        error: error,
+        stackTrace: stackTrace,
+      );
+
+      if (!mounted) return;
+
+      _showMessage(
+        'Unable to select the avatar.',
+      );
     }
-
-    if (path == null || path.trim().isEmpty) {
-      _showMessage('Unable to access the selected image path.');
-      return;
-    }
-
-    setState(() {
-      _selectedAvatarBytes = bytes;
-      _selectedAvatarPath = path;
-    });
-
-    await _uploadSelectedAvatar();
   }
 
   Future<void> _uploadSelectedAvatar() async {
     final filePath = _selectedAvatarPath;
-    if (filePath == null || filePath.trim().isEmpty) return;
+
+    if (filePath == null || filePath.trim().isEmpty) {
+      AppLogger.warning(
+        'Avatar upload skipped because the file path was empty.',
+        tag: _loggerTag,
+      );
+      return;
+    }
+
+    if (_isUploadingAvatar) {
+      AppLogger.debug(
+        'Duplicate avatar upload ignored.',
+        tag: _loggerTag,
+      );
+      return;
+    }
 
     setState(() {
       _isUploadingAvatar = true;
     });
 
+    AppLogger.info(
+      'Avatar upload started.',
+      tag: _loggerTag,
+    );
+
     try {
-      final imageUrl = await widget.repository.uploadProfileImage(filePath);
+      final imageUrl = await widget.repository.uploadProfileImage(
+        filePath,
+      );
 
       if (!mounted) return;
+
+      final normalizedImageUrl = imageUrl.trim();
+
+      if (normalizedImageUrl.isEmpty) {
+        AppLogger.warning(
+          'Avatar upload returned an empty image URL.',
+          tag: _loggerTag,
+        );
+
+        _showMessage(
+          'Avatar upload did not return a valid image URL.',
+        );
+        return;
+      }
 
       setState(() {
-        _uploadedImageUrl = imageUrl;
+        _uploadedImageUrl = normalizedImageUrl;
       });
 
-      _showMessage('Avatar uploaded successfully.');
-    } catch (_) {
+      AppLogger.info(
+        'Avatar upload completed successfully.',
+        tag: _loggerTag,
+      );
+
+      _showMessage(
+        'Avatar uploaded successfully.',
+      );
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'Avatar upload failed.',
+        tag: _loggerTag,
+        error: error,
+        stackTrace: stackTrace,
+      );
+
       if (!mounted) return;
-      _showMessage('Failed to upload avatar.');
+
+      _showMessage(
+        'Failed to upload avatar.',
+      );
     } finally {
       if (mounted) {
         setState(() {
           _isUploadingAvatar = false;
         });
       }
+
+      AppLogger.debug(
+        'Avatar upload state reset.',
+        tag: _loggerTag,
+      );
     }
   }
 
   Future<void> _submit() async {
+    if (_isSubmitting) {
+      AppLogger.debug(
+        'Duplicate user-update action ignored.',
+        tag: _loggerTag,
+      );
+      return;
+    }
+
+    if (_isUploadingAvatar) {
+      AppLogger.debug(
+        'User update ignored while avatar upload is active.',
+        tag: _loggerTag,
+      );
+      return;
+    }
+
     final form = _formKey.currentState;
-    if (form == null || !form.validate() || _isSubmitting || _isUploadingAvatar) {
+
+    if (form == null) {
+      AppLogger.warning(
+        'Edit-user form state was unavailable.',
+        tag: _loggerTag,
+      );
       return;
     }
 
     FocusScope.of(context).unfocus();
 
+    if (!form.validate()) {
+      AppLogger.debug(
+        'Edit-user form validation failed.',
+        tag: _loggerTag,
+      );
+      return;
+    }
+
     setState(() {
       _isSubmitting = true;
     });
+
+    AppLogger.info(
+      'User update started.',
+      tag: _loggerTag,
+    );
 
     try {
       final updatedUser = await widget.repository.updateUser(
@@ -165,33 +354,75 @@ class _EditUserScreenState extends State<EditUserScreen> {
         email: _emailController.text.trim(),
         firstName: _firstNameController.text.trim(),
         lastName: _lastNameController.text.trim(),
-        phoneNumber: _normalizeOptionalPhone(_phoneController.text),
+        phoneNumber: _normalizeOptionalPhone(
+          _phoneController.text,
+        ),
         imageUrl: _uploadedImageUrl,
         role: _selectedRole,
       );
 
       if (!mounted) return;
 
-      _showMessage('User updated successfully.');
+      AppLogger.info(
+        'User update completed successfully.',
+        tag: _loggerTag,
+      );
+
+      _showMessage(
+        'User updated successfully.',
+      );
+
       context.pop(updatedUser);
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'User update failed.',
+        tag: _loggerTag,
+        error: error,
+        stackTrace: stackTrace,
+      );
+
       if (!mounted) return;
-      _showMessage('Failed to update user.');
+
+      _showMessage(
+        'Failed to update user.',
+      );
     } finally {
       if (mounted) {
         setState(() {
           _isSubmitting = false;
         });
       }
+
+      AppLogger.debug(
+        'User-update state reset.',
+        tag: _loggerTag,
+      );
     }
+  }
+
+  void _goBack() {
+    if (_isSubmitting || _isUploadingAvatar) {
+      return;
+    }
+
+    AppLogger.debug(
+      'User returned from edit-user screen.',
+      tag: _loggerTag,
+    );
+
+    context.pop();
   }
 
   void _showMessage(String message) {
     final messenger = ScaffoldMessenger.of(context);
-    messenger.hideCurrentSnackBar();
-    messenger.showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+        ),
+      );
   }
 
   @override
@@ -207,12 +438,16 @@ class _EditUserScreenState extends State<EditUserScreen> {
     ].where((value) => value.isNotEmpty).join(' ');
 
     final username = _usernameController.text.trim();
+
     final avatarLetter = displayName.isNotEmpty
         ? displayName.characters.first.toUpperCase()
-        : (username.isNotEmpty ? username.characters.first.toUpperCase() : 'U');
+        : username.isNotEmpty
+            ? username.characters.first.toUpperCase()
+            : 'U';
 
+    final imageUrl = _uploadedImageUrl?.trim();
     final hasRemoteAvatar =
-        _uploadedImageUrl != null && _uploadedImageUrl!.trim().isNotEmpty;
+        imageUrl != null && imageUrl.isNotEmpty;
 
     return Scaffold(
       backgroundColor: colors.background,
@@ -220,13 +455,17 @@ class _EditUserScreenState extends State<EditUserScreen> {
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 760),
+            constraints: const BoxConstraints(
+              maxWidth: 760,
+            ),
             child: Container(
               padding: const EdgeInsets.all(32),
               decoration: BoxDecoration(
                 color: colors.card,
                 borderRadius: BorderRadius.circular(28),
-                border: Border.all(color: colors.border),
+                border: Border.all(
+                  color: colors.border,
+                ),
                 boxShadow: [
                   BoxShadow(
                     color: theme.brightness == Brightness.dark
@@ -243,10 +482,13 @@ class _EditUserScreenState extends State<EditUserScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     TextButton.icon(
-                      onPressed: _isSubmitting || _isUploadingAvatar
+                      onPressed: _isSubmitting ||
+                              _isUploadingAvatar
                           ? null
-                          : () => context.pop(),
-                      icon: const Icon(Icons.arrow_back_rounded),
+                          : _goBack,
+                      icon: const Icon(
+                        Icons.arrow_back_rounded,
+                      ),
                       label: const Text('Back'),
                       style: TextButton.styleFrom(
                         foregroundColor: colorScheme.primary,
@@ -272,20 +514,26 @@ class _EditUserScreenState extends State<EditUserScreen> {
                     ),
                     const SizedBox(height: 28),
                     Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
+                      crossAxisAlignment:
+                          CrossAxisAlignment.center,
                       children: [
                         CircleAvatar(
                           radius: 34,
                           backgroundColor: colors.inputFill,
-                          backgroundImage: _selectedAvatarBytes != null
-                              ? MemoryImage(_selectedAvatarBytes!)
-                              : hasRemoteAvatar
-                                  ? NetworkImage(_uploadedImageUrl!.trim())
-                                  : null,
-                          child: _selectedAvatarBytes == null && !hasRemoteAvatar
+                          backgroundImage:
+                              _selectedAvatarBytes != null
+                                  ? MemoryImage(
+                                      _selectedAvatarBytes!,
+                                    )
+                                  : hasRemoteAvatar
+                                      ? NetworkImage(imageUrl)
+                                      : null,
+                          child: _selectedAvatarBytes == null &&
+                                  !hasRemoteAvatar
                               ? Text(
                                   avatarLetter,
-                                  style: textTheme.titleLarge?.copyWith(
+                                  style: textTheme.titleLarge
+                                      ?.copyWith(
                                     fontWeight: FontWeight.w800,
                                     color: colors.textPrimary,
                                   ),
@@ -295,11 +543,15 @@ class _EditUserScreenState extends State<EditUserScreen> {
                         const SizedBox(width: 16),
                         Expanded(
                           child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                            crossAxisAlignment:
+                                CrossAxisAlignment.start,
                             children: [
                               Text(
-                                displayName.isEmpty ? 'Unnamed user' : displayName,
-                                style: textTheme.titleMedium?.copyWith(
+                                displayName.isEmpty
+                                    ? 'Unnamed user'
+                                    : displayName,
+                                style: textTheme.titleMedium
+                                    ?.copyWith(
                                   fontWeight: FontWeight.w700,
                                   color: colors.textPrimary,
                                 ),
@@ -314,7 +566,8 @@ class _EditUserScreenState extends State<EditUserScreen> {
                               const SizedBox(height: 6),
                               Text(
                                 'Current status: ${widget.profile.isBanned ? 'Banned' : 'Active'}',
-                                style: textTheme.bodySmall?.copyWith(
+                                style: textTheme.bodySmall
+                                    ?.copyWith(
                                   color: widget.profile.isBanned
                                       ? colorScheme.error
                                       : colorScheme.primary,
@@ -327,32 +580,43 @@ class _EditUserScreenState extends State<EditUserScreen> {
                                 runSpacing: 10,
                                 children: [
                                   OutlinedButton.icon(
-                                    onPressed: _isSubmitting || _isUploadingAvatar
+                                    onPressed: _isSubmitting ||
+                                            _isUploadingAvatar
                                         ? null
                                         : _pickAvatar,
                                     icon: _isUploadingAvatar
                                         ? SizedBox(
                                             width: 16,
                                             height: 16,
-                                            child: CircularProgressIndicator(
+                                            child:
+                                                CircularProgressIndicator(
                                               strokeWidth: 2,
                                               valueColor:
-                                                  AlwaysStoppedAnimation<Color>(
+                                                  AlwaysStoppedAnimation<
+                                                      Color>(
                                                 colorScheme.primary,
                                               ),
                                             ),
                                           )
-                                        : const Icon(Icons.photo_camera_back_outlined),
+                                        : const Icon(
+                                            Icons
+                                                .photo_camera_back_outlined,
+                                          ),
                                     label: Text(
                                       _isUploadingAvatar
                                           ? 'Uploading...'
                                           : 'Change avatar',
                                     ),
                                     style: OutlinedButton.styleFrom(
-                                      foregroundColor: colorScheme.primary,
-                                      side: BorderSide(color: colors.border),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(
+                                      foregroundColor:
+                                          colorScheme.primary,
+                                      side: BorderSide(
+                                        color: colors.border,
+                                      ),
+                                      shape:
+                                          RoundedRectangleBorder(
+                                        borderRadius:
+                                            BorderRadius.circular(
                                           AppThemeMetrics.radiusMd,
                                         ),
                                       ),
@@ -375,7 +639,8 @@ class _EditUserScreenState extends State<EditUserScreen> {
                             hintText: 'Enter first name',
                             prefixIcon: Icons.badge_outlined,
                             enabled: !_isSubmitting,
-                            textInputAction: TextInputAction.next,
+                            textInputAction:
+                                TextInputAction.next,
                             validator: Validators.firstName,
                             onChanged: (_) => setState(() {}),
                           ),
@@ -388,7 +653,8 @@ class _EditUserScreenState extends State<EditUserScreen> {
                             hintText: 'Enter last name',
                             prefixIcon: Icons.badge_outlined,
                             enabled: !_isSubmitting,
-                            textInputAction: TextInputAction.next,
+                            textInputAction:
+                                TextInputAction.next,
                             validator: Validators.lastName,
                             onChanged: (_) => setState(() {}),
                           ),
@@ -400,10 +666,12 @@ class _EditUserScreenState extends State<EditUserScreen> {
                       controller: _usernameController,
                       label: 'Username',
                       hintText: 'Enter username',
-                      prefixIcon: Icons.alternate_email_rounded,
+                      prefixIcon:
+                          Icons.alternate_email_rounded,
                       enabled: !_isSubmitting,
                       textInputAction: TextInputAction.next,
                       validator: Validators.username,
+                      onChanged: (_) => setState(() {}),
                     ),
                     const SizedBox(height: 18),
                     _EditUserField(
@@ -414,7 +682,8 @@ class _EditUserScreenState extends State<EditUserScreen> {
                       enabled: !_isSubmitting,
                       textInputAction: TextInputAction.next,
                       validator: Validators.email,
-                      keyboardType: TextInputType.emailAddress,
+                      keyboardType:
+                          TextInputType.emailAddress,
                       onChanged: (_) => setState(() {}),
                     ),
                     const SizedBox(height: 18),
@@ -435,9 +704,15 @@ class _EditUserScreenState extends State<EditUserScreen> {
                       enabled: !_isSubmitting,
                       onChanged: (value) {
                         if (value == null) return;
+
                         setState(() {
                           _selectedRole = value;
                         });
+
+                        AppLogger.debug(
+                          'User role changed.',
+                          tag: _loggerTag,
+                        );
                       },
                     ),
                     const SizedBox(height: 24),
@@ -446,10 +721,13 @@ class _EditUserScreenState extends State<EditUserScreen> {
                       decoration: BoxDecoration(
                         color: colors.inputFill,
                         borderRadius: BorderRadius.circular(18),
-                        border: Border.all(color: colors.borderSoft),
+                        border: Border.all(
+                          color: colors.borderSoft,
+                        ),
                       ),
                       child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                        crossAxisAlignment:
+                            CrossAxisAlignment.start,
                         children: [
                           Icon(
                             Icons.admin_panel_settings_outlined,
@@ -459,7 +737,8 @@ class _EditUserScreenState extends State<EditUserScreen> {
                           Expanded(
                             child: Text(
                               'This screen updates user identity fields and role. Ban and unban actions can remain in the users table workflow.',
-                              style: textTheme.bodyMedium?.copyWith(
+                              style: textTheme.bodyMedium
+                                  ?.copyWith(
                                 fontSize: 14,
                                 height: 1.5,
                                 color: colors.textSecondary,
@@ -477,21 +756,28 @@ class _EditUserScreenState extends State<EditUserScreen> {
                           child: SizedBox(
                             height: 52,
                             child: OutlinedButton(
-                              onPressed: _isSubmitting || _isUploadingAvatar
+                              onPressed: _isSubmitting ||
+                                      _isUploadingAvatar
                                   ? null
-                                  : () => context.pop(),
+                                  : _goBack,
                               style: OutlinedButton.styleFrom(
-                                foregroundColor: colors.textSecondary,
-                                side: BorderSide(color: colors.border),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(
+                                foregroundColor:
+                                    colors.textSecondary,
+                                side: BorderSide(
+                                  color: colors.border,
+                                ),
+                                shape:
+                                    RoundedRectangleBorder(
+                                  borderRadius:
+                                      BorderRadius.circular(
                                     AppThemeMetrics.radiusMd + 2,
                                   ),
                                 ),
                               ),
                               child: Text(
                                 'Cancel',
-                                style: textTheme.titleMedium?.copyWith(
+                                style: textTheme.titleMedium
+                                    ?.copyWith(
                                   fontWeight: FontWeight.w700,
                                   color: colors.textSecondary,
                                 ),
@@ -504,15 +790,20 @@ class _EditUserScreenState extends State<EditUserScreen> {
                           child: SizedBox(
                             height: 52,
                             child: ElevatedButton(
-                              onPressed: _isSubmitting || _isUploadingAvatar
+                              onPressed: _isSubmitting ||
+                                      _isUploadingAvatar
                                   ? null
                                   : _submit,
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: colorScheme.primary,
-                                foregroundColor: colorScheme.onPrimary,
+                                backgroundColor:
+                                    colorScheme.primary,
+                                foregroundColor:
+                                    colorScheme.onPrimary,
                                 elevation: 0,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(
+                                shape:
+                                    RoundedRectangleBorder(
+                                  borderRadius:
+                                      BorderRadius.circular(
                                     AppThemeMetrics.radiusMd + 2,
                                   ),
                                 ),
@@ -521,18 +812,24 @@ class _EditUserScreenState extends State<EditUserScreen> {
                                   ? SizedBox(
                                       width: 22,
                                       height: 22,
-                                      child: CircularProgressIndicator(
+                                      child:
+                                          CircularProgressIndicator(
                                         strokeWidth: 2.4,
-                                        valueColor: AlwaysStoppedAnimation<Color>(
+                                        valueColor:
+                                            AlwaysStoppedAnimation<
+                                                Color>(
                                           colorScheme.onPrimary,
                                         ),
                                       ),
                                     )
                                   : Text(
                                       'Save changes',
-                                      style: textTheme.titleMedium?.copyWith(
-                                        fontWeight: FontWeight.w700,
-                                        color: colorScheme.onPrimary,
+                                      style: textTheme.titleMedium
+                                          ?.copyWith(
+                                        fontWeight:
+                                            FontWeight.w700,
+                                        color:
+                                            colorScheme.onPrimary,
                                       ),
                                     ),
                             ),
@@ -580,8 +877,12 @@ class _EditUserField extends StatelessWidget {
     final colors = theme.appColors;
 
     final border = OutlineInputBorder(
-      borderRadius: BorderRadius.circular(AppThemeMetrics.radiusMd),
-      borderSide: BorderSide(color: colors.borderSoft),
+      borderRadius: BorderRadius.circular(
+        AppThemeMetrics.radiusMd,
+      ),
+      borderSide: BorderSide(
+        color: colors.borderSoft,
+      ),
     );
 
     return Column(
@@ -611,29 +912,41 @@ class _EditUserField extends StatelessWidget {
             fillColor: colors.inputFill,
             hintText: hintText,
             hintStyle: theme.textTheme.bodyMedium?.copyWith(
-              color: colors.textSecondary.withValues(alpha: 0.72),
+              color: colors.textSecondary.withValues(
+                alpha: 0.72,
+              ),
               fontWeight: FontWeight.w500,
             ),
             prefixIcon: Icon(
               prefixIcon,
               color: colors.textSecondary,
             ),
-            contentPadding: const EdgeInsets.symmetric(vertical: 16),
+            contentPadding: const EdgeInsets.symmetric(
+              vertical: 16,
+            ),
             border: border,
             enabledBorder: border,
             focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(AppThemeMetrics.radiusMd),
+              borderRadius: BorderRadius.circular(
+                AppThemeMetrics.radiusMd,
+              ),
               borderSide: BorderSide(
                 color: theme.colorScheme.primary,
                 width: 1.2,
               ),
             ),
             errorBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(AppThemeMetrics.radiusMd),
-              borderSide: BorderSide(color: theme.colorScheme.error),
+              borderRadius: BorderRadius.circular(
+                AppThemeMetrics.radiusMd,
+              ),
+              borderSide: BorderSide(
+                color: theme.colorScheme.error,
+              ),
             ),
             focusedErrorBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(AppThemeMetrics.radiusMd),
+              borderRadius: BorderRadius.circular(
+                AppThemeMetrics.radiusMd,
+              ),
               borderSide: BorderSide(
                 color: theme.colorScheme.error,
                 width: 1.2,
@@ -665,8 +978,12 @@ class _RoleDropdownField extends StatelessWidget {
     final colors = theme.appColors;
 
     final border = OutlineInputBorder(
-      borderRadius: BorderRadius.circular(AppThemeMetrics.radiusMd),
-      borderSide: BorderSide(color: colors.borderSoft),
+      borderRadius: BorderRadius.circular(
+        AppThemeMetrics.radiusMd,
+      ),
+      borderSide: BorderSide(
+        color: colors.borderSoft,
+      ),
     );
 
     return Column(
@@ -682,7 +999,15 @@ class _RoleDropdownField extends StatelessWidget {
         const SizedBox(height: 8),
         DropdownButtonFormField<String>(
           initialValue: initialValue,
+          isExpanded: true,
           onChanged: enabled ? onChanged : null,
+          validator: (value) {
+            if (value == null || value.trim().isEmpty) {
+              return 'Role is required.';
+            }
+
+            return null;
+          },
           decoration: InputDecoration(
             filled: true,
             fillColor: colors.inputFill,
@@ -697,21 +1022,40 @@ class _RoleDropdownField extends StatelessWidget {
             border: border,
             enabledBorder: border,
             focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(AppThemeMetrics.radiusMd),
+              borderRadius: BorderRadius.circular(
+                AppThemeMetrics.radiusMd,
+              ),
               borderSide: BorderSide(
                 color: theme.colorScheme.primary,
                 width: 1.2,
               ),
             ),
-          ),
-          items: const [
-            DropdownMenuItem(
-              value: 'User',
-              child: Text('User'),
+            errorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(
+                AppThemeMetrics.radiusMd,
+              ),
+              borderSide: BorderSide(
+                color: theme.colorScheme.error,
+              ),
             ),
-            DropdownMenuItem(
-              value: 'Admin',
-              child: Text('Admin'),
+            focusedErrorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(
+                AppThemeMetrics.radiusMd,
+              ),
+              borderSide: BorderSide(
+                color: theme.colorScheme.error,
+                width: 1.2,
+              ),
+            ),
+          ),
+          items: [
+            DropdownMenuItem<String>(
+              value: AppRoles.user,
+              child: Text(AppRoles.user),
+            ),
+            DropdownMenuItem<String>(
+              value: AppRoles.admin,
+              child: Text(AppRoles.admin),
             ),
           ],
         ),

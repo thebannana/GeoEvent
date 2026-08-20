@@ -64,7 +64,7 @@ class _TicketScannerScreenState extends ConsumerState<TicketScannerScreen>
     if (lastValue == null || lastAt == null) return false;
     if (lastValue != value) return false;
 
-    return DateTime.now().difference(lastAt) < _duplicateCooldown;
+    return DateTime.now().toUtc().difference(lastAt) < _duplicateCooldown;
   }
 
   Future<void> _handleBarcode(BarcodeCapture capture) async {
@@ -86,7 +86,7 @@ class _TicketScannerScreenState extends ConsumerState<TicketScannerScreen>
     setState(() {
       _isHandlingScan = true;
       _lastScannedValue = trimmed;
-      _lastScanAt = DateTime.now();
+      _lastScanAt = DateTime.now().toUtc();
     });
 
     try {

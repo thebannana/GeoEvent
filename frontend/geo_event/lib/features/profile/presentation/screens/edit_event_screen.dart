@@ -622,7 +622,7 @@ class _EditEventScreenState extends ConsumerState<EditEventScreen> {
     BuildContext context, {
     DateTime? initial,
   }) async {
-    final now = DateTime.now();
+    final now = DateTime.now().toUtc();
     final today = now.dateOnly;
     final seed = initial ?? now.add(const Duration(hours: 1));
     final safeInitialDate = seed.isBefore(today) ? today : seed;

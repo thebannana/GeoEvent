@@ -25,6 +25,7 @@ class TicketBottomSheet extends StatelessWidget {
     return AppBottomSheetContainer(
       maxHeightFactor: 0.92,
       padding: EdgeInsets.zero,
+      scrollable: false,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -69,10 +70,10 @@ class TicketBottomSheet extends StatelessWidget {
             height: 1,
             color: theme.dividerColor.withValues(alpha: 0.35),
           ),
-          Flexible(
+          Expanded(
             child: ListView.separated(
-              shrinkWrap: true,
               padding: const EdgeInsets.fromLTRB(16, 14, 16, 32),
+              physics: const BouncingScrollPhysics(),
               itemCount: tickets.length,
               separatorBuilder: (_, _) => const SizedBox(height: 12),
               itemBuilder: (context, i) => TicketItem(

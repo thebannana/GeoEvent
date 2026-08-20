@@ -174,8 +174,17 @@ public class Event
 
     public void Cancel()
     {
+
+        if (Status == EventStatus.Cancelled)
+        {
+            return;
+        }
+
         if (Status is not (EventStatus.Pending or EventStatus.Confirmed))
-            throw new InvalidEventStateException("Only pending or confirmed events can be cancelled.");
+        {
+            throw new InvalidEventStateException(
+                "Only pending or confirmed events can be cancelled.");
+        }
 
         Status = EventStatus.Cancelled;
         UpdatedAt = DateTime.UtcNow;

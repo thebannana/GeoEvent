@@ -3,11 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../shared/events/models/create_event_models.dart';
 import '../../../../shared/events/models/paged_result.dart';
 import '../../../../shared/profile/models/user_preference.dart';
+import '../../../shared/events/models/recommendation_scoring.dart';
 import '../../../shared/events/providers/event_providers.dart';
 import '../../profile/application/preferences_controller.dart';
 import '../../../shared/search/models/filter_selection.dart';
 import '../../../shared/search/models/sort_option.dart';
 import '../../../shared/search/data/search_state.dart';
+import '../../../../shared/location/data/map_location_service.dart';
 
 final searchControllerProvider =
     StateNotifierProvider.autoDispose<SearchController, SearchState>((ref) {
@@ -18,33 +20,9 @@ class SearchController extends StateNotifier<SearchState> {
   SearchController(this.ref) : super(const SearchState());
 
   final Ref ref;
+  final _locationService = MapLocationService();
+
   int _requestId = 0;
-
-  Map<int, double> _segmentWeights(List<UserPreference> preferences) {
-    final map = <int, double>{};
-
-    for (final pref in preferences) {
-      final segmentId = pref.segmentId;
-      if (segmentId != null) {
-        map[segmentId] = (map[segmentId] ?? 0) + pref.score;
-      }
-    }
-
-    return map;
-  }
-
-  Map<int, double> _genreWeights(List<UserPreference> preferences) {
-    final map = <int, double>{};
-
-    for (final pref in preferences) {
-      final genreId = pref.genreId;
-      if (genreId != null) {
-        map[genreId] = (map[genreId] ?? 0) + pref.score;
-      }
-    }
-
-    return map;
-  }
 
   List<UserPreference> _preferences() {
     return ref.read(preferencesControllerProvider).maybeWhen(
@@ -53,77 +31,59 @@ class SearchController extends StateNotifier<SearchState> {
         );
   }
 
-  double _preferenceScore(
-    EventItem item,
-    Map<int, double> segmentWeights,
-    Map<int, double> genreWeights,
-  ) {
-    var score = 0.0;
-
-    if (item.segmentId != null) {
-      score += (segmentWeights[item.segmentId!] ?? 0) * 30;
+  Future<({double latitude, double longitude})> _getUserLocation() async {
+    try {
+      final result = await _locationService.getCurrentLocation();
+      if (result.position != null) {
+        return (
+          latitude: result.position!.latitude,
+          longitude: result.position!.longitude,
+        );
+      }
+    } catch (_) {
+      // Ignore location errors; fallback to default.
     }
 
-    if (item.genreId != null) {
-      score += (genreWeights[item.genreId!] ?? 0) * 22;
-    }
-
-    if (item.isFeatured) {
-      score += 6;
-    }
-
-    return score;
+    return (latitude: 43.8563, longitude: 18.4131);
   }
 
-  double _basePopularityScore(EventItem item) {
-    return (item.likesCount / 20) + (item.viewCount / 200);
-  }
-
-  double _searchTextScore(EventItem item, String query) {
-    final q = query.toLowerCase();
-    var total = 0.0;
-
-    final title = item.title.toLowerCase();
-    final description = item.description.toLowerCase();
-    final segment = (item.segmentName ?? '').toLowerCase();
-    final genre = (item.genreName ?? '').toLowerCase();
-    final subGenre = (item.subGenreName ?? '').toLowerCase();
-    final tags = (item.tags ?? '').toLowerCase();
-    final promoter = (item.promoterName ?? '').toLowerCase();
-
-    if (title.contains(q)) total += 90;
-    if (description.contains(q)) total += 30;
-    if (segment.contains(q)) total += 28;
-    if (genre.contains(q)) total += 24;
-    if (subGenre.contains(q)) total += 20;
-    if (tags.contains(q)) total += 18;
-    if (promoter.contains(q)) total += 14;
-
-    return total;
-  }
-
-  List<EventItem> _rankItems(
+  Future<List<EventItem>> _rankItems(
     List<EventItem> items, {
     required String query,
     required List<UserPreference> preferences,
-  }) {
-    final segmentWeights = _segmentWeights(preferences);
-    final genreWeights = _genreWeights(preferences);
-    final trimmed = query.trim();
+  }) async {
+    final userLocation = await _getUserLocation();
+
+    final preferredSegmentIds = preferences
+        .where((preference) => preference.segmentId != null)
+        .map((preference) => preference.segmentId!)
+        .toSet();
+
+    final preferredGenreIds = preferences
+        .where((preference) => preference.genreId != null)
+        .map((preference) => preference.genreId!)
+        .toSet();
+
+    final preferredSubGenreIds = preferences
+        .where((preference) => preference.subGenreId != null)
+        .map((preference) => preference.subGenreId!)
+        .toSet();
 
     double score(EventItem item) {
-      var total = 0.0;
-      total += _preferenceScore(item, segmentWeights, genreWeights);
-      total += _basePopularityScore(item);
-
-      if (trimmed.isNotEmpty) {
-        total += _searchTextScore(item, trimmed);
-      }
-
-      return total;
+      return RecommendationScorer.score(
+        item: item,
+        userLatitude: userLocation.latitude,
+        userLongitude: userLocation.longitude,
+        preferredSegmentIds: preferredSegmentIds,
+        preferredGenreIds: preferredGenreIds,
+        preferredSubGenreIds: preferredSubGenreIds,
+        query: query,
+      ).total;
     }
 
-    final ranked = [...items]..sort((a, b) => score(b).compareTo(score(a)));
+    final ranked = [...items]
+      ..sort((a, b) => score(b).compareTo(score(a)));
+
     return ranked;
   }
 
@@ -177,7 +137,7 @@ class SearchController extends StateNotifier<SearchState> {
           await ref.read(eventsRepositoryProvider).searchEventsPaged(
                 searchTerm: trimmed.isEmpty ? null : trimmed,
                 page: nextPage,
-                pageSize: state.pageSize,
+                pageSize: state.sort.isClientSideRanked ? 100 : state.pageSize,
                 sortBy: state.sort.sortBy,
                 sortDescending: state.sort.sortDescending,
                 segmentId: state.filter.segmentId,
@@ -187,10 +147,12 @@ class SearchController extends StateNotifier<SearchState> {
 
       if (!mounted || requestId != _requestId) return;
 
-      var pageItems = result.items.where((item) => item.isVisibleInSearch).toList();
+      var pageItems = result.items
+          .where((item) => item.isVisibleInSearch)
+          .toList();
 
       if (state.sort.isClientSideRanked) {
-        pageItems = _rankItems(
+        pageItems = await _rankItems(
           pageItems,
           query: trimmed,
           preferences: _preferences(),

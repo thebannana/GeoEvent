@@ -1,4 +1,5 @@
-﻿using UserService.Domain.Enums;
+﻿using System.ComponentModel.DataAnnotations.Schema;
+using UserService.Domain.Enums;
 
 namespace UserService.Domain.Entities;
 
@@ -20,6 +21,7 @@ public class Report
     public User? Reporter { get; private set; }
     public User? ResolvedBy { get; private set; }
 
+    [NotMapped]
     public User? TargetUser { get; private set; }
 
     protected Report() { }
@@ -31,6 +33,15 @@ public class Report
         int reporterId,
         string? description = null)
     {
+        if (targetId <= 0)
+            throw new ArgumentException("Target ID must be greater than zero.", nameof(targetId));
+
+        if (reporterId <= 0)
+            throw new ArgumentException("Reporter ID must be greater than zero.", nameof(reporterId));
+
+        if (string.IsNullOrWhiteSpace(reason))
+            throw new ArgumentException("Reason is required.", nameof(reason));
+
         TargetType = targetType;
         TargetId = targetId;
         Reason = reason.Trim();

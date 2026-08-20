@@ -57,7 +57,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen>
   }
 
   Future<void> _pickBirthDate() async {
-    final now = DateTime.now();
+    final now = DateTime.now().toUtc();
     final initialDate = DateTime(now.year - 18, now.month, now.day);
 
     final date = await showDatePicker(

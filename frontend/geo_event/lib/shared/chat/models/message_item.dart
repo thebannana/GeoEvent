@@ -52,13 +52,13 @@ class MessageItem {
       isRead: json['isRead'] as bool? ?? false,
       likesCount: (json['likesCount'] as num?)?.toInt() ?? 0,
       isLikedByMe: json['isLikedByMe'] as bool? ?? false,
-      sentAt: DateTime.tryParse(json['sentAt']?.toString() ?? '')?.toLocal() ??
+      sentAt: DateTime.tryParse(json['sentAt']?.toString() ?? '')?.toUtc() ??
           DateTime.fromMillisecondsSinceEpoch(0),
       readAt: json['readAt'] != null
-          ? DateTime.tryParse(json['readAt'].toString())?.toLocal()
+          ? DateTime.tryParse(json['readAt'].toString())?.toUtc()
           : null,
       editedAt: json['editedAt'] != null
-          ? DateTime.tryParse(json['editedAt'].toString())?.toLocal()
+          ? DateTime.tryParse(json['editedAt'].toString())?.toUtc()
           : null,
       senderDisplayName: json['senderDisplayName']?.toString(),
       senderAvatarUrl: json['senderAvatarUrl']?.toString(),

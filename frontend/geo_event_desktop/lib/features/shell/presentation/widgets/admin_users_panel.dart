@@ -1,8 +1,10 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 
+import '../../../../core/constants/app_roles.dart';
+import '../../../../core/errors/error_mapper.dart';
 import '../../../../core/theme/app_theme_colors.dart';
+import '../../../../core/utils/debouncer.dart';
+import '../../../../core/utils/logger.dart';
 import '../../../../shared/admin_profile/data/admin_users_repository.dart';
 import '../../../../shared/admin_profile/models/user_profile.dart';
 import '../screens/edit_user_screen.dart';
@@ -21,9 +23,17 @@ class AdminUsersPanel extends StatefulWidget {
 }
 
 class _AdminUsersPanelState extends State<AdminUsersPanel> {
-  final TextEditingController _searchController = TextEditingController();
+  static const _loggerTag = 'AdminUsersPanel';
 
-  Timer? _searchDebounce;
+  static const _allRolesFilter = '__all_roles__';
+  static const _allStatusesFilter = '__all_statuses__';
+  static const _activeStatusFilter = '__active__';
+  static const _bannedStatusFilter = '__banned__';
+
+  final TextEditingController _searchController = TextEditingController();
+  final Debouncer _searchDebouncer = Debouncer(
+    delay: const Duration(milliseconds: 450),
+  );
 
   List<_AdminUserRowData> _users = const [];
   bool _isLoading = true;
@@ -34,19 +44,21 @@ class _AdminUsersPanelState extends State<AdminUsersPanel> {
   final int _pageSize = 10;
   int _totalCount = 0;
 
+  // null means: do not apply that filter.
   String? _roleFilter;
   bool? _isBannedFilter;
 
   @override
   void initState() {
     super.initState();
-    _roleFilter = 'User';
+
+    // Keep both filters null so the initial request is truly "All users".
     _loadUsers();
   }
 
   @override
   void dispose() {
-    _searchDebounce?.cancel();
+    _searchDebouncer.dispose();
     _searchController.dispose();
     super.dispose();
   }
@@ -82,7 +94,14 @@ class _AdminUsersPanelState extends State<AdminUsersPanel> {
         _users = result.items.map(_AdminUserRowData.fromProfile).toList();
         _isLoading = false;
       });
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'Failed to load users list.',
+        tag: _loggerTag,
+        error: error,
+        stackTrace: stackTrace,
+      );
+
       if (!mounted) return;
 
       setState(() {
@@ -94,24 +113,28 @@ class _AdminUsersPanelState extends State<AdminUsersPanel> {
 
   void _onSearchChanged(String _) {
     setState(() {});
-    _searchDebounce?.cancel();
-    _searchDebounce = Timer(const Duration(milliseconds: 450), () {
+
+    _searchDebouncer.run(() {
       if (!mounted) return;
       _loadUsers(page: 1);
     });
   }
 
   Future<void> _clearSearch() async {
-    _searchDebounce?.cancel();
+    _searchDebouncer.cancel();
     _searchController.clear();
+
     setState(() {});
+
     await _loadUsers(page: 1);
   }
 
   void _showSnack(String message) {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
+      ..showSnackBar(
+        SnackBar(content: Text(message)),
+      );
   }
 
   Future<void> _openUserProfile(_AdminUserRowData user) async {
@@ -160,16 +183,33 @@ class _AdminUsersPanelState extends State<AdminUsersPanel> {
 
     try {
       await widget.repository.deleteUser(user.userId);
+
       await _loadUsers(
         page: _users.length == 1 && _page > 1 ? _page - 1 : _page,
         showLoader: false,
       );
+
       if (!mounted) return;
       _showSnack('${user.displayName} deleted successfully.');
-    } catch (_) {
-      if (!mounted) return;
-      _showSnack('Failed to delete ${user.displayName}.');
-    } finally {
+    } catch (error, stackTrace) {
+  AppLogger.error(
+    'Failed to delete user ${user.userId}.',
+    tag: _loggerTag,
+    error: error,
+    stackTrace: stackTrace,
+  );
+
+  if (!mounted) return;
+
+  _showSnack(
+    ErrorMapper.toMessage(
+      error,
+      stackTrace: stackTrace,
+      fallbackMessage:
+          'Could not delete ${user.displayName}. Please try again.',
+    ),
+  );
+} finally {
       if (mounted) {
         setState(() => _isActionLoading = false);
       }
@@ -195,14 +235,28 @@ class _AdminUsersPanelState extends State<AdminUsersPanel> {
             ? '${user.displayName} unbanned successfully.'
             : '${user.displayName} banned successfully.',
       );
-    } catch (_) {
-      if (!mounted) return;
-      _showSnack(
-        user.isBanned
-            ? 'Failed to unban ${user.displayName}.'
-            : 'Failed to ban ${user.displayName}.',
-      );
-    } finally {
+    } catch (error, stackTrace) {
+  AppLogger.error(
+    user.isBanned
+        ? 'Failed to unban ${user.displayName}.'
+        : 'Failed to ban ${user.displayName}.',
+    tag: _loggerTag,
+    error: error,
+    stackTrace: stackTrace,
+  );
+
+  if (!mounted) return;
+
+  _showSnack(
+    ErrorMapper.toMessage(
+      error,
+      stackTrace: stackTrace,
+      fallbackMessage: user.isBanned
+          ? 'Could not unban ${user.displayName}. Please try again.'
+          : 'Could not ban ${user.displayName}. Please try again.',
+    ),
+  );
+} finally {
       if (mounted) {
         setState(() => _isActionLoading = false);
       }
@@ -229,6 +283,7 @@ class _AdminUsersPanelState extends State<AdminUsersPanel> {
     setState(() {
       _isBannedFilter = value;
     });
+
     await _loadUsers(page: 1);
   }
 
@@ -236,6 +291,7 @@ class _AdminUsersPanelState extends State<AdminUsersPanel> {
     setState(() {
       _roleFilter = value;
     });
+
     await _loadUsers(page: 1);
   }
 
@@ -247,6 +303,11 @@ class _AdminUsersPanelState extends State<AdminUsersPanel> {
   String _roleFilterLabel() {
     if (_roleFilter == null) return 'All roles';
     return _roleFilter!;
+  }
+
+  String _statusFilterLabel() {
+    if (_isBannedFilter == null) return 'All';
+    return _isBannedFilter! ? 'Banned' : 'Active';
   }
 
   @override
@@ -312,21 +373,29 @@ class _AdminUsersPanelState extends State<AdminUsersPanel> {
                 ),
               ),
               const SizedBox(width: 12),
-              PopupMenuButton<bool?>(
+              PopupMenuButton<String>(
                 tooltip: 'Filter by status',
-                initialValue: _isBannedFilter,
-                onSelected: _setBannedFilter,
+                onSelected: (value) {
+                  final bool? bannedFilter = switch (value) {
+                    _allStatusesFilter => null,
+                    _activeStatusFilter => false,
+                    _bannedStatusFilter => true,
+                    _ => null,
+                  };
+
+                  _setBannedFilter(bannedFilter);
+                },
                 itemBuilder: (context) => const [
-                  PopupMenuItem<bool?>(
-                    value: null,
+                  PopupMenuItem<String>(
+                    value: _allStatusesFilter,
                     child: Text('All users'),
                   ),
-                  PopupMenuItem<bool?>(
-                    value: false,
+                  PopupMenuItem<String>(
+                    value: _activeStatusFilter,
                     child: Text('Active only'),
                   ),
-                  PopupMenuItem<bool?>(
-                    value: true,
+                  PopupMenuItem<String>(
+                    value: _bannedStatusFilter,
                     child: Text('Banned only'),
                   ),
                 ],
@@ -350,11 +419,7 @@ class _AdminUsersPanelState extends State<AdminUsersPanel> {
                       ),
                       const SizedBox(width: 8),
                       Text(
-                        _isBannedFilter == null
-                            ? 'All'
-                            : _isBannedFilter!
-                                ? 'Banned'
-                                : 'Active',
+                        _statusFilterLabel(),
                         style: textTheme.labelLarge?.copyWith(
                           color: _isBannedFilter == null
                               ? colors.textSecondary
@@ -367,22 +432,25 @@ class _AdminUsersPanelState extends State<AdminUsersPanel> {
                 ),
               ),
               const SizedBox(width: 12),
-              PopupMenuButton<String?>(
+              PopupMenuButton<String>(
                 tooltip: 'Filter by role',
-                initialValue: _roleFilter,
-                onSelected: _setRoleFilter,
+                onSelected: (value) {
+                  _setRoleFilter(
+                    value == _allRolesFilter ? null : value,
+                  );
+                },
                 itemBuilder: (context) => const [
-                  PopupMenuItem<String?>(
-                    value: null,
+                  PopupMenuItem<String>(
+                    value: _allRolesFilter,
                     child: Text('All roles'),
                   ),
-                  PopupMenuItem<String?>(
-                    value: 'User',
-                    child: Text('User'),
+                  PopupMenuItem<String>(
+                    value: AppRoles.user,
+                    child: Text(AppRoles.user),
                   ),
-                  PopupMenuItem<String?>(
-                    value: 'Admin',
-                    child: Text('Admin'),
+                  PopupMenuItem<String>(
+                    value: AppRoles.admin,
+                    child: Text(AppRoles.admin),
                   ),
                 ],
                 child: Container(
@@ -486,7 +554,8 @@ class _AdminUsersPanelState extends State<AdminUsersPanel> {
                                   child: LayoutBuilder(
                                     builder: (context, constraints) {
                                       return ClipRRect(
-                                        borderRadius: BorderRadius.circular(22),
+                                        borderRadius:
+                                            BorderRadius.circular(22),
                                         child: Scrollbar(
                                           thumbVisibility: true,
                                           child: SingleChildScrollView(
@@ -496,9 +565,10 @@ class _AdminUsersPanelState extends State<AdminUsersPanel> {
                                                 minWidth: constraints.maxWidth,
                                               ),
                                               child: SizedBox(
-                                                width: constraints.maxWidth < 1220
-                                                    ? 1220
-                                                    : constraints.maxWidth,
+                                                width:
+                                                    constraints.maxWidth < 1220
+                                                        ? 1220
+                                                        : constraints.maxWidth,
                                                 child: Column(
                                                   children: [
                                                     _UsersTableHeader(
@@ -507,38 +577,52 @@ class _AdminUsersPanelState extends State<AdminUsersPanel> {
                                                     ),
                                                     Divider(
                                                       height: 1,
-                                                      color: colors.borderSoft,
+                                                      color:
+                                                          colors.borderSoft,
                                                     ),
                                                     Expanded(
                                                       child: ListView.separated(
                                                         padding:
-                                                            const EdgeInsets.symmetric(
+                                                            const EdgeInsets
+                                                                .symmetric(
                                                           vertical: 6,
                                                         ),
-                                                        itemCount: _users.length,
-                                                        separatorBuilder: (_, __) =>
-                                                            Divider(
+                                                        itemCount:
+                                                            _users.length,
+                                                        separatorBuilder:
+                                                            (_, _) => Divider(
                                                           height: 1,
                                                           indent: 18,
                                                           endIndent: 18,
-                                                          color: colors.borderSoft
+                                                          color: colors
+                                                              .borderSoft
                                                               .withValues(
                                                             alpha: 0.7,
                                                           ),
                                                         ),
                                                         itemBuilder:
                                                             (context, index) {
-                                                          final user = _users[index];
+                                                          final user =
+                                                              _users[index];
+
                                                           return _UserRow(
                                                             user: user,
                                                             onViewProfile: () =>
-                                                                _openUserProfile(user),
+                                                                _openUserProfile(
+                                                              user,
+                                                            ),
                                                             onEdit: () =>
-                                                                _editUser(user),
+                                                                _editUser(
+                                                              user,
+                                                            ),
                                                             onDelete: () =>
-                                                                _confirmDelete(user),
+                                                                _confirmDelete(
+                                                              user,
+                                                            ),
                                                             onToggleBan: () =>
-                                                                _toggleBan(user),
+                                                                _toggleBan(
+                                                              user,
+                                                            ),
                                                           );
                                                         },
                                                       ),
@@ -579,9 +663,8 @@ class _AdminUsersPanelState extends State<AdminUsersPanel> {
             page: _page,
             totalPages: _totalPages,
             onPrevious: _page > 1 ? () => _loadUsers(page: _page - 1) : null,
-            onNext: _page < _totalPages
-                ? () => _loadUsers(page: _page + 1)
-                : null,
+            onNext:
+                _page < _totalPages ? () => _loadUsers(page: _page + 1) : null,
           ),
         ],
       ),
@@ -826,7 +909,11 @@ class _ActionIconButton extends StatelessWidget {
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: colors.borderSoft),
           ),
-          child: Icon(icon, size: 18, color: color),
+          child: Icon(
+            icon,
+            size: 18,
+            color: color,
+          ),
         ),
       ),
     );
@@ -910,7 +997,6 @@ class _AdminUserRowData {
   }
 
   int get userId => profile.userId;
-  int get id => profile.userId;
 
   String get fullName => '${profile.firstName} ${profile.lastName}'.trim();
 
@@ -925,8 +1011,11 @@ class _AdminUserRowData {
   }
 
   String get phoneNumber => profile.phoneNumber ?? '';
+
   String get email => profile.email.trim().isEmpty ? 'No email' : profile.email;
+
   String get username => profile.username;
+
   String get displayUsername {
     final value = profile.username.trim();
     if (value.isEmpty) return '@user';
@@ -934,16 +1023,10 @@ class _AdminUserRowData {
   }
 
   String get role => profile.role.trim().isEmpty ? 'User' : profile.role;
-  bool get isBanned => profile.isBanned;
-  String? get avatarUrl => profile.imageUrl;
 
-  _AdminUserRowData copyWith({
-    UserProfile? profile,
-  }) {
-    return _AdminUserRowData(
-      profile: profile ?? this.profile,
-    );
-  }
+  bool get isBanned => profile.isBanned;
+
+  String? get avatarUrl => profile.imageUrl;
 }
 
 class _UserAvatar extends StatelessWidget {
@@ -980,9 +1063,8 @@ class _UserAvatar extends StatelessWidget {
         ? colorScheme.error.withValues(alpha: 0.12)
         : const Color(0xFFF3EAFE);
 
-    final fallbackForeground = isBanned
-        ? colorScheme.error
-        : const Color(0xFF7C66B3);
+    final fallbackForeground =
+        isBanned ? colorScheme.error : const Color(0xFF7C66B3);
 
     Widget fallback() {
       return Container(
@@ -1020,7 +1102,7 @@ class _UserAvatar extends StatelessWidget {
         child: Image.network(
           normalizedUrl,
           fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => fallback(),
+          errorBuilder: (_, _, _) => fallback(),
           loadingBuilder: (context, child, progress) {
             if (progress == null) return child;
             return fallback();

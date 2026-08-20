@@ -1,3 +1,5 @@
+import '../../../core/utils/json_helpers.dart';
+
 class TicketScanResultDto {
   final bool isValid;
   final String status;
@@ -37,11 +39,7 @@ class TicketScanResultDto {
 
   factory TicketScanResultDto.fromJson(Map<String, dynamic> json) {
     DateTime? parseDate(dynamic value) {
-      final raw = value?.toString().trim();
-      if (raw == null || raw.isEmpty) return null;
-
-      final parsed = DateTime.tryParse(raw);
-      return parsed?.toLocal();
+      return JsonHelpers.parseDateTime(value);
     }
 
     return TicketScanResultDto(

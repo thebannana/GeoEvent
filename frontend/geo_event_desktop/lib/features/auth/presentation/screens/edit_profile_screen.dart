@@ -5,8 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/errors/error_mapper.dart';
 import '../../../../core/theme/app_theme_colors.dart';
 import '../../../../core/theme/app_theme_metrics.dart';
+import '../../../../core/utils/logger.dart';
 import '../../../../core/utils/validators.dart';
 import '../../../../shared/admin_profile/models/user_profile.dart';
 import '../../../shell/application/profile_controller.dart';
@@ -20,10 +22,13 @@ class EditProfileScreen extends ConsumerStatefulWidget {
   final UserProfile profile;
 
   @override
-  ConsumerState<EditProfileScreen> createState() => _EditProfileScreenState();
+  ConsumerState<EditProfileScreen> createState() =>
+      _EditProfileScreenState();
 }
 
 class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
+  static const _loggerTag = 'EditProfileScreen';
+
   final _formKey = GlobalKey<FormState>();
 
   late final TextEditingController _firstNameController;
@@ -42,82 +47,187 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   @override
   void initState() {
     super.initState();
-    _firstNameController = TextEditingController(text: widget.profile.firstName);
-    _lastNameController = TextEditingController(text: widget.profile.lastName);
-    _phoneController =
-        TextEditingController(text: widget.profile.phoneNumber ?? '');
-    _usernameController = TextEditingController(text: widget.profile.username);
-    _emailController = TextEditingController(text: widget.profile.email);
+
+    _firstNameController = TextEditingController(
+      text: widget.profile.firstName,
+    );
+    _lastNameController = TextEditingController(
+      text: widget.profile.lastName,
+    );
+    _phoneController = TextEditingController(
+      text: widget.profile.phoneNumber ?? '',
+    );
+    _usernameController = TextEditingController(
+      text: widget.profile.username,
+    );
+    _emailController = TextEditingController(
+      text: widget.profile.email,
+    );
+
     _uploadedImageUrl = widget.profile.imageUrl;
+
+    AppLogger.debug(
+      'Edit-profile screen initialized.',
+      tag: _loggerTag,
+    );
   }
 
   @override
   void dispose() {
+    AppLogger.debug(
+      'Edit-profile screen disposed.',
+      tag: _loggerTag,
+    );
+
     _firstNameController.dispose();
     _lastNameController.dispose();
     _phoneController.dispose();
     _usernameController.dispose();
     _emailController.dispose();
+
     super.dispose();
   }
 
   String? _validateOptionalPhone(String? value) {
     final text = (value ?? '').trim();
-    if (text.isEmpty) return null;
+
+    if (text.isEmpty) {
+      return null;
+    }
+
     return Validators.phoneNumber(text);
   }
 
   String? _normalizeOptionalPhone(String? value) {
     final text = (value ?? '').trim();
-    if (text.isEmpty) return null;
-    return text.replaceAll(RegExp(r'[\s\-\(\)]'), '');
+
+    if (text.isEmpty) {
+      return null;
+    }
+
+    return text.replaceAll(
+      RegExp(r'[\s\-\(\)]'),
+      '',
+    );
   }
 
   Future<void> _pickAvatar() async {
-    if (_isSubmitting || _isUploadingAvatar) return;
+    if (_isSubmitting || _isUploadingAvatar) {
+      AppLogger.debug(
+        'Avatar selection ignored because the screen is busy.',
+        tag: _loggerTag,
+      );
+      return;
+    }
 
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowMultiple: false,
-      withData: true,
-      allowedExtensions: ['png', 'jpg', 'jpeg', 'webp'],
+    AppLogger.debug(
+      'Avatar picker opened.',
+      tag: _loggerTag,
     );
 
-    if (!mounted || result == null || result.files.isEmpty) {
-      return;
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowMultiple: false,
+        withData: true,
+        allowedExtensions: const [
+          'png',
+          'jpg',
+          'jpeg',
+          'webp',
+        ],
+      );
+
+      if (!mounted || result == null || result.files.isEmpty) {
+        AppLogger.debug(
+          'Avatar selection was cancelled.',
+          tag: _loggerTag,
+        );
+        return;
+      }
+
+      final file = result.files.single;
+      final bytes = file.bytes;
+      final path = file.path;
+
+      if (bytes == null || bytes.isEmpty) {
+        AppLogger.warning(
+          'Selected avatar did not contain readable bytes.',
+          tag: _loggerTag,
+        );
+
+        _showMessage('Unable to read the selected image.');
+        return;
+      }
+
+      if (path == null || path.trim().isEmpty) {
+        AppLogger.warning(
+          'Selected avatar did not contain a valid file path.',
+          tag: _loggerTag,
+        );
+
+        _showMessage('Unable to access the selected image path.');
+        return;
+      }
+
+      setState(() {
+        _selectedAvatarBytes = bytes;
+        _selectedAvatarPath = path;
+      });
+
+      AppLogger.info(
+        'Avatar selected successfully.',
+        tag: _loggerTag,
+      );
+
+      await _uploadSelectedAvatar();
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'Avatar picker failed.',
+        tag: _loggerTag,
+        error: error,
+        stackTrace: stackTrace,
+      );
+
+      if (!mounted) return;
+
+      _showMessage(
+        ErrorMapper.toMessage(
+          error,
+          stackTrace: stackTrace,
+          fallbackMessage: 'Unable to select the avatar.',
+        ),
+      );
     }
-
-    final file = result.files.single;
-    final bytes = file.bytes;
-    final path = file.path;
-
-    if (bytes == null || bytes.isEmpty) {
-      _showMessage('Unable to read the selected image.');
-      return;
-    }
-
-    if (path == null || path.trim().isEmpty) {
-      _showMessage('Unable to access the selected image path.');
-      return;
-    }
-
-    setState(() {
-      _selectedAvatarBytes = bytes;
-      _selectedAvatarPath = path;
-    });
-
-    await _uploadSelectedAvatar();
   }
 
   Future<void> _uploadSelectedAvatar() async {
     final filePath = _selectedAvatarPath;
+
     if (filePath == null || filePath.trim().isEmpty) {
+      AppLogger.warning(
+        'Avatar upload skipped because the file path was empty.',
+        tag: _loggerTag,
+      );
+      return;
+    }
+
+    if (_isUploadingAvatar) {
+      AppLogger.debug(
+        'Duplicate avatar upload ignored.',
+        tag: _loggerTag,
+      );
       return;
     }
 
     setState(() {
       _isUploadingAvatar = true;
     });
+
+    AppLogger.info(
+      'Avatar upload started.',
+      tag: _loggerTag,
+    );
 
     try {
       final imageUrl = await ref
@@ -126,34 +236,106 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
 
       if (!mounted) return;
 
+      final normalizedImageUrl = imageUrl.trim();
+
+      if (normalizedImageUrl.isEmpty) {
+        AppLogger.warning(
+          'Avatar upload returned an empty image URL.',
+          tag: _loggerTag,
+        );
+
+        _showMessage(
+          'Avatar upload did not return a valid image URL.',
+        );
+        return;
+      }
+
       setState(() {
-        _uploadedImageUrl = imageUrl;
+        _uploadedImageUrl = normalizedImageUrl;
       });
 
+      AppLogger.info(
+        'Avatar upload completed successfully.',
+        tag: _loggerTag,
+      );
+
       _showMessage('Avatar uploaded successfully.');
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'Avatar upload failed.',
+        tag: _loggerTag,
+        error: error,
+        stackTrace: stackTrace,
+      );
+
       if (!mounted) return;
-      _showMessage('Failed to upload avatar.');
+
+      _showMessage(
+        ErrorMapper.toMessage(
+          error,
+          stackTrace: stackTrace,
+          fallbackMessage: 'Failed to upload avatar.',
+        ),
+      );
     } finally {
       if (mounted) {
         setState(() {
           _isUploadingAvatar = false;
         });
       }
+
+      AppLogger.debug(
+        'Avatar upload state reset.',
+        tag: _loggerTag,
+      );
     }
   }
 
   Future<void> _submit() async {
+    if (_isSubmitting) {
+      AppLogger.debug(
+        'Duplicate profile-submit action ignored.',
+        tag: _loggerTag,
+      );
+      return;
+    }
+
+    if (_isUploadingAvatar) {
+      AppLogger.debug(
+        'Profile-submit action ignored while avatar upload is active.',
+        tag: _loggerTag,
+      );
+      return;
+    }
+
     final form = _formKey.currentState;
-    if (form == null || !form.validate() || _isSubmitting || _isUploadingAvatar) {
+
+    if (form == null) {
+      AppLogger.warning(
+        'Profile form state was unavailable.',
+        tag: _loggerTag,
+      );
       return;
     }
 
     FocusScope.of(context).unfocus();
 
+    if (!form.validate()) {
+      AppLogger.debug(
+        'Profile form validation failed.',
+        tag: _loggerTag,
+      );
+      return;
+    }
+
     setState(() {
       _isSubmitting = true;
     });
+
+    AppLogger.info(
+      'Profile update started.',
+      tag: _loggerTag,
+    );
 
     try {
       final success =
@@ -162,37 +344,114 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                 email: _emailController.text.trim(),
                 firstName: _firstNameController.text.trim(),
                 lastName: _lastNameController.text.trim(),
-                phoneNumber: _normalizeOptionalPhone(_phoneController.text),
+                phoneNumber: _normalizeOptionalPhone(
+                  _phoneController.text,
+                ),
                 imageUrl: _uploadedImageUrl,
               );
 
       if (!mounted) return;
 
       if (!success) {
+        AppLogger.warning(
+          'Profile update returned an unsuccessful result.',
+          tag: _loggerTag,
+        );
+
         _showMessage('Failed to update profile.');
         return;
       }
 
+      AppLogger.info(
+        'Profile update completed successfully.',
+        tag: _loggerTag,
+      );
+
       _showMessage('Profile updated successfully.');
       context.pop(true);
-    } catch (_) {
+    } catch (error, stackTrace) {
+      AppLogger.error(
+        'Profile update failed.',
+        tag: _loggerTag,
+        error: error,
+        stackTrace: stackTrace,
+      );
+
       if (!mounted) return;
-      _showMessage('Something went wrong while updating the profile.');
+
+      _showMessage(
+        ErrorMapper.toMessage(
+          error,
+          stackTrace: stackTrace,
+          fallbackMessage:
+              'Something went wrong while updating the profile.',
+        ),
+      );
     } finally {
       if (mounted) {
         setState(() {
           _isSubmitting = false;
         });
       }
+
+      AppLogger.debug(
+        'Profile-submit state reset.',
+        tag: _loggerTag,
+      );
     }
+  }
+
+  void _goBack() {
+    if (_isSubmitting || _isUploadingAvatar) {
+      return;
+    }
+
+    AppLogger.debug(
+      'User left the edit-profile screen.',
+      tag: _loggerTag,
+    );
+
+    context.pop();
   }
 
   void _showMessage(String message) {
     final messenger = ScaffoldMessenger.of(context);
-    messenger.hideCurrentSnackBar();
-    messenger.showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+        ),
+      );
+  }
+
+  String get _displayName {
+    return [
+      _firstNameController.text.trim(),
+      _lastNameController.text.trim(),
+    ].where((value) => value.isNotEmpty).join(' ');
+  }
+
+  String get _avatarLetter {
+    final displayName = _displayName;
+    final username = _usernameController.text.trim();
+
+    if (displayName.isNotEmpty) {
+      return displayName.characters.first.toUpperCase();
+    }
+
+    if (username.isNotEmpty) {
+      return username.characters.first.toUpperCase();
+    }
+
+    return 'A';
+  }
+
+  bool get _hasRemoteAvatar {
+    final imageUrl = _uploadedImageUrl?.trim();
+
+    return imageUrl != null && imageUrl.isNotEmpty;
   }
 
   @override
@@ -202,19 +461,8 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     final textTheme = theme.textTheme;
     final colorScheme = theme.colorScheme;
 
-    final displayName = [
-      _firstNameController.text.trim(),
-      _lastNameController.text.trim(),
-    ].where((value) => value.isNotEmpty).join(' ');
-
-    final avatarLetter = displayName.isNotEmpty
-        ? displayName.characters.first.toUpperCase()
-        : (_usernameController.text.trim().isNotEmpty
-            ? _usernameController.text.trim().characters.first.toUpperCase()
-            : 'A');
-
-    final hasRemoteAvatar =
-        _uploadedImageUrl != null && _uploadedImageUrl!.trim().isNotEmpty;
+    final displayName = _displayName;
+    final hasRemoteAvatar = _hasRemoteAvatar;
 
     return Scaffold(
       backgroundColor: colors.background,
@@ -222,13 +470,17 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 760),
+            constraints: const BoxConstraints(
+              maxWidth: 760,
+            ),
             child: Container(
               padding: const EdgeInsets.all(32),
               decoration: BoxDecoration(
                 color: colors.card,
                 borderRadius: BorderRadius.circular(28),
-                border: Border.all(color: colors.border),
+                border: Border.all(
+                  color: colors.border,
+                ),
                 boxShadow: [
                   BoxShadow(
                     color: theme.brightness == Brightness.dark
@@ -247,8 +499,10 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                     TextButton.icon(
                       onPressed: _isSubmitting || _isUploadingAvatar
                           ? null
-                          : () => context.pop(),
-                      icon: const Icon(Icons.arrow_back_rounded),
+                          : _goBack,
+                      icon: const Icon(
+                        Icons.arrow_back_rounded,
+                      ),
                       label: const Text('Back'),
                       style: TextButton.styleFrom(
                         foregroundColor: colorScheme.primary,
@@ -288,11 +542,14 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                           backgroundImage: _selectedAvatarBytes != null
                               ? MemoryImage(_selectedAvatarBytes!)
                               : hasRemoteAvatar
-                                  ? NetworkImage(_uploadedImageUrl!.trim())
+                                  ? NetworkImage(
+                                      _uploadedImageUrl!.trim(),
+                                    )
                                   : null,
-                          child: _selectedAvatarBytes == null && !hasRemoteAvatar
+                          child: _selectedAvatarBytes == null &&
+                                  !hasRemoteAvatar
                               ? Text(
-                                  avatarLetter,
+                                  _avatarLetter,
                                   style: textTheme.titleLarge?.copyWith(
                                     fontWeight: FontWeight.w800,
                                     color: colors.textPrimary,
@@ -306,7 +563,9 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                displayName.isEmpty ? 'Unnamed user' : displayName,
+                                displayName.isEmpty
+                                    ? 'Unnamed user'
+                                    : displayName,
                                 style: textTheme.titleMedium?.copyWith(
                                   fontWeight: FontWeight.w700,
                                   color: colors.textPrimary,
@@ -325,30 +584,39 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                                 runSpacing: 10,
                                 children: [
                                   OutlinedButton.icon(
-                                    onPressed: _isSubmitting || _isUploadingAvatar
-                                        ? null
-                                        : _pickAvatar,
+                                    onPressed:
+                                        _isSubmitting || _isUploadingAvatar
+                                            ? null
+                                            : _pickAvatar,
                                     icon: _isUploadingAvatar
                                         ? SizedBox(
                                             width: 16,
                                             height: 16,
-                                            child: CircularProgressIndicator(
+                                            child:
+                                                CircularProgressIndicator(
                                               strokeWidth: 2,
                                               valueColor:
-                                                  AlwaysStoppedAnimation<Color>(
+                                                  AlwaysStoppedAnimation<
+                                                      Color>(
                                                 colorScheme.primary,
                                               ),
                                             ),
                                           )
-                                        : const Icon(Icons.photo_camera_back_outlined),
+                                        : const Icon(
+                                            Icons
+                                                .photo_camera_back_outlined,
+                                          ),
                                     label: Text(
                                       _isUploadingAvatar
                                           ? 'Uploading...'
                                           : 'Change avatar',
                                     ),
                                     style: OutlinedButton.styleFrom(
-                                      foregroundColor: colorScheme.primary,
-                                      side: BorderSide(color: colors.border),
+                                      foregroundColor:
+                                          colorScheme.primary,
+                                      side: BorderSide(
+                                        color: colors.border,
+                                      ),
                                       shape: RoundedRectangleBorder(
                                         borderRadius: BorderRadius.circular(
                                           AppThemeMetrics.radiusMd,
@@ -402,6 +670,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                       enabled: !_isSubmitting,
                       textInputAction: TextInputAction.next,
                       validator: Validators.username,
+                      onChanged: (_) => setState(() {}),
                     ),
                     const SizedBox(height: 18),
                     _EditProfileField(
@@ -433,7 +702,9 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                       decoration: BoxDecoration(
                         color: colors.inputFill,
                         borderRadius: BorderRadius.circular(18),
-                        border: Border.all(color: colors.borderSoft),
+                        border: Border.all(
+                          color: colors.borderSoft,
+                        ),
                       ),
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -466,10 +737,12 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                             child: OutlinedButton(
                               onPressed: _isSubmitting || _isUploadingAvatar
                                   ? null
-                                  : () => context.pop(),
+                                  : _goBack,
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: colors.textSecondary,
-                                side: BorderSide(color: colors.border),
+                                side: BorderSide(
+                                  color: colors.border,
+                                ),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(
                                     AppThemeMetrics.radiusMd + 2,
@@ -510,8 +783,9 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                                       height: 22,
                                       child: CircularProgressIndicator(
                                         strokeWidth: 2.4,
-                                        valueColor: AlwaysStoppedAnimation<Color>(
-                                          colorScheme.primary,
+                                        valueColor:
+                                            AlwaysStoppedAnimation<Color>(
+                                          colorScheme.onPrimary,
                                         ),
                                       ),
                                     )
@@ -569,8 +843,12 @@ class _EditProfileField extends StatelessWidget {
     final colors = theme.appColors;
 
     final border = OutlineInputBorder(
-      borderRadius: BorderRadius.circular(AppThemeMetrics.radiusMd),
-      borderSide: BorderSide(color: colors.borderSoft),
+      borderRadius: BorderRadius.circular(
+        AppThemeMetrics.radiusMd,
+      ),
+      borderSide: BorderSide(
+        color: colors.borderSoft,
+      ),
     );
 
     return Column(
@@ -601,29 +879,41 @@ class _EditProfileField extends StatelessWidget {
             fillColor: colors.inputFill,
             hintText: hintText,
             hintStyle: theme.textTheme.bodyMedium?.copyWith(
-              color: colors.textSecondary.withValues(alpha: 0.72),
+              color: colors.textSecondary.withValues(
+                alpha: 0.72,
+              ),
               fontWeight: FontWeight.w500,
             ),
             prefixIcon: Icon(
               prefixIcon,
               color: colors.textSecondary,
             ),
-            contentPadding: const EdgeInsets.symmetric(vertical: 16),
+            contentPadding: const EdgeInsets.symmetric(
+              vertical: 16,
+            ),
             border: border,
             enabledBorder: border,
             focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(AppThemeMetrics.radiusMd),
+              borderRadius: BorderRadius.circular(
+                AppThemeMetrics.radiusMd,
+              ),
               borderSide: BorderSide(
                 color: theme.colorScheme.primary,
                 width: 1.2,
               ),
             ),
             errorBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(AppThemeMetrics.radiusMd),
-              borderSide: BorderSide(color: theme.colorScheme.error),
+              borderRadius: BorderRadius.circular(
+                AppThemeMetrics.radiusMd,
+              ),
+              borderSide: BorderSide(
+                color: theme.colorScheme.error,
+              ),
             ),
             focusedErrorBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(AppThemeMetrics.radiusMd),
+              borderRadius: BorderRadius.circular(
+                AppThemeMetrics.radiusMd,
+              ),
               borderSide: BorderSide(
                 color: theme.colorScheme.error,
                 width: 1.2,

@@ -79,7 +79,7 @@ class CommentsApi {
         data: {
           'eventId': eventId,
           'content': content.trim(),
-          if (parentCommentId != null) 'parentCommentId': parentCommentId,
+          'parentCommentId': ?parentCommentId,
         },
       );
 

@@ -18,7 +18,10 @@ class PreferencesApi {
       queryParameters: query.toQueryParameters(),
     );
 
-    return _parsePaged(response.data, UserPreference.fromJson);
+    return _parsePaged(
+      response.data,
+      UserPreference.fromJson,
+    );
   }
 
   Future<PagedResult<UserPreference>> getPreferencesForUser(
@@ -30,23 +33,9 @@ class PreferencesApi {
       queryParameters: query.toQueryParameters(),
     );
 
-    return _parsePaged(response.data, UserPreference.fromJson);
-  }
-
-  Future<void> deletePreference(int prefId) {
-    throw UnimplementedError(
-      'DELETE /api/preferences/{id} is not exposed by the current backend.',
-    );
-  }
-
-  Future<UserPreference> upsertPreference({
-    int? segmentId,
-    int? genreId,
-    int? subGenreId,
-    required double score,
-  }) async {
-    throw UnimplementedError(
-      'PUT /api/preferences is not exposed by the current backend.',
+    return _parsePaged(
+      response.data,
+      UserPreference.fromJson,
     );
   }
 
@@ -59,9 +48,14 @@ class PreferencesApi {
     }
 
     if (raw is Map) {
-      return PagedResult<T>.fromJson(Map<String, dynamic>.from(raw), fromJson);
+      return PagedResult<T>.fromJson(
+        Map<String, dynamic>.from(raw),
+        fromJson,
+      );
     }
 
-    throw Exception('Invalid paged response format.');
+    throw FormatException(
+      'Invalid paged response format.',
+    );
   }
 }

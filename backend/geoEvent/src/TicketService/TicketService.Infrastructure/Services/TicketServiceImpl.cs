@@ -49,15 +49,21 @@ public class TicketServiceImpl : ITicketService
         _configuration = configuration;
     }
 
-    public async Task<ServiceResult<PagedResult<AdminRefundRequestResponseDto>>> GetAdminRefundRequestsAsync(
+    public async Task<
+    ServiceResult<PagedResult<AdminRefundRequestResponseDto>>>
+    GetAdminRefundRequestsAsync(
         AdminRefundRequestsQueryDto query,
         int requesterId,
         string requesterRole)
     {
-        if (!string.Equals(requesterRole, "Admin", StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(
+                requesterRole,
+                "Admin",
+                StringComparison.OrdinalIgnoreCase))
         {
-            return ServiceResult<PagedResult<AdminRefundRequestResponseDto>>.Forbidden(
-                "Only admins can view refund requests.");
+            return ServiceResult<
+                PagedResult<AdminRefundRequestResponseDto>>.Forbidden(
+                    "Only admins can view refund requests.");
         }
 
         query ??= new AdminRefundRequestsQueryDto();
@@ -65,73 +71,114 @@ public class TicketServiceImpl : ITicketService
         var paged = await _repository.GetRefundRequestsAsync(query);
         var items = paged.Items.ToList();
 
-        var userIds = items.Select(x => x.UserId).Distinct().ToList();
+        var userIds = items
+            .Select(x => x.UserId)
+            .Distinct()
+            .ToList();
+
         var profiles = userIds.Count == 0
             ? new List<PublicUserProfileDto>()
             : await _userDirectoryService.GetPublicProfilesAsync(userIds);
 
-        var profilesById = profiles.ToDictionary(x => x.UserId);
+        var profilesById = profiles
+            .ToDictionary(x => x.UserId);
 
-        var eventIds = items.Select(x => x.EventId).Distinct().ToList();
+        var eventIds = items
+            .Select(x => x.EventId)
+            .Distinct()
+            .ToList();
 
         var eventFetchTasks = eventIds.ToDictionary(
             eventId => eventId,
             eventId => _internalEventLookupClient.GetEventAsync(eventId));
 
-        await Task.WhenAll(eventFetchTasks.Values);
+        var eventResults = await Task.WhenAll(
+            eventFetchTasks.Values);
 
-        var eventsById = eventFetchTasks.ToDictionary(
-            kvp => kvp.Key,
-            kvp => kvp.Value.Result);
+        var eventsById = eventFetchTasks.Keys
+            .Zip(eventResults)
+            .ToDictionary(
+                pair => pair.First,
+                pair => pair.Second);
 
-        var mapped = items.Select(r =>
-        {
-            profilesById.TryGetValue(r.UserId, out var profile);
-            eventsById.TryGetValue(r.EventId, out var ev);
-
-            var latestPayment = r.PaymentDetails?
-                .OrderByDescending(x => x.PaymentId)
-                .FirstOrDefault();
-
-            var eventTitle = !string.IsNullOrWhiteSpace(ev?.Title)
-                ? ev!.Title.Trim()
-                : $"Event #{r.EventId}";
-
-            return new AdminRefundRequestResponseDto
+        var mapped = items
+            .Select(r =>
             {
-                ReservationId = r.ReservationId,
-                RefundRequestId = $"RF-{r.ReservationId}",
-                EventId = r.EventId,
-                EventTitle = eventTitle,
-                EventImageUrl = ev?.CoverImageUrl,
-                UserId = r.UserId,
-                RequesterName = ResolveDisplayName(profile, r.UserId),
-                RequesterUsername = profile?.Username ?? $"user-{r.UserId}",
-                RequesterAvatarUrl = profile?.ImageUrl,
-                TargetName = eventTitle,
-                TargetUsername = $"event-{r.EventId}",
-                Title = BuildRefundTitle(r, eventTitle),
-                Preview = BuildRefundPreview(r),
-                FullContent = string.IsNullOrWhiteSpace(r.RefundReason)
-                    ? "Refund request submitted."
-                    : r.RefundReason.Trim(),
-                Amount = r.TotalAmount,
-                Currency = r.Currency,
-                AmountLabel = $"{r.TotalAmount:0.00} {r.Currency}",
-                QueueStatus = MapRefundQueueStatus(r.RefundRequestStatus),
-                RefundRequestStatus = r.RefundRequestStatus.ToString(),
-                CreatedAt = r.RefundRequestedAt ?? r.CreatedAt,
-                RequestedAt = r.RefundRequestedAt,
-                ReviewedAt = r.RefundReviewedAt,
-                ReviewedByUserId = r.RefundReviewedByUserId,
-                DecisionReason = r.RefundDecisionReason,
-                ModeratorAction = r.RefundModeratorAction,
-                PaymentMethod = latestPayment?.Method.ToString(),
-                PaymentStatus = latestPayment?.Status.ToString()
-            };
-        }).ToList();
+                profilesById.TryGetValue(
+                    r.UserId,
+                    out var profile);
 
-        return ServiceResult<PagedResult<AdminRefundRequestResponseDto>>.Ok(
+                eventsById.TryGetValue(
+                    r.EventId,
+                    out var ev);
+
+                var latestPayment = r.PaymentDetails?
+                    .OrderByDescending(x => x.PaymentId)
+                    .FirstOrDefault();
+
+                var eventTitle =
+                    !string.IsNullOrWhiteSpace(ev?.Title)
+                        ? ev!.Title.Trim()
+                        : $"Event #{r.EventId}";
+
+                return new AdminRefundRequestResponseDto
+                {
+                    ReservationId = r.ReservationId,
+                    RefundRequestId = $"RF-{r.ReservationId}",
+
+                    EventId = r.EventId,
+                    EventTitle = eventTitle,
+                    EventImageUrl = ev?.CoverImageUrl,
+
+                    UserId = r.UserId,
+                    RequesterName = ResolveDisplayName(
+                        profile,
+                        r.UserId),
+                    RequesterUsername =
+                        profile?.Username ?? $"user-{r.UserId}",
+                    RequesterAvatarUrl = profile?.ImageUrl,
+
+                    TargetName = eventTitle,
+                    TargetUsername = $"event-{r.EventId}",
+
+                    Title = BuildRefundTitle(
+                        r,
+                        eventTitle),
+
+                    Preview = BuildRefundPreview(r),
+
+                    FullContent =
+                        string.IsNullOrWhiteSpace(r.RefundReason)
+                            ? "Refund request submitted."
+                            : r.RefundReason.Trim(),
+
+                    Amount = r.TotalAmount,
+                    Currency = r.Currency,
+                    AmountLabel = $"{r.TotalAmount:0.00} {r.Currency}",
+
+                    QueueStatus = MapRefundQueueStatus(
+                        r.RefundRequestStatus),
+
+                    RefundRequestStatus =
+                        r.RefundRequestStatus.ToString(),
+
+                    CreatedAt =
+                        r.RefundRequestedAt ?? r.CreatedAt,
+
+                    RequestedAt = r.RefundRequestedAt,
+                    ReviewedAt = r.RefundReviewedAt,
+                    ReviewedByUserId = r.RefundReviewedByUserId,
+                    DecisionReason = r.RefundDecisionReason,
+                    ModeratorAction = r.RefundModeratorAction,
+
+                    PaymentMethod = latestPayment?.Method.ToString(),
+                    PaymentStatus = latestPayment?.Status.ToString()
+                };
+            })
+            .ToList();
+
+        return ServiceResult<
+            PagedResult<AdminRefundRequestResponseDto>>.Ok(
             new PagedResult<AdminRefundRequestResponseDto>
             {
                 Items = mapped,

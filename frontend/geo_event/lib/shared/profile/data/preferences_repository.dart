@@ -20,22 +20,4 @@ class PreferencesRepository {
   }) {
     return api.getPreferencesForUser(userId, query: query);
   }
-
-  Future<UserPreference> upsertPreference({
-    int? segmentId,
-    int? genreId,
-    int? subGenreId,
-    required double score,
-  }) {
-    return api.upsertPreference(
-      segmentId: segmentId,
-      genreId: genreId,
-      subGenreId: subGenreId,
-      score: score,
-    );
-  }
-
-  Future<void> deletePreference(int prefId) {
-    return api.deletePreference(prefId);
-  }
 }

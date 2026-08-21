@@ -199,6 +199,24 @@ public class Event
         UpdatedAt = DateTime.UtcNow;
     }
 
+    public void RestoreAsConfirmed()
+    {
+        if (Status != EventStatus.Cancelled)
+        {
+            throw new InvalidEventStateException(
+                "Only cancelled events can be restored.");
+        }
+
+        if (StartDateTime <= DateTime.UtcNow)
+        {
+            throw new InvalidEventStateException(
+                "Only events with a future start date can be restored.");
+        }
+
+        Status = EventStatus.Confirmed;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
     public void MarkAsFeatured()
     {
         IsFeatured = true;

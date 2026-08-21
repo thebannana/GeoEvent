@@ -168,14 +168,26 @@ public class EventServiceImpl : IEventService
         return ServiceResult<EventResponseDto>.Ok(MapToDto(ev));
     }
 
-    public async Task<ServiceResult<EventResponseDto>> AdminUpdateAsync(int eventId, UpdateEventDto dto)
+    public async Task<ServiceResult<EventResponseDto>> AdminUpdateAsync(
+    int eventId,
+    UpdateEventDto dto)
     {
         var ev = await _eventRepository.GetTrackedByIdAsync(eventId);
+
         if (ev is null)
-            return ServiceResult<EventResponseDto>.NotFound($"Event {eventId} not found.");
+        {
+            return ServiceResult<EventResponseDto>.NotFound(
+                $"Event {eventId} not found.");
+        }
 
         try
         {
+            var newStartDateTime =
+                dto.StartDateTime ?? ev.StartDateTime;
+
+            var wasCancelled =
+                ev.Status == EventStatus.Cancelled;
+
             ev.UpdateDetails(
                 segmentId: dto.SegmentId ?? ev.SegmentId,
                 genreId: dto.GenreId ?? ev.GenreId,
@@ -184,36 +196,56 @@ public class EventServiceImpl : IEventService
                 description: dto.Description ?? ev.Description,
                 latitude: dto.Latitude ?? ev.Latitude,
                 longitude: dto.Longitude ?? ev.Longitude,
-                startDateTime: dto.StartDateTime ?? ev.StartDateTime,
+                startDateTime: newStartDateTime,
                 endDateTime: dto.EndDateTime ?? ev.EndDateTime,
                 capacity: dto.Capacity ?? ev.Capacity,
                 price: dto.Price ?? ev.Price,
                 isFeatured: dto.IsFeatured ?? ev.IsFeatured,
                 tags: dto.Tags ?? ev.Tags,
-                accessibilityInfo: dto.AccessibilityInfo ?? ev.AccessibilityInfo,
-                promoterName: dto.PromoterName ?? ev.PromoterName,
+                accessibilityInfo:
+                    dto.AccessibilityInfo ?? ev.AccessibilityInfo,
+                promoterName:
+                    dto.PromoterName ?? ev.PromoterName,
                 locale: dto.Locale ?? ev.Locale
             );
 
+            if (wasCancelled &&
+                newStartDateTime > DateTime.UtcNow)
+            {
+                ev.RestoreAsConfirmed();
+            }
+
             await _eventRepository.UpdateAsync(ev);
 
-            await _publishEndpoint.Publish(new EventUpdatedMessage(
-                ev.EventId,
-                ev.Title,
-                ev.OrganizerId,
-                ev.StartDateTime,
-                ev.EndDateTime,
-                "Event updated by admin",
-                DateTime.UtcNow
-            ));
+            await _publishEndpoint.Publish(
+                new EventUpdatedMessage(
+                    ev.EventId,
+                    ev.Title,
+                    ev.OrganizerId,
+                    ev.StartDateTime,
+                    ev.EndDateTime,
+                    wasCancelled &&
+                    ev.Status == EventStatus.Confirmed
+                        ? "Cancelled event restored and confirmed by admin"
+                        : "Event updated by admin",
+                    DateTime.UtcNow));
 
-            var updated = await _eventRepository.GetByIdWithDetailsAsync(eventId) ?? ev;
-            return ServiceResult<EventResponseDto>.Ok(MapToDto(updated));
+            var updated =
+                await _eventRepository.GetByIdWithDetailsAsync(eventId)
+                ?? ev;
+
+            return ServiceResult<EventResponseDto>.Ok(
+                MapToDto(updated));
         }
         catch (InvalidEventDataException ex)
         {
-            _logger.LogWarning(ex, "Invalid event data while admin updated event {EventId}", eventId);
-            return ServiceResult<EventResponseDto>.Fail(ex.Message);
+            _logger.LogWarning(
+                ex,
+                "Invalid event data while admin updated event {EventId}",
+                eventId);
+
+            return ServiceResult<EventResponseDto>.Fail(
+                ex.Message);
         }
     }
 
@@ -1008,17 +1040,33 @@ public class EventServiceImpl : IEventService
         }
     }
 
-    public async Task<ServiceResult<EventResponseDto>> UpdateAsync(int eventId, UpdateEventDto dto, int requesterId)
+    public async Task<ServiceResult<EventResponseDto>> UpdateAsync(
+    int eventId,
+    UpdateEventDto dto,
+    int requesterId)
     {
         var ev = await _eventRepository.GetTrackedByIdAsync(eventId);
+
         if (ev is null)
-            return ServiceResult<EventResponseDto>.NotFound($"Event {eventId} not found.");
+        {
+            return ServiceResult<EventResponseDto>.NotFound(
+                $"Event {eventId} not found.");
+        }
 
         if (ev.OrganizerId != requesterId)
-            return ServiceResult<EventResponseDto>.Forbidden("You do not own this event.");
+        {
+            return ServiceResult<EventResponseDto>.Forbidden(
+                "You do not own this event.");
+        }
 
         try
         {
+            var newStartDateTime =
+                dto.StartDateTime ?? ev.StartDateTime;
+
+            var wasCancelled =
+                ev.Status == EventStatus.Cancelled;
+
             ev.UpdateDetails(
                 segmentId: dto.SegmentId ?? ev.SegmentId,
                 genreId: dto.GenreId ?? ev.GenreId,
@@ -1027,36 +1075,56 @@ public class EventServiceImpl : IEventService
                 description: dto.Description ?? ev.Description,
                 latitude: dto.Latitude ?? ev.Latitude,
                 longitude: dto.Longitude ?? ev.Longitude,
-                startDateTime: dto.StartDateTime ?? ev.StartDateTime,
+                startDateTime: newStartDateTime,
                 endDateTime: dto.EndDateTime ?? ev.EndDateTime,
                 capacity: dto.Capacity ?? ev.Capacity,
                 price: dto.Price ?? ev.Price,
                 isFeatured: dto.IsFeatured ?? ev.IsFeatured,
                 tags: dto.Tags ?? ev.Tags,
-                accessibilityInfo: dto.AccessibilityInfo ?? ev.AccessibilityInfo,
-                promoterName: dto.PromoterName ?? ev.PromoterName,
+                accessibilityInfo:
+                    dto.AccessibilityInfo ?? ev.AccessibilityInfo,
+                promoterName:
+                    dto.PromoterName ?? ev.PromoterName,
                 locale: dto.Locale ?? ev.Locale
             );
 
+            if (wasCancelled &&
+                newStartDateTime > DateTime.UtcNow)
+            {
+                ev.RestoreAsConfirmed();
+            }
+
             await _eventRepository.UpdateAsync(ev);
 
-            await _publishEndpoint.Publish(new EventUpdatedMessage(
-                ev.EventId,
-                ev.Title,
-                ev.OrganizerId,
-                ev.StartDateTime,
-                ev.EndDateTime,
-                null,
-                DateTime.UtcNow
-            ));
+            await _publishEndpoint.Publish(
+                new EventUpdatedMessage(
+                    ev.EventId,
+                    ev.Title,
+                    ev.OrganizerId,
+                    ev.StartDateTime,
+                    ev.EndDateTime,
+                    wasCancelled &&
+                    ev.Status == EventStatus.Confirmed
+                        ? "Cancelled event restored and confirmed"
+                        : null,
+                    DateTime.UtcNow));
 
-            var updated = await _eventRepository.GetByIdWithDetailsAsync(eventId) ?? ev;
-            return ServiceResult<EventResponseDto>.Ok(MapToDto(updated));
+            var updated =
+                await _eventRepository.GetByIdWithDetailsAsync(eventId)
+                ?? ev;
+
+            return ServiceResult<EventResponseDto>.Ok(
+                MapToDto(updated));
         }
         catch (InvalidEventDataException ex)
         {
-            _logger.LogWarning(ex, "Invalid event data while updating event {EventId}", eventId);
-            return ServiceResult<EventResponseDto>.Fail(ex.Message);
+            _logger.LogWarning(
+                ex,
+                "Invalid event data while updating event {EventId}",
+                eventId);
+
+            return ServiceResult<EventResponseDto>.Fail(
+                ex.Message);
         }
     }
 

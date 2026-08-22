@@ -130,7 +130,7 @@ Android APK:
 ```powershell
 flutter clean
 flutter pub get
-flutter build apk --release --dart-define=API_BASE_URL=http://10.0.2.2:5000
+flutter build apk --release --dart-define=API_BASE_URL=http://10.0.2.2:5000 --dart-define=MAPBOX_ACCESS_TOKEN=TOKEN
 ```
 
 Windows desktop:
@@ -138,7 +138,7 @@ Windows desktop:
 ```powershell
 flutter clean
 flutter pub get
-flutter build windows --release --dart-define=API_BASE_URL=http://localhost:5000
+flutter build windows --release --dart-define=API_BASE_URL=http://localhost:5000 --dart-define=MAPBOX_ACCESS_TOKEN=TOKEN
 ```
 
 ## Payment testing

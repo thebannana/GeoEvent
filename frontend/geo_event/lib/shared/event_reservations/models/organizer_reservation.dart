@@ -1,3 +1,5 @@
+import '../../../core/utils/json_helpers.dart';
+
 class OrganizerReservationDto {
   final int reservationId;
   final int userId;
@@ -22,13 +24,11 @@ class OrganizerReservationDto {
   final DateTime? refundReviewedAt;
   final int? refundReviewedByUserId;
   final String? refundDecisionReason;
-
   final String? paymentMethod;
   final String? paymentStatus;
   final String? paymentMessage;
   final DateTime? validatedAt;
   final bool canCollectCash;
-
   final int totalTickets;
   final int validatedTicketCount;
 
@@ -65,76 +65,156 @@ class OrganizerReservationDto {
     required this.validatedTicketCount,
   });
 
-  factory OrganizerReservationDto.fromJson(Map<String, dynamic> json) {
-    DateTime? tryParse(dynamic value) {
-      if (value == null) return null;
-      final raw = value.toString().trim();
-      if (raw.isEmpty) return null;
-      return DateTime.tryParse(raw)?.toUtc();
-    }
-
-    bool readBool(dynamic value) {
-      if (value is bool) return value;
-      if (value is num) return value != 0;
-      final raw = value?.toString().trim().toLowerCase();
-      return raw == 'true' || raw == '1';
-    }
-
+  factory OrganizerReservationDto.fromJson(
+    Map<String, dynamic> json,
+  ) {
     return OrganizerReservationDto(
-      reservationId: (json['reservationId'] as num).toInt(),
-      userId: (json['userId'] as num).toInt(),
-      eventId: (json['eventId'] as num).toInt(),
-      eventTicketId: (json['eventTicketId'] as num?)?.toInt(),
-      quantity: (json['quantity'] as num).toInt(),
-      totalAmount: (json['totalAmount'] as num).toDouble(),
-      currency: json['currency']?.toString() ?? '',
-      status: json['status']?.toString() ?? '',
-      createdAt: DateTime.parse(json['createdAt'].toString()).toUtc(),
-      confirmedAt: tryParse(json['confirmedAt']),
-      cancelledAt: tryParse(json['cancelledAt']),
-      expiredAt: tryParse(json['expiredAt']),
-      expiresAt: DateTime.parse(json['expiresAt'].toString()).toUtc(),
-      paymentReference: json['paymentReference']?.toString(),
+      reservationId: JsonHelpers.asInt(
+            json['reservationId'],
+          ) ??
+          0,
+      userId: JsonHelpers.asInt(
+            json['userId'],
+          ) ??
+          0,
+      eventId: JsonHelpers.asInt(
+            json['eventId'],
+          ) ??
+          0,
+      eventTicketId: JsonHelpers.asInt(
+        json['eventTicketId'],
+      ),
+      quantity: JsonHelpers.asInt(
+            json['quantity'],
+          ) ??
+          0,
+      totalAmount: JsonHelpers.asDouble(
+        json['totalAmount'],
+      ),
+      currency:
+          json['currency']?.toString() ?? '',
+      status:
+          json['status']?.toString() ?? '',
+      createdAt: JsonHelpers.parseDateTimeRequired(
+        json['createdAt'],
+        DateTime.fromMillisecondsSinceEpoch(
+          0,
+          isUtc: true,
+        ),
+      ),
+      confirmedAt: JsonHelpers.parseDateTime(
+        json['confirmedAt'],
+      ),
+      cancelledAt: JsonHelpers.parseDateTime(
+        json['cancelledAt'],
+      ),
+      expiredAt: JsonHelpers.parseDateTime(
+        json['expiredAt'],
+      ),
+      expiresAt: JsonHelpers.parseDateTimeRequired(
+        json['expiresAt'],
+        DateTime.fromMillisecondsSinceEpoch(
+          0,
+          isUtc: true,
+        ),
+      ),
+      paymentReference:
+          json['paymentReference']?.toString(),
       notes: json['notes']?.toString(),
-      participantUsername: json['participantUsername']?.toString(),
-      participantAvatarUrl: json['participantAvatarUrl']?.toString(),
-      refundRequestStatus: json['refundRequestStatus']?.toString(),
-      refundReason: json['refundReason']?.toString(),
-      refundRequestedAt: tryParse(json['refundRequestedAt']),
-      refundReviewedAt: tryParse(json['refundReviewedAt']),
-      refundReviewedByUserId: (json['refundReviewedByUserId'] as num?)?.toInt(),
-      refundDecisionReason: json['refundDecisionReason']?.toString(),
-      paymentMethod: json['paymentMethod']?.toString(),
-      paymentStatus: json['paymentStatus']?.toString(),
-      paymentMessage: json['paymentMessage']?.toString(),
-      validatedAt: tryParse(json['validatedAt']),
-      canCollectCash: readBool(json['canCollectCash']),
-      totalTickets: (json['totalTickets'] as num?)?.toInt() ?? 1,
-      validatedTicketCount: (json['validatedTicketCount'] as num?)?.toInt() ?? 0,
+      participantUsername:
+          json['participantUsername']?.toString(),
+      participantAvatarUrl:
+          json['participantAvatarUrl']?.toString(),
+      refundRequestStatus:
+          json['refundRequestStatus']?.toString(),
+      refundReason:
+          json['refundReason']?.toString(),
+      refundRequestedAt:
+          JsonHelpers.parseDateTime(
+        json['refundRequestedAt'],
+      ),
+      refundReviewedAt:
+          JsonHelpers.parseDateTime(
+        json['refundReviewedAt'],
+      ),
+      refundReviewedByUserId:
+          JsonHelpers.asInt(
+        json['refundReviewedByUserId'],
+      ),
+      refundDecisionReason:
+          json['refundDecisionReason']?.toString(),
+      paymentMethod:
+          json['paymentMethod']?.toString(),
+      paymentStatus:
+          json['paymentStatus']?.toString(),
+      paymentMessage:
+          json['paymentMessage']?.toString(),
+      validatedAt: JsonHelpers.parseDateTime(
+        json['validatedAt'],
+      ),
+      canCollectCash: JsonHelpers.asBool(
+        json['canCollectCash'],
+      ),
+      totalTickets: JsonHelpers.asInt(
+            json['totalTickets'],
+          ) ??
+          1,
+      validatedTicketCount: JsonHelpers.asInt(
+            json['validatedTicketCount'],
+          ) ??
+          0,
     );
   }
 
   bool get hasPendingRefundRequest =>
-      (refundRequestStatus ?? '').trim().toLowerCase() == 'pending';
+      (refundRequestStatus ?? '')
+          .trim()
+          .toLowerCase() ==
+      'pending';
 
   bool get isRefundRejected =>
-      (refundRequestStatus ?? '').trim().toLowerCase() == 'rejected';
+      (refundRequestStatus ?? '')
+          .trim()
+          .toLowerCase() ==
+      'rejected';
 
   bool get isRefundCompleted =>
-      (refundRequestStatus ?? '').trim().toLowerCase() == 'refunded' ||
-      status.trim().toLowerCase() == 'refunded';
+      (refundRequestStatus ?? '')
+              .trim()
+              .toLowerCase() ==
+          'refunded' ||
+      status.trim().toLowerCase() ==
+          'refunded';
 
   bool get isCashPending =>
-      (paymentMethod ?? '').trim().toLowerCase() == 'cash' &&
-      (paymentStatus ?? '').trim().toLowerCase() == 'pending';
+      (paymentMethod ?? '')
+              .trim()
+              .toLowerCase() ==
+          'cash' &&
+      (paymentStatus ?? '')
+              .trim()
+              .toLowerCase() ==
+          'pending';
 
-  bool get isPayPalPaid =>
-      (paymentMethod ?? '').trim().toLowerCase() == 'paypal' &&
+    bool get isCashCollected =>
+      (paymentMethod ?? '').trim().toLowerCase() == 'cash' &&
       (paymentStatus ?? '').trim().toLowerCase() == 'completed';
 
+  bool get isPayPalPaid =>
+      (paymentMethod ?? '')
+              .trim()
+              .toLowerCase() ==
+          'paypal' &&
+      (paymentStatus ?? '')
+              .trim()
+              .toLowerCase() ==
+          'completed';
+
   bool get allTicketsValidated =>
-      totalTickets > 0 && validatedTicketCount == totalTickets;
+      totalTickets > 0 &&
+      validatedTicketCount >= totalTickets;
 
   bool get hasPartialValidation =>
-      validatedTicketCount > 0 && validatedTicketCount < totalTickets;
+      validatedTicketCount > 0 &&
+      validatedTicketCount < totalTickets;
 }

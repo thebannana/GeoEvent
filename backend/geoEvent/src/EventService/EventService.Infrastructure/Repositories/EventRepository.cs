@@ -18,6 +18,10 @@ public class EventRepository : IEventRepository
     private const int DefaultNearbyLimit = 20;
     private const int MaxNearbyLimit = 100;
     private const double MinCosLatitude = 0.000001d;
+    private const double FeaturedScore = 4.0;
+    private const double MaxPopularityScore = 12.0;
+    private const double MaxDistanceScore = 8.0;
+    private const double MaxTextScore = 90.0;
 
     private static readonly EventStatus[] ReservationStatuses =
     [
@@ -696,6 +700,241 @@ public class EventRepository : IEventRepository
             .Include(e => e.SubGenre)
             .FirstOrDefaultAsync(e => e.EventId == eventId);
 
+    private static double CalculateRecommendationScore(
+    Event ev,
+    decimal? userLatitude,
+    decimal? userLongitude,
+    double radiusKm,
+    IReadOnlyList<UserPreferenceDto> preferences,
+    string? searchTerm = null)
+    {
+        var preferenceScore =
+            CalculatePreferenceScore(
+                ev,
+                preferences);
+
+        var distanceScore =
+            CalculateDistanceScore(
+                ev,
+                userLatitude,
+                userLongitude,
+                radiusKm);
+
+        var popularityScore =
+            CalculatePopularityScore(ev);
+
+        var featuredScore = ev.IsFeatured
+            ? FeaturedScore
+            : 0.0;
+
+        var textScore =
+            string.IsNullOrWhiteSpace(searchTerm)
+                ? 0.0
+                : CalculateTextScore(
+                    ev,
+                    searchTerm);
+
+        return preferenceScore +
+               distanceScore +
+               popularityScore +
+               featuredScore +
+               textScore;
+    }
+
+    private static double CalculatePreferenceScore(
+    Event ev,
+    IReadOnlyList<UserPreferenceDto> preferences)
+    {
+        if (preferences.Count == 0)
+        {
+            return 0.0;
+        }
+
+        var score = 0.0;
+
+        foreach (var preference in preferences)
+        {
+            var matchesSegment =
+                !preference.SegmentId.HasValue ||
+                preference.SegmentId.Value ==
+                    ev.SegmentId;
+
+            var matchesGenre =
+                !preference.GenreId.HasValue ||
+                preference.GenreId.Value ==
+                    ev.GenreId;
+
+            var matchesSubGenre =
+                !preference.SubGenreId.HasValue ||
+                preference.SubGenreId.Value ==
+                    ev.SubGenreId;
+
+            if (!matchesSegment ||
+                !matchesGenre ||
+                !matchesSubGenre)
+            {
+                continue;
+            }
+
+            var specificity = 0;
+
+            if (preference.SegmentId.HasValue)
+            {
+                specificity++;
+            }
+
+            if (preference.GenreId.HasValue)
+            {
+                specificity++;
+            }
+
+            if (preference.SubGenreId.HasValue)
+            {
+                specificity++;
+            }
+
+            var multiplier = specificity switch
+            {
+                3 => 3.0,
+                2 => 2.0,
+                1 => 1.0,
+                _ => 0.25
+            };
+
+            score += preference.Score * multiplier;
+        }
+
+        return score;
+    }
+
+    private static double CalculateDistanceScore(
+    Event ev,
+    decimal? userLatitude,
+    decimal? userLongitude,
+    double radiusKm)
+    {
+        if (!userLatitude.HasValue ||
+            !userLongitude.HasValue)
+        {
+            return 0.0;
+        }
+
+        var distanceKm = CalculateDistanceKm(
+            (double)userLatitude.Value,
+            (double)userLongitude.Value,
+            (double)ev.Latitude,
+            (double)ev.Longitude);
+
+        if (distanceKm <= 2.0)
+        {
+            return MaxDistanceScore;
+        }
+
+        if (radiusKm <= 0.0 ||
+            distanceKm >= radiusKm)
+        {
+            return 0.0;
+        }
+
+        var ratio = 1.0 -
+            distanceKm / radiusKm;
+
+        return Math.Clamp(
+            ratio * MaxDistanceScore,
+            0.0,
+            MaxDistanceScore);
+    }
+
+    private static double CalculateDistanceKm(
+    double latitude1,
+    double longitude1,
+    double latitude2,
+    double longitude2)
+    {
+        const double earthRadiusKm = 6371.0;
+
+        var latitudeDelta =
+            DegreesToRadians(latitude2 - latitude1);
+
+        var longitudeDelta =
+            DegreesToRadians(longitude2 - longitude1);
+
+        var a =
+            Math.Sin(latitudeDelta / 2.0) *
+            Math.Sin(latitudeDelta / 2.0) +
+            Math.Cos(DegreesToRadians(latitude1)) *
+            Math.Cos(DegreesToRadians(latitude2)) *
+            Math.Sin(longitudeDelta / 2.0) *
+            Math.Sin(longitudeDelta / 2.0);
+
+        var safeA = Math.Clamp(a, 0.0, 1.0);
+
+        var c = 2.0 * Math.Atan2(
+            Math.Sqrt(safeA),
+            Math.Sqrt(1.0 - safeA));
+
+        return earthRadiusKm * c;
+    }
+
+    private static double DegreesToRadians(
+    double degrees)
+    {
+        return degrees * Math.PI / 180.0;
+    }
+
+    private static double CalculatePopularityScore(
+    Event ev)
+    {
+        var likesScore =
+            Math.Log(1.0 + ev.LikesCount) * 1.5;
+
+        var viewsScore =
+            Math.Log(1.0 + ev.ViewCount) * 0.5;
+
+        return Math.Min(
+            likesScore + viewsScore,
+            MaxPopularityScore);
+    }
+
+    private static double CalculateTextScore(
+    Event ev,
+    string searchTerm)
+    {
+        var term = searchTerm.Trim();
+
+        if (term.Length == 0)
+        {
+            return 0.0;
+        }
+
+        var score = 0.0;
+
+        if (ev.Title.Contains(
+            term,
+            StringComparison.OrdinalIgnoreCase))
+        {
+            score += 90.0;
+        }
+
+        if (ev.Description.Contains(
+            term,
+            StringComparison.OrdinalIgnoreCase))
+        {
+            score += 30.0;
+        }
+
+        if (ev.Tags?.Contains(
+            term,
+            StringComparison.OrdinalIgnoreCase) == true)
+        {
+            score += 18.0;
+        }
+
+        return Math.Min(
+            score,
+            MaxTextScore);
+    }
+
     public async Task<PagedResult<Event>> GetAllAsync(EventFilterDto filter)
     {
         filter ??= new EventFilterDto();
@@ -833,7 +1072,7 @@ public class EventRepository : IEventRepository
         };
     }
 
-    public async Task<List<Event>> GetNearbyAsync(
+    public async Task<List<RankedEvent>> GetNearbyRankedAsync(
     NearbyEventSearchDto dto,
     IReadOnlyList<UserPreferenceDto>? preferences = null)
     {
@@ -842,186 +1081,253 @@ public class EventRepository : IEventRepository
 
         var radiusKm = dto.RadiusKm <= 0
             ? DefaultNearbyRadiusKm
-            : Math.Min(dto.RadiusKm, MaxNearbyRadiusKm);
+            : Math.Min(
+                dto.RadiusKm,
+                MaxNearbyRadiusKm);
 
         var limit = dto.Limit <= 0
             ? DefaultNearbyLimit
-            : Math.Min(dto.Limit, MaxNearbyLimit);
+            : Math.Min(
+                dto.Limit,
+                MaxNearbyLimit);
 
-        var latDelta = (decimal)(radiusKm / 111.0);
+        var latDelta =
+            (decimal)(radiusKm / 111.0);
 
-        var cosLatitude =
-            Math.Cos((double)latitude * Math.PI / 180.0);
+        var cosLatitude = Math.Cos(
+            (double)latitude *
+            Math.PI /
+            180.0);
 
-        if (Math.Abs(cosLatitude) < MinCosLatitude)
+        if (Math.Abs(cosLatitude) <
+            MinCosLatitude)
         {
             cosLatitude = MinCosLatitude;
         }
 
         var lonDelta = (decimal)(
-            radiusKm / 111.0 / Math.Abs(cosLatitude));
+            radiusKm /
+            111.0 /
+            Math.Abs(cosLatitude));
 
         var nowUtc = DateTime.UtcNow;
 
         IQueryable<Event> query = _context.Events
             .AsNoTracking()
-            .Include(e => e.Images)
-            .Include(e => e.Segment)
-            .Include(e => e.Genre)
-            .Include(e => e.SubGenre)
-            .Where(e =>
-                e.Status == EventStatus.Confirmed &&
-                e.EndDateTime > nowUtc &&
-                e.Latitude >= latitude - latDelta &&
-                e.Latitude <= latitude + latDelta &&
-                e.Longitude >= longitude - lonDelta &&
-                e.Longitude <= longitude + lonDelta);
+            .Include(eventItem =>
+                eventItem.Images)
+            .Include(eventItem =>
+                eventItem.Segment)
+            .Include(eventItem =>
+                eventItem.Genre)
+            .Include(eventItem =>
+                eventItem.SubGenre)
+            .Where(eventItem =>
+                eventItem.Status ==
+                    EventStatus.Confirmed &&
+                eventItem.EndDateTime > nowUtc &&
+                eventItem.Latitude >=
+                    latitude - latDelta &&
+                eventItem.Latitude <=
+                    latitude + latDelta &&
+                eventItem.Longitude >=
+                    longitude - lonDelta &&
+                eventItem.Longitude <=
+                    longitude + lonDelta);
 
         if (dto.SegmentId.HasValue)
         {
-            query = query.Where(e =>
-                e.SegmentId == dto.SegmentId.Value);
+            query = query.Where(eventItem =>
+                eventItem.SegmentId ==
+                dto.SegmentId.Value);
         }
 
         if (dto.GenreId.HasValue)
         {
-            query = query.Where(e =>
-                e.GenreId == dto.GenreId.Value);
+            query = query.Where(eventItem =>
+                eventItem.GenreId ==
+                dto.GenreId.Value);
         }
 
         if (dto.SubGenreId.HasValue)
         {
-            query = query.Where(e =>
-                e.SubGenreId == dto.SubGenreId.Value);
+            query = query.Where(eventItem =>
+                eventItem.SubGenreId ==
+                dto.SubGenreId.Value);
         }
 
         if (dto.MinPrice.HasValue)
         {
-            query = query.Where(e =>
-                e.Price >= dto.MinPrice.Value);
+            query = query.Where(eventItem =>
+                eventItem.Price >=
+                dto.MinPrice.Value);
         }
 
         if (dto.MaxPrice.HasValue)
         {
-            query = query.Where(e =>
-                e.Price <= dto.MaxPrice.Value);
+            query = query.Where(eventItem =>
+                eventItem.Price <=
+                dto.MaxPrice.Value);
         }
 
         if (dto.TodayOnly)
         {
             var todayUtc = nowUtc.Date;
-            var tomorrowUtc = todayUtc.AddDays(1);
+            var tomorrowUtc =
+                todayUtc.AddDays(1);
 
-            query = query.Where(e =>
-                e.StartDateTime >= todayUtc &&
-                e.StartDateTime < tomorrowUtc);
+            query = query.Where(eventItem =>
+                eventItem.StartDateTime >= todayUtc &&
+                eventItem.StartDateTime < tomorrowUtc);
         }
 
-        var candidates = await query
-            .ToListAsync();
+        var candidates =
+            await query.ToListAsync();
 
-        var activePreferences = preferences?
-            .Where(p =>
-                p.SegmentId.HasValue ||
-                p.GenreId.HasValue ||
-                p.SubGenreId.HasValue)
-            .ToList()
-            ?? [];
-
-        if (activePreferences.Count == 0)
-        {
-            return candidates
-                .OrderBy(e => e.StartDateTime)
-                .ThenBy(e => e.EventId)
-                .Take(limit)
-                .ToList();
-        }
+        var activePreferences =
+            preferences?
+                .Where(preference =>
+                    preference.SegmentId.HasValue ||
+                    preference.GenreId.HasValue ||
+                    preference.SubGenreId.HasValue)
+                .ToList()
+            ?? new List<UserPreferenceDto>();
 
         return candidates
-            .Select(e => new
+            .Select(eventItem => new RankedEvent
             {
-                Event = e,
-                Score = CalculatePreferenceScore(
-                    e,
+                Event = eventItem,
+                Score = CalculateRecommendationScore(
+                    eventItem,
+                    latitude,
+                    longitude,
+                    radiusKm,
                     activePreferences)
             })
-            .OrderByDescending(x => x.Score)
-            .ThenBy(x => x.Event.StartDateTime)
-            .ThenByDescending(x => x.Event.LikesCount)
-            .ThenBy(x => x.Event.EventId)
+            .OrderByDescending(rankedItem =>
+                rankedItem.Score)
+            .ThenBy(rankedItem =>
+                rankedItem.Event.StartDateTime)
+            .ThenByDescending(rankedItem =>
+                rankedItem.Event.LikesCount)
+            .ThenBy(rankedItem =>
+                rankedItem.Event.EventId)
             .Take(limit)
-            .Select(x => x.Event)
             .ToList();
     }
 
-    private static double CalculatePreferenceScore(
-    Event ev,
+    public async Task<List<RankedEvent>> GetPublicRankedAsync(
+    EventFilterDto filter,
     IReadOnlyList<UserPreferenceDto> preferences)
     {
-        if (preferences.Count == 0)
+        filter ??= new EventFilterDto();
+
+        var nowUtc = DateTime.UtcNow;
+
+        IQueryable<Event> query = _context.Events
+            .AsNoTracking()
+            .Include(eventItem => eventItem.Images)
+            .Include(eventItem => eventItem.Segment)
+            .Include(eventItem => eventItem.Genre)
+            .Include(eventItem => eventItem.SubGenre)
+            .Where(eventItem =>
+                eventItem.Status ==
+                    EventStatus.Confirmed &&
+                eventItem.EndDateTime > nowUtc);
+
+        if (filter.SegmentId.HasValue)
         {
-            return 0;
+            query = query.Where(eventItem =>
+                eventItem.SegmentId ==
+                filter.SegmentId.Value);
         }
 
-        var score = 0d;
-
-        foreach (var preference in preferences)
+        if (filter.GenreId.HasValue)
         {
-            var matchesSegment =
-                !preference.SegmentId.HasValue ||
-                preference.SegmentId == ev.SegmentId;
-
-            var matchesGenre =
-                !preference.GenreId.HasValue ||
-                preference.GenreId == ev.GenreId;
-
-            var matchesSubGenre =
-                !preference.SubGenreId.HasValue ||
-                preference.SubGenreId == ev.SubGenreId;
-
-            if (!matchesSegment ||
-                !matchesGenre ||
-                !matchesSubGenre)
-            {
-                continue;
-            }
-
-            var specificity = 0;
-
-            if (preference.SegmentId.HasValue)
-            {
-                specificity++;
-            }
-
-            if (preference.GenreId.HasValue)
-            {
-                specificity++;
-            }
-
-            if (preference.SubGenreId.HasValue)
-            {
-                specificity++;
-            }
-
-            var specificityMultiplier = specificity switch
-            {
-                3 => 3.0,
-                2 => 2.0,
-                1 => 1.0,
-                _ => 0.25
-            };
-
-            score += preference.Score * specificityMultiplier;
+            query = query.Where(eventItem =>
+                eventItem.GenreId ==
+                filter.GenreId.Value);
         }
 
-        if (ev.IsFeatured)
+        if (filter.SubGenreId.HasValue)
         {
-            score += 0.5;
+            query = query.Where(eventItem =>
+                eventItem.SubGenreId ==
+                filter.SubGenreId.Value);
         }
 
-        return score;
+        if (filter.MinPrice.HasValue)
+        {
+            query = query.Where(eventItem =>
+                eventItem.Price >=
+                filter.MinPrice.Value);
+        }
+
+        if (filter.MaxPrice.HasValue)
+        {
+            query = query.Where(eventItem =>
+                eventItem.Price <=
+                filter.MaxPrice.Value);
+        }
+
+        if (filter.FromDate.HasValue)
+        {
+            query = query.Where(eventItem =>
+                eventItem.StartDateTime >=
+                filter.FromDate.Value);
+        }
+
+        if (filter.ToDate.HasValue)
+        {
+            query = query.Where(eventItem =>
+                eventItem.StartDateTime <=
+                filter.ToDate.Value);
+        }
+
+        if (filter.IsFeatured.HasValue)
+        {
+            query = query.Where(eventItem =>
+                eventItem.IsFeatured ==
+                filter.IsFeatured.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(
+            filter.SearchTerm))
+        {
+            var term = filter.SearchTerm.Trim();
+
+            query = query.Where(eventItem =>
+                eventItem.Title.Contains(term) ||
+                eventItem.Description.Contains(term) ||
+                (eventItem.Tags != null &&
+                 eventItem.Tags.Contains(term)));
+        }
+
+        var candidates =
+            await query.ToListAsync();
+
+        return candidates
+            .Select(eventItem => new RankedEvent
+            {
+                Event = eventItem,
+                Score = CalculateRecommendationScore(
+                    eventItem,
+                    filter.Latitude,
+                    filter.Longitude,
+                    25.0,
+                    preferences,
+                    filter.SearchTerm)
+            })
+            .OrderByDescending(rankedItem =>
+                rankedItem.Score)
+            .ThenBy(rankedItem =>
+                rankedItem.Event.StartDateTime)
+            .ThenByDescending(rankedItem =>
+                rankedItem.Event.LikesCount)
+            .ThenBy(rankedItem =>
+                rankedItem.Event.EventId)
+            .ToList();
     }
-
     public async Task<Event> CreateAsync(Event entity)
     {
         await _context.Events.AddAsync(entity);

@@ -39,7 +39,7 @@ class TicketBottomSheet extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Tickets · Reservation #$reservationId',
+                        'Tickets · Reservation for #$eventTitle',
                         style: theme.textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.w700,
                         ),
@@ -165,12 +165,6 @@ class TicketItem extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 4),
-                    Text(
-                      'Ticket #${ticket.ticketId}',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
-                      ),
-                    ),
                     if (seatText.isNotEmpty) ...[
                       const SizedBox(height: 2),
                       Text(

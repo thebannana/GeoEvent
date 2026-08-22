@@ -3,7 +3,11 @@ import 'package:flutter/material.dart';
 import '../../../core/utils/color_parser.dart';
 import 'create_event_models.dart';
 
-enum EventPinPriority { high, medium, low }
+enum EventPinPriority {
+  high,
+  medium,
+  low,
+}
 
 class EventMapPinData {
   final int id;
@@ -26,39 +30,63 @@ class EventMapPinData {
     required this.priority,
   });
 
-  static const int _highThreshold = 60;
-  static const int _mediumThreshold = 35;
-  static const Color _fallbackPinColor = Color(0xFF7C4DFF);
+  static const int highThreshold = 90;
+  static const int mediumThreshold = 40;
+
+  static const Color fallbackPinColor =
+      Color(0xFF7C4DFF);
 
   factory EventMapPinData.fromEventItem(
-    EventItem item, {
-    int recommendationScore = 0,
-  }) {
+    EventItem item,
+  ) {
+    final score =
+        item.recommendationScore.round();
+
     return EventMapPinData(
       id: item.eventId,
       lat: item.latitude,
       lng: item.longitude,
       title: item.title,
       imageUrl: item.coverImageUrl ??
-          (item.imageUrls.isNotEmpty ? item.imageUrls.first : null),
-      categoryColor: _resolveCategoryColor(item.segmentColor),
-      recommendationScore: recommendationScore,
-      priority: _resolvePriority(recommendationScore),
+          (item.imageUrls.isNotEmpty
+              ? item.imageUrls.first
+              : null),
+      categoryColor: resolveCategoryColor(
+        item.segmentColor,
+      ),
+      recommendationScore: score,
+      priority: resolvePriority(score),
     );
   }
 
-  static EventPinPriority _resolvePriority(int score) {
-    if (score >= _highThreshold) return EventPinPriority.high;
-    if (score >= _mediumThreshold) return EventPinPriority.medium;
+  static EventPinPriority resolvePriority(
+    int score,
+  ) {
+    if (score >= highThreshold) {
+      return EventPinPriority.high;
+    }
+
+    if (score >= mediumThreshold) {
+      return EventPinPriority.medium;
+    }
+
     return EventPinPriority.low;
   }
 
-  static Color _resolveCategoryColor(String? rawColor) {
+  static Color resolveCategoryColor(
+    String? rawColor,
+  ) {
     final trimmed = rawColor?.trim() ?? '';
-    if (trimmed.isEmpty) return _fallbackPinColor;
+
+    if (trimmed.isEmpty) {
+      return fallbackPinColor;
+    }
 
     final parsed = parseHex(trimmed);
-    if (parsed.alpha == 0) return _fallbackPinColor;
+
+    if (parsed.alpha == 0) {
+      return fallbackPinColor;
+    }
 
     return parsed;
   }

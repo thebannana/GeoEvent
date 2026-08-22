@@ -125,148 +125,203 @@ class EventsApi {
   }
 
   Future<List<EventItem>> getNearbyEvents({
-    required double latitude,
-    required double longitude,
-    double radiusKm = 10,
-    int limit = 100,
-    int? segmentId,
-    int? genreId,
-    int? subGenreId,
-    double? minPrice,
-    double? maxPrice,
-    bool? freeOnly,
-    bool? todayOnly,
-    bool usePreferences = false,
-  }) async {
-    final response = await dio.get(
-      '${ApiEndpoints.publicEventsBase}/nearby',
-      queryParameters: {
-        'latitude': latitude,
-        'longitude': longitude,
-        'radiusKm': radiusKm,
-        'limit': limit,
-        'segmentId': ?segmentId,
-        'genreId': ?genreId,
-        'subGenreId': ?subGenreId,
-        if (freeOnly == true) 'maxPrice': 0,
-        if (freeOnly != true && minPrice != null) 'minPrice': minPrice,
-        if (freeOnly != true && maxPrice != null) 'maxPrice': maxPrice,
-        if (todayOnly == true) 'todayOnly': true,
-        if (usePreferences) 'usePreferences': true,
-      },
-    );
+  required double latitude,
+  required double longitude,
+  double radiusKm = 10,
+  int limit = 100,
+  int? segmentId,
+  int? genreId,
+  int? subGenreId,
+  double? minPrice,
+  double? maxPrice,
+  bool? freeOnly,
+  bool? todayOnly,
+  bool usePreferences = false,
+}) async {
+  final response = await dio.get(
+    '${ApiEndpoints.publicEventsBase}/nearby',
+    queryParameters: {
+      'latitude': latitude,
+      'longitude': longitude,
+      'radiusKm': radiusKm,
+      'limit': limit,
+      if (segmentId != null)
+        'segmentId': segmentId,
+      if (genreId != null)
+        'genreId': genreId,
+      if (subGenreId != null)
+        'subGenreId': subGenreId,
+      if (freeOnly == true)
+        'maxPrice': 0,
+      if (freeOnly != true &&
+          minPrice != null)
+        'minPrice': minPrice,
+      if (freeOnly != true &&
+          maxPrice != null)
+        'maxPrice': maxPrice,
+      if (todayOnly == true)
+        'todayOnly': true,
+      if (usePreferences)
+        'usePreferences': true,
+    },
+  );
 
-    final items = _extractList(response.data);
-    return items.map(EventItem.fromJson).toList();
-  }
+  final items = _extractList(response.data);
+
+  return items
+      .map(EventItem.fromJson)
+      .toList();
+}
 
   Future<List<EventItem>> getGlobalEvents({
-    String? searchTerm,
-    int page = 1,
-    int pageSize = 100,
-    String sortBy = 'StartDateTime',
-    bool sortDescending = false,
-    int? segmentId,
-    int? genreId,
-    int? subGenreId,
-    double? minPrice,
-    double? maxPrice,
-    bool? freeOnly,
-    bool? todayOnly,
-    bool usePreferences = false,
-  }) async {
-    final response = await dio.get(
-      ApiEndpoints.publicEventsBase,
-      queryParameters: {
-        if (searchTerm != null && searchTerm.trim().isNotEmpty)
-          'searchTerm': searchTerm.trim(),
-        'page': page,
-        'pageSize': pageSize,
-        'sortBy': sortBy,
-        'sortDescending': sortDescending,
-        'segmentId': ?segmentId,
-        'genreId': ?genreId,
-        'subGenreId': ?subGenreId,
-        if (freeOnly == true) 'maxPrice': 0,
-        if (freeOnly != true && minPrice != null) 'minPrice': minPrice,
-        if (freeOnly != true && maxPrice != null) 'maxPrice': maxPrice,
-        if (todayOnly == true) 'todayOnly': true,
-        if (usePreferences) 'usePreferences': true,
-      },
-    );
+  String? searchTerm,
+  int page = 1,
+  int pageSize = 100,
+  String sortBy = 'StartDateTime',
+  bool sortDescending = false,
+  int? segmentId,
+  int? genreId,
+  int? subGenreId,
+  double? minPrice,
+  double? maxPrice,
+  bool? freeOnly,
+  bool? todayOnly,
+  bool usePreferences = false,
+}) async {
+  final response = await dio.get(
+    ApiEndpoints.publicEventsBase,
+    queryParameters: {
+      if (searchTerm != null &&
+          searchTerm.trim().isNotEmpty)
+        'searchTerm': searchTerm.trim(),
+      'page': page,
+      'pageSize': pageSize,
+      'sortBy': sortBy,
+      'sortDescending': sortDescending,
+      if (segmentId != null)
+        'segmentId': segmentId,
+      if (genreId != null)
+        'genreId': genreId,
+      if (subGenreId != null)
+        'subGenreId': subGenreId,
+      if (freeOnly == true)
+        'maxPrice': 0,
+      if (freeOnly != true &&
+          minPrice != null)
+        'minPrice': minPrice,
+      if (freeOnly != true &&
+          maxPrice != null)
+        'maxPrice': maxPrice,
+      if (todayOnly == true)
+        'todayOnly': true,
+      if (usePreferences)
+        'usePreferences': true,
+    },
+  );
 
-    final items = _extractList(response.data);
-    return items.map(EventItem.fromJson).toList();
-  }
+  final items = _extractList(response.data);
+
+  return items
+      .map(EventItem.fromJson)
+      .toList();
+}
 
   Future<PagedResult<EventItem>> searchEventsPaged({
-    String? searchTerm,
-    int page = 1,
-    int pageSize = 20,
-    String sortBy = 'StartDateTime',
-    bool sortDescending = false,
-    int? segmentId,
-    int? genreId,
-    int? subGenreId,
-  }) async {
-    final response = await dio.get(
-      ApiEndpoints.publicEventsBase,
-      queryParameters: {
-        if (searchTerm != null && searchTerm.trim().isNotEmpty)
-          'searchTerm': searchTerm.trim(),
-        'page': page,
-        'pageSize': pageSize,
-        'sortBy': sortBy,
-        'sortDescending': sortDescending,
-        'segmentId': ?segmentId,
-        'genreId': ?genreId,
-        'subGenreId': ?subGenreId,
-      },
-    );
+  String? searchTerm,
+  int page = 1,
+  int pageSize = 20,
+  String sortBy = 'StartDateTime',
+  bool sortDescending = false,
+  int? segmentId,
+  int? genreId,
+  int? subGenreId,
+  bool usePreferences = false,
+  double? latitude,
+  double? longitude,
+}) async {
+  final response = await dio.get(
+    ApiEndpoints.publicEventsBase,
+    queryParameters: {
+      if (searchTerm != null &&
+          searchTerm.trim().isNotEmpty)
+        'searchTerm': searchTerm.trim(),
+      'page': page,
+      'pageSize': pageSize,
+      'sortBy': sortBy,
+      'sortDescending': sortDescending,
+      if (segmentId != null)
+        'segmentId': segmentId,
+      if (genreId != null)
+        'genreId': genreId,
+      if (subGenreId != null)
+        'subGenreId': subGenreId,
+      if (usePreferences)
+        'usePreferences': true,
+      if (latitude != null)
+        'latitude': latitude,
+      if (longitude != null)
+        'longitude': longitude,
+    },
+  );
 
-    final raw = response.data;
-    if (raw is Map) {
-      final map = Map<String, dynamic>.from(raw);
-      if (map.containsKey('items') || map.containsKey('Items')) {
-        return PagedResult<EventItem>.fromJson(map, EventItem.fromJson);
-      }
+  final raw = response.data;
+
+  if (raw is Map) {
+    final map = Map<String, dynamic>.from(raw);
+
+    if (map.containsKey('items') ||
+        map.containsKey('Items')) {
+      return PagedResult<EventItem>.fromJson(
+        map,
+        EventItem.fromJson,
+      );
     }
-
-    final items = _extractList(raw);
-    return PagedResult<EventItem>(
-      items: items.map(EventItem.fromJson).toList(),
-      totalCount: items.length,
-      page: page,
-      pageSize: pageSize,
-      totalPages: 1,
-      hasNextPage: false,
-      hasPreviousPage: page > 1,
-    );
   }
+
+  final items = _extractList(raw);
+
+  return PagedResult<EventItem>(
+    items: items
+        .map(EventItem.fromJson)
+        .toList(),
+    totalCount: items.length,
+    page: page,
+    pageSize: pageSize,
+    totalPages: 1,
+    hasNextPage: false,
+    hasPreviousPage: page > 1,
+  );
+}
 
   Future<List<EventItem>> searchEvents({
-    String? searchTerm,
-    int page = 1,
-    int pageSize = 20,
-    String sortBy = 'StartDateTime',
-    bool sortDescending = false,
-    int? segmentId,
-    int? genreId,
-    int? subGenreId,
-  }) async {
-    final result = await searchEventsPaged(
-      searchTerm: searchTerm,
-      page: page,
-      pageSize: pageSize,
-      sortBy: sortBy,
-      sortDescending: sortDescending,
-      segmentId: segmentId,
-      genreId: genreId,
-      subGenreId: subGenreId,
-    );
+  String? searchTerm,
+  int page = 1,
+  int pageSize = 20,
+  String sortBy = 'StartDateTime',
+  bool sortDescending = false,
+  int? segmentId,
+  int? genreId,
+  int? subGenreId,
+  bool usePreferences = false,
+  double? latitude,
+  double? longitude,
+}) async {
+  final result = await searchEventsPaged(
+    searchTerm: searchTerm,
+    page: page,
+    pageSize: pageSize,
+    sortBy: sortBy,
+    sortDescending: sortDescending,
+    segmentId: segmentId,
+    genreId: genreId,
+    subGenreId: subGenreId,
+    usePreferences: usePreferences,
+    latitude: latitude,
+    longitude: longitude,
+  );
 
-    return result.items;
-  }
+  return result.items;
+}
 
   Future<EventItem> getEventById(int eventId) async {
     final response = await dio.get(ApiEndpoints.publicEventById(eventId));

@@ -219,7 +219,7 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
     final confirmed = await AppConfirmDialog.show(
       context,
       title: 'Cancel reservation?',
-      message: 'Reservation #${reservation.reservationId} for '
+      message: 'Reservation for '
           '${reservation.quantity} ticket${reservation.quantity > 1 ? 's' : ''} '
           'will be cancelled.',
       cancelLabel: 'Keep',
@@ -343,7 +343,7 @@ class _RefundRequestDialogState extends State<_RefundRequestDialog> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Reservation #${reservation.reservationId} for '
+            'Reservation for '
             '${reservation.quantity} ticket'
             '${reservation.quantity > 1 ? 's' : ''} '
             'will be submitted for admin review.',

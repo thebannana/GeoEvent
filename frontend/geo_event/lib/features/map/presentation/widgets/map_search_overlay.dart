@@ -6,19 +6,14 @@ import '../../../../core/utils/debounce.dart';
 import '../../../../core/utils/logger.dart';
 import '../../../../core/widgets/inputs/app_icon_circle_button.dart';
 import '../../../../core/widgets/layout/app_bottom_sheet_container.dart';
-import '../../../../shared/events/models/create_event_models.dart'
-    hide isWithinRadius, rankByPreferences, rankSearchResults;
+import '../../../../shared/events/models/create_event_models.dart';
 import '../../../../shared/events/providers/event_providers.dart';
-import 'map_event_helpers.dart';
-import 'map_search_widgets.dart';
+import '../widgets/map_search_widgets.dart';
 
 class MapSearchOverlay extends ConsumerStatefulWidget {
   final VoidCallback onClose;
   final double userLatitude;
   final double userLongitude;
-  final Set<int> preferredSegmentIds;
-  final Set<int> preferredGenreIds;
-  final Set<int> preferredSubGenreIds;
   final ValueChanged<EventItem>? onEventSelected;
 
   const MapSearchOverlay({
@@ -26,44 +21,66 @@ class MapSearchOverlay extends ConsumerStatefulWidget {
     required this.onClose,
     required this.userLatitude,
     required this.userLongitude,
-    this.preferredSegmentIds = const {},
-    this.preferredGenreIds = const {},
-    this.preferredSubGenreIds = const {},
     this.onEventSelected,
   });
 
   @override
-  ConsumerState<MapSearchOverlay> createState() => _MapSearchOverlayState();
+  ConsumerState<MapSearchOverlay> createState() =>
+      _MapSearchOverlayState();
 }
 
-class _MapSearchOverlayState extends ConsumerState<MapSearchOverlay>
+class _MapSearchOverlayState
+    extends ConsumerState<MapSearchOverlay>
     with SingleTickerProviderStateMixin {
-  static const _debounceDuration = Duration(milliseconds: 350);
-  static const _animationDuration = Duration(milliseconds: 270);
-  static const List<double> _distanceOptions = [25, 50, 100, 250];
+  static const _debounceDuration =
+      Duration(milliseconds: 350);
+
+  static const _animationDuration =
+      Duration(milliseconds: 270);
+
+  static const List<double> _distanceOptions = [
+    25,
+    50,
+    100,
+    250,
+  ];
 
   late final AnimationController _controller;
   late final Animation<Offset> _slide;
-  final TextEditingController _textController = TextEditingController();
-  final Debouncer _debouncer = Debouncer(delay: _debounceDuration);
 
-  List<EventItem> _results = [];
+  final TextEditingController _textController =
+      TextEditingController();
+
+  final Debouncer _debouncer = Debouncer(
+    delay: _debounceDuration,
+  );
+
+  List<EventItem> _results = <EventItem>[];
+
   bool _loading = false;
   String? _error;
   bool _loadedInitialNearby = false;
-  int _requestId = 0;
   bool _closing = false;
+
+  int _requestId = 0;
 
   double _selectedRadiusKm = 25;
   bool _showGlobalEvents = false;
 
-  bool get _hasQuery => _textController.text.trim().isNotEmpty;
+  bool get _hasQuery =>
+      _textController.text.trim().isNotEmpty;
 
-  String get _query => _textController.text.trim();
+  String get _query =>
+      _textController.text.trim();
 
-  String get _scopeLabel => _showGlobalEvents
-      ? 'Global results'
-      : 'Nearby results within ${_selectedRadiusKm.toInt()} km';
+  String get _scopeLabel {
+    if (_showGlobalEvents) {
+      return 'Global results';
+    }
+
+    return 'Nearby results within '
+        '${_selectedRadiusKm.toInt()} km';
+  }
 
   @override
   void initState() {
@@ -85,37 +102,50 @@ class _MapSearchOverlayState extends ConsumerState<MapSearchOverlay>
     );
 
     _controller.forward();
+
     _textController.addListener(_onQueryChanged);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadInitial();
+      if (mounted) {
+        _loadInitial();
+      }
     });
   }
 
   @override
   void dispose() {
     _debouncer.dispose();
-    _textController.removeListener(_onQueryChanged);
-    _textController.dispose();
+
+    _textController
+      ..removeListener(_onQueryChanged)
+      ..dispose();
+
     _controller.dispose();
+
     super.dispose();
   }
 
   void _onQueryChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+
     _debouncer.runAsync(() async {
+      if (!mounted) {
+        return;
+      }
+
       if (_query.isEmpty) {
         await _loadInitial(force: true);
       } else {
         await _search(_query);
       }
     });
-
-    if (mounted) {
-      setState(() {});
-    }
   }
 
-  int _beginRequest() => ++_requestId;
+  int _beginRequest() {
+    return ++_requestId;
+  }
 
   String _mapErrorMessage(
     Object error, {
@@ -143,7 +173,10 @@ class _MapSearchOverlayState extends ConsumerState<MapSearchOverlay>
   }
 
   void _startLoading() {
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
+
     setState(() {
       _loading = true;
       _error = null;
@@ -154,11 +187,15 @@ class _MapSearchOverlayState extends ConsumerState<MapSearchOverlay>
     List<EventItem> items, {
     bool markNearbyLoaded = false,
   }) {
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
+
     setState(() {
-      _results = items;
+      _results = List<EventItem>.unmodifiable(items);
       _loading = false;
       _error = null;
+
       if (markNearbyLoaded) {
         _loadedInitialNearby = true;
       }
@@ -170,9 +207,12 @@ class _MapSearchOverlayState extends ConsumerState<MapSearchOverlay>
     StackTrace? stackTrace,
     String fallback = 'Unable to load events.',
   }) {
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
+
     setState(() {
-      _results = [];
+      _results = <EventItem>[];
       _loading = false;
       _error = _mapErrorMessage(
         error,
@@ -182,42 +222,55 @@ class _MapSearchOverlayState extends ConsumerState<MapSearchOverlay>
     });
   }
 
-  Future<void> _loadInitial({bool force = false}) async {
+  Future<void> _loadInitial({
+    bool force = false,
+  }) async {
     if (_showGlobalEvents) {
       await _loadGlobalInitial();
       return;
     }
 
-    if (_loadedInitialNearby && !force) return;
+    if (_loadedInitialNearby && !force) {
+      return;
+    }
+
     await _loadNearbyInitial(force: force);
   }
 
-  Future<void> _loadNearbyInitial({bool force = false}) async {
-    if (_loadedInitialNearby && !force) return;
+  Future<void> _loadNearbyInitial({
+    bool force = false,
+  }) async {
+    if (_loadedInitialNearby && !force) {
+      return;
+    }
 
     final requestId = _beginRequest();
+
     _startLoading();
 
     try {
-      final items = await ref.read(eventsApiProvider).getNearbyEvents(
+      final items = await ref
+          .read(eventsApiProvider)
+          .getNearbyEvents(
             latitude: widget.userLatitude,
             longitude: widget.userLongitude,
             radiusKm: _selectedRadiusKm,
-            limit: 20,
+            limit: 100,
+            usePreferences: true,
           );
 
-      if (!mounted || requestId != _requestId) return;
+      if (!mounted || requestId != _requestId) {
+        return;
+      }
 
-      final ranked = rankByPreferences(
-        items: items,
-        preferredSegmentIds: widget.preferredSegmentIds,
-        preferredGenreIds: widget.preferredGenreIds,
-        preferredSubGenreIds: widget.preferredSubGenreIds,
+      _finishWithResults(
+        items,
+        markNearbyLoaded: true,
       );
-
-      _finishWithResults(ranked, markNearbyLoaded: true);
     } catch (error, stackTrace) {
-      if (!mounted || requestId != _requestId) return;
+      if (!mounted || requestId != _requestId) {
+        return;
+      }
 
       _logError(
         'Failed to load nearby search results.',
@@ -235,26 +288,26 @@ class _MapSearchOverlayState extends ConsumerState<MapSearchOverlay>
 
   Future<void> _loadGlobalInitial() async {
     final requestId = _beginRequest();
+
     _startLoading();
 
     try {
-      final items = await ref.read(eventsApiProvider).searchEvents(
-            page: 1,
-            pageSize: 20,
+      final items = await ref
+          .read(eventsApiProvider)
+          .getGlobalEvents(
+            pageSize: 100,
+            usePreferences: true,
           );
 
-      if (!mounted || requestId != _requestId) return;
+      if (!mounted || requestId != _requestId) {
+        return;
+      }
 
-      final ranked = rankByPreferences(
-        items: items,
-        preferredSegmentIds: widget.preferredSegmentIds,
-        preferredGenreIds: widget.preferredGenreIds,
-        preferredSubGenreIds: widget.preferredSubGenreIds,
-      );
-
-      _finishWithResults(ranked);
+      _finishWithResults(items);
     } catch (error, stackTrace) {
-      if (!mounted || requestId != _requestId) return;
+      if (!mounted || requestId != _requestId) {
+        return;
+      }
 
       _logError(
         'Failed to load global search results.',
@@ -279,45 +332,32 @@ class _MapSearchOverlayState extends ConsumerState<MapSearchOverlay>
     }
 
     final requestId = _beginRequest();
+
     _startLoading();
 
     try {
-      var items = await ref.read(eventsApiProvider).searchEvents(
-            searchTerm: trimmed,
-            page: 1,
-            pageSize: 20,
-          );
+      final items = await ref
+        .read(eventsApiProvider)
+        .searchEvents(
+          searchTerm: trimmed,
+          page: 1,
+          pageSize: 100,
+          sortBy: '',
+          sortDescending: true,
+          usePreferences: true,
+          latitude: widget.userLatitude,
+          longitude: widget.userLongitude,
+        );
 
-      if (!_showGlobalEvents) {
-        items = items
-            .where(
-              (item) => isWithinRadius(
-                item: item,
-                userLatitude: widget.userLatitude,
-                userLongitude: widget.userLongitude,
-                radiusKm: _selectedRadiusKm,
-              ),
-            )
-            .toList();
+      if (!mounted || requestId != _requestId) {
+        return;
       }
 
-      if (!mounted || requestId != _requestId) return;
-
-      final ranked = rankSearchResults(
-        items: items,
-        query: trimmed,
-        showGlobalEvents: _showGlobalEvents,
-        selectedRadiusKm: _selectedRadiusKm,
-        userLatitude: widget.userLatitude,
-        userLongitude: widget.userLongitude,
-        preferredSegmentIds: widget.preferredSegmentIds,
-        preferredGenreIds: widget.preferredGenreIds,
-        preferredSubGenreIds: widget.preferredSubGenreIds,
-      );
-
-      _finishWithResults(ranked);
+      _finishWithResults(items);
     } catch (error, stackTrace) {
-      if (!mounted || requestId != _requestId) return;
+      if (!mounted || requestId != _requestId) {
+        return;
+      }
 
       _logError(
         'Failed to search events.',
@@ -341,8 +381,15 @@ class _MapSearchOverlayState extends ConsumerState<MapSearchOverlay>
     }
   }
 
-  Future<void> _applyRadius(double radiusKm) async {
-    if (_selectedRadiusKm == radiusKm && !_showGlobalEvents) return;
+  Future<void> _applyRadius(
+    double radiusKm,
+  ) async {
+    if (_selectedRadiusKm == radiusKm &&
+        !_showGlobalEvents) {
+      return;
+    }
+
+    _requestId++;
 
     setState(() {
       _selectedRadiusKm = radiusKm;
@@ -354,6 +401,8 @@ class _MapSearchOverlayState extends ConsumerState<MapSearchOverlay>
   }
 
   Future<void> _toggleGlobal() async {
+    _requestId++;
+
     setState(() {
       _showGlobalEvents = !_showGlobalEvents;
       _loadedInitialNearby = false;
@@ -363,12 +412,18 @@ class _MapSearchOverlayState extends ConsumerState<MapSearchOverlay>
   }
 
   Future<void> _clearQuery() async {
+    _debouncer.cancel();
+
     _textController.clear();
+
     await _loadInitial(force: true);
   }
 
   Future<void> _close() async {
-    if (_closing) return;
+    if (_closing) {
+      return;
+    }
+
     _closing = true;
 
     _debouncer.cancel();
@@ -384,7 +439,7 @@ class _MapSearchOverlayState extends ConsumerState<MapSearchOverlay>
   Future<void> _showDistancePicker() async {
     final picked = await showModalBottomSheet<double>(
       context: context,
-      builder: (context) {
+      builder: (sheetContext) {
         return SafeArea(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -393,20 +448,38 @@ class _MapSearchOverlayState extends ConsumerState<MapSearchOverlay>
               const ListTile(
                 title: Text(
                   'Select distance',
-                  style: TextStyle(fontWeight: FontWeight.w700),
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
               ..._distanceOptions.map(
-                (km) => ListTile(
-                  title: Text('${km.toInt()} km'),
-                  subtitle: _showGlobalEvents && _selectedRadiusKm == km
-                      ? const Text('Will apply when nearby mode is enabled')
-                      : null,
-                  trailing: _selectedRadiusKm == km
-                      ? const Icon(Icons.check_rounded)
-                      : null,
-                  onTap: () => Navigator.of(context).pop(km),
-                ),
+                (km) {
+                  final selected =
+                      _selectedRadiusKm == km;
+
+                  return ListTile(
+                    title: Text(
+                      '${km.toInt()} km',
+                    ),
+                    subtitle: _showGlobalEvents &&
+                            selected
+                        ? const Text(
+                            'Will apply when nearby '
+                            'mode is enabled',
+                          )
+                        : null,
+                    trailing: selected
+                        ? const Icon(
+                            Icons.check_rounded,
+                          )
+                        : null,
+                    onTap: () {
+                      Navigator.of(sheetContext)
+                          .pop(km);
+                    },
+                  );
+                },
               ),
               const SizedBox(height: 8),
             ],
@@ -415,7 +488,7 @@ class _MapSearchOverlayState extends ConsumerState<MapSearchOverlay>
       },
     );
 
-    if (picked != null) {
+    if (picked != null && mounted) {
       await _applyRadius(picked);
     }
   }
@@ -424,9 +497,13 @@ class _MapSearchOverlayState extends ConsumerState<MapSearchOverlay>
     if (_loading) {
       return const MapSearchLoadingView();
     }
+
     if (_error != null) {
-      return MapSearchErrorView(message: _error!);
+      return MapSearchErrorView(
+        message: _error!,
+      );
     }
+
     if (_results.isEmpty) {
       return MapSearchEmptyView(
         hasQuery: _hasQuery,
@@ -435,7 +512,10 @@ class _MapSearchOverlayState extends ConsumerState<MapSearchOverlay>
     }
 
     return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      padding: const EdgeInsets.symmetric(
+        horizontal: 14,
+        vertical: 12,
+      ),
       itemCount: _results.length,
       itemBuilder: (context, index) {
         final item = _results[index];
@@ -446,7 +526,9 @@ class _MapSearchOverlayState extends ConsumerState<MapSearchOverlay>
           userLongitude: widget.userLongitude,
           onTap: widget.onEventSelected == null
               ? null
-              : () => widget.onEventSelected!(item),
+              : () => widget.onEventSelected!(
+                    item,
+                  ),
         );
       },
     );
@@ -458,18 +540,31 @@ class _MapSearchOverlayState extends ConsumerState<MapSearchOverlay>
       position: _slide,
       child: AppBottomSheetContainer(
         maxHeightFactor: 0.78,
-        margin: const EdgeInsets.fromLTRB(12, 0, 12, 118),
+        margin: const EdgeInsets.fromLTRB(
+          12,
+          0,
+          12,
+          118,
+        ),
         padding: EdgeInsets.zero,
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(18, 14, 10, 10),
+              padding: const EdgeInsets.fromLTRB(
+                18,
+                14,
+                10,
+                10,
+              ),
               child: Row(
                 children: [
                   Expanded(
                     child: Text(
                       'Search events',
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleLarge
+                          ?.copyWith(
                             fontWeight: FontWeight.w700,
                           ),
                     ),
@@ -484,18 +579,30 @@ class _MapSearchOverlayState extends ConsumerState<MapSearchOverlay>
               ),
             ),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 16,
+              ),
               child: TextField(
                 controller: _textController,
                 autofocus: true,
-                style: const TextStyle(fontSize: 15),
+                style: const TextStyle(
+                  fontSize: 15,
+                ),
                 decoration: InputDecoration(
-                  hintText: 'Search by title, segment, genre, or tag',
-                  prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                  hintText:
+                      'Search by title, segment, '
+                      'genre, or tag',
+                  prefixIcon: const Icon(
+                    Icons.search_rounded,
+                    size: 20,
+                  ),
                   suffixIcon: _hasQuery
                       ? IconButton(
                           onPressed: _clearQuery,
-                          icon: const Icon(Icons.close_rounded, size: 18),
+                          icon: const Icon(
+                            Icons.close_rounded,
+                            size: 18,
+                          ),
                         )
                       : null,
                 ),
@@ -503,18 +610,24 @@ class _MapSearchOverlayState extends ConsumerState<MapSearchOverlay>
             ),
             const SizedBox(height: 10),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 16,
+              ),
               child: Row(
                 children: [
                   Expanded(
                     child: MapSearchFilterChip(
-                      label: 'Radius: ${_selectedRadiusKm.toInt()} km',
+                      label:
+                          'Radius: '
+                          '${_selectedRadiusKm.toInt()} km',
                       onTap: _showDistancePicker,
                     ),
                   ),
                   const SizedBox(width: 8),
                   MapSearchFilterChip(
-                    label: _showGlobalEvents ? 'Global on' : 'Nearby only',
+                    label: _showGlobalEvents
+                        ? 'Global on'
+                        : 'Nearby only',
                     isActive: _showGlobalEvents,
                     onTap: _toggleGlobal,
                   ),
@@ -522,19 +635,29 @@ class _MapSearchOverlayState extends ConsumerState<MapSearchOverlay>
               ),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+              padding: const EdgeInsets.fromLTRB(
+                16,
+                10,
+                16,
+                12,
+              ),
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
                   _scopeLabel,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodySmall
+                      ?.copyWith(
                         fontWeight: FontWeight.w600,
                       ),
                 ),
               ),
             ),
             const Divider(height: 1),
-            Expanded(child: _buildResults()),
+            Expanded(
+              child: _buildResults(),
+            ),
           ],
         ),
       ),

@@ -19,4 +19,6 @@ public class EventFilterDto
     public int Page { get; set; } = 1;
     public int PageSize { get; set; } = 20;
     public bool UsePreferences { get; set; }
+    public decimal? Latitude { get; set; }
+    public decimal? Longitude { get; set; }
 }

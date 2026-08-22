@@ -98,6 +98,12 @@ class EventReservationCard extends StatelessWidget {
                               label: 'Paid via PayPal',
                               tone: _ReservationStatusTone.success,
                             ),
+                          if (reservation.isCashCollected)
+                            const _ReservationStatusChip(
+                              icon: Icons.payments_rounded,
+                              label: 'Cash collected',
+                              tone: _ReservationStatusTone.success,
+                            ),
                           if (reservation.isCashPending)
                             const _ReservationStatusChip(
                               icon: Icons.schedule_rounded,
@@ -186,7 +192,7 @@ class EventReservationCard extends StatelessWidget {
   }
 
   static String _displayName(PublicUserProfileDto? profile, int userId) {
-    if (profile == null) return 'User #$userId';
+    if (profile == null) return 'User';
 
     final fullName = '${profile.firstName} ${profile.lastName}'.trim();
     if (fullName.isNotEmpty) return fullName;
@@ -194,7 +200,7 @@ class EventReservationCard extends StatelessWidget {
     final username = profile.username.trim();
     if (username.isNotEmpty) return username;
 
-    return 'User #$userId';
+    return 'User';
   }
 
   static String _subtitle(PublicUserProfileDto? profile, int userId) {
@@ -203,7 +209,7 @@ class EventReservationCard extends StatelessWidget {
     final username = profile.username.trim();
     if (username.isNotEmpty) return '@$username';
 
-    return 'User #$userId';
+    return 'User';
   }
 }
 

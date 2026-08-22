@@ -762,72 +762,94 @@ public class EventServiceImpl : IEventService
             });
     }
 
-    public async Task<ServiceResult<PagedResult<EventResponseDto>>> GetPublicAsync(
-    EventFilterDto filter, int? requesterId = null)
+    public async Task<
+        ServiceResult<
+            PagedResult<EventResponseDto>
+        >
+    > GetPublicAsync(
+        EventFilterDto filter,
+        int? requesterId = null)
     {
         filter ??= new EventFilterDto();
+
         filter.Status = EventStatus.Confirmed;
         filter.Page = NormalizePage(filter.Page);
         filter.PageSize = NormalizePageSize(filter.PageSize);
 
-        var usePreferences = requesterId.HasValue && filter.UsePreferences;
+        var usePreferences =
+            requesterId.HasValue &&
+            filter.UsePreferences;
 
         if (!usePreferences)
         {
-            var result = await _eventRepository.GetAllAsync(filter);
-            return ServiceResult<PagedResult<EventResponseDto>>.Ok(
+            var unrankedResult =
+                await _eventRepository.GetAllAsync(filter);
+
+            var unrankedResponseItems =
+                unrankedResult.Items
+                    .Select(eventItem =>
+                        MapToDto(
+                            eventItem,
+                            false,
+                            0.0))
+                    .ToList();
+
+            return ServiceResult<
+                PagedResult<EventResponseDto>
+            >.Ok(
                 new PagedResult<EventResponseDto>
                 {
-                    Items = result.Items.Select(e => MapToDto(e, false)).ToList(),
-                    TotalCount = result.TotalCount,
-                    Page = result.Page,
-                    PageSize = result.PageSize
+                    Items = unrankedResponseItems,
+                    TotalCount = unrankedResult.TotalCount,
+                    Page = unrankedResult.Page,
+                    PageSize = unrankedResult.PageSize
                 });
         }
 
-        var preferences = await _userProfileService.GetUserPreferencesAsync(requesterId!.Value);
+        var preferences =
+            await _userProfileService.GetUserPreferencesAsync(
+                requesterId!.Value);
 
-        if (preferences.Count == 0)
-        {
-            var result = await _eventRepository.GetAllAsync(filter);
-            var events = result.Items.ToList();
-            var likedIds = await _eventRepository.GetLikedEventIdsAsync(
-                requesterId.Value, events.Select(e => e.EventId));
+        var rankedEvents =
+            await _eventRepository.GetPublicRankedAsync(
+                filter,
+                preferences);
 
-            return ServiceResult<PagedResult<EventResponseDto>>.Ok(
-                new PagedResult<EventResponseDto>
-                {
-                    Items = events.Select(e => MapToDto(e, likedIds.Contains(e.EventId))).ToList(),
-                    TotalCount = result.TotalCount,
-                    Page = result.Page,
-                    PageSize = result.PageSize
-                });
-        }
+        var rankedTotalCount = rankedEvents.Count;
 
-        var candidates = await _eventRepository.GetPublicCandidatesAsync(filter);
-        var ranked = candidates
-            .Select(e => new { Event = e, Score = CalculatePreferenceScore(e, preferences) })
-            .OrderByDescending(x => x.Score)
-            .ThenBy(x => x.Event.StartDateTime)
-            .ThenByDescending(x => x.Event.LikesCount)
-            .ThenBy(x => x.Event.EventId)
-            .ToList();
-
-        var totalCount = ranked.Count;
-        var pagedEvents = ranked
-            .Skip((filter.Page - 1) * filter.PageSize)
+        var pagedRankedEvents = rankedEvents
+            .Skip(
+                (filter.Page - 1) *
+                filter.PageSize)
             .Take(filter.PageSize)
-            .Select(x => x.Event)
             .ToList();
 
-        var likedEventIds = await _eventRepository.GetLikedEventIdsAsync(
-            requesterId.Value, pagedEvents.Select(e => e.EventId));
+        var rankedEventIds = pagedRankedEvents
+            .Select(rankedItem =>
+                rankedItem.Event.EventId)
+            .ToList();
 
-        return ServiceResult<PagedResult<EventResponseDto>>.Ok(
+        var likedRankedEventIds =
+            await _eventRepository.GetLikedEventIdsAsync(
+                requesterId.Value,
+                rankedEventIds);
+
+        var rankedResponseItems = pagedRankedEvents
+            .Select(rankedItem =>
+                MapToDto(
+                    rankedItem.Event,
+                    likedRankedEventIds.Contains(
+                        rankedItem.Event.EventId),
+                    rankedItem.Score))
+            .ToList();
+
+        return ServiceResult<
+            PagedResult<EventResponseDto>
+        >.Ok(
             new PagedResult<EventResponseDto>
             {
-                Items = pagedEvents.Select(e => MapToDto(e, likedEventIds.Contains(e.EventId))).ToList(),
-                TotalCount = totalCount,
+                Items = rankedResponseItems,
+                TotalCount = rankedTotalCount,
                 Page = filter.Page,
                 PageSize = filter.PageSize
             });
@@ -884,63 +906,89 @@ public class EventServiceImpl : IEventService
             });
     }
 
-    public async Task<ServiceResult<List<EventResponseDto>>> GetNearbyPublicAsync(
-    NearbyEventSearchDto dto,
-    int? requesterId = null)
+    public async Task<
+        ServiceResult<List<EventResponseDto>>
+    > GetNearbyPublicAsync(
+        NearbyEventSearchDto dto,
+        int? requesterId = null)
     {
         if (dto is null)
         {
-            return ServiceResult<List<EventResponseDto>>.Fail(
+            return ServiceResult<
+                List<EventResponseDto>
+            >.Fail(
                 "Search parameters are required.");
         }
 
-        if (!dto.Latitude.HasValue || !dto.Longitude.HasValue)
+        if (!dto.Latitude.HasValue ||
+            !dto.Longitude.HasValue)
         {
-            return ServiceResult<List<EventResponseDto>>.Fail(
+            return ServiceResult<
+                List<EventResponseDto>
+            >.Fail(
                 "Latitude and Longitude are required.");
         }
 
         if (dto.Latitude.Value is < -90 or > 90)
         {
-            return ServiceResult<List<EventResponseDto>>.Fail(
+            return ServiceResult<
+                List<EventResponseDto>
+            >.Fail(
                 "Latitude must be between -90 and 90.");
         }
 
         if (dto.Longitude.Value is < -180 or > 180)
         {
-            return ServiceResult<List<EventResponseDto>>.Fail(
+            return ServiceResult<
+                List<EventResponseDto>
+            >.Fail(
                 "Longitude must be between -180 and 180.");
         }
 
-        if (dto.RadiusKm <= 0 || dto.RadiusKm > 500)
+        if (dto.RadiusKm <= 0 ||
+            dto.RadiusKm > 500)
         {
-            return ServiceResult<List<EventResponseDto>>.Fail(
+            return ServiceResult<
+                List<EventResponseDto>
+            >.Fail(
                 "Radius must be between 1 and 500 km.");
         }
 
-        if (dto.Limit <= 0 || dto.Limit > 100)
+        if (dto.Limit <= 0 ||
+            dto.Limit > 100)
         {
-            return ServiceResult<List<EventResponseDto>>.Fail(
+            return ServiceResult<
+                List<EventResponseDto>
+            >.Fail(
                 "Limit must be between 1 and 100.");
         }
 
-        if (dto.MinPrice.HasValue && dto.MinPrice.Value < 0)
+        if (dto.MinPrice.HasValue &&
+            dto.MinPrice.Value < 0)
         {
-            return ServiceResult<List<EventResponseDto>>.Fail(
+            return ServiceResult<
+                List<EventResponseDto>
+            >.Fail(
                 "Minimum price cannot be negative.");
         }
 
-        if (dto.MaxPrice.HasValue && dto.MaxPrice.Value < 0)
+        if (dto.MaxPrice.HasValue &&
+            dto.MaxPrice.Value < 0)
         {
-            return ServiceResult<List<EventResponseDto>>.Fail(
+            return ServiceResult<
+                List<EventResponseDto>
+            >.Fail(
                 "Maximum price cannot be negative.");
         }
 
         if (dto.MinPrice.HasValue &&
             dto.MaxPrice.HasValue &&
-            dto.MinPrice.Value > dto.MaxPrice.Value)
+            dto.MinPrice.Value >
+                dto.MaxPrice.Value)
         {
-            return ServiceResult<List<EventResponseDto>>.Fail(
+            return ServiceResult<
+                List<EventResponseDto>
+            >.Fail(
                 "Minimum price cannot be greater than maximum price.");
         }
 
@@ -948,44 +996,116 @@ public class EventServiceImpl : IEventService
             dto.GenreId is <= 0 ||
             dto.SubGenreId is <= 0)
         {
-            return ServiceResult<List<EventResponseDto>>.Fail(
+            return ServiceResult<
+                List<EventResponseDto>
+            >.Fail(
                 "Category IDs must be greater than zero.");
         }
 
-        var preferences = requesterId.HasValue && dto.UsePreferences
-            ? await _userProfileService.GetUserPreferencesAsync(
-                requesterId.Value)
-            : Array.Empty<UserPreferenceDto>();
+        _logger.LogInformation(
+            "Nearby recommendation request: " +
+            "RequesterId={RequesterId}, " +
+            "Authenticated={Authenticated}, " +
+            "UsePreferences={UsePreferences}, " +
+            "Latitude={Latitude}, " +
+            "Longitude={Longitude}, " +
+            "RadiusKm={RadiusKm}, " +
+            "Limit={Limit}",
+            requesterId,
+            requesterId.HasValue,
+            dto.UsePreferences,
+            dto.Latitude.Value,
+            dto.Longitude.Value,
+            dto.RadiusKm,
+            dto.Limit);
 
-        var events = await _eventRepository.GetNearbyAsync(
-            dto,
-            preferences);
+        var preferences =
+            requesterId.HasValue &&
+            dto.UsePreferences
+                ? await _userProfileService
+                    .GetUserPreferencesAsync(
+                        requesterId.Value)
+                : Array.Empty<UserPreferenceDto>();
 
-        var publicEvents = events
-            .Where(e =>
-                e.Status == EventStatus.Confirmed &&
-                !e.IsPast())
-            .Select(e => MapToDto(e, false))
-            .ToList();
+        _logger.LogInformation(
+            "Nearby preferences loaded: " +
+            "RequesterId={RequesterId}, " +
+            "PreferenceCount={PreferenceCount}, " +
+            "Preferences={Preferences}",
+            requesterId,
+            preferences.Count,
+            string.Join(
+                " | ",
+                preferences.Select(preference =>
+                    $"segment={preference.SegmentId}, " +
+                    $"genre={preference.GenreId}, " +
+                    $"subGenre={preference.SubGenreId}, " +
+                    $"score={preference.Score}")));
 
-        if (requesterId.HasValue && publicEvents.Count > 0)
+        var rankedEvents =
+            await _eventRepository.GetNearbyRankedAsync(
+                dto,
+                preferences);
+
+        _logger.LogInformation(
+            "Nearby ranked events returned: " +
+            "Count={Count}, " +
+            "Scores={Scores}",
+            rankedEvents.Count,
+            string.Join(
+                " | ",
+                rankedEvents.Select(rankedItem =>
+                    $"event={rankedItem.Event.EventId}, " +
+                    $"title={rankedItem.Event.Title}, " +
+                    $"score={rankedItem.Score:F2}")));
+
+        if (rankedEvents.Count == 0)
         {
-            var likedEventIds =
-                await _eventRepository.GetLikedEventIdsAsync(
-                    requesterId.Value,
-                    publicEvents.Select(e => e.EventId));
-
-            publicEvents = events
-                .Where(e =>
-                    e.Status == EventStatus.Confirmed &&
-                    !e.IsPast())
-                .Select(e => MapToDto(
-                    e,
-                    likedEventIds.Contains(e.EventId)))
-                .ToList();
+            return ServiceResult<
+                List<EventResponseDto>
+            >.Ok(
+                new List<EventResponseDto>());
         }
 
-        return ServiceResult<List<EventResponseDto>>.Ok(publicEvents);
+        var visibleEvents = rankedEvents
+            .Where(rankedItem =>
+                rankedItem.Event.Status ==
+                    EventStatus.Confirmed &&
+                !rankedItem.Event.IsPast())
+            .ToList();
+
+        if (visibleEvents.Count == 0)
+        {
+            return ServiceResult<
+                List<EventResponseDto>
+            >.Ok(
+                new List<EventResponseDto>());
+        }
+
+        var eventIds = visibleEvents
+            .Select(rankedItem =>
+                rankedItem.Event.EventId)
+            .ToList();
+
+        var likedEventIds = requesterId.HasValue
+            ? await _eventRepository
+                .GetLikedEventIdsAsync(
+                    requesterId.Value,
+                    eventIds)
+            : new HashSet<int>();
+
+        var responseItems = visibleEvents
+            .Select(rankedItem =>
+                MapToDto(
+                    rankedItem.Event,
+                    likedEventIds.Contains(
+                        rankedItem.Event.EventId),
+                    rankedItem.Score))
+            .ToList();
+
+        return ServiceResult<
+            List<EventResponseDto>
+        >.Ok(responseItems);
     }
 
     public async Task<ServiceResult<EventResponseDto>> CreateAsync(CreateEventDto dto, int organizerId)
@@ -1832,7 +1952,7 @@ public class EventServiceImpl : IEventService
         return score;
     }
 
-    private static EventResponseDto MapToDto(DomainEvent ev, bool isLiked = false) => new()
+    private static EventResponseDto MapToDto(DomainEvent ev, bool isLiked = false, double recommendationScore = 0.0) => new()
     {
         EventId = ev.EventId,
         OrganizerId = ev.OrganizerId,
@@ -1855,6 +1975,7 @@ public class EventServiceImpl : IEventService
         IsFeatured = ev.IsFeatured,
         ViewCount = ev.ViewCount,
         LikesCount = ev.LikesCount,
+        RecommendationScore = recommendationScore,
         IsLiked = isLiked,
         Tags = ev.Tags,
         AccessibilityInfo = ev.AccessibilityInfo,

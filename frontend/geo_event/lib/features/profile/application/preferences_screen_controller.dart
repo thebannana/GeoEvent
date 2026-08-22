@@ -66,7 +66,7 @@ class _PreferencesScreenMapper {
         subGenreItems.add(
           PreferenceItemViewModel(
             prefId: preference.prefId,
-            title: subGenre?.name ?? 'Subgenre #${preference.subGenreId}',
+            title: subGenre?.name ?? 'Subgenre',
             subtitle: genre?.name,
             score: preference.score,
             progress: _normalizeProgress(preference.score, maxScore),
@@ -86,7 +86,7 @@ class _PreferencesScreenMapper {
         genreItems.add(
           PreferenceItemViewModel(
             prefId: preference.prefId,
-            title: genre?.name ?? 'Genre #${preference.genreId}',
+            title: genre?.name ?? 'Genre',
             subtitle: segment?.name,
             score: preference.score,
             progress: _normalizeProgress(preference.score, maxScore),
@@ -103,7 +103,7 @@ class _PreferencesScreenMapper {
         segmentItems.add(
           PreferenceItemViewModel(
             prefId: preference.prefId,
-            title: segment?.name ?? 'Segment #${preference.segmentId}',
+            title: segment?.name ?? 'Segment',
             subtitle: null,
             score: preference.score,
             progress: _normalizeProgress(preference.score, maxScore),

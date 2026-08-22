@@ -66,8 +66,8 @@ docker compose up --build -d
 ### Administrator
 
 ```text
-Username: dengabenga
-Email: kundodenis@gmail.com
+Username: admin
+Email: admin@geoevent.local
 Password: Admin123!
 ```
 

@@ -12,7 +12,7 @@ using TicketService.Infrastructure.Persistence;
 namespace TicketService.Infrastructure.Migrations
 {
     [DbContext(typeof(TicketDbContext))]
-    [Migration("20260822194705_FINAL")]
+    [Migration("20260822215544_FINAL")]
     partial class FINAL
     {
         /// <inheritdoc />

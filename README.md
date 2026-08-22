@@ -38,8 +38,16 @@ Create the required `.env` file in the backend directory. It must contain the da
 
 Start the backend from the directory containing `docker-compose.yml`:
 
+Build the services:
+
 ```powershell
-docker compose up --build -d
+docker compose build
+```
+
+Start the services:
+
+```powershell
+docker compose up -d
 ```
 
 Check the services:
@@ -58,7 +66,8 @@ For a complete local database reset:
 
 ```powershell
 docker compose down --volumes
-docker compose up --build -d
+docker compose build
+docker compose up -d
 ```
 
 ## Test accounts

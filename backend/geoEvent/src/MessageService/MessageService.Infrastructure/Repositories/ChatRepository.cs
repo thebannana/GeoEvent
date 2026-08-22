@@ -172,31 +172,43 @@ public class ChatRepository : IChatRepository
             .ToListAsync();
 
     public async Task<PagedResult<ChatThread>> GetUserThreadsAsync(
-        int userId,
-        int page,
-        int pageSize,
-        string? searchTerm,
-        bool unreadOnly)
+    int userId,
+    int page,
+    int pageSize,
+    string? searchTerm,
+    bool unreadOnly,
+    bool skipPagination = false)
     {
         page = page <= 0 ? 1 : page;
-        pageSize = pageSize <= 0 ? 20 : Math.Min(pageSize, 50);
-        searchTerm = string.IsNullOrWhiteSpace(searchTerm) ? null : searchTerm.Trim();
+        pageSize = pageSize <= 0
+            ? 20
+            : Math.Min(pageSize, 50);
+
+        searchTerm = string.IsNullOrWhiteSpace(searchTerm)
+            ? null
+            : searchTerm.Trim();
 
         var query = _context.ChatThreads
             .AsNoTracking()
-            .Include(x => x.Participants)
-            .Where(x => x.Participants.Any(p => p.UserId == userId && p.LeftAt == null));
+            .Where(thread =>
+                thread.Participants.Any(participant =>
+                    participant.UserId == userId &&
+                    participant.LeftAt == null));
 
         if (unreadOnly)
         {
             query = query.Where(thread =>
-                thread.Participants.Any(p =>
-                    p.UserId == userId &&
-                    p.LeftAt == null &&
-                    thread.Messages.Any(m =>
-                        m.DeletedAt == null &&
-                        m.SenderId != userId &&
-                        (p.LastReadAt == null || m.SentAt > p.LastReadAt.Value))));
+                thread.Participants.Any(participant =>
+                    participant.UserId == userId &&
+                    participant.LeftAt == null &&
+                    thread.Messages.Any(message =>
+                        message.DeletedAt == null &&
+                        message.SenderId != userId &&
+                        (
+                            participant.LastReadAt == null ||
+                            message.SentAt >
+                                participant.LastReadAt.Value
+                        ))));
         }
 
         if (!string.IsNullOrWhiteSpace(searchTerm))
@@ -204,19 +216,36 @@ public class ChatRepository : IChatRepository
             var pattern = $"%{searchTerm}%";
 
             query = query.Where(thread =>
-                EF.Functions.Like(thread.Title, pattern) ||
-                thread.Messages.Any(m =>
-                    m.DeletedAt == null &&
-                    EF.Functions.Like(m.Content, pattern)));
+                (
+                    thread.Title != null &&
+                    EF.Functions.Like(
+                        thread.Title,
+                        pattern)
+                ) ||
+                thread.Messages.Any(message =>
+                    message.DeletedAt == null &&
+                    EF.Functions.Like(
+                        message.Content,
+                        pattern)));
         }
+
+        query = query
+            .OrderByDescending(thread =>
+                thread.LastMessageAt ?? thread.CreatedAt)
+            .ThenByDescending(thread => thread.Id);
 
         var totalCount = await query.CountAsync();
 
+        if (!skipPagination)
+        {
+            query = query
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize);
+        }
+
         var items = await query
-            .OrderByDescending(x => x.LastMessageAt ?? x.CreatedAt)
-            .ThenByDescending(x => x.Id)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
+            .Include(thread => thread.Participants)
+            .Include(thread => thread.Messages)
             .ToListAsync();
 
         return new PagedResult<ChatThread>

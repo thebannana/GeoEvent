@@ -109,7 +109,8 @@ public class ChatServiceImpl : IChatService
             page,
             pageSize,
             searchTerm,
-            filter.UnreadOnly);
+            filter.UnreadOnly,
+            skipPagination: !string.IsNullOrWhiteSpace(searchTerm));
 
         var threadItems = pagedThreads.Items.ToList();
 
@@ -150,10 +151,18 @@ public class ChatServiceImpl : IChatService
                             StringComparison.OrdinalIgnoreCase)) ||
                     thread.Participants.Any(participant =>
                         participant.LeftAt == null &&
-                        matchingUserIds.Contains(participant.UserId)))
+                        matchingUserIds.Contains(
+                            participant.UserId)))
                 .ToList();
 
-            pagedThreads.TotalCount = threadItems.Count;
+            var totalCount = threadItems.Count;
+
+            threadItems = threadItems
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToList();
+
+            pagedThreads.TotalCount = totalCount;
         }
 
         var mappedItems = new List<ChatThreadSummaryDto>(
@@ -161,7 +170,10 @@ public class ChatServiceImpl : IChatService
 
         foreach (var thread in threadItems)
         {
-            var dto = await MapThreadSummaryAsync(thread, userId);
+            var dto = await MapThreadSummaryAsync(
+                thread,
+                userId);
+
             mappedItems.Add(dto);
         }
 

@@ -5,6 +5,13 @@ namespace MessageService.Application.Interfaces.Repositories;
 
 public interface IChatRepository
 {
+    Task<PagedResult<ChatThread>> GetUserThreadsAsync(
+    int userId,
+    int page,
+    int pageSize,
+    string? searchTerm,
+    bool unreadOnly,
+    bool skipPagination = false);
     Task<int> GetThreadUnreadCountAsync(long threadId, int userId);
     Task<int> GetUnreadCountAsync(int userId);
 
@@ -34,11 +41,4 @@ public interface IChatRepository
     Task<List<ChatThreadParticipant>> GetUserParticipationsAsync(int userId);
     Task<List<ChatMessage>> GetMessagesBySenderAsync(int userId);
     Task<List<ChatMessage>> GetMessagesByThreadAndSenderAsync(long threadId, int userId);
-
-    Task<PagedResult<ChatThread>> GetUserThreadsAsync(
-        int userId,
-        int page,
-        int pageSize,
-        string? searchTerm,
-        bool unreadOnly);
 }

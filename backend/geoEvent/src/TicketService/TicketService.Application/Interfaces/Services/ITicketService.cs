@@ -5,6 +5,10 @@ namespace TicketService.Application.Interfaces.Services;
 
 public interface ITicketService
 {
+    Task<ServiceResult<bool>>
+    ExpireEventDataAsync(
+        int eventId,
+        CancellationToken cancellationToken = default);
     Task<ServiceResult<PagedResult<AdminRefundRequestResponseDto>>> GetAdminRefundRequestsAsync(
     AdminRefundRequestsQueryDto query,
     int requesterId,

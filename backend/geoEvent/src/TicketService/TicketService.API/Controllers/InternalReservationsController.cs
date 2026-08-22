@@ -30,4 +30,21 @@ public sealed class InternalReservationsController : ControllerBase
                 result.StatusCode,
                 new { error = result.Error });
     }
+
+    [HttpPost("{eventId:int}/expire-after-event")]
+    public async Task<IActionResult> ExpireAfterEvent(
+    int eventId,
+    CancellationToken cancellationToken)
+    {
+        var result =
+            await _ticketService.ExpireEventDataAsync(
+                eventId,
+                cancellationToken);
+
+        return result.Success
+            ? Ok(result.Data)
+            : StatusCode(
+                result.StatusCode,
+                new { error = result.Error });
+    }
 }

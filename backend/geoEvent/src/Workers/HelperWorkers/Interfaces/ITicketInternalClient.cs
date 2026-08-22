@@ -10,4 +10,8 @@ public interface ITicketInternalClient
 
     Task ExpireReservationsAsync(
     CancellationToken cancellationToken = default);
+
+    Task ExpireEventDataAsync(
+    int eventId,
+    CancellationToken cancellationToken = default);
 }

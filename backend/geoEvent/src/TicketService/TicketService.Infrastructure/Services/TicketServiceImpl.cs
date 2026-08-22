@@ -49,6 +49,62 @@ public class TicketServiceImpl : ITicketService
         _configuration = configuration;
     }
 
+    public async Task<ServiceResult<bool>>
+    ExpireEventDataAsync(
+        int eventId,
+        CancellationToken cancellationToken = default)
+    {
+        if (eventId <= 0)
+        {
+            return ServiceResult<bool>.Fail(
+                "Invalid event id.",
+                StatusCodes.Status400BadRequest);
+        }
+
+        var reservations =
+            await _repository.GetReservationsForEventAsync(
+                eventId);
+
+        foreach (var reservationSummary in reservations)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var reservation =
+                await _repository.GetReservationByIdForUpdateAsync(
+                    reservationSummary.ReservationId);
+
+            if (reservation is null)
+            {
+                continue;
+            }
+
+            if (reservation.EventId != eventId)
+            {
+                continue;
+            }
+
+            reservation.Expire();
+
+            var tickets =
+                await _repository
+                    .GetTicketsByReservationForUpdateAsync(
+                        reservation.ReservationId);
+
+            foreach (var ticket in tickets)
+            {
+                ticket.Expire();
+            }
+        }
+
+        await _repository.SaveChangesAsync();
+
+        _logger.LogInformation(
+            "Expired all reservations and tickets for EventId {EventId}.",
+            eventId);
+
+        return ServiceResult<bool>.Ok(true);
+    }
+
     public async Task<
     ServiceResult<PagedResult<AdminRefundRequestResponseDto>>>
     GetAdminRefundRequestsAsync(

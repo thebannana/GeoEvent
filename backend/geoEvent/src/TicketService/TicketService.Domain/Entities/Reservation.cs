@@ -141,8 +141,10 @@ public class Reservation
 
     public void Expire()
     {
-        if (Status != ReservationStatus.Pending)
-            throw new BusinessException("Only pending reservations can expire.");
+        if (Status == ReservationStatus.Expired)
+        {
+            return;
+        }
 
         Status = ReservationStatus.Expired;
         ExpiredAt = DateTime.UtcNow;

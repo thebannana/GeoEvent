@@ -74,4 +74,32 @@ public sealed class TicketInternalClient : ITicketInternalClient
 
         response.EnsureSuccessStatusCode();
     }
+
+    public async Task ExpireEventDataAsync(
+    int eventId,
+    CancellationToken cancellationToken = default)
+    {
+        using var response = await _httpClient.PostAsync(
+            $"api/internal/reservations/{eventId}/expire-after-event",
+            content: null,
+            cancellationToken);
+
+        if (response.IsSuccessStatusCode)
+        {
+            return;
+        }
+
+        var responseBody =
+            await response.Content.ReadAsStringAsync(
+                cancellationToken);
+
+        _logger.LogError(
+            "Event data expiration failed for EventId {EventId}. " +
+            "StatusCode: {StatusCode}, Response: {Response}",
+            eventId,
+            (int)response.StatusCode,
+            responseBody);
+
+        response.EnsureSuccessStatusCode();
+    }
 }

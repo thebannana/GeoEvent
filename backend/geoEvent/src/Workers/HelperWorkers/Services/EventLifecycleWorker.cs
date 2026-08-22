@@ -36,7 +36,7 @@ public sealed class EventLifecycleWorker : BackgroundService
     }
 
     private async Task RunOnceAsync(
-        CancellationToken cancellationToken)
+    CancellationToken cancellationToken)
     {
         try
         {
@@ -66,6 +66,10 @@ public sealed class EventLifecycleWorker : BackgroundService
             foreach (var candidate in candidates)
             {
                 await eventClient.CompleteAsync(
+                    candidate.EventId,
+                    cancellationToken);
+
+                await ticketClient.ExpireEventDataAsync(
                     candidate.EventId,
                     cancellationToken);
             }

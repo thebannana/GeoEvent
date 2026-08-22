@@ -6,6 +6,7 @@ namespace EventService.Application.Interfaces.Repositories;
 
 public interface IEventRepository
 {
+    Task<List<Event>> GetConfirmedEventsEndingBeforeAsync(DateTime now);
     Task<List<RankedEvent>> GetNearbyRankedAsync(
         NearbyEventSearchDto dto,
         IReadOnlyList<UserPreferenceDto>? preferences = null);

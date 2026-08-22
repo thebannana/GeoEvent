@@ -2239,7 +2239,6 @@ public class TicketServiceImpl : ITicketService
         SaleEndDate = t.SaleEndDate,
         IsActive = t.IsActive,
         Description = t.Description,
-        PriceZoneId = t.PriceZoneId
     };
 
     private static PaymentDetailResponseDto MapToPaymentResponse(PaymentDetail p) => new()

@@ -35,4 +35,32 @@ public sealed class InternalEventsController : ControllerBase
             ? Ok(result.Data)
             : StatusCode(result.StatusCode, new { error = result.Error });
     }
+
+    [HttpGet("ready-to-complete")]
+    public async Task<IActionResult> GetReadyToComplete(
+        [FromQuery] DateTime now)
+    {
+        var result =
+            await _eventService.GetReadyToCompleteAsync(now);
+
+        return result.Success
+            ? Ok(result.Data)
+            : StatusCode(
+                result.StatusCode,
+                new { error = result.Error });
+    }
+
+    [HttpPost("{eventId:int}/complete")]
+    public async Task<IActionResult> Complete(
+        int eventId)
+    {
+        var result =
+            await _eventService.CompleteAutomaticallyAsync(eventId);
+
+        return result.Success
+            ? Ok(result.Data)
+            : StatusCode(
+                result.StatusCode,
+                new { error = result.Error });
+    }
 }

@@ -25,8 +25,7 @@ namespace TicketService.Infrastructure.Migrations
                     SaleStartDate = table.Column<DateTime>(type: "datetime2", nullable: true),
                     SaleEndDate = table.Column<DateTime>(type: "datetime2", nullable: true),
                     IsActive = table.Column<bool>(type: "bit", nullable: false),
-                    Description = table.Column<string>(type: "nvarchar(2000)", maxLength: 2000, nullable: true),
-                    PriceZoneId = table.Column<int>(type: "int", nullable: true)
+                    Description = table.Column<string>(type: "nvarchar(2000)", maxLength: 2000, nullable: true)
                 },
                 constraints: table =>
                 {

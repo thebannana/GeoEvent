@@ -114,6 +114,28 @@ builder.Services.AddHttpClient<IUserPreferenceInternalClient, UserPreferenceInte
     client.DefaultRequestHeaders.Add("X-Api-Key", userServiceInternalApiKey);
 });
 
+var eventServiceUri = GetRequiredAbsoluteUri(
+    builder.Configuration,
+    "Services:EventService:BaseUrl");
+
+var eventServiceInternalApiKey = GetRequiredSetting(
+    builder.Configuration,
+    "Services:EventService:InternalApiKey");
+
+builder.Services.AddHttpClient<
+    IEventInternalClient,
+    EventInternalClient>(client =>
+    {
+        client.BaseAddress = eventServiceUri;
+        client.Timeout = TimeSpan.FromSeconds(30);
+        client.DefaultRequestHeaders.Accept.Add(
+            new MediaTypeWithQualityHeaderValue(
+                "application/json"));
+        client.DefaultRequestHeaders.Add(
+            "X-Api-Key",
+            eventServiceInternalApiKey);
+    });
+
 var rabbitMqHost = GetRequiredSetting(builder.Configuration, "RabbitMq:Host");
 var rabbitMqVirtualHost = builder.Configuration["RabbitMq:VirtualHost"] ?? "/";
 var rabbitMqUsername = GetRequiredSetting(builder.Configuration, "RabbitMq:Username");
@@ -176,6 +198,7 @@ builder.Services.AddMassTransit(x =>
 });
 
 builder.Services.AddHostedService<WorkerStartupLogger>();
+builder.Services.AddHostedService<EventLifecycleWorker>();
 
 var host = builder.Build();
 await host.RunAsync();

@@ -35,6 +35,7 @@ class _TicketScannerScreenState extends ConsumerState<TicketScannerScreen>
   bool _isHandlingScan = false;
   String? _lastScannedValue;
   DateTime? _lastScanAt;
+  final bool _didValidateTicket = false;
 
   static const Duration _duplicateCooldown = Duration(seconds: 2);
 
@@ -153,18 +154,24 @@ class _TicketScannerScreenState extends ConsumerState<TicketScannerScreen>
   @override
   Widget build(BuildContext context) {
     return AppScaffold(
-      appBar: AppBar(
-        title: Text(widget.eventTitle),
-        actions: [
-          IconButton(
-            tooltip: _isHandlingScan
-                ? 'Manual entry is unavailable while validation is in progress'
-                : 'Enter code manually',
-            onPressed: _isHandlingScan ? null : _openManualCodeInput,
-            icon: const Icon(Icons.keyboard_alt_rounded),
-          ),
-        ],
+    appBar: AppBar(
+      leading: BackButton(
+        onPressed: () {
+          Navigator.of(context).pop(_didValidateTicket);
+        },
       ),
+      title: Text(widget.eventTitle),
+      actions: [
+        IconButton(
+          tooltip: _isHandlingScan
+              ? 'Manual entry is unavailable while validation is in progress'
+              : 'Enter code manually',
+          onPressed:
+              _isHandlingScan ? null : _openManualCodeInput,
+          icon: const Icon(Icons.keyboard_alt_rounded),
+        ),
+      ],
+    ),
       child: Stack(
         children: [
           Positioned.fill(

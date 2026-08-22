@@ -5,6 +5,11 @@ namespace EventService.Application.Interfaces.Services;
 
 public interface IEventService
 {
+    Task<ServiceResult<IReadOnlyList<EventLifecycleCandidateDto>>>
+    GetReadyToCompleteAsync(DateTime now);
+
+    Task<ServiceResult<bool>>
+        CompleteAutomaticallyAsync(int eventId);
     Task<ServiceResult<InternalEventLookupDto>> GetInternalEventLookupAsync(int eventId);
     Task<ServiceResult<InternalCommentLookupDto>> GetInternalCommentLookupAsync(int commentId);
     Task<ServiceResult<CommentResponseDto>> AdminUpdateCommentAsync(int commentId, UpdateCommentDto dto);

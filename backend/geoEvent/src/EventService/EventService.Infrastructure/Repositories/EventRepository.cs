@@ -37,6 +37,16 @@ public class EventRepository : IEventRepository
         _context = context;
     }
 
+    public async Task<List<Event>> GetConfirmedEventsEndingBeforeAsync(
+    DateTime now)
+    {
+        return await _context.Events
+            .Where(ev =>
+                ev.Status == EventStatus.Confirmed &&
+                ev.EndDateTime <= now)
+            .ToListAsync();
+    }
+
     public async Task<int> GetTotalEventsCountAsync() =>
     await _context.Events
         .AsNoTracking()

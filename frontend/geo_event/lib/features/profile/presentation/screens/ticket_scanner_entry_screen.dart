@@ -60,16 +60,25 @@ class _TicketScannerEntryScreenState
     return ref.read(myEventsProvider.notifier).refresh();
   }
 
-  void _openScanner(BuildContext context, MyEventResponseDto event) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => TicketScannerScreen(
-          eventId: event.eventId,
-          eventTitle: event.title,
-        ),
+Future<void> _openScanner(
+  BuildContext context,
+  MyEventResponseDto event,
+) async {
+  final didValidate = await Navigator.of(context).push<bool>(
+    MaterialPageRoute(
+      builder: (_) => TicketScannerScreen(
+        eventId: event.eventId,
+        eventTitle: event.title,
       ),
-    );
+    ),
+  );
+
+  if (!mounted || didValidate != true) {
+    return;
   }
+
+  await ref.read(myEventsProvider.notifier).refresh();
+}
 
   @override
   Widget build(BuildContext context) {

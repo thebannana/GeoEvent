@@ -466,72 +466,72 @@ Future<void> onMapCreated(
   }
 
   Future<void> applyStandardMapConfiguration(
-    MapSettingsState settings,
-  ) async {
-    final map = mapboxMap;
+  MapSettingsState settings,
+) async {
+  final map = mapboxMap;
 
-    if (map == null || !styleLoaded) {
-      return;
-    }
-
-    final style = map.style;
-
-    await _runMapTask(
-      () => style.setStyleImportConfigProperty(
-        'basemap',
-        'lightPreset',
-        settings.dayNightCycle
-            ? resolveLightPreset()
-            : 'day',
-      ),
-      debugLabel: 'Failed to apply map light preset.',
-    );
-
-    await _runMapTask(
-      () => style.setStyleImportConfigProperty(
-        'basemap',
-        'showPointOfInterestLabels',
-        true,
-      ),
-      debugLabel: 'Failed to apply POI label visibility.',
-    );
-
-    await _runMapTask(
-      () => style.setStyleImportConfigProperty(
-        'basemap',
-        'showTransitLabels',
-        true,
-      ),
-      debugLabel: 'Failed to apply transit label visibility.',
-    );
-
-    await _runMapTask(
-      () => style.setStyleImportConfigProperty(
-        'basemap',
-        'showPlaceLabels',
-        true,
-      ),
-      debugLabel: 'Failed to apply place label visibility.',
-    );
-
-    await _runMapTask(
-      () => style.setStyleImportConfigProperty(
-        'basemap',
-        'showRoadLabels',
-        true,
-      ),
-      debugLabel: 'Failed to apply road label visibility.',
-    );
-
-    await _runMapTask(
-      () => style.setStyleImportConfigProperty(
-        'basemap',
-        'show3dObjects',
-        settings.map3D,
-      ),
-      debugLabel: 'Failed to apply 3D object visibility.',
-    );
+  if (map == null || !styleLoaded) {
+    return;
   }
+
+  final style = map.style;
+
+  await _runMapTask(
+    () => style.setStyleImportConfigProperty(
+      'basemap',
+      'lightPreset',
+      settings.dayNightCycle
+          ? resolveLightPreset()
+          : 'day',
+    ),
+    debugLabel: 'Failed to apply map light preset.',
+  );
+
+  await _runMapTask(
+    () => style.setStyleImportConfigProperty(
+      'basemap',
+      'showPointOfInterestLabels',
+      settings.mapPins,
+    ),
+    debugLabel: 'Failed to apply POI label visibility.',
+  );
+
+  await _runMapTask(
+    () => style.setStyleImportConfigProperty(
+      'basemap',
+      'showTransitLabels',
+      true,
+    ),
+    debugLabel: 'Failed to apply transit label visibility.',
+  );
+
+  await _runMapTask(
+    () => style.setStyleImportConfigProperty(
+      'basemap',
+      'showPlaceLabels',
+      true,
+    ),
+    debugLabel: 'Failed to apply place label visibility.',
+  );
+
+  await _runMapTask(
+    () => style.setStyleImportConfigProperty(
+      'basemap',
+      'showRoadLabels',
+      true,
+    ),
+    debugLabel: 'Failed to apply road label visibility.',
+  );
+
+  await _runMapTask(
+    () => style.setStyleImportConfigProperty(
+      'basemap',
+      'show3dObjects',
+      settings.map3D,
+    ),
+    debugLabel: 'Failed to apply 3D object visibility.',
+  );
+}
 
   Future<void> animateCameraFor3D(bool enabled) async {
     final map = mapboxMap;

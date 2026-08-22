@@ -105,6 +105,13 @@ Email: luka.jovanovic@geoevent.local
 Password: User123!
 ```
 
+### Paypal sandbox account for testing
+
+```text
+Email: sb-etlcz51926455@personal.example.com
+Password: 8u2kiH/<
+```
+
 The seed process creates sample segments, genres, subgenres, preferences, events, event images, likes, bookmarks, comments, reports, chat data, and notifications. These profiles and records provide data for testing event browsing, recommendations, filtering, maps, administration, and communication features.
 
 ## Mobile and desktop builds

@@ -289,6 +289,7 @@ services:
       Services__UserService__BaseUrl: ${USER_SERVICE_BASE_URL}
       Services__UserService__InternalApiKey: ${INTERNAL_API_KEY}
       Services__EventService__BaseUrl: ${EVENT_SERVICE_BASE_URL}
+      Services__EventService__InternalApiKey: ${INTERNAL_API_KEY}
       Services__NotificationService__BaseUrl: ${NOTIFICATION_SERVICE_BASE_URL}
       Services__NotificationService__InternalApiKey: ${INTERNAL_API_KEY}
       Services__MessageService__BaseUrl: ${MESSAGE_SERVICE_BASE_URL}

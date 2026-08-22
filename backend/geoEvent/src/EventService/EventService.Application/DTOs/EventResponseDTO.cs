@@ -33,4 +33,5 @@ public class EventResponseDto
     public List<string> ImageUrls { get; set; } = new();
     public string? CoverImageUrl { get; set; }
     public List<EventImageResponseDto> Images { get; set; } = new();
+    public double RecommendationScore { get; set; }
 }

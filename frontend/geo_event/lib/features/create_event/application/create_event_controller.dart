@@ -483,7 +483,7 @@ class CreateEventController extends StateNotifier<CreateEventState> {
         );
       } catch (error, stackTrace) {
         failures.add(
-          'Image #$imageId: ${_messageFromError(
+          'Image: ${_messageFromError(
             error,
             stackTrace: stackTrace,
             fallbackMessage: 'Could not remove this image.',

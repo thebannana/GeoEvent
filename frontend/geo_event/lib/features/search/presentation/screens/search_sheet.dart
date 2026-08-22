@@ -30,12 +30,18 @@ class SearchSheet extends ConsumerStatefulWidget {
   });
 
   @override
-  ConsumerState<SearchSheet> createState() => _SearchSheetState();
+  ConsumerState<SearchSheet> createState() =>
+      _SearchSheetState();
 }
 
-class _SearchSheetState extends ConsumerState<SearchSheet> {
-  final TextEditingController _textController = TextEditingController();
-  final ScrollController _scrollController = ScrollController();
+class _SearchSheetState
+    extends ConsumerState<SearchSheet> {
+  final TextEditingController _textController =
+      TextEditingController();
+
+  final ScrollController _scrollController =
+      ScrollController();
+
   final Debouncer _debouncer = Debouncer(
     delay: const Duration(milliseconds: 350),
   );
@@ -46,25 +52,35 @@ class _SearchSheetState extends ConsumerState<SearchSheet> {
   void initState() {
     super.initState();
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(searchControllerProvider.notifier).loadInitial();
-    });
-
     _scrollController.addListener(_onScroll);
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+
+      ref
+          .read(searchControllerProvider.notifier)
+          .loadInitial(force: true);
+    });
   }
 
   @override
   void dispose() {
     _debouncer.dispose();
     _textController.dispose();
+
     _scrollController
       ..removeListener(_onScroll)
       ..dispose();
+
     super.dispose();
   }
 
   void _showMessage(String message) {
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
 
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
@@ -73,25 +89,45 @@ class _SearchSheetState extends ConsumerState<SearchSheet> {
       );
   }
 
-  void _onScroll() {
-    if (!_scrollController.hasClients) return;
-
-    final position = _scrollController.position;
-    if (position.pixels >= position.maxScrollExtent - 240) {
-      ref.read(searchControllerProvider.notifier).loadMore();
-    }
+void _onScroll() {
+  if (!_scrollController.hasClients) {
+    return;
   }
+
+  final currentState =
+      ref.read(searchControllerProvider);
+
+  if (currentState.loading ||
+      currentState.loadingMore ||
+      !currentState.hasMore) {
+    return;
+  }
+
+  final position = _scrollController.position;
+
+  if (position.pixels >=
+      position.maxScrollExtent - 240) {
+    ref
+        .read(searchControllerProvider.notifier)
+        .loadMore();
+  }
+}
 
   void _closeParentSearchSheet() {
     widget.onCloseSheet?.call();
   }
 
   Future<void> _reloadCurrentResults() async {
-    await ref.read(searchControllerProvider.notifier).loadInitial(force: true);
+    await ref
+        .read(searchControllerProvider.notifier)
+        .loadInitial(force: true);
   }
 
-  Future<void> _openDirections(EventItem item) async {
-    final activeNavigation = ref.read(activeNavigationProvider);
+  Future<void> _openDirections(
+    EventItem item,
+  ) async {
+    final activeNavigation =
+        ref.read(activeNavigationProvider);
 
     if (activeNavigation?.eventId == item.eventId) {
       await Navigator.of(context).maybePop();
@@ -99,7 +135,8 @@ class _SearchSheetState extends ConsumerState<SearchSheet> {
       return;
     }
 
-    ref.read(pendingDirectionsProvider.notifier).state = EventDirectionsRequest(
+    ref.read(pendingDirectionsProvider.notifier).state =
+        EventDirectionsRequest(
       eventId: item.eventId,
       latitude: item.latitude,
       longitude: item.longitude,
@@ -112,14 +149,22 @@ class _SearchSheetState extends ConsumerState<SearchSheet> {
 
   void _onQueryChanged(String value) {
     _debouncer.run(() {
-      ref.read(searchControllerProvider.notifier).search(value);
+      if (!mounted) {
+        return;
+      }
+
+      ref
+          .read(searchControllerProvider.notifier)
+          .search(value);
     });
   }
 
   Future<T?> _showSheetSafeDialog<T>({
     required Widget child,
   }) async {
-    if (_isDialogOpen || !mounted) return null;
+    if (_isDialogOpen || !mounted) {
+      return null;
+    }
 
     _isDialogOpen = true;
     FocusScope.of(context).unfocus();
@@ -127,12 +172,16 @@ class _SearchSheetState extends ConsumerState<SearchSheet> {
     try {
       await Future<void>.delayed(Duration.zero);
 
-      if (!mounted) return null;
+      if (!mounted) {
+        return null;
+      }
 
       return await showDialog<T>(
         context: context,
         barrierDismissible: true,
         builder: (dialogContext) {
+          final theme = Theme.of(dialogContext);
+
           return Dialog(
             backgroundColor: Colors.transparent,
             insetPadding: const EdgeInsets.symmetric(
@@ -141,13 +190,15 @@ class _SearchSheetState extends ConsumerState<SearchSheet> {
             ),
             child: ConstrainedBox(
               constraints: BoxConstraints(
-                maxHeight: MediaQuery.of(dialogContext).size.height * 0.78,
+                maxHeight:
+                    MediaQuery.of(dialogContext).size.height *
+                        0.78,
                 maxWidth: 560,
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(28),
                 child: Material(
-                  color: Theme.of(dialogContext).colorScheme.surface,
+                  color: theme.colorScheme.surface,
                   child: child,
                 ),
               ),
@@ -161,36 +212,58 @@ class _SearchSheetState extends ConsumerState<SearchSheet> {
   }
 
   Future<void> _openSortSheet() async {
-    final currentState = ref.read(searchControllerProvider);
+    final currentState =
+        ref.read(searchControllerProvider);
 
-    final selected = await _showSheetSafeDialog<SortOption>(
+    final selected =
+        await _showSheetSafeDialog<SortOption>(
       child: SearchSortBottomSheet(
         selected: currentState.sort,
       ),
     );
 
-    if (selected == null || !mounted) return;
-    await ref.read(searchControllerProvider.notifier).applySort(selected);
+    if (selected == null || !mounted) {
+      return;
+    }
+
+    await ref
+        .read(searchControllerProvider.notifier)
+        .applySort(selected);
   }
 
   Future<void> _openFilterSheet() async {
     try {
-      final currentState = ref.read(searchControllerProvider);
-      final segments = await ref.read(eventsApiProvider).getSegments();
+      final currentState =
+          ref.read(searchControllerProvider);
 
-      if (!mounted) return;
+      final segments = await ref
+          .read(eventsApiProvider)
+          .getSegments();
 
-      final result = await _showSheetSafeDialog<FilterSelection>(
+      if (!mounted) {
+        return;
+      }
+
+      final result =
+          await _showSheetSafeDialog<FilterSelection>(
         child: SearchFilterBottomSheet(
-          initialSegmentId: currentState.filter.segmentId,
-          initialGenreId: currentState.filter.genreId,
-          initialSubGenreId: currentState.filter.subGenreId,
+          initialSegmentId:
+              currentState.filter.segmentId,
+          initialGenreId:
+              currentState.filter.genreId,
+          initialSubGenreId:
+              currentState.filter.subGenreId,
           segments: segments,
         ),
       );
 
-      if (result == null || !mounted) return;
-      await ref.read(searchControllerProvider.notifier).applyFilter(result);
+      if (result == null || !mounted) {
+        return;
+      }
+
+      await ref
+          .read(searchControllerProvider.notifier)
+          .applyFilter(result);
     } catch (error, stackTrace) {
       AppLogger.error(
         'Failed to open search filters.',
@@ -203,7 +276,8 @@ class _SearchSheetState extends ConsumerState<SearchSheet> {
         ErrorMapper.toMessage(
           error,
           stackTrace: stackTrace,
-          fallbackMessage: 'Could not load filters. Please try again.',
+          fallbackMessage:
+              'Could not load filters. Please try again.',
         ),
       );
     }
@@ -219,22 +293,31 @@ class _SearchSheetState extends ConsumerState<SearchSheet> {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 16),
         child: Center(
-          child: AppSpinner(size: 22, strokeWidth: 2),
+          child: AppSpinner(
+            size: 22,
+            strokeWidth: 2,
+          ),
         ),
       );
     }
 
     if (hasMore) {
       return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 16),
+        padding: const EdgeInsets.symmetric(
+          vertical: 16,
+        ),
         child: Center(
           child: OutlinedButton.icon(
-            onPressed: () =>
-                ref.read(searchControllerProvider.notifier).loadMore(),
-            icon: const Icon(Icons.expand_more_rounded),
+            onPressed: () => ref
+                .read(searchControllerProvider.notifier)
+                .loadMore(),
+            icon: const Icon(
+              Icons.expand_more_rounded,
+            ),
             label: Text(
               totalCount > 0
-                  ? 'Load more ($loadedCount/$totalCount)'
+                  ? 'Load more '
+                      '($loadedCount/$totalCount)'
                   : 'Load more',
             ),
           ),
@@ -247,11 +330,15 @@ class _SearchSheetState extends ConsumerState<SearchSheet> {
     }
 
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 16),
+      padding: const EdgeInsets.symmetric(
+        vertical: 16,
+      ),
       child: Center(
         child: Text(
           'Showing all $loadedCount events',
-          style: Theme.of(context).textTheme.bodySmall,
+          style: Theme.of(context)
+              .textTheme
+              .bodySmall,
         ),
       ),
     );
@@ -262,7 +349,8 @@ class _SearchSheetState extends ConsumerState<SearchSheet> {
     final colorScheme = theme.colorScheme;
 
     return Material(
-      color: colorScheme.errorContainer.withValues(alpha: 0.65),
+      color: colorScheme.errorContainer
+          .withValues(alpha: 0.65),
       borderRadius: BorderRadius.circular(16),
       child: Padding(
         padding: const EdgeInsets.all(12),
@@ -276,7 +364,8 @@ class _SearchSheetState extends ConsumerState<SearchSheet> {
             Expanded(
               child: Text(
                 message,
-                style: theme.textTheme.bodySmall?.copyWith(
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(
                   color: colorScheme.onErrorContainer,
                   fontWeight: FontWeight.w600,
                 ),
@@ -290,7 +379,7 @@ class _SearchSheetState extends ConsumerState<SearchSheet> {
 
   Widget _buildBody() {
     final state = ref.watch(searchControllerProvider);
-    final query = _textController.text.trim();
+    final query = state.query.trim();
 
     if (state.loading && state.results.isEmpty) {
       return ListView(
@@ -300,10 +389,13 @@ class _SearchSheetState extends ConsumerState<SearchSheet> {
         children: const [
           SizedBox(height: 28),
           Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16),
+            padding: EdgeInsets.symmetric(
+              horizontal: 16,
+            ),
             child: AppLoadingIndicator(
               title: 'Loading events',
-              message: 'Please wait while we prepare your results.',
+              message:
+                  'Please wait while we prepare your results.',
               centered: false,
             ),
           ),
@@ -312,12 +404,18 @@ class _SearchSheetState extends ConsumerState<SearchSheet> {
       );
     }
 
-    if (state.error != null && state.results.isEmpty) {
+    if (state.error != null &&
+        state.results.isEmpty) {
       return ListView(
         physics: const AlwaysScrollableScrollPhysics(
           parent: ClampingScrollPhysics(),
         ),
-        padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
+        padding: const EdgeInsets.fromLTRB(
+          16,
+          20,
+          16,
+          24,
+        ),
         children: [
           AppErrorState(
             message: state.error!,
@@ -327,31 +425,45 @@ class _SearchSheetState extends ConsumerState<SearchSheet> {
       );
     }
 
-    if (query.isEmpty && state.results.isEmpty) {
+    if (query.isEmpty &&
+        state.results.isEmpty) {
       return ListView(
         physics: const AlwaysScrollableScrollPhysics(
           parent: ClampingScrollPhysics(),
         ),
-        padding: const EdgeInsets.fromLTRB(16, 24, 16, 24),
+        padding: const EdgeInsets.fromLTRB(
+          16,
+          24,
+          16,
+          24,
+        ),
         children: const [
           AppEmptyState(
             title: 'No events available',
-            message: 'There are no events available right now.',
+            message:
+                'There are no events available right now.',
           ),
         ],
       );
     }
 
-    if (query.isNotEmpty && state.results.isEmpty) {
+    if (query.isNotEmpty &&
+        state.results.isEmpty) {
       return ListView(
         physics: const AlwaysScrollableScrollPhysics(
           parent: ClampingScrollPhysics(),
         ),
-        padding: const EdgeInsets.fromLTRB(16, 24, 16, 24),
+        padding: const EdgeInsets.fromLTRB(
+          16,
+          24,
+          16,
+          24,
+        ),
         children: const [
           AppEmptyState(
             title: 'No events found',
-            message: 'Try a different keyword or adjust your filters.',
+            message:
+                'Try a different keyword or adjust your filters.',
           ),
         ],
       );
@@ -370,13 +482,27 @@ class _SearchSheetState extends ConsumerState<SearchSheet> {
             children: [
               if (state.error != null)
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                  child: _buildInlineError(state.error!),
+                  padding: const EdgeInsets.fromLTRB(
+                    16,
+                    0,
+                    16,
+                    12,
+                  ),
+                  child: _buildInlineError(
+                    state.error!,
+                  ),
                 ),
               if (state.loading)
                 const Padding(
-                  padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
-                  child: LinearProgressIndicator(minHeight: 3),
+                  padding: EdgeInsets.fromLTRB(
+                    16,
+                    0,
+                    16,
+                    12,
+                  ),
+                  child: LinearProgressIndicator(
+                    minHeight: 3,
+                  ),
                 ),
             ],
           );
@@ -393,20 +519,11 @@ class _SearchSheetState extends ConsumerState<SearchSheet> {
 
         final item = state.results[index - 1];
 
-        final showRecommendedLabel =
-            state.isRecommendedSort &&
-            state.query.trim().isEmpty &&
-            index == 1;
-
-        final recommendationLabel = showRecommendedLabel
-            ? 'Based on your activity'
-            : null;
-
         return SearchResultCard(
           item: item,
           onOpenDirections: _openDirections,
-          onCloseParentSearchSheet: _closeParentSearchSheet,
-          recommendationLabel: recommendationLabel,
+          onCloseParentSearchSheet:
+              _closeParentSearchSheet,
         );
       },
     );
@@ -417,9 +534,12 @@ class _SearchSheetState extends ConsumerState<SearchSheet> {
     final state = ref.watch(searchControllerProvider);
 
     if (_textController.text != state.query) {
-      _textController.value = _textController.value.copyWith(
+      _textController.value =
+          _textController.value.copyWith(
         text: state.query,
-        selection: TextSelection.collapsed(offset: state.query.length),
+        selection: TextSelection.collapsed(
+          offset: state.query.length,
+        ),
         composing: TextRange.empty,
       );
     }
@@ -429,25 +549,37 @@ class _SearchSheetState extends ConsumerState<SearchSheet> {
       child: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            padding: const EdgeInsets.fromLTRB(
+              16,
+              12,
+              16,
+              0,
+            ),
             child: SearchBarWidget(
               controller: _textController,
               onChanged: _onQueryChanged,
               onClear: () async {
                 _debouncer.cancel();
-                await ref.read(searchControllerProvider.notifier).clearQuery();
+
+                await ref
+                    .read(searchControllerProvider.notifier)
+                    .clearQuery();
               },
             ),
           ),
           const SizedBox(height: 10),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 16,
+            ),
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: [
                   AppChip(
-                    label: state.hasActiveFilters ? 'Filtered' : 'Filter',
+                    label: state.hasActiveFilters
+                        ? 'Filtered'
+                        : 'Filter',
                     onTap: _openFilterSheet,
                     selected: state.hasActiveFilters,
                     icon: Icons.tune_rounded,

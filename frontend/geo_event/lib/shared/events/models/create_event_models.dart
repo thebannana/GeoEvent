@@ -1,4 +1,3 @@
-import 'dart:math' as math;
 import 'dart:typed_data';
 
 import '../../../core/constants/event_status.dart';
@@ -44,6 +43,7 @@ class EventItem {
   final int likesCount;
   final bool isLiked;
   final bool isBookmarked;
+  final double recommendationScore;
   final String? tags;
   final String? accessibilityInfo;
   final String? promoterName;
@@ -75,6 +75,7 @@ class EventItem {
     required this.isFeatured,
     required this.viewCount,
     required this.likesCount,
+    required this.recommendationScore,
     this.isLiked = false,
     this.isBookmarked = false,
     required this.tags,
@@ -87,72 +88,139 @@ class EventItem {
     required this.coverImageUrl,
   });
 
-  String get normalizedStatus => status.trim().toLowerCase();
+  String get normalizedStatus =>
+      status.trim().toLowerCase();
 
-  bool get isCancelled => normalizedStatus == 'cancelled';
+  bool get isCancelled =>
+      normalizedStatus == 'cancelled';
 
   bool get isFinished {
     final now = DateTime.now().toUtc();
-    final localEnd = endDateTime.toUtc();
-    return localEnd.isBefore(now) || localEnd.isAtSameMomentAs(now);
+    final end = endDateTime.toUtc();
+
+    return end.isBefore(now) ||
+        end.isAtSameMomentAs(now);
   }
 
-  bool get isUpcoming => startDateTime.toUtc().isAfter(DateTime.now().toUtc());
+  bool get isUpcoming =>
+      startDateTime
+          .toUtc()
+          .isAfter(DateTime.now().toUtc());
 
   bool get isOngoing {
     final now = DateTime.now().toUtc();
-    final localStart = startDateTime.toUtc();
-    final localEnd = endDateTime.toUtc();
-    final started =
-        localStart.isBefore(now) || localStart.isAtSameMomentAs(now);
-    final notEnded = localEnd.isAfter(now);
-    return started && notEnded;
+    final start = startDateTime.toUtc();
+    final end = endDateTime.toUtc();
+
+    final started = start.isBefore(now) ||
+        start.isAtSameMomentAs(now);
+
+    return started && end.isAfter(now);
   }
 
-  bool get isVisibleInSearch {
-    if (isCancelled) return false;
-    return !isFinished;
-  }
+  bool get isVisibleInSearch =>
+      !isCancelled && !isFinished;
 
-  factory EventItem.fromJson(Map<String, dynamic> json) {
+  factory EventItem.fromJson(
+    Map<String, dynamic> json,
+  ) {
+    final defaultDate =
+        DateTime.fromMillisecondsSinceEpoch(
+      0,
+      isUtc: true,
+    );
+
+    final startDate =
+        JsonHelpers.parseDateTimeRequired(
+      json['startDateTime'],
+      defaultDate,
+    );
 
     return EventItem(
-      eventId: JsonHelpers.asInt(json['eventId']) ?? 0,
-      organizerId: JsonHelpers.asInt(json['organizerId']),
-      segmentId: JsonHelpers.asInt(json['segmentId']),
+      eventId: JsonHelpers.asInt(
+            json['eventId'],
+          ) ??
+          0,
+      organizerId: JsonHelpers.asInt(
+        json['organizerId'],
+      ),
+      segmentId: JsonHelpers.asInt(
+        json['segmentId'],
+      ),
       segmentName: json['segmentName']?.toString(),
       segmentColor: json['segmentColor']?.toString(),
-      genreId: JsonHelpers.asInt(json['genreId']),
-      genreName: json['genreName']?.toString(),
-      subGenreId: JsonHelpers.asInt(json['subGenreId']),
-      subGenreName: json['subGenreName']?.toString(),
-      title: json['title']?.toString() ?? '',
-      description: json['description']?.toString() ?? '',
-      latitude: JsonHelpers.asDouble(json['latitude']),
-      longitude: JsonHelpers.asDouble(json['longitude']),
-      startDateTime: JsonHelpers.parseDateTimeRequired(
-          json['startDateTime'], DateTime.fromMillisecondsSinceEpoch(0).toUtc()),
-      endDateTime: JsonHelpers.parseDateTimeRequired(
-        json['endDateTime'],
-        JsonHelpers.parseDateTimeRequired(
-            json['startDateTime'], DateTime.fromMillisecondsSinceEpoch(0).toUtc()),
+      genreId: JsonHelpers.asInt(
+        json['genreId'],
       ),
-      capacity: JsonHelpers.asInt(json['capacity']) ?? 0,
-      price: JsonHelpers.asDouble(json['price']),
-      status: json['status']?.toString() ?? EventStatus.pending,
-      isFeatured: JsonHelpers.asBool(json['isFeatured']),
-      viewCount: JsonHelpers.asInt(json['viewCount']) ?? 0,
-      likesCount: JsonHelpers.asInt(json['likesCount']) ?? 0,
-      isLiked: JsonHelpers.asBool(json['isLiked']),
-      isBookmarked: JsonHelpers.asBool(json['isBookmarked']),
+      genreName: json['genreName']?.toString(),
+      subGenreId: JsonHelpers.asInt(
+        json['subGenreId'],
+      ),
+      subGenreName:
+          json['subGenreName']?.toString(),
+      title: json['title']?.toString() ?? '',
+      description:
+          json['description']?.toString() ?? '',
+      latitude: JsonHelpers.asDouble(
+        json['latitude'],
+      ),
+      longitude: JsonHelpers.asDouble(
+        json['longitude'],
+      ),
+      startDateTime: startDate,
+      endDateTime:
+          JsonHelpers.parseDateTimeRequired(
+        json['endDateTime'],
+        startDate,
+      ),
+      capacity: JsonHelpers.asInt(
+            json['capacity'],
+          ) ??
+          0,
+      price: JsonHelpers.asDouble(
+        json['price'],
+      ),
+      status: json['status']?.toString() ??
+          EventStatus.pending,
+      isFeatured: JsonHelpers.asBool(
+        json['isFeatured'],
+      ),
+      viewCount: JsonHelpers.asInt(
+            json['viewCount'],
+          ) ??
+          0,
+      likesCount: JsonHelpers.asInt(
+            json['likesCount'],
+          ) ??
+          0,
+      recommendationScore:
+          JsonHelpers.asDouble(
+            json['recommendationScore'],
+          ),
+      isLiked: JsonHelpers.asBool(
+        json['isLiked'],
+      ),
+      isBookmarked: JsonHelpers.asBool(
+        json['isBookmarked'],
+      ),
       tags: json['tags']?.toString(),
-      accessibilityInfo: json['accessibilityInfo']?.toString(),
-      promoterName: json['promoterName']?.toString(),
-      locale: json['locale']?.toString() ?? 'bs-BA',
-      createdAt: JsonHelpers.parseDateTime(json['createdAt']),
-      updatedAt: JsonHelpers.parseDateTime(json['updatedAt']),
-      imageUrls: JsonHelpers.asStringList(json['imageUrls']),
-      coverImageUrl: json['coverImageUrl']?.toString(),
+      accessibilityInfo:
+          json['accessibilityInfo']?.toString(),
+      promoterName:
+          json['promoterName']?.toString(),
+      locale: json['locale']?.toString() ??
+          'bs-BA',
+      createdAt: JsonHelpers.parseDateTime(
+        json['createdAt'],
+      ),
+      updatedAt: JsonHelpers.parseDateTime(
+        json['updatedAt'],
+      ),
+      imageUrls: JsonHelpers.asStringList(
+        json['imageUrls'],
+      ),
+      coverImageUrl:
+          json['coverImageUrl']?.toString(),
     );
   }
 
@@ -178,6 +246,7 @@ class EventItem {
     bool? isFeatured,
     int? viewCount,
     int? likesCount,
+    double? recommendationScore,
     bool? isLiked,
     bool? isBookmarked,
     String? tags,
@@ -191,36 +260,56 @@ class EventItem {
   }) {
     return EventItem(
       eventId: eventId ?? this.eventId,
-      organizerId: organizerId ?? this.organizerId,
+      organizerId:
+          organizerId ?? this.organizerId,
       segmentId: segmentId ?? this.segmentId,
-      segmentName: segmentName ?? this.segmentName,
-      segmentColor: segmentColor ?? this.segmentColor,
+      segmentName:
+          segmentName ?? this.segmentName,
+      segmentColor:
+          segmentColor ?? this.segmentColor,
       genreId: genreId ?? this.genreId,
       genreName: genreName ?? this.genreName,
-      subGenreId: subGenreId ?? this.subGenreId,
-      subGenreName: subGenreName ?? this.subGenreName,
+      subGenreId:
+          subGenreId ?? this.subGenreId,
+      subGenreName:
+          subGenreName ?? this.subGenreName,
       title: title ?? this.title,
-      description: description ?? this.description,
+      description:
+          description ?? this.description,
       latitude: latitude ?? this.latitude,
       longitude: longitude ?? this.longitude,
-      startDateTime: startDateTime ?? this.startDateTime,
-      endDateTime: endDateTime ?? this.endDateTime,
+      startDateTime:
+          startDateTime ?? this.startDateTime,
+      endDateTime:
+          endDateTime ?? this.endDateTime,
       capacity: capacity ?? this.capacity,
       price: price ?? this.price,
       status: status ?? this.status,
-      isFeatured: isFeatured ?? this.isFeatured,
-      viewCount: viewCount ?? this.viewCount,
-      likesCount: likesCount ?? this.likesCount,
+      isFeatured:
+          isFeatured ?? this.isFeatured,
+      viewCount:
+          viewCount ?? this.viewCount,
+      likesCount:
+          likesCount ?? this.likesCount,
+      recommendationScore:
+          recommendationScore ??
+              this.recommendationScore,
       isLiked: isLiked ?? this.isLiked,
-      isBookmarked: isBookmarked ?? this.isBookmarked,
+      isBookmarked:
+          isBookmarked ?? this.isBookmarked,
       tags: tags ?? this.tags,
-      accessibilityInfo: accessibilityInfo ?? this.accessibilityInfo,
-      promoterName: promoterName ?? this.promoterName,
+      accessibilityInfo:
+          accessibilityInfo ??
+              this.accessibilityInfo,
+      promoterName:
+          promoterName ?? this.promoterName,
       locale: locale ?? this.locale,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
-      imageUrls: imageUrls ?? this.imageUrls,
-      coverImageUrl: coverImageUrl ?? this.coverImageUrl,
+      imageUrls:
+          imageUrls ?? this.imageUrls,
+      coverImageUrl:
+          coverImageUrl ?? this.coverImageUrl,
     );
   }
 }
@@ -236,11 +325,19 @@ class CreateEventResponse {
     required this.coverImageUrl,
   });
 
-  factory CreateEventResponse.fromJson(Map<String, dynamic> json) {
+  factory CreateEventResponse.fromJson(
+    Map<String, dynamic> json,
+  ) {
     return CreateEventResponse(
-      eventId: JsonHelpers.asInt(json['eventId']) ?? 0,
-      imageUrls: JsonHelpers.asStringList(json['imageUrls']),
-      coverImageUrl: json['coverImageUrl']?.toString(),
+      eventId: JsonHelpers.asInt(
+            json['eventId'],
+          ) ??
+          0,
+      imageUrls: JsonHelpers.asStringList(
+        json['imageUrls'],
+      ),
+      coverImageUrl:
+          json['coverImageUrl']?.toString(),
     );
   }
 }
@@ -274,9 +371,15 @@ class EventImageUploadItem {
   });
 
   String get fileName {
-    final normalized = localPath.replaceAll('\\', '/');
+    final normalized =
+        localPath.replaceAll('\\', '/');
+
     final parts = normalized.split('/');
-    return parts.isNotEmpty && parts.last.isNotEmpty ? parts.last : 'image.jpg';
+
+    return parts.isNotEmpty &&
+            parts.last.isNotEmpty
+        ? parts.last
+        : 'image.jpg';
   }
 
   EventImageUploadItem copyWith({
@@ -286,9 +389,12 @@ class EventImageUploadItem {
     bool clearPreviewBytes = false,
   }) {
     return EventImageUploadItem(
-      localPath: localPath ?? this.localPath,
+      localPath:
+          localPath ?? this.localPath,
       isCover: isCover ?? this.isCover,
-      previewBytes: clearPreviewBytes ? null : (previewBytes ?? this.previewBytes),
+      previewBytes: clearPreviewBytes
+          ? null
+          : previewBytes ?? this.previewBytes,
     );
   }
 }
@@ -337,212 +443,30 @@ class CreateEventRequest {
       'subGenreId': subGenreId,
       'latitude': latitude,
       'longitude': longitude,
-      'startDateTime': startDateTime.toUtc().toIso8601String(),
-      'endDateTime': endDateTime.toUtc().toIso8601String(),
+      'startDateTime':
+          startDateTime.toUtc().toIso8601String(),
+      'endDateTime':
+          endDateTime.toUtc().toIso8601String(),
       'capacity': capacity,
       'price': price,
       'tags': _cleanNullable(tags),
-      'accessibilityInfo': _cleanNullable(accessibilityInfo),
-      'promoterName': _cleanNullable(promoterName),
-      'locale': locale.trim().isEmpty ? 'bs-BA' : locale.trim(),
+      'accessibilityInfo':
+          _cleanNullable(accessibilityInfo),
+      'promoterName':
+          _cleanNullable(promoterName),
+      'locale': locale.trim().isEmpty
+          ? 'bs-BA'
+          : locale.trim(),
     };
   }
 
   String? _cleanNullable(String? value) {
     final trimmed = value?.trim();
+
     if (trimmed == null || trimmed.isEmpty) {
       return null;
     }
+
     return trimmed;
   }
-}
-
-double distanceKm({
-  required double lat1,
-  required double lon1,
-  required double lat2,
-  required double lon2,
-}) {
-  const earthRadiusKm = 6371.0;
-  final dLat = _degToRad(lat2 - lat1);
-  final dLon = _degToRad(lon2 - lon1);
-
-  final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
-      math.cos(_degToRad(lat1)) *
-          math.cos(_degToRad(lat2)) *
-          math.sin(dLon / 2) *
-          math.sin(dLon / 2);
-
-  final c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
-  return earthRadiusKm * c;
-}
-
-double _degToRad(double deg) => deg * math.pi / 180;
-
-bool isWithinRadius({
-  required EventItem item,
-  required double userLatitude,
-  required double userLongitude,
-  required double radiusKm,
-}) {
-  final distance = distanceKm(
-    lat1: userLatitude,
-    lon1: userLongitude,
-    lat2: item.latitude,
-    lon2: item.longitude,
-  );
-
-  return distance <= radiusKm;
-}
-
-int preferenceScore({
-  required EventItem item,
-  required Set<int> preferredSegmentIds,
-  required Set<int> preferredGenreIds,
-  required Set<int> preferredSubGenreIds,
-}) {
-  var score = 0;
-
-  if (item.segmentId != null && preferredSegmentIds.contains(item.segmentId)) {
-    score += 30;
-  }
-  if (item.genreId != null && preferredGenreIds.contains(item.genreId)) {
-    score += 22;
-  }
-  if (item.subGenreId != null && preferredSubGenreIds.contains(item.subGenreId)) {
-    score += 16;
-  }
-  if (item.isFeatured) {
-    score += 6;
-  }
-
-  return score;
-}
-
-int mapRecommendationScore({
-  required EventItem item,
-  required double userLatitude,
-  required double userLongitude,
-  required Set<int> preferredSegmentIds,
-  required Set<int> preferredGenreIds,
-  required Set<int> preferredSubGenreIds,
-}) {
-  var total = preferenceScore(
-    item: item,
-    preferredSegmentIds: preferredSegmentIds,
-    preferredGenreIds: preferredGenreIds,
-    preferredSubGenreIds: preferredSubGenreIds,
-  );
-
-  final distance = distanceKm(
-    lat1: userLatitude,
-    lon1: userLongitude,
-    lat2: item.latitude,
-    lon2: item.longitude,
-  );
-
-  if (distance <= 2) {
-    total += 24;
-  } else if (distance <= 5) {
-    total += 16;
-  } else if (distance <= 10) {
-    total += 10;
-  } else if (distance <= 25) {
-    total += 4;
-  }
-
-  total += (item.likesCount / 25).round();
-  total += (item.viewCount / 250).round();
-
-  if (item.isFeatured) {
-    total += 4;
-  }
-
-  return total;
-}
-
-List<EventItem> rankByPreferences({
-  required List<EventItem> items,
-  required Set<int> preferredSegmentIds,
-  required Set<int> preferredGenreIds,
-  required Set<int> preferredSubGenreIds,
-}) {
-  final ranked = [...items];
-
-  ranked.sort(
-    (a, b) => preferenceScore(
-      item: b,
-      preferredSegmentIds: preferredSegmentIds,
-      preferredGenreIds: preferredGenreIds,
-      preferredSubGenreIds: preferredSubGenreIds,
-    ).compareTo(
-      preferenceScore(
-        item: a,
-        preferredSegmentIds: preferredSegmentIds,
-        preferredGenreIds: preferredGenreIds,
-        preferredSubGenreIds: preferredSubGenreIds,
-      ),
-    ),
-  );
-
-  return ranked;
-}
-
-List<EventItem> rankSearchResults({
-  required List<EventItem> items,
-  required String query,
-  required bool showGlobalEvents,
-  required double selectedRadiusKm,
-  required double userLatitude,
-  required double userLongitude,
-  required Set<int> preferredSegmentIds,
-  required Set<int> preferredGenreIds,
-  required Set<int> preferredSubGenreIds,
-}) {
-  final q = query.trim().toLowerCase();
-  final ranked = [...items];
-
-  int score(EventItem item) {
-    var total = 0;
-
-    final title = item.title.toLowerCase();
-    final segment = (item.segmentName ?? '').toLowerCase();
-    final genre = (item.genreName ?? '').toLowerCase();
-    final subGenre = (item.subGenreName ?? '').toLowerCase();
-    final tags = (item.tags ?? '').toLowerCase();
-
-    if (q.isNotEmpty) {
-      if (title.contains(q)) total += 80;
-      if (segment.contains(q)) total += 30;
-      if (genre.contains(q)) total += 25;
-      if (subGenre.contains(q)) total += 20;
-      if (tags.contains(q)) total += 15;
-    }
-
-    total += preferenceScore(
-      item: item,
-      preferredSegmentIds: preferredSegmentIds,
-      preferredGenreIds: preferredGenreIds,
-      preferredSubGenreIds: preferredSubGenreIds,
-    );
-
-    total += (item.likesCount / 20).round();
-    total += (item.viewCount / 200).round();
-
-    if (!showGlobalEvents) {
-      final distance = distanceKm(
-        lat1: userLatitude,
-        lon1: userLongitude,
-        lat2: item.latitude,
-        lon2: item.longitude,
-      );
-
-      total += distance <= selectedRadiusKm ? 20 : -20;
-    }
-
-    return total;
-  }
-
-  ranked.sort((a, b) => score(b).compareTo(score(a)));
-  return ranked;
 }

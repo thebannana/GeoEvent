@@ -59,9 +59,17 @@ extension DateTimeExtensions on DateTime {
         value.day == yesterday.day;
   }
 
-  bool get isPast => utc.isBefore(DateTime.now().toUtc());
+bool get isPast {
+  return toUtc().isBefore(
+    DateTime.now().toUtc(),
+  );
+}
 
-  bool get isFuture => utc.isAfter(DateTime.now().toUtc());
+bool get isFuture {
+  return toUtc().isAfter(
+    DateTime.now().toUtc(),
+  );
+}
 
   bool isSameDate(DateTime other) {
     final a = local;
@@ -83,17 +91,23 @@ extension DateTimeExtensions on DateTime {
         a.minute == b.minute;
   }
 
-  String formatDate({String pattern = 'dd MMM yyyy'}) {
-    return DateFormat(pattern).format(local);
-  }
+String formatDate({
+  String pattern = 'dd MMM yyyy',
+}) {
+  return DateFormat(pattern).format(toLocal());
+}
 
-  String formatTime({String pattern = 'HH:mm'}) {
-    return DateFormat(pattern).format(local);
-  }
+String formatTime({
+  String pattern = 'HH:mm',
+}) {
+  return DateFormat(pattern).format(toLocal());
+}
 
-  String formatDateTime({String pattern = 'dd MMM yyyy, HH:mm'}) {
-    return DateFormat(pattern).format(local);
-  }
+String formatDateTime({
+  String pattern = 'dd MMM yyyy, HH:mm',
+}) {
+  return DateFormat(pattern).format(toLocal());
+}
 
   String formatEventDate() {
     if (isToday) return 'Today';
@@ -103,23 +117,50 @@ extension DateTimeExtensions on DateTime {
     return DateFormat('EEE, dd MMM').format(local);
   }
 
-  String formatEventDateTime() {
-    final value = local;
+String formatEventDateTime() {
+  final value = toUtc().toLocal();
+  final now = DateTime.now();
 
-    if (isToday) {
-      return 'Today • ${DateFormat('HH:mm').format(value)}';
-    }
+  final sameDay = value.year == now.year &&
+      value.month == now.month &&
+      value.day == now.day;
 
-    if (isTomorrow) {
-      return 'Tomorrow • ${DateFormat('HH:mm').format(value)}';
-    }
+  final tomorrow = DateTime(
+    now.year,
+    now.month,
+    now.day,
+  ).add(const Duration(days: 1));
 
-    if (isYesterday) {
-      return 'Yesterday • ${DateFormat('HH:mm').format(value)}';
-    }
+  final yesterday = DateTime(
+    now.year,
+    now.month,
+    now.day,
+  ).subtract(const Duration(days: 1));
 
-    return DateFormat('EEE, dd MMM • HH:mm').format(value);
+  final isTomorrowDate = value.year == tomorrow.year &&
+      value.month == tomorrow.month &&
+      value.day == tomorrow.day;
+
+  final isYesterdayDate = value.year == yesterday.year &&
+      value.month == yesterday.month &&
+      value.day == yesterday.day;
+
+  if (sameDay) {
+    return 'Today • ${DateFormat('HH:mm').format(value)}';
   }
+
+  if (isTomorrowDate) {
+    return 'Tomorrow • ${DateFormat('HH:mm').format(value)}';
+  }
+
+  if (isYesterdayDate) {
+    return 'Yesterday • ${DateFormat('HH:mm').format(value)}';
+  }
+
+  return DateFormat(
+    'EEE, dd MMM • HH:mm',
+  ).format(value);
+}
 
   String timeAgo({bool short = false}) {
     final difference = DateTime.now().toUtc().difference(utc);

@@ -16,31 +16,45 @@ public class UserProfileService : IUserProfileService
         _logger = logger;
     }
 
-    public async Task<IReadOnlyList<UserPreferenceDto>> GetUserPreferencesAsync(int userId)
+    public async Task<
+        IReadOnlyList<UserPreferenceDto>
+    > GetUserPreferencesAsync(int userId)
     {
         if (userId <= 0)
+        {
             return Array.Empty<UserPreferenceDto>();
+        }
 
         try
         {
-            var response = await _httpClient.GetAsync($"api/internal/preferences/users/{userId}");
+            var response = await _httpClient.GetAsync(
+                $"api/internal/preferences/users/{userId}");
 
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogWarning(
-                    "Failed to fetch user preferences. StatusCode: {StatusCode}, UserId: {UserId}",
+                    "Failed to fetch user preferences. " +
+                    "StatusCode: {StatusCode}, UserId: {UserId}",
                     response.StatusCode,
                     userId);
 
                 return Array.Empty<UserPreferenceDto>();
             }
 
-            var data = await response.Content.ReadFromJsonAsync<List<UserPreferenceDto>>();
-            return Array.Empty<UserPreferenceDto>();
+            var data = await response.Content
+                .ReadFromJsonAsync<List<UserPreferenceDto>>();
+
+            return data ??
+                new List<UserPreferenceDto>();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error while fetching user preferences for user {UserId}.", userId);
+            _logger.LogError(
+                ex,
+                "Error while fetching user preferences " +
+                "for user {UserId}.",
+                userId);
+
             return Array.Empty<UserPreferenceDto>();
         }
     }

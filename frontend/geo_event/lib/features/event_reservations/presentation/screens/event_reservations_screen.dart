@@ -18,11 +18,11 @@ import '../../../../shared/profile/data/public_users_api.dart';
 import '../../../../shared/profile/models/public_user_profile.dart';
 import '../../../../shared/reservations/models/reservation_status.dart';
 import '../../../profile/presentation/screens/ticket_scanner_screen.dart';
+import '../../../public_profile/presentation/screens/public_profile_screen.dart';
 import '../widgets/event_reservation_card.dart';
 import '../widgets/event_reservations_header_card.dart';
 import '../widgets/event_reservations_pagination_footer.dart';
 import '../widgets/event_reservations_status_filter_bar.dart';
-import 'public_profile_screen.dart';
 
 class EventReservationsScreen extends ConsumerStatefulWidget {
   const EventReservationsScreen({
@@ -113,21 +113,46 @@ void _showMappedError(
 }
 
   void _onScroll() {
-    if (!_scrollController.hasClients) return;
-
-    final position = _scrollController.position;
-    final shouldLoadNextPage =
-        position.pixels >= position.maxScrollExtent - _nextPageTriggerOffset;
-
-    if (!shouldLoadNextPage) return;
-
-    ref
-        .read(
-          eventReservationsControllerProvider(widget.event.eventId).notifier,
-        )
-        .loadNextPage()
-        .then((_) => _loadMissingProfiles());
+  if (!_scrollController.hasClients) {
+    return;
   }
+
+  final state = ref.read(
+    eventReservationsControllerProvider(
+      widget.event.eventId,
+    ),
+  );
+
+  if (state.isInitialLoading ||
+      state.isLoadingMore ||
+      !state.hasNextPage) {
+    return;
+  }
+
+  final position = _scrollController.position;
+
+  final shouldLoadNextPage =
+      position.pixels >=
+          position.maxScrollExtent -
+              _nextPageTriggerOffset;
+
+  if (!shouldLoadNextPage) {
+    return;
+  }
+
+  ref
+      .read(
+        eventReservationsControllerProvider(
+          widget.event.eventId,
+        ).notifier,
+      )
+      .loadNextPage()
+      .then((_) {
+        if (mounted) {
+          return _loadMissingProfiles();
+        }
+      });
+}
 
   Future<void> _loadMissingProfiles() async {
     if (!mounted || _loadingProfiles) return;
@@ -241,16 +266,22 @@ void _showMappedError(
         actions: [
           IconButton(
             tooltip: 'Open ticket scanner',
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => TicketScannerScreen(
-                    eventId: widget.event.eventId,
-                    eventTitle: widget.event.title,
+              onPressed: () async {
+                await Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => TicketScannerScreen(
+                      eventId: widget.event.eventId,
+                      eventTitle: widget.event.title,
+                    ),
                   ),
-                ),
-              );
-            },
+                );
+
+                if (!mounted) {
+                  return;
+                }
+
+                await _refresh();
+              },
             icon: const Icon(Icons.qr_code_scanner_rounded),
           ),
         ],

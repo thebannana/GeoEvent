@@ -1,6 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
+import '../../../../core/utils/location_helpers.dart';
 import '../../../../core/widgets/feedback/app_empty_state.dart';
 import '../../../../core/widgets/feedback/app_error_state.dart';
 import '../../../../core/widgets/feedback/app_loading_indicator.dart';
@@ -119,20 +120,22 @@ class MapSearchEventCard extends StatelessWidget {
     return '\$${item.price.toStringAsFixed(2)}';
   }
 
-  String _distanceLabel() {
-    final value = distanceKm(
-      lat1: userLatitude,
-      lon1: userLongitude,
-      lat2: item.latitude,
-      lon2: item.longitude,
-    );
+String _distanceLabel() {
+  final value = LocationHelpers.distanceKm(
+    lat1: userLatitude,
+    lon1: userLongitude,
+    lat2: item.latitude,
+    lon2: item.longitude,
+  );
 
-    if (value < 1) {
-      return '${(value * 1000).round()} m away';
-    }
-
-    return '${value.toStringAsFixed(value < 10 ? 1 : 0)} km away';
+  if (value < 1) {
+    return '${(value * 1000).round()} m away';
   }
+
+  return '${value.toStringAsFixed(
+    value < 10 ? 1 : 0,
+  )} km away';
+}
 
   String get _subtitle {
     final parts = <String>[

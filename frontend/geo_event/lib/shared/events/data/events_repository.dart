@@ -97,48 +97,60 @@ class EventsRepository {
   }
 
   Future<PagedResult<EventItem>> searchEventsPaged({
-    String? searchTerm,
-    int page = 1,
-    int pageSize = 20,
-    String sortBy = 'StartDateTime',
-    bool sortDescending = false,
-    int? segmentId,
-    int? genreId,
-    int? subGenreId,
-  }) {
-    return api.searchEventsPaged(
-      searchTerm: searchTerm,
-      page: page,
-      pageSize: pageSize,
-      sortBy: sortBy,
-      sortDescending: sortDescending,
-      segmentId: segmentId,
-      genreId: genreId,
-      subGenreId: subGenreId,
-    );
-  }
+  String? searchTerm,
+  int page = 1,
+  int pageSize = 20,
+  String sortBy = 'StartDateTime',
+  bool sortDescending = false,
+  int? segmentId,
+  int? genreId,
+  int? subGenreId,
+  bool usePreferences = false,
+  double? latitude,
+  double? longitude,
+}) {
+  return api.searchEventsPaged(
+    searchTerm: searchTerm,
+    page: page,
+    pageSize: pageSize,
+    sortBy: sortBy,
+    sortDescending: sortDescending,
+    segmentId: segmentId,
+    genreId: genreId,
+    subGenreId: subGenreId,
+    usePreferences: usePreferences,
+    latitude: latitude,
+    longitude: longitude,
+  );
+}
 
   Future<List<EventItem>> searchEvents({
-    String? searchTerm,
-    int page = 1,
-    int pageSize = 20,
-    String sortBy = 'StartDateTime',
-    bool sortDescending = false,
-    int? segmentId,
-    int? genreId,
-    int? subGenreId,
-  }) {
-    return api.searchEvents(
-      searchTerm: searchTerm,
-      page: page,
-      pageSize: pageSize,
-      sortBy: sortBy,
-      sortDescending: sortDescending,
-      segmentId: segmentId,
-      genreId: genreId,
-      subGenreId: subGenreId,
-    );
-  }
+  String? searchTerm,
+  int page = 1,
+  int pageSize = 20,
+  String sortBy = 'StartDateTime',
+  bool sortDescending = false,
+  int? segmentId,
+  int? genreId,
+  int? subGenreId,
+  bool usePreferences = false,
+  double? latitude,
+  double? longitude,
+}) {
+  return api.searchEvents(
+    searchTerm: searchTerm,
+    page: page,
+    pageSize: pageSize,
+    sortBy: sortBy,
+    sortDescending: sortDescending,
+    segmentId: segmentId,
+    genreId: genreId,
+    subGenreId: subGenreId,
+    usePreferences: usePreferences,
+    latitude: latitude,
+    longitude: longitude,
+  );
+}
 
   Future<List<EventItem>> getGlobalEvents({
     String? searchTerm,

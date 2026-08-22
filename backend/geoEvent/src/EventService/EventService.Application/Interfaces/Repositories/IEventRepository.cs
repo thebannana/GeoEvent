@@ -6,6 +6,13 @@ namespace EventService.Application.Interfaces.Repositories;
 
 public interface IEventRepository
 {
+    Task<List<RankedEvent>> GetNearbyRankedAsync(
+        NearbyEventSearchDto dto,
+        IReadOnlyList<UserPreferenceDto>? preferences = null);
+
+    Task<List<RankedEvent>> GetPublicRankedAsync(
+        EventFilterDto filter,
+        IReadOnlyList<UserPreferenceDto> preferences);
     Task<int> GetTotalEventsCountAsync();
     Task<int> GetEventsCountByStatusAsync(EventService.Domain.Enums.EventStatus status);
     Task<int> GetTotalViewsCountAsync();
@@ -38,9 +45,6 @@ public interface IEventRepository
     Task<Event?> GetByIdAsync(int eventId);
     Task<Event?> GetByIdWithDetailsAsync(int eventId);
     Task<PagedResult<Event>> GetAllAsync(EventFilterDto filter);
-    Task<List<Event>> GetNearbyAsync(
-        NearbyEventSearchDto dto,
-        IReadOnlyList<UserPreferenceDto>? preferences = null);
 
     Task<Event> CreateAsync(Event entity);
     Task UpdateAsync(Event entity);

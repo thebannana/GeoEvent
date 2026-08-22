@@ -12,8 +12,8 @@ class SortOption {
   });
 
   static const recommended = SortOption(
-    sortBy: 'StartDateTime',
-    sortDescending: false,
+    sortBy: '',
+    sortDescending: true,
     label: 'Recommended',
     isClientSideRanked: true,
   );

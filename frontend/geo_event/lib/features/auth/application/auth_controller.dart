@@ -9,6 +9,8 @@ import '../../../shared/auth/models/register_request.dart';
 import '../../../shared/auth/models/reset_password_request.dart';
 import '../../../shared/auth/providers/auth_providers.dart';
 import '../../../shared/events/providers/event_refresh_providers.dart';
+import '../../profile/application/preferences_controller.dart';
+import '../../search/application/search_controller.dart';
 
 final authStateProvider =
     StateNotifierProvider<AuthController, AuthState>((ref) {
@@ -118,6 +120,7 @@ class AuthController extends StateNotifier<AuthState> {
       );
 
       await setAuthenticated(response, preserveUser: response.user);
+      ref.invalidate(preferencesControllerProvider);
       _refreshEventMap();
 
       return response;
@@ -191,6 +194,7 @@ class AuthController extends StateNotifier<AuthState> {
       }
 
       await setAuthenticated(response, preserveUser: fallbackUser);
+      ref.invalidate(preferencesControllerProvider);
       return true;
     } catch (_) {
       await _repository.clearSession();
@@ -221,26 +225,42 @@ class AuthController extends StateNotifier<AuthState> {
     );
   }
 
-  Future<void> logout() async {
-    final refreshToken = state.refreshToken;
+Future<void> logout() async {
+  final refreshToken = state.refreshToken;
 
-    try {
-      if (refreshToken != null && refreshToken.trim().isNotEmpty) {
-        await _repository.logout(refreshToken);
-      } else {
-        await _repository.clearSession();
-      }
-    } catch (_) {
+  try {
+    if (refreshToken != null &&
+        refreshToken.trim().isNotEmpty) {
+      await _repository.logout(refreshToken);
+    } else {
       await _repository.clearSession();
-    } finally {
-      state = const AuthState.unauthenticated(isInitialized: true);
-      _refreshEventMap();
     }
+  } catch (_) {
+    await _repository.clearSession();
+  } finally {
+    ref
+        .read(searchControllerProvider.notifier)
+        .reset();
+
+    state = const AuthState.unauthenticated(
+      isInitialized: true,
+    );
+
+    _refreshEventMap();
   }
+}
 
   Future<void> clearSession() async {
     await _repository.clearSession();
-    state = const AuthState.unauthenticated(isInitialized: true);
+
+    ref
+        .read(searchControllerProvider.notifier)
+        .reset();
+
+    state = const AuthState.unauthenticated(
+      isInitialized: true,
+    );
+
     _refreshEventMap();
   }
 

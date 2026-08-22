@@ -85,14 +85,21 @@ public class ChatServiceImpl : IChatService
         });
     }
 
-    public async Task<ServiceResult<PagedResult<ChatThreadSummaryDto>>> GetThreadsAsync(
-        int userId,
-        ChatThreadsFilterDto? filter)
+    public async Task<ServiceResult<PagedResult<ChatThreadSummaryDto>>>
+        GetThreadsAsync(
+            int userId,
+            ChatThreadsFilterDto? filter)
     {
         filter ??= new ChatThreadsFilterDto();
 
-        var page = filter.Page <= 0 ? 1 : filter.Page;
-        var pageSize = filter.PageSize <= 0 ? 20 : Math.Min(filter.PageSize, 50);
+        var page = filter.Page <= 0
+            ? 1
+            : filter.Page;
+
+        var pageSize = filter.PageSize <= 0
+            ? 20
+            : Math.Min(filter.PageSize, 50);
+
         var searchTerm = string.IsNullOrWhiteSpace(filter.SearchTerm)
             ? null
             : filter.SearchTerm.Trim();
@@ -104,9 +111,55 @@ public class ChatServiceImpl : IChatService
             searchTerm,
             filter.UnreadOnly);
 
-        var mappedItems = new List<ChatThreadSummaryDto>();
+        var threadItems = pagedThreads.Items.ToList();
 
-        foreach (var thread in pagedThreads.Items)
+        if (!string.IsNullOrWhiteSpace(searchTerm))
+        {
+            var participantIds = threadItems
+                .SelectMany(thread => thread.Participants)
+                .Where(participant =>
+                    participant.UserId != userId &&
+                    participant.LeftAt == null)
+                .Select(participant => participant.UserId)
+                .Distinct()
+                .ToList();
+
+            var users = await _userDirectoryClient.GetPublicUsersAsync(
+                participantIds);
+
+            var matchingUserIds = users.Values
+                .Where(user =>
+                    user.Username.Contains(
+                        searchTerm,
+                        StringComparison.OrdinalIgnoreCase) ||
+                    user.DisplayName.Contains(
+                        searchTerm,
+                        StringComparison.OrdinalIgnoreCase))
+                .Select(user => user.UserId)
+                .ToHashSet();
+
+            threadItems = threadItems
+                .Where(thread =>
+                    thread.Title?.Contains(
+                        searchTerm,
+                        StringComparison.OrdinalIgnoreCase) == true ||
+                    thread.Messages.Any(message =>
+                        message.DeletedAt == null &&
+                        message.Content.Contains(
+                            searchTerm,
+                            StringComparison.OrdinalIgnoreCase)) ||
+                    thread.Participants.Any(participant =>
+                        participant.LeftAt == null &&
+                        matchingUserIds.Contains(participant.UserId)))
+                .ToList();
+
+            pagedThreads.TotalCount = threadItems.Count;
+        }
+
+        var mappedItems = new List<ChatThreadSummaryDto>(
+            threadItems.Count);
+
+        foreach (var thread in threadItems)
         {
             var dto = await MapThreadSummaryAsync(thread, userId);
             mappedItems.Add(dto);

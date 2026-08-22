@@ -12,7 +12,7 @@ using TicketService.Infrastructure.Persistence;
 namespace TicketService.Infrastructure.Migrations
 {
     [DbContext(typeof(TicketDbContext))]
-    [Migration("20260822132417_FINAL")]
+    [Migration("20260822194705_FINAL")]
     partial class FINAL
     {
         /// <inheritdoc />
@@ -46,9 +46,6 @@ namespace TicketService.Infrastructure.Migrations
                     b.Property<decimal>("Price")
                         .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
-
-                    b.Property<int?>("PriceZoneId")
-                        .HasColumnType("int");
 
                     b.Property<DateTime?>("SaleEndDate")
                         .HasColumnType("datetime2");

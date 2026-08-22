@@ -145,12 +145,9 @@ class EventsApi {
       'longitude': longitude,
       'radiusKm': radiusKm,
       'limit': limit,
-      if (segmentId != null)
-        'segmentId': segmentId,
-      if (genreId != null)
-        'genreId': genreId,
-      if (subGenreId != null)
-        'subGenreId': subGenreId,
+      'segmentId': ?segmentId,
+      'genreId': ?genreId,
+      'subGenreId': ?subGenreId,
       if (freeOnly == true)
         'maxPrice': 0,
       if (freeOnly != true &&
@@ -198,12 +195,9 @@ class EventsApi {
       'pageSize': pageSize,
       'sortBy': sortBy,
       'sortDescending': sortDescending,
-      if (segmentId != null)
-        'segmentId': segmentId,
-      if (genreId != null)
-        'genreId': genreId,
-      if (subGenreId != null)
-        'subGenreId': subGenreId,
+      'segmentId': ?segmentId,
+      'genreId': ?genreId,
+      'subGenreId': ?subGenreId,
       if (freeOnly == true)
         'maxPrice': 0,
       if (freeOnly != true &&
@@ -249,18 +243,13 @@ class EventsApi {
       'pageSize': pageSize,
       'sortBy': sortBy,
       'sortDescending': sortDescending,
-      if (segmentId != null)
-        'segmentId': segmentId,
-      if (genreId != null)
-        'genreId': genreId,
-      if (subGenreId != null)
-        'subGenreId': subGenreId,
+      'segmentId': ?segmentId,
+      'genreId': ?genreId,
+      'subGenreId': ?subGenreId,
       if (usePreferences)
         'usePreferences': true,
-      if (latitude != null)
-        'latitude': latitude,
-      if (longitude != null)
-        'longitude': longitude,
+      'latitude': ?latitude,
+      'longitude': ?longitude,
     },
   );
 

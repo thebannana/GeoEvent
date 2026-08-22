@@ -14,7 +14,6 @@ public class EventTicket
     public DateTime? SaleEndDate { get; private set; }
     public bool IsActive { get; private set; } = true;
     public string? Description { get; private set; }
-    public int? PriceZoneId { get; private set; }
 
     public ICollection<Reservation> Reservations { get; set; } = [];
 
@@ -31,8 +30,7 @@ public class EventTicket
         int totalQuantity,
         DateTime? saleStartDate,
         DateTime? saleEndDate,
-        string? description = null,
-        int? priceZoneId = null)
+        string? description = null)
     {
         if (eventId <= 0)
             throw new BusinessException("Event ID must be valid.");
@@ -56,7 +54,6 @@ public class EventTicket
         SaleStartDate = saleStartDate;
         SaleEndDate = saleEndDate;
         Description = string.IsNullOrWhiteSpace(description) ? null : description.Trim();
-        PriceZoneId = priceZoneId;
     }
 
     public bool IsAvailable() =>
@@ -99,7 +96,6 @@ public class EventTicket
         DateTime? saleStartDate,
         DateTime? saleEndDate,
         string? description,
-        int? priceZoneId,
         bool isActive)
     {
         if (string.IsNullOrWhiteSpace(ticketType))
@@ -120,7 +116,6 @@ public class EventTicket
         SaleStartDate = saleStartDate;
         SaleEndDate = saleEndDate;
         Description = string.IsNullOrWhiteSpace(description) ? null : description.Trim();
-        PriceZoneId = priceZoneId;
         IsActive = isActive;
     }
 

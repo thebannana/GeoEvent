@@ -48,4 +48,30 @@ public sealed class TicketInternalClient : ITicketInternalClient
 
         response.EnsureSuccessStatusCode();
     }
+
+    public async Task ExpireReservationsAsync(
+    CancellationToken cancellationToken = default)
+    {
+        using var response = await _httpClient.PostAsync(
+            "api/internal/reservations/expire",
+            content: null,
+            cancellationToken);
+
+        if (response.IsSuccessStatusCode)
+        {
+            return;
+        }
+
+        var responseBody =
+            await response.Content.ReadAsStringAsync(
+                cancellationToken);
+
+        _logger.LogError(
+            "Reservation expiration request failed. " +
+            "StatusCode: {StatusCode}, Response: {Response}",
+            (int)response.StatusCode,
+            responseBody);
+
+        response.EnsureSuccessStatusCode();
+    }
 }

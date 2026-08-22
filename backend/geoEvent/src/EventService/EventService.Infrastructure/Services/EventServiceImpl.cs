@@ -41,6 +41,63 @@ public class EventServiceImpl : IEventService
         _logger = logger;
     }
 
+    public async Task<
+    ServiceResult<IReadOnlyList<EventLifecycleCandidateDto>>>
+    GetReadyToCompleteAsync(DateTime now)
+    {
+        var events =
+            await _eventRepository.GetConfirmedEventsEndingBeforeAsync(now);
+
+        var result = events
+            .Select(ev => new EventLifecycleCandidateDto
+            {
+                EventId = ev.EventId
+            })
+            .ToList();
+
+        return ServiceResult<
+            IReadOnlyList<EventLifecycleCandidateDto>>.Ok(result);
+    }
+
+    public async Task<ServiceResult<bool>>
+    CompleteAutomaticallyAsync(int eventId)
+    {
+        var ev =
+            await _eventRepository.GetTrackedByIdAsync(eventId);
+
+        if (ev is null)
+        {
+            return ServiceResult<bool>.NotFound(
+                $"Event {eventId} not found.");
+        }
+
+        if (ev.Status != EventStatus.Confirmed)
+        {
+            return ServiceResult<bool>.Ok(false);
+        }
+
+        if (ev.EndDateTime > DateTime.UtcNow)
+        {
+            return ServiceResult<bool>.Ok(false);
+        }
+
+        ev.Complete();
+
+        await _eventRepository.UpdateAsync(ev);
+
+        await _publishEndpoint.Publish(
+            new EventUpdatedMessage(
+                ev.EventId,
+                ev.Title,
+                ev.OrganizerId,
+                ev.StartDateTime,
+                ev.EndDateTime,
+                "Event completed automatically",
+                DateTime.UtcNow));
+
+        return ServiceResult<bool>.Ok(true);
+    }
+
     public async Task<ServiceResult<InternalEventLookupDto>> GetInternalEventLookupAsync(
         int eventId)
     {
@@ -1161,9 +1218,9 @@ public class EventServiceImpl : IEventService
     }
 
     public async Task<ServiceResult<EventResponseDto>> UpdateAsync(
-    int eventId,
-    UpdateEventDto dto,
-    int requesterId)
+        int eventId,
+        UpdateEventDto dto,
+        int requesterId)
     {
         var ev = await _eventRepository.GetTrackedByIdAsync(eventId);
 
@@ -1213,6 +1270,10 @@ public class EventServiceImpl : IEventService
             {
                 ev.RestoreAsConfirmed();
             }
+            else if (ev.Status == EventStatus.Pending)
+            {
+                ev.Publish();
+            }
 
             await _eventRepository.UpdateAsync(ev);
 
@@ -1226,7 +1287,7 @@ public class EventServiceImpl : IEventService
                     wasCancelled &&
                     ev.Status == EventStatus.Confirmed
                         ? "Cancelled event restored and confirmed"
-                        : null,
+                        : "Event updated and confirmed",
                     DateTime.UtcNow));
 
             var updated =
@@ -1241,6 +1302,16 @@ public class EventServiceImpl : IEventService
             _logger.LogWarning(
                 ex,
                 "Invalid event data while updating event {EventId}",
+                eventId);
+
+            return ServiceResult<EventResponseDto>.Fail(
+                ex.Message);
+        }
+        catch (InvalidEventStateException ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Invalid event state while updating event {EventId}",
                 eventId);
 
             return ServiceResult<EventResponseDto>.Fail(

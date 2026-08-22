@@ -56,8 +56,7 @@ public class EventTicketSeeder : ISeeder
                 seed.TotalQuantity,
                 seed.SaleStartDate,
                 seed.SaleEndDate,
-                string.IsNullOrWhiteSpace(seed.Description) ? null : seed.Description.Trim(),
-                seed.PriceZoneId);
+                string.IsNullOrWhiteSpace(seed.Description) ? null : seed.Description.Trim());
 
             if (!seed.IsActive)
             {

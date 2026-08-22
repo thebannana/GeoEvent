@@ -266,22 +266,22 @@ void _showMappedError(
         actions: [
           IconButton(
             tooltip: 'Open ticket scanner',
-              onPressed: () async {
-                await Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => TicketScannerScreen(
-                      eventId: widget.event.eventId,
-                      eventTitle: widget.event.title,
-                    ),
+            onPressed: () async {
+              final didValidate = await Navigator.of(context).push<bool>(
+                MaterialPageRoute(
+                  builder: (_) => TicketScannerScreen(
+                    eventId: widget.event.eventId,
+                    eventTitle: widget.event.title,
                   ),
-                );
+                ),
+              );
 
-                if (!mounted) {
-                  return;
-                }
+              if (!mounted || didValidate != true) {
+                return;
+              }
 
-                await _refresh();
-              },
+              await _refresh();
+            },
             icon: const Icon(Icons.qr_code_scanner_rounded),
           ),
         ],
@@ -415,14 +415,20 @@ void _showMappedError(
             profile: profile,
             isRemoving: isRemoving,
             isCollectingCash: isCollectingCash,
-            onTap: () {
-              Navigator.of(context).push(
+            onTap: () async {
+              await Navigator.of(context).push(
                 MaterialPageRoute(
                   builder: (_) => PublicProfileScreen(
                     userId: item.userId,
                   ),
                 ),
               );
+
+              if (!mounted) {
+                return;
+              }
+
+              await _refresh();
             },
             onRemove: () => _removeAttendee(context, ref, item),
             onCollectCash: () => _collectCash(context, ref, item),

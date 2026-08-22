@@ -14,5 +14,4 @@ public class EventTicketResponseDto
     public DateTime? SaleEndDate { get; set; }
     public bool IsActive { get; set; }
     public string? Description { get; set; }
-    public int? PriceZoneId { get; set; }
 }

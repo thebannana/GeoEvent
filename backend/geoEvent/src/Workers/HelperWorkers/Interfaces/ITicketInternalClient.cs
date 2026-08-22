@@ -7,4 +7,7 @@ public interface ITicketInternalClient
     Task CreateDefaultTicketForEventAsync(
         EventCreatedMessage message,
         CancellationToken cancellationToken = default);
+
+    Task ExpireReservationsAsync(
+    CancellationToken cancellationToken = default);
 }

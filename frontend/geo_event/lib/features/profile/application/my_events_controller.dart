@@ -114,7 +114,7 @@ class MyEventsController extends AsyncNotifier<MyEventsState> {
         pageSize: current.pageSize,
         searchTerm: current.searchTerm,
         status: current.selectedStatus,
-        canViewReservations: true,
+        canViewReservations: null,
       );
 
       final mergedItems = [...current.items, ...result.items];
@@ -172,7 +172,7 @@ class MyEventsController extends AsyncNotifier<MyEventsState> {
       pageSize: kMyEventsDefaultPageSize,
       searchTerm: searchTerm,
       status: selectedStatus,
-      canViewReservations: true,
+      canViewReservations: null,
     );
 
     return MyEventsState(

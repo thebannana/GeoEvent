@@ -85,8 +85,8 @@ This account can be used to test administration, event management, reports, user
 ### Regular users
 
 ```text
-Username: johndoe
-Email: john.doe@geoevent.local
+Username: jimmysanders
+Email: jimmysander123123@gmail.com
 Password: User123!
 ```
 

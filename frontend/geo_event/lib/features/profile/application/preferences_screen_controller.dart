@@ -7,7 +7,8 @@ import '../../../shared/profile/models/user_preference.dart';
 import '../../../shared/profile/providers/event_taxonomy_providers.dart';
 import '../../profile/application/preferences_controller.dart';
 
-final eventTaxonomyProvider = FutureProvider<List<SegmentLookup>>((ref) async {
+final eventTaxonomyProvider =
+    FutureProvider.autoDispose<List<SegmentLookup>>((ref) async {
   return ref.read(eventTaxonomyRepositoryProvider).getSegments();
 });
 

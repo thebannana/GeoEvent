@@ -25,15 +25,26 @@ class _PreferencesScreenState extends ConsumerState<PreferencesScreen> {
 
   String? _selectedType;
 
-  @override
-  void initState() {
-    super.initState();
+@override
+void initState() {
+  super.initState();
 
-    Future.microtask(() async {
-      await ref.read(preferencesControllerProvider.notifier).refresh();
-      ref.invalidate(preferencesScreenControllerProvider);
-    });
-  }
+  Future.microtask(() async {
+    ref.invalidate(eventTaxonomyProvider);
+    ref.invalidate(preferencesScreenControllerProvider);
+
+    await ref
+        .read(preferencesControllerProvider.notifier)
+        .refresh();
+
+    if (!mounted) return;
+
+    await Future.wait([
+      ref.read(eventTaxonomyProvider.future),
+      ref.read(preferencesScreenControllerProvider.future),
+    ]);
+  });
+}
 
   @override
   void dispose() {
@@ -42,18 +53,21 @@ class _PreferencesScreenState extends ConsumerState<PreferencesScreen> {
     super.dispose();
   }
 
-  Future<void> _refreshAll() async {
-    ref.invalidate(eventTaxonomyProvider);
+Future<void> _refreshAll() async {
+  ref.invalidate(eventTaxonomyProvider);
+  ref.invalidate(preferencesScreenControllerProvider);
 
-    await ref.read(preferencesControllerProvider.notifier).refresh();
+  await ref
+      .read(preferencesControllerProvider.notifier)
+      .refresh();
 
-    ref.invalidate(preferencesScreenControllerProvider);
+  if (!mounted) return;
 
-    await Future.wait([
-      ref.read(eventTaxonomyProvider.future),
-      ref.read(preferencesScreenControllerProvider.future),
-    ]);
-  }
+  await Future.wait([
+    ref.read(eventTaxonomyProvider.future),
+    ref.read(preferencesScreenControllerProvider.future),
+  ]);
+}
 
   Future<void> _applyFilters() async {
     final minText = _minScoreController.text.trim();

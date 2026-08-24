@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Shared.Contracts.Events;
 using Shared.Contracts.Reservations;
 using Shared.Contracts.Tickets;
 using System.Security.Cryptography;
@@ -1021,6 +1022,29 @@ public class TicketServiceImpl : ITicketService
             reservation.UserId,
             reservation.Quantity,
             reservation.ConfirmedAt ?? DateTime.UtcNow));
+
+        var eventSummary = await _eventDirectoryClient.GetEventAsync(
+    reservation.EventId);
+
+        if (eventSummary is null)
+        {
+            _logger.LogWarning(
+                "Could not update preferences. Event {EventId} was not found.",
+                reservation.EventId);
+        }
+        else
+        {
+            await _publishEndpoint.Publish(
+                new UserEventPreferenceInteractionMessage(
+                    Guid.NewGuid(),
+                    reservation.UserId,
+                    reservation.EventId,
+                    eventSummary.SegmentId,
+                    eventSummary.GenreId,
+                    eventSummary.SubGenreId,
+                    "ReservationConfirmed",
+                    reservation.ConfirmedAt ?? DateTime.UtcNow));
+        }
 
         if (payment.Method == PaymentMethod.PayPal)
         {

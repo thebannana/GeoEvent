@@ -9,18 +9,42 @@ import '../../profile/application/preferences_controller.dart';
 
 final eventTaxonomyProvider =
     FutureProvider.autoDispose<List<SegmentLookup>>((ref) async {
-  return ref.read(eventTaxonomyRepositoryProvider).getSegments();
+  return ref
+      .read(eventTaxonomyRepositoryProvider)
+      .getSegments();
 });
 
 final preferencesScreenControllerProvider =
     FutureProvider<PreferencesScreenState>((ref) async {
-  final preferenceState = await ref.watch(preferencesControllerProvider.future);
-  final segments = await ref.watch(eventTaxonomyProvider.future);
+  final preferenceState =
+      await ref.watch(preferencesControllerProvider.future);
+
+  final segments =
+      await ref.watch(eventTaxonomyProvider.future);
+
+  final genreIds = preferenceState.result.items
+      .where((preference) => preference.subGenreId != null)
+      .map((preference) => preference.genreId)
+      .whereType<int>()
+      .toSet();
+
+  final subGenreLists = await Future.wait(
+    genreIds.map(
+      (genreId) => ref
+          .read(eventTaxonomyRepositoryProvider)
+          .getSubGenresForGenre(genreId),
+    ),
+  );
+
+  final loadedSubGenres = subGenreLists
+      .expand((items) => items)
+      .toList();
 
   return _PreferencesScreenMapper.map(
     preferences: preferenceState.result.items,
     paged: preferenceState,
     segments: segments,
+    loadedSubGenres: loadedSubGenres,
   );
 });
 
@@ -29,6 +53,7 @@ class _PreferencesScreenMapper {
     required List<UserPreference> preferences,
     required PreferencesListState paged,
     required List<SegmentLookup> segments,
+    required List<SubGenreLookup> loadedSubGenres,
   }) {
     final genreById = <int, GenreLookup>{};
     final subGenreById = <int, SubGenreLookup>{};
@@ -46,6 +71,10 @@ class _PreferencesScreenMapper {
       }
     }
 
+    for (final subGenre in loadedSubGenres) {
+      subGenreById[subGenre.subGenreId] = subGenre;
+    }
+
     final segmentItems = <PreferenceItemViewModel>[];
     final genreItems = <PreferenceItemViewModel>[];
     final subGenreItems = <PreferenceItemViewModel>[];
@@ -53,13 +82,15 @@ class _PreferencesScreenMapper {
     final maxScore = preferences.isEmpty
         ? 1.0
         : preferences
-            .map((e) => e.score)
+            .map((preference) => preference.score)
             .reduce((a, b) => a > b ? a : b)
             .clamp(1.0, double.infinity);
 
     for (final preference in preferences) {
       if (preference.subGenreId != null) {
-        final subGenre = subGenreById[preference.subGenreId!];
+        final subGenre =
+            subGenreById[preference.subGenreId!];
+
         final genre = subGenre?.genreId != null
             ? genreById[subGenre!.genreId!]
             : null;
@@ -67,19 +98,26 @@ class _PreferencesScreenMapper {
         subGenreItems.add(
           PreferenceItemViewModel(
             prefId: preference.prefId,
-            title: subGenre?.name ?? 'Subgenre',
+            title: subGenre?.name ??
+                'Subgenre #${preference.subGenreId}',
             subtitle: genre?.name,
             score: preference.score,
-            progress: _normalizeProgress(preference.score, maxScore),
+            progress: _normalizeProgress(
+              preference.score,
+              maxScore,
+            ),
             lastUpdated: preference.lastUpdated,
             type: PreferenceItemType.subGenre,
           ),
         );
+
         continue;
       }
 
       if (preference.genreId != null) {
-        final genre = genreById[preference.genreId!];
+        final genre =
+            genreById[preference.genreId!];
+
         final segment = genre?.segmentId != null
             ? segmentById[genre!.segmentId!]
             : null;
@@ -90,16 +128,21 @@ class _PreferencesScreenMapper {
             title: genre?.name ?? 'Genre',
             subtitle: segment?.name,
             score: preference.score,
-            progress: _normalizeProgress(preference.score, maxScore),
+            progress: _normalizeProgress(
+              preference.score,
+              maxScore,
+            ),
             lastUpdated: preference.lastUpdated,
             type: PreferenceItemType.genre,
           ),
         );
+
         continue;
       }
 
       if (preference.segmentId != null) {
-        final segment = segmentById[preference.segmentId!];
+        final segment =
+            segmentById[preference.segmentId!];
 
         segmentItems.add(
           PreferenceItemViewModel(
@@ -107,7 +150,10 @@ class _PreferencesScreenMapper {
             title: segment?.name ?? 'Segment',
             subtitle: null,
             score: preference.score,
-            progress: _normalizeProgress(preference.score, maxScore),
+            progress: _normalizeProgress(
+              preference.score,
+              maxScore,
+            ),
             lastUpdated: preference.lastUpdated,
             type: PreferenceItemType.segment,
           ),
@@ -115,43 +161,50 @@ class _PreferencesScreenMapper {
       }
     }
 
-segmentItems.sort(_compareByScore);
-genreItems.sort(_compareByScore);
-subGenreItems.sort(_compareByScore);
+    segmentItems.sort(_compareByScore);
+    genreItems.sort(_compareByScore);
+    subGenreItems.sort(_compareByScore);
 
-return PreferencesScreenState(
-  segmentItems: segmentItems,
-  genreItems: genreItems,
-  subGenreItems: subGenreItems,
-  page: paged.result.page,
-  pageSize: paged.result.pageSize,
-  totalCount: paged.result.totalCount,
-  totalPages: paged.result.totalPages,
-  hasNextPage: paged.result.hasNextPage,
-  hasPreviousPage: paged.result.hasPreviousPage,
-);
+    return PreferencesScreenState(
+      segmentItems: segmentItems,
+      genreItems: genreItems,
+      subGenreItems: subGenreItems,
+      page: paged.result.page,
+      pageSize: paged.result.pageSize,
+      totalCount: paged.result.totalCount,
+      totalPages: paged.result.totalPages,
+      hasNextPage: paged.result.hasNextPage,
+      hasPreviousPage: paged.result.hasPreviousPage,
+    );
   }
 
   static int _compareByScore(
-  PreferenceItemViewModel a,
-  PreferenceItemViewModel b,
-) {
-  final scoreComparison = b.score.compareTo(a.score);
+    PreferenceItemViewModel a,
+    PreferenceItemViewModel b,
+  ) {
+    final scoreComparison =
+        b.score.compareTo(a.score);
 
-  if (scoreComparison != 0) {
-    return scoreComparison;
+    if (scoreComparison != 0) {
+      return scoreComparison;
+    }
+
+    return a.title.toLowerCase().compareTo(
+          b.title.toLowerCase(),
+        );
   }
 
-  return a.title.toLowerCase().compareTo(
-        b.title.toLowerCase(),
-      );
-}
-
-  static double _normalizeProgress(double score, double maxScore) {
+  static double _normalizeProgress(
+    double score,
+    double maxScore,
+  ) {
     if (maxScore <= 0) return 0;
+
     final value = score / maxScore;
+
     if (value < 0) return 0;
     if (value > 1) return 1;
+
     return value;
   }
 }

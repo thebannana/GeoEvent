@@ -108,7 +108,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                         hintText: 'Search chats',
                         helperText: state.searchQuery.isNotEmpty
                             ? 'Showing filtered chat results.'
-                            : 'Search by person, username, or chat title.',
+                            : 'Search by chat title or content.',
                         prefixIcon: const Icon(Icons.search_rounded, size: 20),
                         suffixIcon: state.searchQuery.isNotEmpty
                             ? IconButton(

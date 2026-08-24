@@ -114,18 +114,37 @@ class _PreferencesScreenMapper {
       }
     }
 
-    return PreferencesScreenState(
-      segmentItems: segmentItems,
-      genreItems: genreItems,
-      subGenreItems: subGenreItems,
-      page: paged.result.page,
-      pageSize: paged.result.pageSize,
-      totalCount: paged.result.totalCount,
-      totalPages: paged.result.totalPages,
-      hasNextPage: paged.result.hasNextPage,
-      hasPreviousPage: paged.result.hasPreviousPage,
-    );
+segmentItems.sort(_compareByScore);
+genreItems.sort(_compareByScore);
+subGenreItems.sort(_compareByScore);
+
+return PreferencesScreenState(
+  segmentItems: segmentItems,
+  genreItems: genreItems,
+  subGenreItems: subGenreItems,
+  page: paged.result.page,
+  pageSize: paged.result.pageSize,
+  totalCount: paged.result.totalCount,
+  totalPages: paged.result.totalPages,
+  hasNextPage: paged.result.hasNextPage,
+  hasPreviousPage: paged.result.hasPreviousPage,
+);
   }
+
+  static int _compareByScore(
+  PreferenceItemViewModel a,
+  PreferenceItemViewModel b,
+) {
+  final scoreComparison = b.score.compareTo(a.score);
+
+  if (scoreComparison != 0) {
+    return scoreComparison;
+  }
+
+  return a.title.toLowerCase().compareTo(
+        b.title.toLowerCase(),
+      );
+}
 
   static double _normalizeProgress(double score, double maxScore) {
     if (maxScore <= 0) return 0;

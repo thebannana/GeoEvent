@@ -35,7 +35,7 @@ class _TicketScannerScreenState extends ConsumerState<TicketScannerScreen>
   bool _isHandlingScan = false;
   String? _lastScannedValue;
   DateTime? _lastScanAt;
-  final bool _didValidateTicket = false;
+  bool _didValidateTicket = false;
 
   static const Duration _duplicateCooldown = Duration(seconds: 2);
 
@@ -79,65 +79,72 @@ class _TicketScannerScreenState extends ConsumerState<TicketScannerScreen>
   }
 
   Future<void> _submitCode(String qrCode) async {
-    final trimmed = qrCode.trim();
-    if (trimmed.isEmpty || _isHandlingScan || _shouldIgnoreDuplicate(trimmed)) {
-      return;
-    }
+  final trimmed = qrCode.trim();
 
-    setState(() {
-      _isHandlingScan = true;
-      _lastScannedValue = trimmed;
-      _lastScanAt = DateTime.now().toUtc();
-    });
+  if (trimmed.isEmpty ||
+      _isHandlingScan ||
+      _shouldIgnoreDuplicate(trimmed)) {
+    return;
+  }
 
-    try {
-      await _controller.stop();
+  setState(() {
+    _isHandlingScan = true;
+    _lastScannedValue = trimmed;
+    _lastScanAt = DateTime.now().toUtc();
+  });
 
-      final result =
-          await ref.read(ticketScannerRepositoryProvider).validateTicket(
-                eventId: widget.eventId,
-                qrCode: trimmed,
-              );
+  try {
+    await _controller.stop();
 
-      if (!mounted) return;
+    final result =
+        await ref.read(ticketScannerRepositoryProvider).validateTicket(
+              eventId: widget.eventId,
+              qrCode: trimmed,
+            );
 
-      await showModalBottomSheet<void>(
-        context: context,
-        isScrollControlled: true,
-        backgroundColor: Colors.transparent,
-        builder: (_) => TicketScanResultSheet(result: result),
-      );
-    } catch (error, stackTrace) {
-      AppLogger.error(
-        'Ticket validation failed.',
-        tag: 'TicketScannerScreen',
-        error: error,
-        stackTrace: stackTrace,
-      );
+    if (!mounted) return;
 
-      if (!mounted) return;
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(
-            content: Text(
-              ErrorMapper.toMessage(
-                error,
-                stackTrace: stackTrace,
-                fallbackMessage: 'Ticket validation failed. Please try again.',
-              ),
+    _didValidateTicket = true;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => TicketScanResultSheet(result: result),
+    );
+  } catch (error, stackTrace) {
+    AppLogger.error(
+      'Ticket validation failed.',
+      tag: 'TicketScannerScreen',
+      error: error,
+      stackTrace: stackTrace,
+    );
+
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            ErrorMapper.toMessage(
+              error,
+              stackTrace: stackTrace,
+              fallbackMessage: 'Ticket validation failed. Please try again.',
             ),
           ),
-        );
-    } finally {
-      if (mounted) {
-        await _controller.start();
-        setState(() {
-          _isHandlingScan = false;
-        });
-      }
+        ),
+      );
+  } finally {
+    if (mounted) {
+      await _controller.start();
+
+      setState(() {
+        _isHandlingScan = false;
+      });
     }
   }
+}
 
   Future<void> _openManualCodeInput() async {
     final code = await showModalBottomSheet<String>(

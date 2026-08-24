@@ -16,38 +16,39 @@ using TicketService.Infrastructure.Persistence;
 var builder = Host.CreateApplicationBuilder(args);
 
 builder.Configuration.Sources.Clear();
+
 builder.Configuration
     .SetBasePath(AppContext.BaseDirectory)
-    .AddJsonFile("appsettings.json", optional: false, reloadOnChange: false)
-    .AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.json", optional: true, reloadOnChange: false)
+    .AddJsonFile(
+        "seed-data.json",
+        optional: false,
+        reloadOnChange: false)
     .AddEnvironmentVariables();
 
-var connectionEnvironmentVariables = new Dictionary<string, string>
-{
-    ["ConnectionStrings:UserDb"] = "USER_DB_CONNECTION",
-    ["ConnectionStrings:EventDb"] = "EVENT_DB_CONNECTION",
-    ["ConnectionStrings:MessageDb"] = "MESSAGE_DB_CONNECTION",
-    ["ConnectionStrings:NotificationDb"] = "NOTIFICATION_DB_CONNECTION",
-    ["ConnectionStrings:TicketDb"] = "TICKET_DB_CONNECTION"
-};
-
-foreach (var (configurationKey, environmentVariable) in connectionEnvironmentVariables)
-{
-    var value = Environment.GetEnvironmentVariable(environmentVariable);
-
-    if (!string.IsNullOrWhiteSpace(value))
-        builder.Configuration[configurationKey] = value;
-}
-
-builder.Services.Configure<SeedSettings>(builder.Configuration);
+builder.Services.Configure<SeedSettings>(
+    builder.Configuration);
 
 var connectionStrings = new Dictionary<string, string>
 {
-    ["UserDb"] = GetRequiredConnectionString(builder.Configuration, "UserDb"),
-    ["EventDb"] = GetRequiredConnectionString(builder.Configuration, "EventDb"),
-    ["MessageDb"] = GetRequiredConnectionString(builder.Configuration, "MessageDb"),
-    ["NotificationDb"] = GetRequiredConnectionString(builder.Configuration, "NotificationDb"),
-    ["TicketDb"] = GetRequiredConnectionString(builder.Configuration, "TicketDb")
+    ["UserDb"] = GetRequiredConnectionString(
+        builder.Configuration,
+        "UserDb"),
+
+    ["EventDb"] = GetRequiredConnectionString(
+        builder.Configuration,
+        "EventDb"),
+
+    ["MessageDb"] = GetRequiredConnectionString(
+        builder.Configuration,
+        "MessageDb"),
+
+    ["NotificationDb"] = GetRequiredConnectionString(
+        builder.Configuration,
+        "NotificationDb"),
+
+    ["TicketDb"] = GetRequiredConnectionString(
+        builder.Configuration,
+        "TicketDb")
 };
 
 builder.Services.AddDbContext<UserDbContext>(options =>
@@ -90,18 +91,40 @@ builder.Services.AddScoped<ISeeder, PaymentDetailSeeder>();
 builder.Services.AddScoped<ISeeder, TicketSeeder>();
 
 using var host = builder.Build();
+
 using var scope = host.Services.CreateScope();
+
 var services = scope.ServiceProvider;
-var logger = services.GetRequiredService<ILoggerFactory>().CreateLogger("SeedGenerator");
 
-await MigrateAsync<UserDbContext>(services, logger);
-await MigrateAsync<EventDbContext>(services, logger);
-await MigrateAsync<MessageDbContext>(services, logger);
-await MigrateAsync<NotificationDbContext>(services, logger);
-await MigrateAsync<TicketDbContext>(services, logger);
+var logger = services
+    .GetRequiredService<ILoggerFactory>()
+    .CreateLogger("SeedGenerator");
 
-var seeders = services.GetServices<ISeeder>()
-    .ToDictionary(seeder => seeder.Name, StringComparer.OrdinalIgnoreCase);
+await MigrateAsync<UserDbContext>(
+    services,
+    logger);
+
+await MigrateAsync<EventDbContext>(
+    services,
+    logger);
+
+await MigrateAsync<MessageDbContext>(
+    services,
+    logger);
+
+await MigrateAsync<NotificationDbContext>(
+    services,
+    logger);
+
+await MigrateAsync<TicketDbContext>(
+    services,
+    logger);
+
+var seeders = services
+    .GetServices<ISeeder>()
+    .ToDictionary(
+        seeder => seeder.Name,
+        StringComparer.OrdinalIgnoreCase);
 
 var command = args.Length == 0
     ? "all"
@@ -109,36 +132,68 @@ var command = args.Length == 0
 
 var executionOrder = new[]
 {
-    "admins", "users", "segments", "genres", "subgenres", "preferences", "events",
-    "eventimages", "eventtickets", "eventlikes", "bookmarks", "comments", "commentlikes",
-    "chatthreads", "chatmessages", "chatmessagelikes", "reservations", "paymentdetails",
-    "tickets", "notifications", "reports"
+    "admins",
+    "users",
+    "segments",
+    "genres",
+    "subgenres",
+    "preferences",
+    "events",
+    "eventimages",
+    "eventtickets",
+    "eventlikes",
+    "bookmarks",
+    "comments",
+    "commentlikes",
+    "chatthreads",
+    "chatmessages",
+    "chatmessagelikes",
+    "reservations",
+    "paymentdetails",
+    "tickets",
+    "notifications",
+    "reports"
 };
 
 if (command == "all")
 {
     foreach (var seederName in executionOrder)
     {
-        if (!seeders.TryGetValue(seederName, out var seeder))
-            throw new InvalidOperationException($"Seeder '{seederName}' is not registered.");
+        if (!seeders.TryGetValue(
+                seederName,
+                out var seeder))
+        {
+            throw new InvalidOperationException(
+                $"Seeder '{seederName}' is not registered.");
+        }
 
         await seeder.SeedAsync();
     }
 }
 else
 {
-    if (!seeders.TryGetValue(command, out var selectedSeeder))
-        throw new InvalidOperationException($"Unknown seed command: {command}");
+    if (!seeders.TryGetValue(
+            command,
+            out var selectedSeeder))
+    {
+        throw new InvalidOperationException(
+            $"Unknown seed command: {command}");
+    }
 
     await selectedSeeder.SeedAsync();
 }
 
-static string GetRequiredConnectionString(IConfiguration configuration, string name)
+static string GetRequiredConnectionString(
+    IConfiguration configuration,
+    string name)
 {
     var value = configuration.GetConnectionString(name);
 
     if (string.IsNullOrWhiteSpace(value))
-        throw new InvalidOperationException($"ConnectionStrings:{name} is not configured.");
+    {
+        throw new InvalidOperationException(
+            $"ConnectionStrings:{name} is not configured.");
+    }
 
     return value;
 }
@@ -155,9 +210,14 @@ static async Task MigrateAsync<TContext>(
     {
         try
         {
-            await using var scope = services.CreateAsyncScope();
-            var db = scope.ServiceProvider.GetRequiredService<TContext>();
-            await db.Database.MigrateAsync(cancellationToken);
+            await using var scope =
+                services.CreateAsyncScope();
+
+            var db = scope.ServiceProvider
+                .GetRequiredService<TContext>();
+
+            await db.Database.MigrateAsync(
+                cancellationToken);
 
             logger.LogInformation(
                 "Migrations applied for {Context}.",
@@ -174,9 +234,12 @@ static async Task MigrateAsync<TContext>(
                 maxAttempts,
                 typeof(TContext).Name);
 
-            await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
+            await Task.Delay(
+                TimeSpan.FromSeconds(5),
+                cancellationToken);
         }
     }
 
-    throw new InvalidOperationException($"Failed to migrate {typeof(TContext).Name}.");
+    throw new InvalidOperationException(
+        $"Failed to migrate {typeof(TContext).Name}.");
 }

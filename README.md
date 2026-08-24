@@ -34,7 +34,7 @@ Requirements:
 - Android Studio and an Android emulator for the mobile application.
 - Visual Studio with Windows desktop development tools for the desktop application.
 
-Create the required `.env` file in the backend directory. It must contain the database, RabbitMQ, JWT, PayPal, SMTP, image storage, and service URL configuration. Do not commit the `.env` file to GitHub.
+Place the required `.env` file in the backend directory backend/geoEvent next to `docker-compose.yml`.
 
 Start the backend from the directory containing `docker-compose.yml`:
 

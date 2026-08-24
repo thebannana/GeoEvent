@@ -23,7 +23,30 @@ builder.Configuration
         "seed-data.json",
         optional: false,
         reloadOnChange: false)
+    .AddJsonFile(
+        $"appsettings.{builder.Environment.EnvironmentName}.json",
+        optional: true,
+        reloadOnChange: false)
     .AddEnvironmentVariables();
+
+var connectionEnvironmentVariables = new Dictionary<string, string>
+{
+    ["ConnectionStrings:UserDb"] = "USER_DB_CONNECTION",
+    ["ConnectionStrings:EventDb"] = "EVENT_DB_CONNECTION",
+    ["ConnectionStrings:MessageDb"] = "MESSAGE_DB_CONNECTION",
+    ["ConnectionStrings:NotificationDb"] = "NOTIFICATION_DB_CONNECTION",
+    ["ConnectionStrings:TicketDb"] = "TICKET_DB_CONNECTION"
+};
+
+foreach (var (configurationKey, environmentVariable) in connectionEnvironmentVariables)
+{
+    var value = Environment.GetEnvironmentVariable(environmentVariable);
+
+    if (!string.IsNullOrWhiteSpace(value))
+    {
+        builder.Configuration[configurationKey] = value;
+    }
+}
 
 builder.Services.Configure<SeedSettings>(
     builder.Configuration);

@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../../core/network/api_endpoints.dart';
 import '../../../../core/widgets/layout/app_scaffold.dart';
 import '../widgets/onboarding_page_content.dart';
 
@@ -17,6 +16,7 @@ class OnboardingScreen extends StatefulWidget {
 class _OnboardingScreenState extends State<OnboardingScreen> {
   static const String _loginRoute = '/login';
   static const String _privacyRoute = '/privacy';
+  static const String _registerRoute = '/register';
   static const Duration _pageAnimationDuration = Duration(milliseconds: 420);
   static const Duration _autoSlideInterval = Duration(seconds: 5);
   static const String _logoAssetPath = 'assets/images/geoevent.png';
@@ -99,7 +99,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   void _goToRegister() {
-    context.push(ApiEndpoints.register);
+    context.push(_registerRoute);
   }
 
   void _openPrivacyPolicy() {

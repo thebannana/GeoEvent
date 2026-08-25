@@ -558,35 +558,67 @@ public class UserRepository : IUserRepository
     public async Task<PagedResult<User>> GetAllAsync(UserFilterDto filter)
     {
         filter ??= new UserFilterDto();
-        ValidatePaging(filter.Page, filter.PageSize, MaxPageSize);
+
+        ValidatePaging(
+            filter.Page,
+            filter.PageSize,
+            MaxPageSize);
 
         var query = _context.Users
             .AsNoTracking()
             .Include(u => u.Person)
-            .Where(u => u.Person != null && !u.Person.IsDeleted)
+            .Where(u =>
+                u.Person != null &&
+                !u.Person.IsDeleted)
             .AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(filter.Search))
         {
-            var term = filter.Search.Trim().ToLower();
+            var term = filter.Search.Trim();
+            var pattern = $"%{term}%";
 
             query = query.Where(u =>
-                u.Username.Contains(term, StringComparison.CurrentCultureIgnoreCase) ||
-                u.Email.ToLower().Contains(term) ||
-                u.Person!.FirstName.Contains(term, StringComparison.CurrentCultureIgnoreCase) ||
-                u.Person.LastName.Contains(term, StringComparison.CurrentCultureIgnoreCase) ||
-                ((u.Person.FirstName + " " + u.Person.LastName).Contains(term, StringComparison.CurrentCultureIgnoreCase)) ||
-                ((u.Person.PhoneNumber ?? string.Empty).Contains(term, StringComparison.CurrentCultureIgnoreCase)));
+                EF.Functions.Like(
+                    u.Username,
+                    pattern) ||
+
+                EF.Functions.Like(
+                    u.Email,
+                    pattern) ||
+
+                EF.Functions.Like(
+                    u.Person!.FirstName,
+                    pattern) ||
+
+                EF.Functions.Like(
+                    u.Person.LastName,
+                    pattern) ||
+
+                EF.Functions.Like(
+                    u.Person.FirstName + " " +
+                    u.Person.LastName,
+                    pattern) ||
+
+                EF.Functions.Like(
+                    u.Person.PhoneNumber ?? string.Empty,
+                    pattern));
         }
 
         if (!string.IsNullOrWhiteSpace(filter.Role) &&
-            Enum.TryParse<UserRole>(filter.Role, true, out var parsedRole))
+            Enum.TryParse<UserRole>(
+                filter.Role,
+                true,
+                out var parsedRole))
         {
-            query = query.Where(u => u.Role == parsedRole);
+            query = query.Where(
+                u => u.Role == parsedRole);
         }
 
         if (filter.IsBanned.HasValue)
-            query = query.Where(u => u.IsBanned == filter.IsBanned.Value);
+        {
+            query = query.Where(
+                u => u.IsBanned == filter.IsBanned.Value);
+        }
 
         var total = await query.CountAsync();
 

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/constants/app_roles.dart';
+import '../../../../core/errors/error_mapper.dart';
 import '../../../../core/theme/app_theme_colors.dart';
 import '../../../../core/theme/app_theme_metrics.dart';
 import '../../../../core/utils/logger.dart';
@@ -302,103 +303,108 @@ class _EditUserScreenState extends State<EditUserScreen> {
   }
 
   Future<void> _submit() async {
-    if (_isSubmitting) {
-      AppLogger.debug(
-        'Duplicate user-update action ignored.',
-        tag: _loggerTag,
-      );
-      return;
-    }
+  if (_isSubmitting) {
+    AppLogger.debug(
+      'Duplicate user-update action ignored.',
+      tag: _loggerTag,
+    );
+    return;
+  }
 
-    if (_isUploadingAvatar) {
-      AppLogger.debug(
-        'User update ignored while avatar upload is active.',
-        tag: _loggerTag,
-      );
-      return;
-    }
+  if (_isUploadingAvatar) {
+    AppLogger.debug(
+      'User update ignored while avatar upload is active.',
+      tag: _loggerTag,
+    );
+    return;
+  }
 
-    final form = _formKey.currentState;
+  final form = _formKey.currentState;
 
-    if (form == null) {
-      AppLogger.warning(
-        'Edit-user form state was unavailable.',
-        tag: _loggerTag,
-      );
-      return;
-    }
+  if (form == null) {
+    AppLogger.warning(
+      'Edit-user form state was unavailable.',
+      tag: _loggerTag,
+    );
+    return;
+  }
 
-    FocusScope.of(context).unfocus();
+  FocusScope.of(context).unfocus();
 
-    if (!form.validate()) {
-      AppLogger.debug(
-        'Edit-user form validation failed.',
-        tag: _loggerTag,
-      );
-      return;
-    }
+  if (!form.validate()) {
+    AppLogger.debug(
+      'Edit-user form validation failed.',
+      tag: _loggerTag,
+    );
+    return;
+  }
 
-    setState(() {
-      _isSubmitting = true;
-    });
+  setState(() {
+    _isSubmitting = true;
+  });
+
+  AppLogger.info(
+    'User update started.',
+    tag: _loggerTag,
+  );
+
+  try {
+    final updatedUser = await widget.repository.updateUser(
+      userId: widget.profile.userId,
+      username: _usernameController.text.trim(),
+      email: _emailController.text.trim(),
+      firstName: _firstNameController.text.trim(),
+      lastName: _lastNameController.text.trim(),
+      phoneNumber: _normalizeOptionalPhone(
+        _phoneController.text,
+      ),
+      imageUrl: _uploadedImageUrl,
+      role: _selectedRole,
+    );
+
+    if (!mounted) return;
 
     AppLogger.info(
-      'User update started.',
+      'User update completed successfully.',
       tag: _loggerTag,
     );
 
-    try {
-      final updatedUser = await widget.repository.updateUser(
-        userId: widget.profile.userId,
-        username: _usernameController.text.trim(),
-        email: _emailController.text.trim(),
-        firstName: _firstNameController.text.trim(),
-        lastName: _lastNameController.text.trim(),
-        phoneNumber: _normalizeOptionalPhone(
-          _phoneController.text,
-        ),
-        imageUrl: _uploadedImageUrl,
-        role: _selectedRole,
-      );
+    _showMessage(
+      'User updated successfully.',
+    );
 
-      if (!mounted) return;
+    context.pop(updatedUser);
+  } catch (error, stackTrace) {
+    AppLogger.error(
+      'User update failed.',
+      tag: _loggerTag,
+      error: error,
+      stackTrace: stackTrace,
+    );
 
-      AppLogger.info(
-        'User update completed successfully.',
-        tag: _loggerTag,
-      );
+    if (!mounted) return;
 
-      _showMessage(
-        'User updated successfully.',
-      );
-
-      context.pop(updatedUser);
-    } catch (error, stackTrace) {
-      AppLogger.error(
-        'User update failed.',
-        tag: _loggerTag,
-        error: error,
+    _showMessage(
+      ErrorMapper.toMessage(
+        error,
         stackTrace: stackTrace,
-      );
-
-      if (!mounted) return;
-
-      _showMessage(
-        'Failed to update user.',
-      );
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isSubmitting = false;
-        });
-      }
-
-      AppLogger.debug(
-        'User-update state reset.',
-        tag: _loggerTag,
-      );
+        fallbackMessage:
+            'Could not update this user. Please try again.',
+      ),
+    );
+  } finally {
+    if (mounted) {
+      setState(() {
+        _isSubmitting = false;
+      });
     }
+
+    AppLogger.debug(
+      'User-update state reset.',
+      tag: _loggerTag,
+    );
   }
+}
 
   void _goBack() {
     if (_isSubmitting || _isUploadingAvatar) {

@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 
 import '../../../core/errors/app_exceptions.dart';
+import '../../../core/utils/logger.dart';
 import '../../../shared/admin_profile/data/profile_repository.dart';
 import '../../../shared/admin_profile/models/user_profile.dart';
 import '../../../shared/admin_profile/providers/profile_providers.dart';
@@ -67,48 +68,71 @@ class ProfileController extends StateNotifier<AsyncValue<UserProfile>> {
     state = await AsyncValue.guard(() => repository.getProfile());
   }
 
-  Future<bool> updateProfile({
-    required String username,
-    required String email,
-    required String firstName,
-    required String lastName,
-    String? phoneNumber,
-    String? imageUrl,
-  }) async {
-    final authState = ref.read(authStateProvider);
+Future<bool> updateProfile({
+  required String username,
+  required String email,
+  required String firstName,
+  required String lastName,
+  String? phoneNumber,
+  String? imageUrl,
+}) async {
+  final authState = ref.read(authStateProvider);
 
-    if (!authState.isAuthenticated) {
-      final fallback = profileFromAuthState();
-      if (fallback != null) {
-        state = AsyncData(fallback);
-      } else {
-        state = AsyncError(
-          const AppException(
-            type: AppExceptionType.unauthorized,
-            message: 'You need to sign in again.',
-          ),
-          StackTrace.current,
-        );
-      }
-      return false;
+  if (!authState.isAuthenticated) {
+    final fallback = profileFromAuthState();
+
+    if (fallback != null) {
+      state = AsyncData(fallback);
+    } else {
+      state = AsyncError(
+        const AppException(
+          type: AppExceptionType.unauthorized,
+          message: 'You need to sign in again.',
+        ),
+        StackTrace.current,
+      );
     }
 
-    state = const AsyncLoading();
+    return false;
+  }
 
-    final result = await AsyncValue.guard(
-      () => repository.updateProfile(
-        username: username.trim(),
-        email: email.trim(),
-        firstName: firstName.trim(),
-        lastName: lastName.trim(),
-        phoneNumber: normalize(phoneNumber),
-        imageUrl: normalize(imageUrl),
-      ),
+  final previousProfile =
+      state is AsyncData<UserProfile>
+          ? (state as AsyncData<UserProfile>).value
+          : null;
+
+  state = const AsyncLoading();
+
+  try {
+    final updatedProfile = await repository.updateProfile(
+      username: username.trim(),
+      email: email.trim(),
+      firstName: firstName.trim(),
+      lastName: lastName.trim(),
+      phoneNumber: normalize(phoneNumber),
+      imageUrl: normalize(imageUrl),
     );
 
-    state = result;
-    return !result.hasError;
+    state = AsyncData(updatedProfile);
+
+    return true;
+  } catch (error, stackTrace) {
+    AppLogger.error(
+      'Profile update failed.',
+      tag: 'ProfileController',
+      error: error,
+      stackTrace: stackTrace,
+    );
+
+    if (previousProfile != null) {
+      state = AsyncData(previousProfile);
+    } else {
+      state = AsyncError(error, stackTrace);
+    }
+
+    rethrow;
   }
+}
 
 Future<String> uploadProfileImage(String filePath) {
   return repository.uploadProfileImage(filePath);

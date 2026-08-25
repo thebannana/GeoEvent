@@ -52,13 +52,13 @@ public class UserRepository : IUserRepository
     }
 
     public async Task<PagedResult<Report>> GetReportsAsync(
-        ReportStatus? status,
-        ReportTargetType? targetType,
-        string? search,
-        string? sortBy,
-        bool descending,
-        int page,
-        int pageSize)
+    ReportStatus? status,
+    ReportTargetType? targetType,
+    string? search,
+    string? sortBy,
+    bool descending,
+    int page,
+    int pageSize)
     {
         ValidatePaging(page, pageSize, MaxPageSize);
 
@@ -71,59 +71,121 @@ public class UserRepository : IUserRepository
             .AsQueryable();
 
         if (status.HasValue)
-            query = query.Where(r => r.Status == status.Value);
+        {
+            query = query.Where(r =>
+                r.Status == status.Value);
+        }
 
         if (targetType.HasValue)
-            query = query.Where(r => r.TargetType == targetType.Value);
+        {
+            query = query.Where(r =>
+                r.TargetType == targetType.Value);
+        }
 
         if (!string.IsNullOrWhiteSpace(search))
         {
-            var term = search.Trim().ToLowerInvariant();
+            var term = search.Trim();
+            var pattern = $"%{term}%";
 
             query = query.Where(r =>
-                r.ReportId.ToString().Contains(term) ||
-                r.Reason.Contains(term, StringComparison.CurrentCultureIgnoreCase) ||
-                (r.Description != null &&
-                 r.Description.Contains(term, StringComparison.CurrentCultureIgnoreCase)) ||
-                (r.Reporter != null &&
-                 r.Reporter.Username.Contains(term, StringComparison.CurrentCultureIgnoreCase)) ||
-                (r.Reporter != null &&
-                 r.Reporter.Person != null &&
-                 (
-                     (r.Reporter.Person.FirstName + " " +
-                      r.Reporter.Person.LastName)
-                     .Trim()
-.Contains(term, StringComparison.CurrentCultureIgnoreCase)
-                 )) ||
-                (r.TargetId.HasValue &&
-                 r.TargetId.Value.ToString().Contains(term)));
+                EF.Functions.Like(
+                    r.ReportId.ToString(),
+                    pattern) ||
+
+                EF.Functions.Like(
+                    r.Reason,
+                    pattern) ||
+
+                EF.Functions.Like(
+                    r.Description ?? string.Empty,
+                    pattern) ||
+
+                EF.Functions.Like(
+                    r.Reporter != null
+                        ? r.Reporter.Username
+                        : string.Empty,
+                    pattern) ||
+
+                EF.Functions.Like(
+                    r.Reporter != null &&
+                    r.Reporter.Person != null
+                        ? r.Reporter.Person.FirstName
+                        : string.Empty,
+                    pattern) ||
+
+                EF.Functions.Like(
+                    r.Reporter != null &&
+                    r.Reporter.Person != null
+                        ? r.Reporter.Person.LastName
+                        : string.Empty,
+                    pattern) ||
+
+                EF.Functions.Like(
+                    r.Reporter != null &&
+                    r.Reporter.Person != null
+                        ? r.Reporter.Person.FirstName +
+                          " " +
+                          r.Reporter.Person.LastName
+                        : string.Empty,
+                    pattern) ||
+
+                EF.Functions.Like(
+                    r.TargetId.HasValue
+                        ? r.TargetId.Value.ToString()
+                        : string.Empty,
+                    pattern));
         }
 
-        var normalizedSort = sortBy?.Trim().ToLowerInvariant();
+        var normalizedSort =
+            sortBy?.Trim().ToLowerInvariant();
 
         query = normalizedSort switch
         {
             "createdat" => descending
-                ? query.OrderByDescending(r => r.CreatedAt).ThenByDescending(r => r.ReportId)
-                : query.OrderBy(r => r.CreatedAt).ThenBy(r => r.ReportId),
+                ? query
+                    .OrderByDescending(r => r.CreatedAt)
+                    .ThenByDescending(r => r.ReportId)
+                : query
+                    .OrderBy(r => r.CreatedAt)
+                    .ThenBy(r => r.ReportId),
 
             "status" => descending
-                ? query.OrderByDescending(r => r.Status).ThenByDescending(r => r.ReportId)
-                : query.OrderBy(r => r.Status).ThenBy(r => r.ReportId),
+                ? query
+                    .OrderByDescending(r => r.Status)
+                    .ThenByDescending(r => r.ReportId)
+                : query
+                    .OrderBy(r => r.Status)
+                    .ThenBy(r => r.ReportId),
 
             "type" => descending
-                ? query.OrderByDescending(r => r.TargetType).ThenByDescending(r => r.ReportId)
-                : query.OrderBy(r => r.TargetType).ThenBy(r => r.ReportId),
+                ? query
+                    .OrderByDescending(r => r.TargetType)
+                    .ThenByDescending(r => r.ReportId)
+                : query
+                    .OrderBy(r => r.TargetType)
+                    .ThenBy(r => r.ReportId),
 
             "reporter" => descending
-                ? query.OrderByDescending(r => r.Reporter != null ? r.Reporter.Username : string.Empty)
-                       .ThenByDescending(r => r.ReportId)
-                : query.OrderBy(r => r.Reporter != null ? r.Reporter.Username : string.Empty)
-                       .ThenBy(r => r.ReportId),
+                ? query
+                    .OrderByDescending(r =>
+                        r.Reporter != null
+                            ? r.Reporter.Username
+                            : string.Empty)
+                    .ThenByDescending(r => r.ReportId)
+                : query
+                    .OrderBy(r =>
+                        r.Reporter != null
+                            ? r.Reporter.Username
+                            : string.Empty)
+                    .ThenBy(r => r.ReportId),
 
             _ => descending
-                ? query.OrderByDescending(r => r.CreatedAt).ThenByDescending(r => r.ReportId)
-                : query.OrderBy(r => r.CreatedAt).ThenBy(r => r.ReportId)
+                ? query
+                    .OrderByDescending(r => r.CreatedAt)
+                    .ThenByDescending(r => r.ReportId)
+                : query
+                    .OrderBy(r => r.CreatedAt)
+                    .ThenBy(r => r.ReportId)
         };
 
         var total = await query.CountAsync();

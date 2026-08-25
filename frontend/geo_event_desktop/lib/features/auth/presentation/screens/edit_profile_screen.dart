@@ -292,114 +292,74 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   }
 
   Future<void> _submit() async {
-    if (_isSubmitting) {
-      AppLogger.debug(
-        'Duplicate profile-submit action ignored.',
-        tag: _loggerTag,
-      );
+  if (_isSubmitting) {
+    return;
+  }
+
+  if (_isUploadingAvatar) {
+    return;
+  }
+
+  final form = _formKey.currentState;
+
+  if (form == null || !form.validate()) {
+    return;
+  }
+
+  FocusScope.of(context).unfocus();
+
+  setState(() {
+    _isSubmitting = true;
+  });
+
+  try {
+    final success =
+        await ref.read(profileControllerProvider.notifier).updateProfile(
+              username: _usernameController.text.trim(),
+              email: _emailController.text.trim(),
+              firstName: _firstNameController.text.trim(),
+              lastName: _lastNameController.text.trim(),
+              phoneNumber: _normalizeOptionalPhone(
+                _phoneController.text,
+              ),
+              imageUrl: _uploadedImageUrl,
+            );
+
+    if (!mounted) return;
+
+    if (!success) {
+      _showMessage('Failed to update profile.');
       return;
     }
 
-    if (_isUploadingAvatar) {
-      AppLogger.debug(
-        'Profile-submit action ignored while avatar upload is active.',
-        tag: _loggerTag,
-      );
-      return;
-    }
-
-    final form = _formKey.currentState;
-
-    if (form == null) {
-      AppLogger.warning(
-        'Profile form state was unavailable.',
-        tag: _loggerTag,
-      );
-      return;
-    }
-
-    FocusScope.of(context).unfocus();
-
-    if (!form.validate()) {
-      AppLogger.debug(
-        'Profile form validation failed.',
-        tag: _loggerTag,
-      );
-      return;
-    }
-
-    setState(() {
-      _isSubmitting = true;
-    });
-
-    AppLogger.info(
-      'Profile update started.',
+    _showMessage('Profile updated successfully.');
+    context.pop(true);
+  } catch (error, stackTrace) {
+    AppLogger.error(
+      'Profile update failed.',
       tag: _loggerTag,
+      error: error,
+      stackTrace: stackTrace,
     );
 
-    try {
-      final success =
-          await ref.read(profileControllerProvider.notifier).updateProfile(
-                username: _usernameController.text.trim(),
-                email: _emailController.text.trim(),
-                firstName: _firstNameController.text.trim(),
-                lastName: _lastNameController.text.trim(),
-                phoneNumber: _normalizeOptionalPhone(
-                  _phoneController.text,
-                ),
-                imageUrl: _uploadedImageUrl,
-              );
+    if (!mounted) return;
 
-      if (!mounted) return;
-
-      if (!success) {
-        AppLogger.warning(
-          'Profile update returned an unsuccessful result.',
-          tag: _loggerTag,
-        );
-
-        _showMessage('Failed to update profile.');
-        return;
-      }
-
-      AppLogger.info(
-        'Profile update completed successfully.',
-        tag: _loggerTag,
-      );
-
-      _showMessage('Profile updated successfully.');
-      context.pop(true);
-    } catch (error, stackTrace) {
-      AppLogger.error(
-        'Profile update failed.',
-        tag: _loggerTag,
-        error: error,
+    _showMessage(
+      ErrorMapper.toMessage(
+        error,
         stackTrace: stackTrace,
-      );
-
-      if (!mounted) return;
-
-      _showMessage(
-        ErrorMapper.toMessage(
-          error,
-          stackTrace: stackTrace,
-          fallbackMessage:
-              'Something went wrong while updating the profile.',
-        ),
-      );
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isSubmitting = false;
-        });
-      }
-
-      AppLogger.debug(
-        'Profile-submit state reset.',
-        tag: _loggerTag,
-      );
+        fallbackMessage:
+            'Could not update profile. Please try again.',
+      ),
+    );
+  } finally {
+    if (mounted) {
+      setState(() {
+        _isSubmitting = false;
+      });
     }
   }
+}
 
   void _goBack() {
     if (_isSubmitting || _isUploadingAvatar) {

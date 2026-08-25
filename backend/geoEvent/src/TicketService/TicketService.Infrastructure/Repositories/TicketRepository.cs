@@ -28,27 +28,45 @@ public class TicketRepository : ITicketRepository
         return (normalizedPage, normalizedPageSize);
     }
 
-    public async Task<PagedResult<Reservation>> GetRefundRequestsAsync(AdminRefundRequestsQueryDto query)
+    public async Task<PagedResult<Reservation>> GetRefundRequestsAsync(
+    AdminRefundRequestsQueryDto query)
     {
         query ??= new AdminRefundRequestsQueryDto();
-        var (page, pageSize) = NormalizePaging(query.Page, query.PageSize);
+
+        var (page, pageSize) = NormalizePaging(
+            query.Page,
+            query.PageSize);
 
         var reservations = _context.Reservations
             .AsNoTracking()
             .Include(r => r.PaymentDetails)
             .Include(r => r.Tickets)
-            .Where(r => r.RefundRequestStatus != RefundRequestStatus.None);
+            .Where(r =>
+                r.RefundRequestStatus != RefundRequestStatus.None);
 
         if (query.EventId.HasValue)
-            reservations = reservations.Where(r => r.EventId == query.EventId.Value);
+        {
+            reservations = reservations.Where(r =>
+                r.EventId == query.EventId.Value);
+        }
 
         if (!string.IsNullOrWhiteSpace(query.Search))
         {
-            var search = query.Search.Trim().ToLower();
+            var search = query.Search.Trim();
+            var pattern = $"%{search}%";
+
             reservations = reservations.Where(r =>
-                (r.RefundReason != null && r.RefundReason.Contains(search, StringComparison.CurrentCultureIgnoreCase)) ||
-                r.ReservationId.ToString().Contains(search) ||
-                r.UserId.ToString().Contains(search));
+                EF.Functions.Like(
+                    r.RefundReason ?? string.Empty,
+                    pattern) ||
+
+                EF.Functions.Like(
+                    r.ReservationId.ToString(),
+                    pattern) ||
+
+                EF.Functions.Like(
+                    r.UserId.ToString(),
+                    pattern));
         }
 
         if (query.Status.HasValue)
@@ -56,36 +74,71 @@ public class TicketRepository : ITicketRepository
             reservations = query.Status.Value switch
             {
                 RefundQueueStatus.Open =>
-                    reservations.Where(r => r.RefundRequestStatus == RefundRequestStatus.Pending),
+                    reservations.Where(r =>
+                        r.RefundRequestStatus ==
+                        RefundRequestStatus.Pending),
 
                 RefundQueueStatus.InReview =>
-                    reservations.Where(r => r.RefundRequestStatus == RefundRequestStatus.Processing),
+                    reservations.Where(r =>
+                        r.RefundRequestStatus ==
+                        RefundRequestStatus.Processing),
 
                 RefundQueueStatus.Resolved =>
                     reservations.Where(r =>
-                        r.RefundRequestStatus == RefundRequestStatus.Approved ||
-                        r.RefundRequestStatus == RefundRequestStatus.Refunded),
+                        r.RefundRequestStatus ==
+                            RefundRequestStatus.Approved ||
+                        r.RefundRequestStatus ==
+                            RefundRequestStatus.Refunded),
 
                 RefundQueueStatus.Rejected =>
-                    reservations.Where(r => r.RefundRequestStatus == RefundRequestStatus.Rejected),
+                    reservations.Where(r =>
+                        r.RefundRequestStatus ==
+                        RefundRequestStatus.Rejected),
 
                 _ => reservations
             };
         }
 
-        reservations = (query.SortBy ?? string.Empty).Trim().ToLowerInvariant() switch
+        reservations = (
+            query.SortBy ?? string.Empty)
+            .Trim()
+            .ToLowerInvariant() switch
         {
             "status" => query.Descending
-                ? reservations.OrderByDescending(r => r.RefundRequestStatus)
-                : reservations.OrderBy(r => r.RefundRequestStatus),
+                ? reservations
+                    .OrderByDescending(r =>
+                        r.RefundRequestStatus)
+                    .ThenByDescending(r =>
+                        r.ReservationId)
+                : reservations
+                    .OrderBy(r =>
+                        r.RefundRequestStatus)
+                    .ThenBy(r =>
+                        r.ReservationId),
 
             "amount" => query.Descending
-                ? reservations.OrderByDescending(r => r.TotalAmount)
-                : reservations.OrderBy(r => r.TotalAmount),
+                ? reservations
+                    .OrderByDescending(r =>
+                        r.TotalAmount)
+                    .ThenByDescending(r =>
+                        r.ReservationId)
+                : reservations
+                    .OrderBy(r =>
+                        r.TotalAmount)
+                    .ThenBy(r =>
+                        r.ReservationId),
 
             _ => query.Descending
-                ? reservations.OrderByDescending(r => r.RefundRequestedAt ?? r.CreatedAt)
-                : reservations.OrderBy(r => r.RefundRequestedAt ?? r.CreatedAt)
+                ? reservations
+                    .OrderByDescending(r =>
+                        r.RefundRequestedAt ?? r.CreatedAt)
+                    .ThenByDescending(r =>
+                        r.ReservationId)
+                : reservations
+                    .OrderBy(r =>
+                        r.RefundRequestedAt ?? r.CreatedAt)
+                    .ThenBy(r =>
+                        r.ReservationId)
         };
 
         var total = await reservations.CountAsync();

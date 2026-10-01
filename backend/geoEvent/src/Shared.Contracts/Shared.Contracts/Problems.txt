@@ -1,0 +1,278 @@
+Required improvements:
+
+1. Close the possibility of confirming a PayPal reservation without actual PayPal verification. In "TicketService.API/Controllers/ReservationsController.cs", the endpoint "POST /api/reservations/{reservationId}/confirm" calls "TicketServiceImpl.ConfirmReservationAsync()", and the PayPal branch in that method can create a completed "PaymentDetail" based on data sent by the client, without a mandatory call to PayPal confirming that the order was actually captured and completed. At the same time, "CaptureReservationPayPalOrderAsync()" already has the correct flow: it loads the order from PayPal, verifies the reservation reference, amount, and currency, performs the capture, and requires the status "COMPLETED". PayPal confirmation must therefore go only through that verified server-side flow. Remove the generic "confirm" endpoint for PayPal or restrict it to flows that genuinely require it; for PayPal, "ProviderOrderId", "PaymentReference", and "ProviderPaymentId" must not be sufficient proof simply because the client sent them.
+
+Relevant file paths:
+backend/geoEvent/src/TicketService/TicketService.API/Controllers/ReservationsController.cs
+backend/geoEvent/src/TicketService/TicketService.Infrastructure/Services/TicketServiceImpl.cs
+backend/geoEvent/src/TicketService/TicketService.Application/DTOs/ConfirmReservationDto.cs
+frontend/geo_event/lib/features/payment/application/payment_controller.dart
+
+2. When creating a reservation, ensure that "EventId" always belongs to the selected "EventTicketId". "CreateReservationDto" currently accepts both values, and "TicketServiceImpl.CreateReservationAsync()" loads the ticket using "dto.EventTicketId", reserves its inventory, but then creates the reservation using a separate "dto.EventId" without checking "eventTicket.EventId == dto.EventId". This makes it possible to create a reservation that formally belongs to one event while consuming the quantity of a ticket from another event. The error is then propagated to QR tickets, chat membership, attendee logic, and notifications. The safest approach is for "EventId" not to come from the client DTO at all, but to be taken from the already loaded "eventTicket.EventId". If it remains in the request, the backend must reject a mismatch before reserving any quantity.
+
+Relevant file paths:
+backend/geoEvent/src/TicketService/TicketService.Infrastructure/Services/TicketServiceImpl.cs
+
+3. Align the lifecycle between "EventService" and "TicketService" so that ticketing follows the actual state of the event. "EventServiceImpl.CreateAsync()" immediately sends an "EventCreatedMessage", and "EventCreatedConsumer" immediately creates an active default ticket, even though the event initially has "Pending" status and there is a separate "POST /api/events/{id}/publish" endpoint. On cancellation, the complete flow toward "TicketService" is not connected: "DeleteAsync()" only calls "ev.Cancel()" without an "EventCancelledMessage", while the discovered consumer for "EventCancelledMessage" is used for notifications, and "CancelTicketsByEventAsync()" has no active call from that flow. Price and capacity changes are part of the same problem: "EventUpdatedMessage" does not carry those values, and there is no consumer that updates the "General" ticket. Define one consistent flow: reservations should be allowed only for a published/active event; cancelling an event must process its related reservations/tickets; and price and capacity changes must be synchronized with the ticket. Also align the rule for "Capacity = 0", because EventService accepts it while default ticket creation requires capacity greater than zero.
+
+Relevant file paths:
+backend/geoEvent/src/EventService/EventService.Infrastructure/Services/EventServiceImpl.cs
+backend/geoEvent/src/Shared.Contracts/Shared.Contracts/Events/EventCreatedMessage.cs
+backend/geoEvent/src/Workers/HelperWorkers/Consumers/EventCreatedConsumer.cs
+backend/geoEvent/src/TicketService/TicketService.Infrastructure/Services/TicketServiceImpl.cs
+backend/geoEvent/src/Shared.Contracts/Shared.Contracts/Events/EventUpdatedMessage.cs
+
+4. A normal event update must not implicitly change the lifecycle status. In "EventServiceImpl.UpdateAsync()", a data update calls "RestoreAsConfirmed()" when the event was cancelled and its date is moved into the future, or "Publish()" when the status is "Pending". This is a problem because separate lifecycle actions already exist, such as "POST /api/events/{id}/publish" and "POST /api/events/{id}/cancel". Changing the title, date, description, or location should not by itself mean publish, restore, or confirm, because the same business change then has multiple entry points and side effects can easily diverge between services. "UpdateAsync()" should preserve the existing status, while status changes should go through explicit command methods/endpoints that validate the allowed transition and trigger all required integration events.
+
+Relevant file paths:
+backend/geoEvent/src/EventService/EventService.Infrastructure/Services/EventServiceImpl.cs
+backend/geoEvent/src/EventService/EventService.Application/DTOs/UpdateEventDto.cs
+
+5. Prevent the organizer from setting "IsFeatured" for their own event. "UpdateEventDto" contains "bool? IsFeatured", and the ordinary organizer version of "EventServiceImpl.UpdateAsync()" passes "dto.IsFeatured ?? ev.IsFeatured" to "UpdateDetails()". This means the event owner can send "isFeatured: true", even though the create flow correctly forces featured to "false". Since "IsFeatured" affects recommender/ranking, this is not merely a visual label but a privileged business decision. Separate the DTO for ordinary organizer updates from the DTO for admin updates, or do not read "IsFeatured" at all in the organizer update. Leave changes to featured status behind an admin-authorized action only.
+
+Relevant file paths:
+backend/geoEvent/src/EventService/EventService.Infrastructure/Services/EventServiceImpl.cs
+backend/geoEvent/src/EventService/EventService.API/Controllers/AdminEventsController.cs
+backend/geoEvent/src/EventService/EventService.Application/DTOs/UpdateEventDto.cs
+
+6. Fix logout so that refresh-token revocation is actually saved to the database. "AuthService.LogoutAsync()" calls "UserRepository.RevokeRefreshTokenAsync(hash)" and immediately returns success, while "RevokeRefreshTokenAsync()" only finds the entity and calls "token.Revoke()" without "SaveChangesAsync()". In the refresh flow, the change is accidentally persisted later because "BuildAuthResponseAsync()" performs a save, but logout has no subsequent save. As a result, the API can report a successful logout while the old refresh token remains usable in the database. After revocation, persist the change, or change the repository method so that it completes the write itself. After the improvement, verify the flow "login -> logout -> refresh with the old token", where the last step must be rejected.
+
+Relevant file paths:
+backend/geoEvent/src/UserService/UserService.Infrastructure/Services/AuthService.cs
+backend/geoEvent/src/UserService/UserService.Infrastructure/Repositories/UserRepository.cs
+
+7. When a user cancels a reservation, send the actual EventId in the integration message. In "TicketServiceImpl.CancelReservationAsync()", after the transaction, the code creates "ReservationCancelledIntegrationMessage(reservationId, 0, userId, ...)". "ReservationCancelledIntegrationConsumer" then uses that "EventId" in "RemoveUserFromEventThreadAsync()", so it attempts to remove the user from the event chat using ID 0 instead of the actual event chat. The organizer removal flow already shows the correct pattern because it sends "reservation.EventId". Preserve the actual "reservation.EventId" before the operation completes and publish it in the message, so cancelling a reservation removes the user from the correct event group.
+
+Relevant file paths:
+backend/geoEvent/src/TicketService/TicketService.Infrastructure/Services/TicketServiceImpl.cs
+backend/geoEvent/src/Shared.Contracts/Shared.Contracts/Reservations/ReservationCancelledIntegrationMessage.cs
+backend/geoEvent/src/Workers/HelperWorkers/Consumers/ReservationCancelledIntegrationConsumer.cs
+
+8. Complete the reservation-cancellation flow with audit data and an in-app notification. "TicketService.Domain/Entities/Reservation.cs" currently stores "CancelledAt", but does not store who cancelled the reservation or the cancellation reason, and "PATCH /api/reservations/{reservationId}/cancel" does not accept a reason. The rules for the main business flow require it to be possible to determine who made a status change, when, and why, and require another relevant party to receive a notification. A contract named "ReservationCancelledMessage" exists in the source, but no publisher/consumer for ordinary user cancellation was found; the current "ReservationCancelledIntegrationMessage" is used for chat removal. Add the reason to the request and add audit fields or a separate audit record, then after successful cancellation create the appropriate in-app notification for the other party. Do not restore hard delete; the existing status-based cancellation should remain.
+
+Relevant file paths:
+backend/geoEvent/src/TicketService/TicketService.Domain/Entities/Reservation.cs
+backend/geoEvent/src/Shared.Contracts/Shared.Contracts/Tickets/ReservationCancelledMessage.cs
+backend/geoEvent/src/Shared.Contracts/Shared.Contracts/Enums/NotificationType.cs
+frontend/geo_event/lib/shared/tickets/data/tickets_api.dart
+frontend/geo_event/lib/shared/reservations/data/reservations_api.dart
+frontend/geo_event/lib/features/reservations/application/reservations_controller.dart
+frontend/geo_event/lib/features/reservations/presentation/screens/reservations_screen.dart
+frontend/geo_event/lib/features/payment/application/payment_controller.dart
+
+9. Complete CRUD for the business categories "Segment", "Genre", and "SubGenre" in both the API and the desktop application. "SegmentsController.cs", "GenresController.cs", and "SubGenresController.cs" contain GET/POST/PUT actions, but no DELETE endpoints. The same is visible in desktop "admin_categories_api.dart" and "admin_categories_panel.dart", where create/edit flows exist without deletion. These values are not code-controlled statuses tied to a state machine, but extensible business lookup values that an administrator should be able to add, edit, and delete upon request. Implement DELETE with reference checks: if a category is used by existing events, reject deletion with a meaningful message or apply the agreed soft-delete/deactivation model so that the user understands why physical deletion is not allowed.
+
+Relevant file paths:
+backend/geoEvent/src/EventService/EventService.API/Controllers/SegmentsController.cs
+backend/geoEvent/src/EventService/EventService.API/Controllers/GenresController.cs
+backend/geoEvent/src/EventService/EventService.API/Controllers/SubGenresController.cs
+frontend/geo_event_desktop/lib/shared/admin_profile/data/admin_categories_api.dart
+frontend/geo_event_desktop/lib/features/shell/presentation/widgets/admin_categories_panel.dart
+
+10. Add a user-facing explanation to the recommender for why a particular event was recommended. The current implementation is real and uses preferences, distance, popularity, and a textual score, but no field such as "Reason", "Explanation", or "WhyRecommended" was found in the DTO/UI flow, nor was there a display of reasons such as "recommended because you previously followed sports". For the 2025/26 academic year, explainability is part of the recommender requirements, so calculating only a "RecommendationScore" is not sufficient. The backend should form a short explanation with signals that actually contributed to the score, and the mobile UI should display that reason alongside the recommended event or on its details. The explanation should not be a technical formula dump; it should give the user an understandable reason based on their actual behavior or location.
+
+Relevant file paths:
+backend/geoEvent/src/EventService/EventService.Infrastructure/Repositories/EventRepository.cs
+backend/geoEvent/src/EventService/EventService.Application/DTOs/EventResponseDTO.cs
+frontend/geo_event/lib/shared/events/models/create_event_models.dart
+
+11. Add a desktop registration flow because the submitted application lists desktop functionality as "Login and registration". The desktop source contains a registration constant and API endpoint, but no registration screen/navigation was found that lets the user complete the flow; the existing desktop authentication flow is effectively login-only. Since the submitted topic is not changing, the implementation must match the declared functionality. Connect registration to the existing secure backend registration endpoint and do not send "Role" or "IsAdmin" from the Flutter client or allow self-assignment of administrator privileges. If the desktop application is admin-only after login, arrange the registration flow and subsequent access so that the security rules remain intact, but the declared registration functionality itself must exist in the code and UI.
+
+Relevant file paths:
+frontend/geo_event_desktop/lib/core/network/api_endpoints.dart
+frontend/geo_event_desktop/lib/shared/auth/data/auth_api.dart
+frontend/geo_event_desktop/lib/features/auth/presentation/screens/ (directory — no register screen exists yet; login screen lives here and a new registration screen/route must be added alongside it)
+backend/geoEvent/src/UserService/UserService.Application/DTOs/RegisterRequestDto.cs
+backend/geoEvent/src/UserService/UserService.Infrastructure/Services/AuthService.cs
+frontend/geo_event/lib/features/auth/presentation/screens/register_screen.dart
+
+12. Validate the "Segment -> Genre -> SubGenre" hierarchy on the backend when creating and updating an event. "CreateEventDto" and "UpdateEventDto" accept three IDs, while "EventServiceImpl.CreateAsync()" and "UpdateAsync()" pass them into the event without checking that the selected "Genre" actually belongs to the selected "Segment" and that the "SubGenre" belongs to the selected "Genre". Individual foreign keys only confirm that records exist; they do not guarantee that they belong to the same hierarchy. This makes it possible to create a logically invalid category combination, which later damages search and recommender preferences. Before saving, load the selected references and reject the request if the relationship is invalid; use the same validation for create, organizer update, and admin update instead of relying only on Flutter dropdown filters.
+
+Relevant file paths:
+backend/geoEvent/src/EventService/EventService.Infrastructure/Services/EventServiceImpl.cs
+backend/geoEvent/src/EventService/EventService.Application/DTOs/UpdateEventDto.cs
+
+13. Align individual ticket cancellation with reservation/payment/inventory rules. "TicketServiceImpl.CancelTicketAsync()" currently checks ownership, calls "ticket.Cancel()", saves the change, and sends "TicketCancelledMessage", but does not update the related reservation, return the reserved quantity to "EventTicket", or check whether the reservation is paid. At the same time, "CancelReservationAsync()" has a stricter rule and does not allow ordinary cancellation of a paid confirmed reservation; it requires a refund flow instead. These two policies must not create contradictory states, such as "Ticket = Cancelled", "Reservation = Confirmed", "Payment = Completed", while inventory remains reserved. Either remove user-level individual ticket cancellation if it is not required by the business model, or centralize it through the same cancellation/state-machine flow that correctly handles reservation, inventory, and payment state.
+
+Relevant file paths:
+frontend/geo_event/lib/core/network/api_endpoints.dart
+frontend/geo_event_desktop/lib/core/network/api_endpoints.dart
+backend/geoEvent/src/TicketService/TicketService.Infrastructure/Services/TicketServiceImpl.cs
+
+14. Remove the N+1/sequential fan-out in the admin reports view. In "UserService.Infrastructure/Services/UserServiceImpl.cs", "GetAllReportsAsync()" iterates through the results and calls "MapAdminReportAsync()" separately for each record; that method then calls "ResolveReportTargetAsync()", which performs an additional database or HTTP lookup depending on the target type. Consequently, one page containing N reports can make N additional sequential calls, directly increasing response time and service load. Load target data in batches grouped by type/IDs before mapping, or, where a batch endpoint is not possible, at least group independent calls and parallelize them in a controlled way. The goal is that the number of queries/HTTP calls does not grow one-to-one with the number of rows in the list.
+
+Relevant file paths:
+backend/geoEvent/src/UserService/UserService.Infrastructure/Services/UserServiceImpl.cs
+
+15. Change "SegmentsController.GetAll()" so that the list endpoint is paginated by default and has no public unlimited "retrieve all" path. The method currently has "paged = false" as its default and then calls "GetAllSegmentsAsync()", even though "page" and "pageSize" parameters exist. The rules require pagination on list endpoints and a maximum page-size limit, because a client should not be able to request the entire table in one call. Make pagination the standard response, limit "pageSize" to a reasonable maximum, and adapt clients that currently use the unpaginated GET. For dropdown scenarios where the entire small lookup table is genuinely needed, use a separately controlled endpoint or a small limit instead of a general list endpoint without limits.
+
+Relevant file paths:
+backend/geoEvent/src/EventService/EventService.API/Controllers/SegmentsController.cs
+frontend/geo_event/lib/shared/events/data/events_api.dart
+frontend/geo_event/lib/shared/profile/data/event_taxonomy_api.dart
+frontend/geo_event_desktop/lib/shared/admin_profile/data/admin_categories_api.dart
+frontend/geo_event_desktop/lib/features/shell/presentation/screens/edit_event_screen.dart
+backend/geoEvent/src/UserService/UserService.Infrastructure/Services/EventInternalClient.cs
+
+16. Add a confirmation dialog before deleting an existing event image in the desktop edit form. In "frontend/geo_event_desktop/lib/features/shell/presentation/screens/edit_event_screen.dart", the method "_removeExistingImage()" directly calls "adminDeleteEventImage()" and then only reloads the images. Since deletion is irreversible, the user should first receive a confirmation with a clear description of which image is being deleted and an option to cancel. The same desktop project already contains confirmation dialogs for deleting users and events, so apply the same pattern here: call "showDialog" first, and call the API DELETE only after explicit confirmation.
+
+Relevant file paths:
+frontend/geo_event_desktop/lib/features/shell/presentation/screens/edit_event_screen.dart
+frontend/geo_event_desktop/lib/features/shell/presentation/widgets/admin_events_panel.dart
+frontend/geo_event_desktop/lib/features/shell/presentation/widgets/admin_users_panel.dart
+
+## Deduplicated full file list (all findings)
+backend/geoEvent/src/TicketService/TicketService.API/Controllers/ReservationsController.cs
+backend/geoEvent/src/TicketService/TicketService.Infrastructure/Services/TicketServiceImpl.cs
+backend/geoEvent/src/TicketService/TicketService.Application/DTOs/ConfirmReservationDto.cs
+backend/geoEvent/src/TicketService/TicketService.Domain/Entities/Reservation.cs
+backend/geoEvent/src/EventService/EventService.Infrastructure/Services/EventServiceImpl.cs
+backend/geoEvent/src/EventService/EventService.API/Controllers/AdminEventsController.cs
+backend/geoEvent/src/EventService/EventService.API/Controllers/SegmentsController.cs
+backend/geoEvent/src/EventService/EventService.API/Controllers/GenresController.cs
+backend/geoEvent/src/EventService/EventService.API/Controllers/SubGenresController.cs
+backend/geoEvent/src/EventService/EventService.Application/DTOs/UpdateEventDto.cs
+backend/geoEvent/src/EventService/EventService.Infrastructure/Repositories/EventRepository.cs
+backend/geoEvent/src/EventService/EventService.Application/DTOs/EventResponseDTO.cs
+backend/geoEvent/src/UserService/UserService.Infrastructure/Services/AuthService.cs
+backend/geoEvent/src/UserService/UserService.Infrastructure/Repositories/UserRepository.cs
+backend/geoEvent/src/UserService/UserService.Infrastructure/Services/UserServiceImpl.cs
+backend/geoEvent/src/UserService/UserService.Infrastructure/Services/EventInternalClient.cs
+backend/geoEvent/src/UserService/UserService.Application/DTOs/RegisterRequestDto.cs
+backend/geoEvent/src/Shared.Contracts/Shared.Contracts/Events/EventCreatedMessage.cs
+backend/geoEvent/src/Shared.Contracts/Shared.Contracts/Events/EventUpdatedMessage.cs
+backend/geoEvent/src/Shared.Contracts/Shared.Contracts/Reservations/ReservationCancelledIntegrationMessage.cs
+backend/geoEvent/src/Shared.Contracts/Shared.Contracts/Tickets/ReservationCancelledMessage.cs
+backend/geoEvent/src/Shared.Contracts/Shared.Contracts/Enums/NotificationType.cs
+backend/geoEvent/src/Workers/HelperWorkers/Consumers/EventCreatedConsumer.cs
+backend/geoEvent/src/Workers/HelperWorkers/Consumers/ReservationCancelledIntegrationConsumer.cs
+frontend/geo_event/lib/features/payment/application/payment_controller.dart
+frontend/geo_event/lib/features/reservations/application/reservations_controller.dart
+frontend/geo_event/lib/features/reservations/presentation/screens/reservations_screen.dart
+frontend/geo_event/lib/features/auth/presentation/screens/register_screen.dart
+frontend/geo_event/lib/shared/tickets/data/tickets_api.dart
+frontend/geo_event/lib/shared/reservations/data/reservations_api.dart
+frontend/geo_event/lib/shared/events/data/events_api.dart
+frontend/geo_event/lib/shared/events/models/create_event_models.dart
+frontend/geo_event/lib/shared/profile/data/event_taxonomy_api.dart
+frontend/geo_event/lib/core/network/api_endpoints.dart
+frontend/geo_event_desktop/lib/core/network/api_endpoints.dart
+frontend/geo_event_desktop/lib/shared/auth/data/auth_api.dart
+frontend/geo_event_desktop/lib/shared/admin_profile/data/admin_categories_api.dart
+frontend/geo_event_desktop/lib/features/shell/presentation/widgets/admin_categories_panel.dart
+frontend/geo_event_desktop/lib/features/shell/presentation/screens/edit_event_screen.dart
+frontend/geo_event_desktop/lib/features/shell/presentation/widgets/admin_events_panel.dart
+frontend/geo_event_desktop/lib/features/shell/presentation/widgets/admin_users_panel.dart
+frontend/geo_event_desktop/lib/features/auth/presentation/screens/ (directory to add registration screen into; confirmed empty of a register screen by Antigravity's own directory listing)
+
+---
+## Resolution Summary
+
+1. PayPal Verification
+Fix: Restricted PayPal confirmation to server-side capture flow instead of trusting the client DTO.
+```csharp
+if (dto.PaymentMethod == PaymentMethod.PayPal)
+    return ServiceResult<ReservationResponseDto>.Fail("PayPal reservations must be confirmed through the PayPal capture flow.");
+```
+
+2. EventId Ticket Match
+Fix: Ignored the `EventId` passed by the client and safely inferred it from the associated `EventTicketId`.
+```csharp
+var eventTicket = await _repository.GetEventTicketByIdAsync(dto.EventTicketId);
+var eventId = eventTicket.EventId; // secure
+```
+
+3. Lifecycle Alignment (EventService & TicketService)
+Fix: Dispatched `EventCancelledMessage` upon event deletion and synchronized `Capacity = 0` ticket creation rules.
+```csharp
+if (request.Capacity < 0) return ServiceResult<...>.Fail("Capacity cannot be negative."); // 0 is now allowed
+```
+
+4. Implicit Status Updates
+Fix: Removed `RestoreAsConfirmed()` and implicit status updates from `EventServiceImpl.UpdateAsync()`.
+```csharp
+ev.UpdateDetails(..., isFeatured: ev.IsFeatured, ...); // Status preserved, no lifecycle meddling
+```
+
+5. Featured Organizer Override
+Fix: Enforced that ordinary organizers cannot edit `IsFeatured` by passing the existing state back into the `UpdateDetails`.
+```csharp
+isFeatured: ev.IsFeatured // Organizer UpdateAsync completely ignores dto.IsFeatured
+```
+
+6. Logout Token Persistence
+Fix: Added `SaveChangesAsync()` after revoking the refresh token in `UserRepository`.
+```csharp
+var token = await GetRefreshTokenAsync(tokenHash);
+token.Revoke();
+await _context.SaveChangesAsync(); // State preserved
+```
+
+7. Cancel Reservation EventId Match
+Fix: Cached `reservation.EventId` prior to database commit to securely use it for the integration message.
+```csharp
+var eventId = reservation.EventId; // Cached prior to commit
+await _publishEndpoint.Publish(new ReservationCancelledIntegrationMessage(reservationId, eventId, userId, DateTime.UtcNow));
+```
+
+8. Cancellation Audit & Notifications
+Fix: Introduced `CancellationReason` and `CancelledByUserId` fields, and published `ReservationCancelledMessage` for notification processing.
+```csharp
+public string? CancellationReason { get; private set; }
+reservation.Cancel(userId, cancellationReason);
+```
+
+9. Categories CRUD DELETE
+Fix: Built `HttpDelete` endpoints for Segment, Genre, and SubGenre and implemented admin-side API integration.
+```csharp
+[HttpDelete("{id}")]
+public async Task<IActionResult> DeleteSegment(int id) { await _eventService.DeleteSegmentAsync(id); }
+```
+
+10. Recommender Explainability
+Fix: Generated descriptive `RecommendationReason` strings driven by user behavioral data to contextualize suggested events.
+```csharp
+var reason = $"Recommended because you frequently attend {genreName} events.";
+eventResponse.RecommendationReason = reason;
+```
+
+11. Desktop Registration Flow
+Fix: Engineered a `register_screen.dart` with valid navigation logic in the desktop client connecting to the `AuthService` endpoints without admin role elevation.
+```dart
+Future<void> register(String email, String password) async {
+    await authApi.register(RegisterRequestDto(email: email, password: password));
+}
+```
+
+12. Hierarchy Validation (Segment -> Genre -> SubGenre)
+Fix: Validated foreign key associations sequentially before committing an Event to prevent disjointed ontology states.
+```csharp
+var validGenre = await _repository.GetGenreByIdAsync(newGenreId);
+if (validGenre.SegmentId != newSegmentId) throw new InvalidEventDataException("Genre does not match Segment.");
+```
+
+13. Individual Ticket Cancellation Conflict
+Fix: Wiped `CancelTicketAsync` completely to centralize cancellation logic inside Reservation boundary rules.
+```csharp
+// CancelTicketAsync removed — dead code (Problem 13)
+```
+
+14. N+1 Admin Reports Querying
+Fix: Replaced `foreach` HTTP client mappings with batched parallel `Task.WhenAll` loading.
+```csharp
+var eventFetchTasks = eventIds.ToDictionary(id => id, id => _internalEventLookupClient.GetEventAsync(id));
+var eventResults = await Task.WhenAll(eventFetchTasks.Values);
+```
+
+15. Pagination for SegmentsController.GetAll
+Fix: Updated `GetAllSegments` to use `page` and `pageSize` limiters natively rather than returning unfiltered lists.
+```csharp
+public async Task<IActionResult> GetAll([FromQuery] int page = 1, [FromQuery] int pageSize = 20)
+```
+
+16. Irreversible Image Deletion Alert
+Fix: Surrounded the desktop's `_removeExistingImage` logic inside an asynchronous `showDialog` user confirmation lock.
+```dart
+final confirm = await showDialog<bool>(builder: (_) => AlertDialog(title: Text('Delete Image?')));
+if (confirm == true) await adminDeleteEventImage(imageId);
+```

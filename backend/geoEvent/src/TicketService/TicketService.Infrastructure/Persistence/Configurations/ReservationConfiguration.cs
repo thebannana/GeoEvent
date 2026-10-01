@@ -60,5 +60,9 @@ public class ReservationConfiguration : IEntityTypeConfiguration<Reservation>
             .HasMaxLength(1000);
 
         builder.HasIndex(r => r.RefundRequestStatus);
+
+        // Cancellation audit
+        builder.Property(r => r.CancelledByUserId);
+        builder.Property(r => r.CancellationReason).HasMaxLength(1000);
     }
 }

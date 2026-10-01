@@ -136,7 +136,7 @@ class ApiEndpoints {
 
   static String ticketById(int ticketId) => '$ticketsBase/$ticketId';
 
-  static String cancelTicket(int ticketId) => '$ticketsBase/$ticketId/cancel';
+  // cancelTicket removed — dead endpoint (Problem 13). Use cancelReservation instead.
 
   static String eventTickets(int eventId) => '/api/events/$eventId/tickets';
 

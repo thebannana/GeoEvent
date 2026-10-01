@@ -22,6 +22,10 @@ public class Reservation
     public string? PaymentReference { get; private set; }
     public string? Notes { get; private set; }
 
+    // Cancellation audit
+    public int? CancelledByUserId { get; private set; }
+    public string? CancellationReason { get; private set; }
+
     public string? PendingProviderOrderId { get; private set; }
     public PaymentMethod? PendingPaymentMethod { get; private set; }
     public DateTime? PendingPaymentCreatedAt { get; private set; }
@@ -115,13 +119,15 @@ public class Reservation
         PendingPaymentCreatedAt = null;
     }
 
-    public void Cancel()
+    public void Cancel(int? cancelledByUserId = null, string? cancellationReason = null)
     {
         if (!CanBeCancelled())
             throw new BusinessException("Reservation cannot be cancelled in its current state.");
 
         Status = ReservationStatus.Cancelled;
         CancelledAt = DateTime.UtcNow;
+        CancelledByUserId = cancelledByUserId;
+        CancellationReason = string.IsNullOrWhiteSpace(cancellationReason) ? null : cancellationReason.Trim();
         ClearPendingPayment();
     }
 

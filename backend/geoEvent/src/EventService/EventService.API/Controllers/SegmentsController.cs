@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using EventService.API.Security;
 using EventService.Application.DTOs;
@@ -22,17 +22,10 @@ public class SegmentsController : ControllerBase
     public async Task<IActionResult> GetAll(
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20,
-        [FromQuery] string? searchTerm = null,
-        [FromQuery] bool paged = false)
+        [FromQuery] string? searchTerm = null)
     {
-        if (!paged)
-        {
-            var listResult = await _eventService.GetAllSegmentsAsync();
-            return listResult.Success
-                ? Ok(listResult.Data)
-                : StatusCode(listResult.StatusCode, new { error = listResult.Error });
-        }
-
+        pageSize = Math.Min(pageSize, 100);
+        
         var result = await _eventService.GetSegmentsPagedAsync(page, pageSize, searchTerm);
         return result.Success
             ? Ok(result.Data)
@@ -74,6 +67,16 @@ public class SegmentsController : ControllerBase
         var result = await _eventService.UpdateSegmentAsync(segmentId, dto);
         return result.Success
             ? Ok(result.Data)
+            : StatusCode(result.StatusCode, new { error = result.Error });
+    }
+
+    [HttpDelete("{segmentId:int}")]
+    [Authorize(Roles = AppRoles.Admin)]
+    public async Task<IActionResult> Delete(int segmentId)
+    {
+        var result = await _eventService.DeleteSegmentAsync(segmentId);
+        return result.Success
+            ? NoContent()
             : StatusCode(result.StatusCode, new { error = result.Error });
     }
 }

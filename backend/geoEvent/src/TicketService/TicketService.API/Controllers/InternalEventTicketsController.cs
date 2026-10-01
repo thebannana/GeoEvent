@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using TicketService.API.Filters;
 using TicketService.Application.DTOs;
@@ -31,5 +31,21 @@ public sealed class InternalEventTicketsController : ControllerBase
         }
 
         return StatusCode(result.StatusCode, new { error = result.Error });
+    }
+
+    [HttpPut("default/{eventId:int}")]
+    public async Task<IActionResult> UpdateDefault(int eventId, [FromBody] UpdateDefaultEventTicketRequest request)
+    {
+        var result = await _ticketService.UpdateDefaultEventTicketAsync(eventId, request);
+        return result.Success
+            ? Ok(result.Data)
+            : StatusCode(result.StatusCode, new { error = result.Error });
+    }
+
+    [HttpPost("cancel-by-event/{eventId:int}")]
+    public async Task<IActionResult> CancelByEvent(int eventId)
+    {
+        await _ticketService.CancelTicketsByEventAsync(eventId);
+        return Ok();
     }
 }

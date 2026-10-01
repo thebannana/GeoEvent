@@ -99,11 +99,24 @@ public class UserServiceImpl : IUserService
             query.Page,
             query.PageSize);
 
+        var userTargetIds = result.Items.Where(r => r.TargetType == ReportTargetType.User && r.TargetId.HasValue).Select(r => r.TargetId!.Value).Distinct().ToList();
+        var usersDict = userTargetIds.Any() ? (await _userRepository.GetPublicByIdsAsync(userTargetIds)).ToDictionary(u => u.PersonId) : new Dictionary<int, User>();
+
+        var eventTargetIds = result.Items.Where(r => r.TargetType == ReportTargetType.Event && r.TargetId.HasValue).Select(r => r.TargetId!.Value).Distinct().ToList();
+        var eventTasks = eventTargetIds.ToDictionary(id => id, id => _externalValidationService.GetEventLookupAsync(id));
+        await Task.WhenAll(eventTasks.Values);
+        var eventsDict = eventTasks.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Result);
+
+        var commentTargetIds = result.Items.Where(r => r.TargetType == ReportTargetType.Comment && r.TargetId.HasValue).Select(r => r.TargetId!.Value).Distinct().ToList();
+        var commentTasks = commentTargetIds.ToDictionary(id => id, id => _externalValidationService.GetCommentLookupAsync(id));
+        await Task.WhenAll(commentTasks.Values);
+        var commentsDict = commentTasks.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Result);
+
         var mappedItems = new List<AdminReportResponseDto>();
 
         foreach (var report in result.Items)
         {
-            mappedItems.Add(await MapAdminReportAsync(report));
+            mappedItems.Add(MapAdminReportBatched(report, usersDict, eventsDict, commentsDict));
         }
 
         return ServiceResult<PagedResult<AdminReportResponseDto>>.Ok(new PagedResult<AdminReportResponseDto>
@@ -250,6 +263,96 @@ public class UserServiceImpl : IUserService
             CreatedAt = r.CreatedAt,
             ResolvedAt = r.ResolvedAt
         };
+    }
+
+    private AdminReportResponseDto MapAdminReportBatched(
+        Report r, 
+        Dictionary<int, User> usersDict, 
+        Dictionary<int, ExternalEventLookupDto?> eventsDict, 
+        Dictionary<int, ExternalCommentLookupDto?> commentsDict)
+    {
+        var reporterDisplayName = BuildPersonDisplayName(
+            r.Reporter?.Person?.FirstName,
+            r.Reporter?.Person?.LastName) ?? r.Reporter?.Username ?? $"User #{r.ReporterId}";
+
+        var resolvedByDisplayName = BuildPersonDisplayName(
+            r.ResolvedBy?.Person?.FirstName,
+            r.ResolvedBy?.Person?.LastName) ?? r.ResolvedBy?.Username;
+
+        var resolved = ResolveReportTargetBatched(r, usersDict, eventsDict, commentsDict);
+
+        return new AdminReportResponseDto
+        {
+            ReportId = r.ReportId,
+            TargetType = r.TargetType.ToString(),
+            TargetId = r.TargetId,
+            TargetDisplay = resolved.TargetDisplay,
+            TargetUsername = resolved.TargetUsername,
+            Reason = r.Reason,
+            Description = r.Description,
+            Preview = resolved.Preview,
+            Status = r.Status.ToString(),
+            ReporterId = r.ReporterId,
+            ReporterUsername = r.Reporter?.Username ?? string.Empty,
+            ReporterDisplayName = reporterDisplayName,
+            ResolvedById = r.ResolvedById,
+            ResolvedByUsername = r.ResolvedBy?.Username,
+            ResolvedByDisplayName = resolvedByDisplayName,
+            ResolutionNote = r.ResolutionNote,
+            ModeratorAction = r.ModeratorAction,
+            CreatedAt = r.CreatedAt,
+            ResolvedAt = r.ResolvedAt
+        };
+    }
+
+    private (string TargetDisplay, string? TargetUsername, string Preview) ResolveReportTargetBatched(
+        Report r, 
+        Dictionary<int, User> usersDict, 
+        Dictionary<int, ExternalEventLookupDto?> eventsDict, 
+        Dictionary<int, ExternalCommentLookupDto?> commentsDict)
+    {
+        if (!r.TargetId.HasValue)
+            return ("Unknown", null, BuildPreview(r.Description, r.Reason));
+
+        var targetId = r.TargetId.Value;
+
+        switch (r.TargetType)
+        {
+            case ReportTargetType.User:
+                {
+                    if (!usersDict.TryGetValue(targetId, out var user) || user is null)
+                        return ($"User #{targetId}", null, BuildPreview(r.Description, r.Reason));
+
+                    var display = BuildPersonDisplayName(
+                        user.Person?.FirstName,
+                        user.Person?.LastName) ?? user.Username ?? $"User #{targetId}";
+
+                    return (display, user.Username, BuildPreview(r.Description, r.Reason));
+                }
+
+            case ReportTargetType.Event:
+                {
+                    if (!eventsDict.TryGetValue(targetId, out var lookup) || lookup is null)
+                        return ($"Event #{targetId}", null, BuildPreview(r.Description, r.Reason));
+
+                    return (string.IsNullOrWhiteSpace(lookup.Title) ? $"Event #{targetId}" : lookup.Title.Trim(),
+                           null,
+                           BuildPreview(r.Description, r.Reason));
+                }
+
+            case ReportTargetType.Comment:
+                {
+                    if (!commentsDict.TryGetValue(targetId, out var lookup) || lookup is null)
+                        return ($"Comment #{targetId}", null, BuildPreview(r.Description, r.Reason));
+
+                    return (string.IsNullOrWhiteSpace(lookup.UserDisplayName) ? $"Comment #{targetId}" : lookup.UserDisplayName!,
+                           lookup.Username,
+                           string.IsNullOrWhiteSpace(lookup.Preview) ? $"Comment #{targetId}" : lookup.Preview);
+                }
+
+            default:
+                return (r.TargetId.ToString()!, null, BuildPreview(r.Description, r.Reason));
+        }
     }
 
     private static string? BuildPersonDisplayName(string? firstName, string? lastName)

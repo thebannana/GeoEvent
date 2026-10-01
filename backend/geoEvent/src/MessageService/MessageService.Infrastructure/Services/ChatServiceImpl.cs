@@ -1,4 +1,4 @@
-﻿using MassTransit;
+using MassTransit;
 using MessageService.Application.Common;
 using MessageService.Application.DTOs;
 using MessageService.Application.Interfaces.Repositories;
@@ -319,6 +319,15 @@ public class ChatServiceImpl : IChatService
             message.SoftDelete();
             await _repository.UpdateMessageAsync(message);
         }
+
+        var activeParticipants = await _repository.GetParticipantsAsync(thread.Id);
+        var notifyUserIds = activeParticipants
+            .Select(x => x.UserId)
+            .Append(userId)
+            .Distinct()
+            .ToList();
+
+        await _realtimeNotifier.ParticipantLeftAsync(thread.Id, userId, notifyUserIds);
     }
 
     public async Task<ServiceResult<PagedResult<ChatMessageDto>>> GetMessagesAsync(

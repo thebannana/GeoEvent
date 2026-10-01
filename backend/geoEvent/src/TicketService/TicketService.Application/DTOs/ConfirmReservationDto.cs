@@ -1,4 +1,4 @@
-﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
 using TicketService.Domain.Enums;
 
 namespace TicketService.Application.DTOs

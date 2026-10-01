@@ -56,6 +56,17 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
     ref.listenManual<ChatThreadState>(
       chatThreadControllerProvider(widget.args),
       (previous, next) {
+        // If the server forcibly removed us from this thread, close the screen.
+        if (next.wasRemovedFromThread &&
+            !(previous?.wasRemovedFromThread ?? false)) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            final nav = Navigator.of(context, rootNavigator: false);
+            if (nav.canPop()) nav.pop();
+          });
+          return;
+        }
+
         final previousCount = previous?.messages.valueOrNull?.length ?? 0;
         final nextCount = next.messages.valueOrNull?.length ?? 0;
 

@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_theme_colors.dart';
@@ -449,6 +450,57 @@ class _AdminCategoriesPanelState extends State<AdminCategoriesPanel> {
     }
   }
 
+  Future<void> _deleteCategory(AdminCategoryRowData row) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Delete ${row.name}'),
+        content: const Text('Are you sure you want to delete this category?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => _isSaving = true);
+    try {
+      switch (row.type) {
+        case AdminCategoryType.segment:
+          await widget.repository.deleteSegment(row.id);
+          break;
+        case AdminCategoryType.genre:
+          await widget.repository.deleteGenre(row.id);
+          break;
+        case AdminCategoryType.subGenre:
+          await widget.repository.deleteSubGenre(row.id);
+          break;
+      }
+      _showSnack('Category deleted successfully.');
+      _segments = const [];
+      await _loadCategories(showLoader: false, page: 1);
+    } catch (e) {
+      if (e is DioException && e.response?.statusCode == 409) {
+        final msg = e.response?.data is Map ? e.response?.data['message'] : null;
+        _showSnack(msg?.toString() ?? 'Cannot delete because it is in use.');
+      } else {
+        _showSnack('Failed to delete category.');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
+    }
+  }
+
   String get _typeLabel => _selectedType.titleLabel;
 
   @override
@@ -675,6 +727,7 @@ class _AdminCategoriesPanelState extends State<AdminCategoriesPanel> {
                                           return CategoryRow(
                                             row: row,
                                             onEdit: () => _openEditScreen(row),
+                                            onDelete: () => _deleteCategory(row),
                                           );
                                         },
                                       ),
@@ -784,10 +837,12 @@ class CategoryRow extends StatelessWidget {
     super.key,
     required this.row,
     required this.onEdit,
+    required this.onDelete,
   });
 
   final AdminCategoryRowData row;
   final VoidCallback onEdit;
+  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -911,6 +966,13 @@ class CategoryRow extends StatelessWidget {
                   icon: Icons.edit_outlined,
                   color: colors.textSecondary,
                   onTap: onEdit,
+                ),
+                const SizedBox(width: 8),
+                ActionIconButton(
+                  tooltip: 'Delete',
+                  icon: Icons.delete_outline_rounded,
+                  color: colorScheme.error,
+                  onTap: onDelete,
                 ),
               ],
             ),

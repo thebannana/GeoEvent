@@ -182,6 +182,8 @@ builder.Services.AddMassTransit(x =>
     x.AddConsumer<ReservationRemovedByOrganizerNotificationConsumer>();
 
     x.AddConsumer<EventCreatedConsumer>();
+    x.AddConsumer<EventCancelledLifecycleConsumer>();
+    x.AddConsumer<EventUpdatedLifecycleConsumer>();
     x.AddConsumer<UserEventPreferenceInteractionConsumer>();
 
     x.UsingRabbitMq((context, cfg) =>

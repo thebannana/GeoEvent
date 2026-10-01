@@ -1,4 +1,4 @@
-﻿namespace Shared.Contracts.Enums;
+namespace Shared.Contracts.Enums;
 
 public enum NotificationType
 {

@@ -1,4 +1,4 @@
-﻿namespace TicketService.Application.DTOs;
+namespace TicketService.Application.DTOs;
 
 public class ReservationResponseDto
 {
@@ -25,4 +25,8 @@ public class ReservationResponseDto
     public DateTime? RefundReviewedAt { get; set; }
     public int? RefundReviewedByUserId { get; set; }
     public string? RefundDecisionReason { get; set; }
-}
+
+    // Cancellation audit (Problem 8)
+    public int? CancelledByUserId { get; set; }
+    public string? CancellationReason { get; set; }
+}

@@ -1,4 +1,4 @@
-﻿using TicketService.Application.Common;
+using TicketService.Application.Common;
 using TicketService.Application.DTOs;
 
 namespace TicketService.Application.Interfaces.Services;
@@ -21,6 +21,11 @@ public interface ITicketService
     string requesterRole);
     Task<ServiceResult<EventTicketResponseDto>> CreateDefaultEventTicketAsync(
     CreateDefaultEventTicketRequest request);
+
+    Task<ServiceResult<EventTicketResponseDto>> UpdateDefaultEventTicketAsync(
+    int eventId,
+    UpdateDefaultEventTicketRequest request);
+
     Task<ServiceResult<PagedResult<EventAttendeePreviewDto>>> GetPublicEventAttendeesAsync(
         int eventId,
         PublicEventAttendeesFilterDto filter);
@@ -34,7 +39,7 @@ public interface ITicketService
     Task<ServiceResult<ReservationResponseDto>> CreateReservationAsync(CreateReservationDto dto, int userId);
     Task<ServiceResult<ReservationResponseDto>> ConfirmReservationAsync(int reservationId, ConfirmReservationDto dto, int userId);
 
-    Task<ServiceResult<bool>> CancelReservationAsync(int reservationId, int userId);
+    Task<ServiceResult<bool>> CancelReservationAsync(int reservationId, int userId, CancelReservationDto? dto = null);
     Task<ServiceResult<ReservationResponseDto>> GetReservationAsync(int reservationId, int userId);
 
     Task<ServiceResult<PagedResult<ReservationResponseDto>>> GetUserReservationsAsync(int userId, ReservationFilterDto filter);
@@ -73,7 +78,7 @@ public interface ITicketService
         int validatorUserId,
         string validatorRole);
 
-    Task<ServiceResult<bool>> CancelTicketAsync(int ticketId, int userId);
+    // CancelTicketAsync removed — dead code (Problem 13)
 
     Task<ServiceResult<PagedResult<PaymentDetailResponseDto>>> GetReservationPaymentsAsync(int reservationId, int userId, int page, int pageSize);
 

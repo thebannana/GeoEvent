@@ -6,6 +6,7 @@ import '../../../shared/auth/models/auth_response.dart';
 import '../../../shared/auth/models/auth_state.dart';
 import '../../../shared/auth/models/auth_user.dart';
 import '../../../shared/auth/models/login_request.dart';
+import '../../../shared/auth/models/register_request.dart';
 import '../../../shared/auth/models/reset_password_request.dart';
 import '../../../shared/auth/providers/auth_providers.dart';
 
@@ -77,6 +78,56 @@ Future<AuthResponse> login({
         deviceInfo: _defaultDeviceInfo,
       ),
       rememberMe: rememberMe,
+    );
+
+    await setAuthenticated(response, preserveUser: response.user);
+
+    if (!state.isAdmin) {
+      await _repository.clearSession();
+      state = const AuthState.unauthenticated(isInitialized: true);
+      throw Exception(
+        'This desktop application is available only to administrators.',
+      );
+    }
+
+    return response;
+  } catch (_) {
+    state = state.copyWith(
+      isLoading: false,
+      isInitialized: true,
+    );
+    rethrow;
+  }
+}
+
+Future<AuthResponse> register({
+  required String username,
+  required String email,
+  required DateTime birthDate,
+  required String phoneNumber,
+  required bool consentGiven,
+  required String consentVersion,
+  required String password,
+  required String confirmPassword,
+  required String firstName,
+  required String lastName,
+}) async {
+  _setLoading(true);
+
+  try {
+    final response = await _repository.register(
+      RegisterRequest(
+        username: username,
+        email: email,
+        birthDate: birthDate,
+        phoneNumber: phoneNumber,
+        consentGiven: consentGiven,
+        consentVersion: consentVersion,
+        password: password,
+        confirmPassword: confirmPassword,
+        firstName: firstName,
+        lastName: lastName,
+      ),
     );
 
     await setAuthenticated(response, preserveUser: response.user);

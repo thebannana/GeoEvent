@@ -1,4 +1,4 @@
-﻿using Shared.Contracts.Events;
+using Shared.Contracts.Events;
 
 namespace GeoEvent.HelperWorkers.Interfaces;
 
@@ -13,5 +13,15 @@ public interface ITicketInternalClient
 
     Task ExpireEventDataAsync(
     int eventId,
+    CancellationToken cancellationToken = default);
+
+    Task CancelTicketsByEventAsync(
+    int eventId,
+    CancellationToken cancellationToken = default);
+
+    Task UpdateDefaultTicketAsync(
+    int eventId,
+    int capacity,
+    decimal price,
     CancellationToken cancellationToken = default);
 }

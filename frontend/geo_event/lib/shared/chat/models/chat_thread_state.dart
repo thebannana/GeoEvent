@@ -15,6 +15,7 @@ class ChatThreadState {
   final int messagesTotalCount;
   final bool hasMoreMessages;
   final bool loadingOlderMessages;
+  final bool wasRemovedFromThread;
 
   const ChatThreadState({
     this.details = const AsyncValue.loading(),
@@ -28,6 +29,7 @@ class ChatThreadState {
     this.messagesTotalCount = 0,
     this.hasMoreMessages = false,
     this.loadingOlderMessages = false,
+    this.wasRemovedFromThread = false,
   });
 
   ChatThreadState copyWith({
@@ -43,6 +45,7 @@ class ChatThreadState {
     int? messagesTotalCount,
     bool? hasMoreMessages,
     bool? loadingOlderMessages,
+    bool? wasRemovedFromThread,
   }) {
     return ChatThreadState(
       details: details ?? this.details,
@@ -56,6 +59,7 @@ class ChatThreadState {
       messagesTotalCount: messagesTotalCount ?? this.messagesTotalCount,
       hasMoreMessages: hasMoreMessages ?? this.hasMoreMessages,
       loadingOlderMessages: loadingOlderMessages ?? this.loadingOlderMessages,
+      wasRemovedFromThread: wasRemovedFromThread ?? this.wasRemovedFromThread,
     );
   }
 }

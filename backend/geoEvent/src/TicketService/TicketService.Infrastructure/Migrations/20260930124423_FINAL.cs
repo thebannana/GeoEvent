@@ -54,6 +54,8 @@ namespace TicketService.Infrastructure.Migrations
                     ExpiresAt = table.Column<DateTime>(type: "datetime2", nullable: false),
                     PaymentReference = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: true),
                     Notes = table.Column<string>(type: "nvarchar(500)", maxLength: 500, nullable: true),
+                    CancelledByUserId = table.Column<int>(type: "int", nullable: true),
+                    CancellationReason = table.Column<string>(type: "nvarchar(1000)", maxLength: 1000, nullable: true),
                     PendingProviderOrderId = table.Column<string>(type: "nvarchar(255)", maxLength: 255, nullable: true),
                     PendingPaymentMethod = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: true),
                     PendingPaymentCreatedAt = table.Column<DateTime>(type: "datetime2", nullable: true),

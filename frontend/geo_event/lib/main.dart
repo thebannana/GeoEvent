@@ -15,8 +15,27 @@ import 'shared/notifications/data/notification_polling_controller.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  AppEnvironment.validateCore();
-  AppEnvironment.validateMaps();
+  try {
+    AppEnvironment.validateCore();
+    AppEnvironment.validateMaps();
+  } catch (e, stack) {
+    debugPrint('Environment validation failed: $e');
+    runApp(MaterialApp(
+      home: Scaffold(
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Text(
+              'Startup failed:\n\n$e',
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ),
+      ),
+    ));
+    return;
+  }
+
 
   final prefs = await SharedPreferences.getInstance();
 

@@ -126,4 +126,8 @@ class AdminCategoriesRepository {
       isActive: isActive,
     );
   }
+
+  Future<void> deleteSegment(int segmentId) => api.deleteSegment(segmentId);
+  Future<void> deleteGenre(int genreId) => api.deleteGenre(genreId);
+  Future<void> deleteSubGenre(int subGenreId) => api.deleteSubGenre(subGenreId);
 }

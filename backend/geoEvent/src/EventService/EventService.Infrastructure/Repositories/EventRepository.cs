@@ -1,4 +1,4 @@
-﻿using EventService.Application.Common;
+using EventService.Application.Common;
 using EventService.Application.DTOs;
 using EventService.Application.Interfaces.Repositories;
 using EventService.Domain.Entities;
@@ -710,7 +710,7 @@ public class EventRepository : IEventRepository
             .Include(e => e.SubGenre)
             .FirstOrDefaultAsync(e => e.EventId == eventId);
 
-    private static double CalculateRecommendationScore(
+    private static (double Score, string? Reason) CalculateRecommendationScore(
     Event ev,
     decimal? userLatitude,
     decimal? userLongitude,
@@ -744,11 +744,25 @@ public class EventRepository : IEventRepository
                     ev,
                     searchTerm);
 
-        return preferenceScore +
-               distanceScore +
-               popularityScore +
-               featuredScore +
-               textScore;
+        var totalScore = preferenceScore + distanceScore + popularityScore + featuredScore + textScore;
+
+        string? reason = null;
+        if (totalScore > 0)
+        {
+            var maxComponent = Math.Max(preferenceScore, Math.Max(distanceScore, Math.Max(popularityScore, Math.Max(featuredScore, textScore))));
+            if (maxComponent == textScore && textScore > 0)
+                reason = "Matches your search";
+            else if (maxComponent == preferenceScore && preferenceScore > 0)
+                reason = "Based on your preferences";
+            else if (maxComponent == distanceScore && distanceScore > 0)
+                reason = "Happening near you";
+            else if (maxComponent == featuredScore && featuredScore > 0)
+                reason = "Featured event";
+            else if (maxComponent == popularityScore && popularityScore > 0)
+                reason = "Highly rated by users";
+        }
+
+        return (totalScore, reason);
     }
 
     private static double CalculatePreferenceScore(
@@ -1204,15 +1218,20 @@ public class EventRepository : IEventRepository
             ?? new List<UserPreferenceDto>();
 
         return candidates
-            .Select(eventItem => new RankedEvent
+            .Select(eventItem =>
             {
-                Event = eventItem,
-                Score = CalculateRecommendationScore(
+                var (score, reason) = CalculateRecommendationScore(
                     eventItem,
                     latitude,
                     longitude,
                     radiusKm,
-                    activePreferences)
+                    activePreferences);
+                return new RankedEvent
+                {
+                    Event = eventItem,
+                    Score = score,
+                    Reason = reason
+                };
             })
             .OrderByDescending(rankedItem =>
                 rankedItem.Score)
@@ -1317,16 +1336,21 @@ public class EventRepository : IEventRepository
             await query.ToListAsync();
 
         return candidates
-            .Select(eventItem => new RankedEvent
+            .Select(eventItem =>
             {
-                Event = eventItem,
-                Score = CalculateRecommendationScore(
+                var (score, reason) = CalculateRecommendationScore(
                     eventItem,
                     filter.Latitude,
                     filter.Longitude,
                     25.0,
                     preferences,
-                    filter.SearchTerm)
+                    filter.SearchTerm);
+                return new RankedEvent
+                {
+                    Event = eventItem,
+                    Score = score,
+                    Reason = reason
+                };
             })
             .OrderByDescending(rankedItem =>
                 rankedItem.Score)
@@ -1518,6 +1542,15 @@ public class EventRepository : IEventRepository
         await _context.SaveChangesAsync();
     }
 
+    public async Task DeleteSegmentAsync(Segment segment)
+    {
+        _context.Segments.Remove(segment);
+        await _context.SaveChangesAsync();
+    }
+
+    public async Task<bool> HasEventsForSegmentAsync(int segmentId) =>
+        await _context.Events.AsNoTracking().AnyAsync(e => e.SegmentId == segmentId);
+
     public async Task<Genre> CreateGenreAsync(Genre genre)
     {
         await _context.Genres.AddAsync(genre);
@@ -1530,6 +1563,15 @@ public class EventRepository : IEventRepository
         await _context.SaveChangesAsync();
     }
 
+    public async Task DeleteGenreAsync(Genre genre)
+    {
+        _context.Genres.Remove(genre);
+        await _context.SaveChangesAsync();
+    }
+
+    public async Task<bool> HasEventsForGenreAsync(int genreId) =>
+        await _context.Events.AsNoTracking().AnyAsync(e => e.GenreId == genreId);
+
     public async Task<SubGenre> CreateSubGenreAsync(SubGenre subGenre)
     {
         await _context.SubGenres.AddAsync(subGenre);
@@ -1541,6 +1583,15 @@ public class EventRepository : IEventRepository
     {
         await _context.SaveChangesAsync();
     }
+
+    public async Task DeleteSubGenreAsync(SubGenre subGenre)
+    {
+        _context.SubGenres.Remove(subGenre);
+        await _context.SaveChangesAsync();
+    }
+
+    public async Task<bool> HasEventsForSubGenreAsync(int subGenreId) =>
+        await _context.Events.AsNoTracking().AnyAsync(e => e.SubGenreId == subGenreId);
 
     private static int NormalizePage(int page) =>
         page < 1 ? DefaultPage : page;

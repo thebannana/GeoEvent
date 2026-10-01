@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using EventService.API.Security;
 using EventService.Application.DTOs;
@@ -64,6 +64,16 @@ public class GenresController : ControllerBase
         var result = await _eventService.UpdateGenreAsync(genreId, dto);
         return result.Success
             ? Ok(result.Data)
+            : StatusCode(result.StatusCode, new { error = result.Error });
+    }
+
+    [HttpDelete("{genreId:int}")]
+    [Authorize(Roles = AppRoles.Admin)]
+    public async Task<IActionResult> Delete(int genreId)
+    {
+        var result = await _eventService.DeleteGenreAsync(genreId);
+        return result.Success
+            ? NoContent()
             : StatusCode(result.StatusCode, new { error = result.Error });
     }
 }

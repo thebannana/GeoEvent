@@ -1,7 +1,8 @@
-﻿namespace Shared.Contracts.Tickets;
+namespace Shared.Contracts.Tickets;
 
 public record ReservationCancelledMessage(
     int ReservationId,
     int EventId,
     int UserId,
-    DateTime CancelledAt);
+    DateTime CancelledAt,
+    string? CancellationReason = null);

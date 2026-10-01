@@ -1,4 +1,4 @@
-﻿using System.Net.Http.Json;
+using System.Net.Http.Json;
 using GeoEvent.HelperWorkers.DTOs;
 using GeoEvent.HelperWorkers.Interfaces;
 using Shared.Contracts.Events;
@@ -95,6 +95,70 @@ public sealed class TicketInternalClient : ITicketInternalClient
 
         _logger.LogError(
             "Event data expiration failed for EventId {EventId}. " +
+            "StatusCode: {StatusCode}, Response: {Response}",
+            eventId,
+            (int)response.StatusCode,
+            responseBody);
+
+        response.EnsureSuccessStatusCode();
+    }
+
+    public async Task CancelTicketsByEventAsync(
+    int eventId,
+    CancellationToken cancellationToken = default)
+    {
+        using var response = await _httpClient.PostAsync(
+            $"api/internal/event-tickets/cancel-by-event/{eventId}",
+            content: null,
+            cancellationToken);
+
+        if (response.IsSuccessStatusCode)
+        {
+            return;
+        }
+
+        var responseBody =
+            await response.Content.ReadAsStringAsync(
+                cancellationToken);
+
+        _logger.LogError(
+            "Ticket cancellation failed for EventId {EventId}. " +
+            "StatusCode: {StatusCode}, Response: {Response}",
+            eventId,
+            (int)response.StatusCode,
+            responseBody);
+
+        response.EnsureSuccessStatusCode();
+    }
+
+    public async Task UpdateDefaultTicketAsync(
+    int eventId,
+    int capacity,
+    decimal price,
+    CancellationToken cancellationToken = default)
+    {
+        var request = new UpdateDefaultEventTicketRequest
+        {
+            Price = price,
+            Capacity = capacity
+        };
+
+        using var response = await _httpClient.PutAsJsonAsync(
+            $"api/internal/event-tickets/default/{eventId}",
+            request,
+            cancellationToken);
+
+        if (response.IsSuccessStatusCode)
+        {
+            return;
+        }
+
+        var responseBody =
+            await response.Content.ReadAsStringAsync(
+                cancellationToken);
+
+        _logger.LogError(
+            "Ticket update failed for EventId {EventId}. " +
             "StatusCode: {StatusCode}, Response: {Response}",
             eventId,
             (int)response.StatusCode,

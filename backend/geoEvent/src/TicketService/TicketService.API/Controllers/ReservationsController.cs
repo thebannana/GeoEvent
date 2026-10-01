@@ -157,10 +157,10 @@ public class ReservationsController : ControllerBase
     }
 
     [HttpPatch("{reservationId:int}/cancel")]
-    public async Task<IActionResult> Cancel(int reservationId)
+    public async Task<IActionResult> Cancel(int reservationId, [FromBody] CancelReservationDto? dto = null)
     {
         var userId = User.GetUserId();
-        var result = await _ticketService.CancelReservationAsync(reservationId, userId);
+        var result = await _ticketService.CancelReservationAsync(reservationId, userId, dto);
 
         return result.Success
             ? NoContent()

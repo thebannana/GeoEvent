@@ -14,7 +14,7 @@ class EventsApi {
   final Dio dio;
 
   Future<List<SegmentItem>> getSegments() async {
-    final response = await dio.get(ApiEndpoints.segments);
+    final response = await dio.get(ApiEndpoints.segments, queryParameters: {'pageSize': 100});
     final items = _extractList(response.data);
     return items.map(SegmentItem.fromJson).toList();
   }

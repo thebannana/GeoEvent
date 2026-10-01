@@ -13,6 +13,7 @@ class AdminCategoriesApi {
   Future<List<AdminSegment>> getSegments() async {
     final response = await dio.get(
       ApiEndpoints.segments,
+      queryParameters: {'pageSize': 100},
       options: Options(
         extra: const {
           AuthInterceptor.allowRefreshKey: true,
@@ -21,11 +22,16 @@ class AdminCategoriesApi {
     );
 
     final raw = response.data;
-    if (raw is! List) {
+    if (raw is! Map) {
       throw const FormatException('Invalid segments response.');
     }
 
-    return raw
+    final items = raw['items'] ?? raw['Items'];
+    if (items is! List) {
+      throw const FormatException('Invalid segments response items format.');
+    }
+
+    return items
         .map((item) => AdminSegment.fromJson(Map<String, dynamic>.from(item as Map)))
         .toList();
   }
@@ -273,5 +279,32 @@ class AdminCategoriesApi {
     );
 
     return AdminSubGenre.fromJson(Map<String, dynamic>.from(response.data as Map));
+  }
+
+  Future<void> deleteSegment(int segmentId) async {
+    await dio.delete(
+      ApiEndpoints.segmentById(segmentId),
+      options: Options(
+        extra: const {AuthInterceptor.allowRefreshKey: true},
+      ),
+    );
+  }
+
+  Future<void> deleteGenre(int genreId) async {
+    await dio.delete(
+      ApiEndpoints.genreById(genreId),
+      options: Options(
+        extra: const {AuthInterceptor.allowRefreshKey: true},
+      ),
+    );
+  }
+
+  Future<void> deleteSubGenre(int subGenreId) async {
+    await dio.delete(
+      ApiEndpoints.subGenreById(subGenreId),
+      options: Options(
+        extra: const {AuthInterceptor.allowRefreshKey: true},
+      ),
+    );
   }
 }

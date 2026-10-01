@@ -6,6 +6,7 @@ import '../../features/auth/application/auth_controller.dart';
 import '../../shared/auth/models/auth_state.dart';
 import '../../features/auth/presentation/screens/forgot_password_screen.dart';
 import '../../features/auth/presentation/screens/login_screen.dart';
+import '../../features/auth/presentation/screens/register_screen.dart';
 import '../../features/auth/presentation/screens/reset_password_screen.dart';
 import '../../features/privacy/presentation/screens/privacy_policy_screen.dart';
 import '../../features/shell/presentation/screens/admin_shell_screen.dart';
@@ -86,11 +87,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       final isLogin = location == '/login';
       final isForgotPassword = location == '/forgot-password';
       final isResetPassword = location == '/reset-password';
+      final isRegister = location == '/register';
       final isPrivacy = location == '/privacy';
       final isAdmin = location == '/admin' || location == '/app';
 
       final isPublicRoute =
-          isLogin || isForgotPassword || isResetPassword || isPrivacy;
+          isLogin || isForgotPassword || isResetPassword || isRegister || isPrivacy;
 
       if (!authState.isInitialized) {
         return isStartup ? null : '/startup';
@@ -126,6 +128,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/login',
         builder: (context, state) => const LoginScreen(),
+      ),
+      GoRoute(
+        path: '/register',
+        builder: (context, state) => const RegisterScreen(),
       ),
       GoRoute(
         path: '/forgot-password',

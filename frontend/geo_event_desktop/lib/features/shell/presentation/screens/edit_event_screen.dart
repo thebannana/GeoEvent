@@ -469,6 +469,26 @@ void _selectLocation(MapboxPlace place) {
   Future<void> _removeExistingImage(ExistingImageItem image) async {
   if (_isSubmitting || _isUploadingCover || _isUploadingGallery) return;
 
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Delete Image'),
+      content: const Text('Are you sure you want to delete this image? This action cannot be undone.'),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(true),
+          child: const Text('Delete'),
+        ),
+      ],
+    ),
+  );
+
+  if (confirmed != true) return;
+
   try {
     await widget.repository.adminDeleteEventImage(
       eventId: widget.event.eventId,

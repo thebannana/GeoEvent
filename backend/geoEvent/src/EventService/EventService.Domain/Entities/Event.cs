@@ -1,4 +1,4 @@
-﻿using EventService.Domain.Enums;
+using EventService.Domain.Enums;
 using EventService.Domain.Exceptions;
 
 namespace EventService.Domain.Entities;

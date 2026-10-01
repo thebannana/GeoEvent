@@ -44,6 +44,7 @@ class EventItem {
   final bool isLiked;
   final bool isBookmarked;
   final double recommendationScore;
+  final String? recommendationReason;
   final String? tags;
   final String? accessibilityInfo;
   final String? promoterName;
@@ -76,6 +77,7 @@ class EventItem {
     required this.viewCount,
     required this.likesCount,
     required this.recommendationScore,
+    this.recommendationReason,
     this.isLiked = false,
     this.isBookmarked = false,
     required this.tags,
@@ -197,6 +199,8 @@ class EventItem {
           JsonHelpers.asDouble(
             json['recommendationScore'],
           ),
+      recommendationReason:
+          json['recommendationReason']?.toString(),
       isLiked: JsonHelpers.asBool(
         json['isLiked'],
       ),
@@ -247,6 +251,7 @@ class EventItem {
     int? viewCount,
     int? likesCount,
     double? recommendationScore,
+    String? recommendationReason,
     bool? isLiked,
     bool? isBookmarked,
     String? tags,
@@ -294,6 +299,9 @@ class EventItem {
       recommendationScore:
           recommendationScore ??
               this.recommendationScore,
+      recommendationReason:
+          recommendationReason ??
+              this.recommendationReason,
       isLiked: isLiked ?? this.isLiked,
       isBookmarked:
           isBookmarked ?? this.isBookmarked,

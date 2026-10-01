@@ -1,4 +1,4 @@
-﻿namespace TicketService.Application.DTOs;
+namespace TicketService.Application.DTOs;
 
 public class EventSummaryDto
 {
@@ -13,4 +13,5 @@ public class EventSummaryDto
     public DateTime EndDateTime { get; set; }
     public string? VenueName { get; set; }
     public bool IsOnline { get; set; }
+    public string Status { get; set; } = string.Empty;
 }

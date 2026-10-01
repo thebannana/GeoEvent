@@ -7,6 +7,7 @@ using EventService.Domain.Enums;
 using EventService.Domain.Exceptions;
 using EventService.Infrastructure.Repositories;
 using MassTransit;
+using MassTransit.Transports;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
@@ -39,6 +40,168 @@ public class EventServiceImpl : IEventService
         _userProfileService = userProfileService;
         _cache = cache;
         _logger = logger;
+    }
+
+    public async Task<ServiceResult<EventResponseDto>> AdminUpdateAsync(
+    int eventId,
+    UpdateEventDto dto)
+    {
+        var ev = await _eventRepository.GetTrackedByIdAsync(eventId);
+
+        if (ev is null)
+        {
+            return ServiceResult<EventResponseDto>.NotFound(
+                $"Event {eventId} not found.");
+        }
+
+        try
+        {
+            var newSegmentId = dto.SegmentId ?? ev.SegmentId;
+            var newGenreId = dto.GenreId ?? ev.GenreId;
+            var newSubGenreId = dto.SubGenreId ?? ev.SubGenreId;
+
+            if (dto.SegmentId.HasValue || dto.GenreId.HasValue || dto.SubGenreId.HasValue)
+            {
+                await ValidateCategoryHierarchyAsync(newSegmentId, newGenreId, newSubGenreId);
+            }
+
+            ev.UpdateDetails(
+                segmentId: newSegmentId,
+                genreId: newGenreId,
+                subGenreId: newSubGenreId,
+                title: dto.Title ?? ev.Title,
+                description: dto.Description ?? ev.Description,
+                latitude: dto.Latitude ?? ev.Latitude,
+                longitude: dto.Longitude ?? ev.Longitude,
+                startDateTime: dto.StartDateTime ?? ev.StartDateTime,
+                endDateTime: dto.EndDateTime ?? ev.EndDateTime,
+                capacity: dto.Capacity ?? ev.Capacity,
+                price: dto.Price ?? ev.Price,
+                isFeatured: dto.IsFeatured ?? ev.IsFeatured,
+                tags: dto.Tags ?? ev.Tags,
+                accessibilityInfo: dto.AccessibilityInfo ?? ev.AccessibilityInfo,
+                promoterName: dto.PromoterName ?? ev.PromoterName,
+                locale: dto.Locale ?? ev.Locale
+            );
+
+            await _eventRepository.UpdateAsync(ev);
+
+            await _publishEndpoint.Publish(
+                new EventUpdatedMessage(
+                    ev.EventId,
+                    ev.Title,
+                    ev.OrganizerId,
+                    ev.StartDateTime,
+                    ev.EndDateTime,
+                    ev.Capacity,
+                    ev.Price,
+                    "Event details updated by admin",
+                    DateTime.UtcNow));
+
+            var updated =
+                await _eventRepository.GetByIdWithDetailsAsync(eventId)
+                ?? ev;
+
+            return ServiceResult<EventResponseDto>.Ok(
+                MapToDto(updated));
+        }
+        catch (InvalidEventDataException ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Invalid event data while admin updated event {EventId}",
+                eventId);
+
+            return ServiceResult<EventResponseDto>.Fail(
+                ex.Message);
+        }
+    }
+
+    public async Task<ServiceResult<EventResponseDto>> UpdateAsync(
+        int eventId,
+        UpdateEventDto dto,
+        int requesterId)
+    {
+        var ev = await _eventRepository.GetTrackedByIdAsync(eventId);
+
+        if (ev is null)
+        {
+            return ServiceResult<EventResponseDto>.NotFound(
+                $"Event {eventId} not found.");
+        }
+
+        if (ev.OrganizerId != requesterId)
+        {
+            return ServiceResult<EventResponseDto>.Forbidden(
+                "You do not own this event.");
+        }
+
+        try
+        {
+            var newSegmentId = dto.SegmentId ?? ev.SegmentId;
+            var newGenreId = dto.GenreId ?? ev.GenreId;
+            var newSubGenreId = dto.SubGenreId ?? ev.SubGenreId;
+
+            if (dto.SegmentId.HasValue || dto.GenreId.HasValue || dto.SubGenreId.HasValue)
+            {
+                await ValidateCategoryHierarchyAsync(newSegmentId, newGenreId, newSubGenreId);
+            }
+
+            ev.UpdateDetails(
+                segmentId: newSegmentId,
+                genreId: newGenreId,
+                subGenreId: newSubGenreId,
+                title: dto.Title ?? ev.Title,
+                description: dto.Description ?? ev.Description,
+                latitude: dto.Latitude ?? ev.Latitude,
+                longitude: dto.Longitude ?? ev.Longitude,
+                startDateTime: dto.StartDateTime ?? ev.StartDateTime,
+                endDateTime: dto.EndDateTime ?? ev.EndDateTime,
+                capacity: dto.Capacity ?? ev.Capacity,
+                price: dto.Price ?? ev.Price,
+                isFeatured: ev.IsFeatured,
+                tags: dto.Tags ?? ev.Tags,
+                accessibilityInfo: dto.AccessibilityInfo ?? ev.AccessibilityInfo,
+                promoterName: dto.PromoterName ?? ev.PromoterName,
+                locale: dto.Locale ?? ev.Locale);
+
+            await _eventRepository.UpdateAsync(ev);
+
+            await _publishEndpoint.Publish(new EventUpdatedMessage(
+                ev.EventId,
+                ev.Title,
+                ev.OrganizerId,
+                ev.StartDateTime,
+                ev.EndDateTime,
+                ev.Capacity,
+                ev.Price,
+                "Event details updated",
+                DateTime.UtcNow));
+
+            var updated =
+                await _eventRepository.GetByIdWithDetailsAsync(eventId) ?? ev;
+
+            return ServiceResult<EventResponseDto>.Ok(
+                MapToDto(updated));
+        }
+        catch (InvalidEventDataException ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Invalid event data while updating event {EventId}",
+                eventId);
+
+            return ServiceResult<EventResponseDto>.Fail(ex.Message);
+        }
+        catch (InvalidEventStateException ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Invalid event state while updating event {EventId}",
+                eventId);
+
+            return ServiceResult<EventResponseDto>.Fail(ex.Message);
+        }
     }
 
     public async Task<
@@ -92,6 +255,8 @@ public class EventServiceImpl : IEventService
                 ev.OrganizerId,
                 ev.StartDateTime,
                 ev.EndDateTime,
+                ev.Capacity,
+                ev.Price,
                 "Event completed automatically",
                 DateTime.UtcNow));
 
@@ -223,87 +388,6 @@ public class EventServiceImpl : IEventService
             return ServiceResult<EventResponseDto>.NotFound($"Event {eventId} not found.");
 
         return ServiceResult<EventResponseDto>.Ok(MapToDto(ev));
-    }
-
-    public async Task<ServiceResult<EventResponseDto>> AdminUpdateAsync(
-    int eventId,
-    UpdateEventDto dto)
-    {
-        var ev = await _eventRepository.GetTrackedByIdAsync(eventId);
-
-        if (ev is null)
-        {
-            return ServiceResult<EventResponseDto>.NotFound(
-                $"Event {eventId} not found.");
-        }
-
-        try
-        {
-            var newStartDateTime =
-                dto.StartDateTime ?? ev.StartDateTime;
-
-            var wasCancelled =
-                ev.Status == EventStatus.Cancelled;
-
-            ev.UpdateDetails(
-                segmentId: dto.SegmentId ?? ev.SegmentId,
-                genreId: dto.GenreId ?? ev.GenreId,
-                subGenreId: dto.SubGenreId ?? ev.SubGenreId,
-                title: dto.Title ?? ev.Title,
-                description: dto.Description ?? ev.Description,
-                latitude: dto.Latitude ?? ev.Latitude,
-                longitude: dto.Longitude ?? ev.Longitude,
-                startDateTime: newStartDateTime,
-                endDateTime: dto.EndDateTime ?? ev.EndDateTime,
-                capacity: dto.Capacity ?? ev.Capacity,
-                price: dto.Price ?? ev.Price,
-                isFeatured: dto.IsFeatured ?? ev.IsFeatured,
-                tags: dto.Tags ?? ev.Tags,
-                accessibilityInfo:
-                    dto.AccessibilityInfo ?? ev.AccessibilityInfo,
-                promoterName:
-                    dto.PromoterName ?? ev.PromoterName,
-                locale: dto.Locale ?? ev.Locale
-            );
-
-            if (wasCancelled &&
-                newStartDateTime > DateTime.UtcNow)
-            {
-                ev.RestoreAsConfirmed();
-            }
-
-            await _eventRepository.UpdateAsync(ev);
-
-            await _publishEndpoint.Publish(
-                new EventUpdatedMessage(
-                    ev.EventId,
-                    ev.Title,
-                    ev.OrganizerId,
-                    ev.StartDateTime,
-                    ev.EndDateTime,
-                    wasCancelled &&
-                    ev.Status == EventStatus.Confirmed
-                        ? "Cancelled event restored and confirmed by admin"
-                        : "Event updated by admin",
-                    DateTime.UtcNow));
-
-            var updated =
-                await _eventRepository.GetByIdWithDetailsAsync(eventId)
-                ?? ev;
-
-            return ServiceResult<EventResponseDto>.Ok(
-                MapToDto(updated));
-        }
-        catch (InvalidEventDataException ex)
-        {
-            _logger.LogWarning(
-                ex,
-                "Invalid event data while admin updated event {EventId}",
-                eventId);
-
-            return ServiceResult<EventResponseDto>.Fail(
-                ex.Message);
-        }
     }
 
     public async Task<ServiceResult<bool>> AdminDeleteImageAsync(
@@ -897,7 +981,8 @@ public class EventServiceImpl : IEventService
                     rankedItem.Event,
                     likedRankedEventIds.Contains(
                         rankedItem.Event.EventId),
-                    rankedItem.Score))
+                    rankedItem.Score,
+                    rankedItem.Reason))
             .ToList();
 
         return ServiceResult<
@@ -1157,7 +1242,8 @@ public class EventServiceImpl : IEventService
                     rankedItem.Event,
                     likedEventIds.Contains(
                         rankedItem.Event.EventId),
-                    rankedItem.Score))
+                    rankedItem.Score,
+                    rankedItem.Reason))
             .ToList();
 
         return ServiceResult<
@@ -1169,6 +1255,8 @@ public class EventServiceImpl : IEventService
     {
         try
         {
+            await ValidateCategoryHierarchyAsync(dto.SegmentId, dto.GenreId, dto.SubGenreId);
+
             var entity = new DomainEvent(
                 organizerId: organizerId,
                 segmentId: dto.SegmentId,
@@ -1191,131 +1279,12 @@ public class EventServiceImpl : IEventService
 
             var created = await _eventRepository.CreateAsync(entity);
 
-            await _publishEndpoint.Publish(new EventCreatedMessage(
-                created.EventId,
-                created.Title,
-                created.OrganizerId,
-                created.SegmentId,
-                created.GenreId,
-                created.SubGenreId,
-                created.Latitude,
-                created.Longitude,
-                created.Price,
-                created.Price == 0,
-                created.Capacity,
-                created.StartDateTime,
-                created.EndDateTime,
-                DateTime.UtcNow
-            ));
-
             return ServiceResult<EventResponseDto>.Created(MapToDto(created));
         }
         catch (InvalidEventDataException ex)
         {
             _logger.LogWarning(ex, "Invalid event data while creating event for organizer {OrganizerId}", organizerId);
             return ServiceResult<EventResponseDto>.Fail(ex.Message);
-        }
-    }
-
-    public async Task<ServiceResult<EventResponseDto>> UpdateAsync(
-        int eventId,
-        UpdateEventDto dto,
-        int requesterId)
-    {
-        var ev = await _eventRepository.GetTrackedByIdAsync(eventId);
-
-        if (ev is null)
-        {
-            return ServiceResult<EventResponseDto>.NotFound(
-                $"Event {eventId} not found.");
-        }
-
-        if (ev.OrganizerId != requesterId)
-        {
-            return ServiceResult<EventResponseDto>.Forbidden(
-                "You do not own this event.");
-        }
-
-        try
-        {
-            var newStartDateTime =
-                dto.StartDateTime ?? ev.StartDateTime;
-
-            var wasCancelled =
-                ev.Status == EventStatus.Cancelled;
-
-            ev.UpdateDetails(
-                segmentId: dto.SegmentId ?? ev.SegmentId,
-                genreId: dto.GenreId ?? ev.GenreId,
-                subGenreId: dto.SubGenreId ?? ev.SubGenreId,
-                title: dto.Title ?? ev.Title,
-                description: dto.Description ?? ev.Description,
-                latitude: dto.Latitude ?? ev.Latitude,
-                longitude: dto.Longitude ?? ev.Longitude,
-                startDateTime: newStartDateTime,
-                endDateTime: dto.EndDateTime ?? ev.EndDateTime,
-                capacity: dto.Capacity ?? ev.Capacity,
-                price: dto.Price ?? ev.Price,
-                isFeatured: dto.IsFeatured ?? ev.IsFeatured,
-                tags: dto.Tags ?? ev.Tags,
-                accessibilityInfo:
-                    dto.AccessibilityInfo ?? ev.AccessibilityInfo,
-                promoterName:
-                    dto.PromoterName ?? ev.PromoterName,
-                locale: dto.Locale ?? ev.Locale
-            );
-
-            if (wasCancelled &&
-                newStartDateTime > DateTime.UtcNow)
-            {
-                ev.RestoreAsConfirmed();
-            }
-            else if (ev.Status == EventStatus.Pending)
-            {
-                ev.Publish();
-            }
-
-            await _eventRepository.UpdateAsync(ev);
-
-            await _publishEndpoint.Publish(
-                new EventUpdatedMessage(
-                    ev.EventId,
-                    ev.Title,
-                    ev.OrganizerId,
-                    ev.StartDateTime,
-                    ev.EndDateTime,
-                    wasCancelled &&
-                    ev.Status == EventStatus.Confirmed
-                        ? "Cancelled event restored and confirmed"
-                        : "Event updated and confirmed",
-                    DateTime.UtcNow));
-
-            var updated =
-                await _eventRepository.GetByIdWithDetailsAsync(eventId)
-                ?? ev;
-
-            return ServiceResult<EventResponseDto>.Ok(
-                MapToDto(updated));
-        }
-        catch (InvalidEventDataException ex)
-        {
-            _logger.LogWarning(
-                ex,
-                "Invalid event data while updating event {EventId}",
-                eventId);
-
-            return ServiceResult<EventResponseDto>.Fail(
-                ex.Message);
-        }
-        catch (InvalidEventStateException ex)
-        {
-            _logger.LogWarning(
-                ex,
-                "Invalid event state while updating event {EventId}",
-                eventId);
-
-            return ServiceResult<EventResponseDto>.Fail(
-                ex.Message);
         }
     }
 
@@ -1330,8 +1299,22 @@ public class EventServiceImpl : IEventService
 
         try
         {
+            var wasAlreadyCancelled = ev.Status == EventStatus.Cancelled;
+
             ev.Cancel();
             await _eventRepository.UpdateAsync(ev);
+
+            if (!wasAlreadyCancelled)
+            {
+                await _publishEndpoint.Publish(new EventCancelledMessage(
+                    ev.EventId,
+                    ev.Title,
+                    ev.OrganizerId,
+                    DateTime.UtcNow,
+                    "Cancelled by organizer"
+                ));
+            }
+
             return ServiceResult<bool>.Ok(true);
         }
         catch (InvalidEventStateTransitionException ex)
@@ -1365,12 +1348,31 @@ public class EventServiceImpl : IEventService
         ev.Publish();
         await _eventRepository.UpdateAsync(ev);
 
+        await _publishEndpoint.Publish(new EventCreatedMessage(
+            ev.EventId,
+            ev.Title,
+            ev.OrganizerId,
+            ev.SegmentId,
+            ev.GenreId,
+            ev.SubGenreId,
+            ev.Latitude,
+            ev.Longitude,
+            ev.Price,
+            ev.Price == 0,
+            ev.Capacity,
+            ev.StartDateTime,
+            ev.EndDateTime,
+            DateTime.UtcNow
+        ));
+
         await _publishEndpoint.Publish(new EventUpdatedMessage(
             ev.EventId,
             ev.Title,
             ev.OrganizerId,
             ev.StartDateTime,
             ev.EndDateTime,
+            ev.Capacity,
+            ev.Price,
             "Event published",
             DateTime.UtcNow));
 
@@ -1417,6 +1419,8 @@ public class EventServiceImpl : IEventService
             ev.OrganizerId,
             ev.StartDateTime,
             ev.EndDateTime,
+            ev.Capacity,
+            ev.Price,
             "Event completed",
             DateTime.UtcNow));
 
@@ -1610,6 +1614,21 @@ public class EventServiceImpl : IEventService
         }
     }
 
+    public async Task<ServiceResult<bool>> DeleteSegmentAsync(int segmentId)
+    {
+        var segment = await _eventRepository.GetTrackedSegmentByIdAsync(segmentId);
+        if (segment is null)
+            return ServiceResult<bool>.NotFound("Segment not found.");
+
+        if (await _eventRepository.HasEventsForSegmentAsync(segmentId))
+            return ServiceResult<bool>.Conflict("Cannot delete segment because it is referenced by one or more events.");
+
+        await _eventRepository.DeleteSegmentAsync(segment);
+        InvalidateSegmentCache();
+
+        return ServiceResult<bool>.Ok(true);
+    }
+
     public async Task<ServiceResult<List<GenreResponseDto>>> GetGenresBySegmentAsync(int segmentId)
     {
         var cacheKey = $"eventservice:genres:segment:{segmentId}";
@@ -1699,6 +1718,21 @@ public class EventServiceImpl : IEventService
         }
     }
 
+    public async Task<ServiceResult<bool>> DeleteGenreAsync(int genreId)
+    {
+        var genre = await _eventRepository.GetTrackedGenreByIdAsync(genreId);
+        if (genre is null)
+            return ServiceResult<bool>.NotFound("Genre not found.");
+
+        if (await _eventRepository.HasEventsForGenreAsync(genreId))
+            return ServiceResult<bool>.Conflict("Cannot delete genre because it is referenced by one or more events.");
+
+        await _eventRepository.DeleteGenreAsync(genre);
+        InvalidateGenresCache(genre.SegmentId);
+
+        return ServiceResult<bool>.Ok(true);
+    }
+
     public async Task<ServiceResult<List<SubGenreResponseDto>>> GetSubGenresByGenreAsync(int genreId)
     {
         var cacheKey = $"eventservice:subgenres:genre:{genreId}";
@@ -1782,6 +1816,21 @@ public class EventServiceImpl : IEventService
             _logger.LogWarning(ex, "Invalid subgenre data while updating subgenre {SubGenreId}", subGenreId);
             return ServiceResult<SubGenreResponseDto>.Fail(ex.Message);
         }
+    }
+
+    public async Task<ServiceResult<bool>> DeleteSubGenreAsync(int subGenreId)
+    {
+        var subGenre = await _eventRepository.GetTrackedSubGenreByIdAsync(subGenreId);
+        if (subGenre is null)
+            return ServiceResult<bool>.NotFound("Subgenre not found.");
+
+        if (await _eventRepository.HasEventsForSubGenreAsync(subGenreId))
+            return ServiceResult<bool>.Conflict("Cannot delete subgenre because it is referenced by one or more events.");
+
+        await _eventRepository.DeleteSubGenreAsync(subGenre);
+        InvalidateSubGenresCache(subGenre.GenreId);
+
+        return ServiceResult<bool>.Ok(true);
     }
 
     public async Task<ServiceResult<PagedResult<BookmarkResponseDto>>> GetUserBookmarksAsync(
@@ -2023,7 +2072,7 @@ public class EventServiceImpl : IEventService
         return score;
     }
 
-    private static EventResponseDto MapToDto(DomainEvent ev, bool isLiked = false, double recommendationScore = 0.0) => new()
+    private static EventResponseDto MapToDto(DomainEvent ev, bool isLiked = false, double recommendationScore = 0.0, string? recommendationReason = null) => new()
     {
         EventId = ev.EventId,
         OrganizerId = ev.OrganizerId,
@@ -2047,6 +2096,7 @@ public class EventServiceImpl : IEventService
         ViewCount = ev.ViewCount,
         LikesCount = ev.LikesCount,
         RecommendationScore = recommendationScore,
+        RecommendationReason = recommendationReason,
         IsLiked = isLiked,
         Tags = ev.Tags,
         AccessibilityInfo = ev.AccessibilityInfo,
@@ -2212,5 +2262,23 @@ public class EventServiceImpl : IEventService
     private void InvalidateSubGenresCache(int genreId)
     {
         _cache.Remove($"eventservice:subgenres:genre:{genreId}");
+    }
+
+    private async Task ValidateCategoryHierarchyAsync(int segmentId, int genreId, int? subGenreId)
+    {
+        var genre = await _eventRepository.GetGenreByIdAsync(genreId);
+        if (genre == null || genre.SegmentId != segmentId)
+        {
+            throw new InvalidEventDataException("Selected Genre does not belong to the selected Segment.");
+        }
+
+        if (subGenreId.HasValue)
+        {
+            var subGenre = await _eventRepository.GetSubGenreByIdAsync(subGenreId.Value);
+            if (subGenre == null || subGenre.GenreId != genreId)
+            {
+                throw new InvalidEventDataException("Selected SubGenre does not belong to the selected Genre.");
+            }
+        }
     }
 }

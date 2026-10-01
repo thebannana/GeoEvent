@@ -9,7 +9,7 @@ class EventTaxonomyApi {
   final Dio _dio;
 
   Future<List<SegmentLookup>> getSegments() async {
-    final response = await _dio.get(ApiEndpoints.segments);
+    final response = await _dio.get(ApiEndpoints.segments, queryParameters: {'pageSize': 100});
     return _parseList(response.data, SegmentLookup.fromJson);
   }
 

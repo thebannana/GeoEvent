@@ -580,6 +580,21 @@ class _LoginCard extends StatelessWidget {
               child: TextButton(
                 onPressed: isLoading
                     ? null
+                    : () => context.go('/register'),
+                child: Text(
+                  'Don\'t have an account? Register',
+                  style: textTheme.labelLarge?.copyWith(
+                    color: colors.textSecondary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Center(
+              child: TextButton(
+                onPressed: isLoading
+                    ? null
                     : () => context.go('/privacy'),
                 child: Text(
                   'Privacy policy',

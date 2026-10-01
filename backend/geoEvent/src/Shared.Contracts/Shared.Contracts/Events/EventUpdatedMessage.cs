@@ -1,4 +1,4 @@
-﻿namespace Shared.Contracts.Events;
+namespace Shared.Contracts.Events;
 
 public record EventUpdatedMessage(
     int EventId,
@@ -6,6 +6,8 @@ public record EventUpdatedMessage(
     int? OrganizerId,
     DateTime StartDateTime,
     DateTime EndDateTime,
+    int Capacity,
+    decimal Price,
     string? ChangeSummary,
     DateTime UpdatedAt
 );

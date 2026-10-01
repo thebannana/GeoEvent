@@ -1,4 +1,4 @@
-﻿using System.Net.Http.Json;
+using System.Net.Http.Json;
 using UserService.Application.DTOs;
 using UserService.Application.Interfaces;
 
@@ -37,8 +37,10 @@ public sealed class EventInternalClient : IEventInternalClient
     public async Task<List<EventSegmentLookupDto>> GetAllSegmentsAsync(
         CancellationToken cancellationToken = default)
     {
+        // The segments endpoint now returns a paginated envelope.
+        // Use a large pageSize to retrieve all segments in one call and extract Items.
         using var response = await _httpClient.GetAsync(
-            "api/segments",
+            "api/segments?page=1&pageSize=1000",
             cancellationToken);
 
         if (!response.IsSuccessStatusCode)
@@ -48,10 +50,21 @@ public sealed class EventInternalClient : IEventInternalClient
                 $"EventService segments lookup failed: {(int)response.StatusCode} {response.ReasonPhrase}. Body: {body}");
         }
 
-        var items = await response.Content.ReadFromJsonAsync<List<EventSegmentLookupDto>>(cancellationToken: cancellationToken)
+        var paged = await response.Content.ReadFromJsonAsync<PagedSegmentsEnvelope>(cancellationToken: cancellationToken)
             ?? throw new InvalidOperationException("EventService returned an empty segments response.");
 
-        return items;
+        return paged.Items ?? [];
+    }
+
+    /// <summary>
+    /// Minimal envelope used to unwrap the paginated GET /api/segments response.
+    /// </summary>
+    private sealed class PagedSegmentsEnvelope
+    {
+        public List<EventSegmentLookupDto>? Items { get; set; }
+        public int TotalCount { get; set; }
+        public int Page { get; set; }
+        public int PageSize { get; set; }
     }
 
     public async Task<InternalEventEngagementStatsDto> GetEngagementStatsAsync(

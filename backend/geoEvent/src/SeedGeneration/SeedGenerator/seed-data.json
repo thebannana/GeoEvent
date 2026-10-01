@@ -71,6 +71,14 @@
     {
       "Name": "Sport",
       "Color": "#FF5722"
+    },
+    {
+      "Name": "Technology",
+      "Color": "#2196F3"
+    },
+    {
+      "Name": "Art",
+      "Color": "#9C27B0"
     }
   ],
   "SeedGenres": [
@@ -85,6 +93,14 @@
     {
       "SegmentId": 1,
       "Name": "Festival"
+    },
+    {
+      "SegmentId": 3,
+      "Name": "Conference"
+    },
+    {
+      "SegmentId": 4,
+      "Name": "Exhibition"
     }
   ],
   "SeedSubGenres": [
@@ -99,6 +115,14 @@
     {
       "GenreId": 2,
       "Name": "Premier"
+    },
+    {
+      "GenreId": 4,
+      "Name": "AI"
+    },
+    {
+      "GenreId": 5,
+      "Name": "Painting"
     }
   ],
   "SeedPreferences": [
@@ -259,6 +283,40 @@
       "Status": "Confirmed",
       "IsFeatured": true,
       "Tags": "football, derby, sports"
+    },
+    {
+      "OrganizerUsername": "jimmysanders",
+      "SegmentId": 3,
+      "GenreId": 4,
+      "SubGenreId": 4,
+      "Title": "AI Summit 2026",
+      "Description": "An upcoming summit on Artificial Intelligence and its future.",
+      "Latitude": 43.856,
+      "Longitude": 18.413,
+      "StartDateTime": "2026-11-15T10:00:00Z",
+      "EndDateTime": "2026-11-17T17:00:00Z",
+      "Capacity": 1000,
+      "Price": 50.00,
+      "Status": "Confirmed",
+      "IsFeatured": false,
+      "Tags": "ai, technology, summit"
+    },
+    {
+      "OrganizerUsername": "janesmith",
+      "SegmentId": 4,
+      "GenreId": 5,
+      "SubGenreId": 5,
+      "Title": "Modern Painting Expo",
+      "Description": "An exhibition of modern painting styles.",
+      "Latitude": 43.855,
+      "Longitude": 18.415,
+      "StartDateTime": "2026-12-01T10:00:00Z",
+      "EndDateTime": "2026-12-05T18:00:00Z",
+      "Capacity": 200,
+      "Price": 10.00,
+      "Status": "Confirmed",
+      "IsFeatured": false,
+      "Tags": "art, painting, expo"
     }
   ],
   "SeedEventImages": [

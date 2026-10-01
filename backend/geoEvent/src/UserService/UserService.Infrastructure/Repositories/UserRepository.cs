@@ -724,7 +724,9 @@ public class UserRepository : IUserRepository
     public async Task RevokeRefreshTokenAsync(string tokenHash)
     {
         var token = await _context.RefreshTokens
-            .FirstOrDefaultAsync(r => r.TokenHash == tokenHash);
+            .FirstOrDefaultAsync(r =>
+                r.TokenHash == tokenHash &&
+                r.RevokedAt == null);
 
         if (token is null)
             return;

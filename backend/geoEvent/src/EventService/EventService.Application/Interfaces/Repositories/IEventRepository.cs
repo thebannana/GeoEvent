@@ -1,4 +1,4 @@
-﻿using EventService.Application.Common;
+using EventService.Application.Common;
 using EventService.Application.DTOs;
 using EventService.Domain.Entities;
 
@@ -66,16 +66,22 @@ public interface IEventRepository
     Task<Segment?> GetSegmentByIdAsync(int segmentId);
     Task<Segment> CreateSegmentAsync(Segment segment);
     Task UpdateSegmentAsync(Segment segment);
+    Task DeleteSegmentAsync(Segment segment);
+    Task<bool> HasEventsForSegmentAsync(int segmentId);
 
     Task<List<Genre>> GetGenresBySegmentAsync(int segmentId);
     Task<Genre?> GetGenreByIdAsync(int genreId);
     Task<Genre> CreateGenreAsync(Genre genre);
     Task UpdateGenreAsync(Genre genre);
+    Task DeleteGenreAsync(Genre genre);
+    Task<bool> HasEventsForGenreAsync(int genreId);
 
     Task<List<SubGenre>> GetSubGenresByGenreAsync(int genreId);
     Task<SubGenre?> GetSubGenreByIdAsync(int subGenreId);
     Task<SubGenre> CreateSubGenreAsync(SubGenre subGenre);
     Task UpdateSubGenreAsync(SubGenre subGenre);
+    Task DeleteSubGenreAsync(SubGenre subGenre);
+    Task<bool> HasEventsForSubGenreAsync(int subGenreId);
 
     Task<Bookmark?> GetBookmarkByIdAsync(int bookmarkId);
     Task<Bookmark?> GetBookmarkByUserAndEventAsync(int userId, int eventId);

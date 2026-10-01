@@ -4,6 +4,7 @@ import '../../../core/network/api_endpoints.dart';
 import '../../../core/network/auth_interceptor.dart';
 import '../models/auth_response.dart';
 import '../models/login_request.dart';
+import '../models/register_request.dart';
 import '../models/reset_password_request.dart';
 
 class AuthApi {
@@ -29,6 +30,23 @@ class AuthApi {
     return _parseAuthResponse(
       response.data,
       fallbackMessage: 'Invalid login response format.',
+    );
+  }
+
+  Future<AuthResponse> register(RegisterRequest request) async {
+    final response = await publicDio.post(
+      ApiEndpoints.register,
+      data: request.toJson(),
+      options: Options(
+        extra: const {
+          AuthInterceptor.requiresAuthKey: false,
+        },
+      ),
+    );
+
+    return _parseAuthResponse(
+      response.data,
+      fallbackMessage: 'Invalid register response format.',
     );
   }
 

@@ -166,7 +166,9 @@ public class AuthService : IAuthService
             return ServiceResult<bool>.Ok(true);
 
         var hash = ComputeRefreshTokenHash(refreshToken);
+
         await _userRepository.RevokeRefreshTokenAsync(hash);
+        await _userRepository.SaveChangesAsync();
 
         return ServiceResult<bool>.Ok(true);
     }

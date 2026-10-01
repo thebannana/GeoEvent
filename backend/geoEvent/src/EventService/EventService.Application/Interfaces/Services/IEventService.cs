@@ -51,16 +51,19 @@ public interface IEventService
     Task<ServiceResult<SegmentResponseDto>> GetSegmentByIdAsync(int segmentId);
     Task<ServiceResult<SegmentResponseDto>> CreateSegmentAsync(CreateSegmentDto dto);
     Task<ServiceResult<SegmentResponseDto>> UpdateSegmentAsync(int segmentId, UpdateSegmentDto dto);
+    Task<ServiceResult<bool>> DeleteSegmentAsync(int segmentId);
 
     Task<ServiceResult<List<GenreResponseDto>>> GetGenresBySegmentAsync(int segmentId);
     Task<ServiceResult<GenreResponseDto>> GetGenreByIdAsync(int genreId);
     Task<ServiceResult<GenreResponseDto>> CreateGenreAsync(CreateGenreDto dto);
     Task<ServiceResult<GenreResponseDto>> UpdateGenreAsync(int genreId, UpdateGenreDto dto);
+    Task<ServiceResult<bool>> DeleteGenreAsync(int genreId);
 
     Task<ServiceResult<List<SubGenreResponseDto>>> GetSubGenresByGenreAsync(int genreId);
     Task<ServiceResult<SubGenreResponseDto>> GetSubGenreByIdAsync(int subGenreId);
     Task<ServiceResult<SubGenreResponseDto>> CreateSubGenreAsync(CreateSubGenreDto dto);
     Task<ServiceResult<SubGenreResponseDto>> UpdateSubGenreAsync(int subGenreId, UpdateSubGenreDto dto);
+    Task<ServiceResult<bool>> DeleteSubGenreAsync(int subGenreId);
 
     Task<ServiceResult<PagedResult<BookmarkResponseDto>>> GetUserBookmarksAsync(int userId, BookmarkFilterDto filter);
     Task<ServiceResult<BookmarkResponseDto>> CreateBookmarkAsync(CreateBookmarkDto dto, int userId);

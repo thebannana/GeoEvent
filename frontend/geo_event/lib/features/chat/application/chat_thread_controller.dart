@@ -593,11 +593,41 @@ class ChatThreadController extends StateNotifier<ChatThreadState> {
     final threadId = (raw['threadId'] as num?)?.toInt();
     if (threadId != args.threadId) return;
 
+    final leftUserId = (raw['userId'] as num?)?.toInt();
+    final myUserId = ref.read(sessionUserIdProvider);
+
+    // If the current user was the one removed (kicked/refunded/event deleted),
+    // close the thread screen and drop the conversation from the inbox.
+    if (leftUserId != null && myUserId != null && leftUserId == myUserId) {
+      _handleRemovedFromThread();
+      return;
+    }
+
+    // Another participant left — reload normally.
     Future.microtask(() async {
       await _reloadDetails();
       await _reloadMessages();
       await ref.read(messagesInboxControllerProvider.notifier).refresh();
     });
+  }
+
+  /// Called when the current user has been forcibly removed from the thread.
+  /// Sets [wasRemovedFromThread] so the widget's listener can pop the screen.
+  void _handleRemovedFromThread() {
+    final hub = _hub;
+    _hub = null;
+
+    if (hub != null) {
+      Future.microtask(() => _shutdownHub(hub, joined: false));
+    }
+
+    ref
+        .read(messagesInboxControllerProvider.notifier)
+        .removeThreadLocally(args.threadId);
+
+    if (mounted) {
+      state = state.copyWith(wasRemovedFromThread: true);
+    }
   }
 
   void _removeMessage(int messageId) {

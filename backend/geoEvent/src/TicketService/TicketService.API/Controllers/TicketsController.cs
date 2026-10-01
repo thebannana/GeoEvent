@@ -59,14 +59,7 @@ public class TicketsController : ControllerBase
             : StatusCode(result.StatusCode, new { error = result.Error });
     }
 
-    [HttpPatch("{ticketId:int}/cancel")]
-    public async Task<IActionResult> Cancel(int ticketId)
-    {
-        var userId = User.GetUserId();
-        var result = await _ticketService.CancelTicketAsync(ticketId, userId);
-
-        return result.Success
-            ? NoContent()
-            : StatusCode(result.StatusCode, new { error = result.Error });
-    }
-}
+    // PATCH {ticketId}/cancel removed — dead code (Problem 13).
+    // Individual ticket cancellation was not wired to reservation/payment logic.
+    // Use PATCH /api/reservations/{id}/cancel for reservation cancellation.
+}

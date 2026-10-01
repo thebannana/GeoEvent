@@ -1,4 +1,4 @@
-﻿namespace EventService.Application.DTOs;
+namespace EventService.Application.DTOs;
 
 public class EventResponseDto
 {
@@ -34,4 +34,5 @@ public class EventResponseDto
     public string? CoverImageUrl { get; set; }
     public List<EventImageResponseDto> Images { get; set; } = new();
     public double RecommendationScore { get; set; }
+    public string? RecommendationReason { get; set; }
 }

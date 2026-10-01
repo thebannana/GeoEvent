@@ -1,6 +1,7 @@
 import '../models/auth_response.dart';
 import '../models/auth_state.dart';
 import '../models/login_request.dart';
+import '../models/register_request.dart';
 import '../models/reset_password_request.dart';
 import 'auth_api.dart';
 import 'auth_local_storage.dart';
@@ -33,6 +34,19 @@ class AuthRepository {
       } else {
         await localStorage.clearSession();
       }
+    }
+
+    return response;
+  }
+
+  Future<AuthResponse> register(RegisterRequest request) async {
+    final response = await api.register(request);
+
+    if (response.hasTokens) {
+      await localStorage.saveSession(
+        response,
+        rememberMe: false,
+      );
     }
 
     return response;

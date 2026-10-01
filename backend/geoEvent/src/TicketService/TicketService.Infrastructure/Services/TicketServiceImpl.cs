@@ -50,6 +50,416 @@ public class TicketServiceImpl : ITicketService
         _configuration = configuration;
     }
 
+    public async Task<ServiceResult<ReservationResponseDto>> CaptureReservationPayPalOrderAsync(
+    int reservationId,
+    CapturePayPalOrderDto dto,
+    int userId)
+    {
+        if (dto is null || string.IsNullOrWhiteSpace(dto.OrderId))
+        {
+            return ServiceResult<ReservationResponseDto>.Fail(
+                "OrderId is required.",
+                StatusCodes.Status400BadRequest);
+        }
+
+        var reservationResult = await GetReservationAsync(reservationId, userId);
+        if (!reservationResult.Success || reservationResult.Data is null)
+        {
+            return ServiceResult<ReservationResponseDto>.Fail(
+                reservationResult.Error ?? "Reservation not found.",
+                reservationResult.StatusCode);
+        }
+
+        if (!string.Equals(
+                reservationResult.Data.Status,
+                ReservationStatus.Pending.ToString(),
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return ServiceResult<ReservationResponseDto>.Fail(
+                "Reservation is not pending.",
+                StatusCodes.Status400BadRequest);
+        }
+
+        if (string.IsNullOrWhiteSpace(reservationResult.Data.PendingProviderOrderId))
+        {
+            return ServiceResult<ReservationResponseDto>.Fail(
+                "No pending PayPal order is attached to this reservation.",
+                StatusCodes.Status400BadRequest);
+        }
+
+        if (!string.Equals(
+                reservationResult.Data.PendingProviderOrderId,
+                dto.OrderId,
+                StringComparison.Ordinal))
+        {
+            return ServiceResult<ReservationResponseDto>.Fail(
+                "OrderId does not match the pending PayPal order for this reservation.",
+                StatusCodes.Status400BadRequest);
+        }
+
+        var orderDetails = await _payPalService.GetOrderAsync(dto.OrderId);
+        if (!orderDetails.Success || orderDetails.Data is null)
+        {
+            return ServiceResult<ReservationResponseDto>.Fail(
+                orderDetails.Error ?? "Failed to get PayPal order details.",
+                orderDetails.StatusCode);
+        }
+
+        if (!string.Equals(
+                orderDetails.Data.OrderId,
+                dto.OrderId,
+                StringComparison.Ordinal))
+        {
+            return ServiceResult<ReservationResponseDto>.Fail(
+                "PayPal order ID mismatch.",
+                StatusCodes.Status400BadRequest);
+        }
+
+        if (!string.Equals(
+                orderDetails.Data.ReferenceId,
+                reservationId.ToString(),
+                StringComparison.Ordinal))
+        {
+            return ServiceResult<ReservationResponseDto>.Fail(
+                "PayPal order does not belong to this reservation.",
+                StatusCodes.Status400BadRequest);
+        }
+
+        if (!PayPalService.AmountMatchesForPayPal(
+                reservationResult.Data.TotalAmount,
+                reservationResult.Data.Currency,
+                orderDetails.Data.Amount,
+                orderDetails.Data.Currency))
+        {
+            return ServiceResult<ReservationResponseDto>.Fail(
+                "PayPal amount or currency does not match reservation amount.",
+                StatusCodes.Status400BadRequest);
+        }
+
+        if (!string.Equals(
+                orderDetails.Data.Status,
+                "APPROVED",
+                StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(
+                orderDetails.Data.Status,
+                "COMPLETED",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return ServiceResult<ReservationResponseDto>.Fail(
+                "PayPal order is not approved.",
+                StatusCodes.Status400BadRequest);
+        }
+
+        var captureResult = await _payPalService.CaptureOrderAsync(dto.OrderId);
+        if (!captureResult.Success || captureResult.Data is null)
+        {
+            return ServiceResult<ReservationResponseDto>.Fail(
+                captureResult.Error ?? "Failed to capture PayPal order.",
+                captureResult.StatusCode);
+        }
+
+        if (!string.Equals(
+                captureResult.Data.Status,
+                "COMPLETED",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return ServiceResult<ReservationResponseDto>.Fail(
+                "PayPal order not completed.",
+                StatusCodes.Status400BadRequest);
+        }
+
+        return await ConfirmVerifiedPayPalReservationAsync(
+            reservationId,
+            userId,
+            dto.OrderId,
+            captureResult.Data.Id);
+    }
+
+    public async Task<ServiceResult<ReservationResponseDto>> ConfirmReservationAsync(
+        int reservationId,
+        ConfirmReservationDto dto,
+        int userId)
+    {
+        if (dto is null)
+        {
+            return ServiceResult<ReservationResponseDto>.Fail(
+                "Confirmation details are required.",
+                StatusCodes.Status400BadRequest);
+        }
+
+        // Client-supplied PayPal references cannot prove that payment completed.
+        if (dto.PaymentMethod == PaymentMethod.PayPal)
+        {
+            return ServiceResult<ReservationResponseDto>.Fail(
+                "PayPal reservations must be confirmed through the PayPal capture flow.",
+                StatusCodes.Status400BadRequest);
+        }
+
+        if (dto.PaymentMethod != PaymentMethod.Cash)
+        {
+            return ServiceResult<ReservationResponseDto>.Fail(
+                "Unsupported payment method.",
+                StatusCodes.Status400BadRequest);
+        }
+
+        var reservation = await _repository.GetReservationByIdAsync(reservationId);
+        if (reservation is null)
+        {
+            return ServiceResult<ReservationResponseDto>.NotFound(
+                "Reservation not found.");
+        }
+
+        var eventSummary = await _eventDirectoryClient.GetEventAsync(reservation.EventId);
+        if (eventSummary is null || !string.Equals(eventSummary.Status, "Confirmed", StringComparison.OrdinalIgnoreCase))
+        {
+            return ServiceResult<ReservationResponseDto>.Fail(
+                "Cannot confirm reservation for an unpublished or cancelled event.",
+                StatusCodes.Status409Conflict);
+        }
+
+        if (reservation.UserId != userId)
+        {
+            return ServiceResult<ReservationResponseDto>.Forbidden(
+                "Not your reservation.");
+        }
+
+        if (!reservation.CanBeConfirmed())
+        {
+            return ServiceResult<ReservationResponseDto>.Fail(
+                reservation.IsExpired()
+                    ? "Reservation has expired."
+                    : "Reservation is no longer pending.",
+                StatusCodes.Status409Conflict);
+        }
+
+        if (!string.Equals(
+                dto.Currency,
+                reservation.Currency,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return ServiceResult<ReservationResponseDto>.Fail(
+                $"Currency mismatch. Expected {reservation.Currency}.",
+                StatusCodes.Status400BadRequest);
+        }
+
+        var cashReference = $"cash-{reservationId}-{Guid.NewGuid():N}";
+        var existingCashPayment =
+            await _repository.GetPaymentByTransactionIdAsync(cashReference);
+
+        if (existingCashPayment is not null)
+        {
+            return ServiceResult<ReservationResponseDto>.Conflict(
+                "Cash payment reference collision. Please retry.");
+        }
+
+        var payment = PaymentDetail.CreatePendingCash(
+            reservationId,
+            userId,
+            reservation.TotalAmount,
+            reservation.Currency,
+            cashReference);
+
+        return await CompleteReservationAsync(
+            reservation,
+            payment,
+            userId);
+    }
+
+    private async Task<ServiceResult<ReservationResponseDto>> ConfirmVerifiedPayPalReservationAsync(
+        int reservationId,
+        int userId,
+        string providerOrderId,
+        string captureId)
+    {
+        var reservation = await _repository.GetReservationByIdAsync(reservationId);
+        if (reservation is null)
+        {
+            return ServiceResult<ReservationResponseDto>.NotFound(
+                "Reservation not found.");
+        }
+
+        var eventSummary = await _eventDirectoryClient.GetEventAsync(reservation.EventId);
+        if (eventSummary is null || !string.Equals(eventSummary.Status, "Confirmed", StringComparison.OrdinalIgnoreCase))
+        {
+            return ServiceResult<ReservationResponseDto>.Fail(
+                "Cannot confirm reservation for an unpublished or cancelled event.",
+                StatusCodes.Status409Conflict);
+        }
+
+        if (reservation.UserId != userId)
+        {
+            return ServiceResult<ReservationResponseDto>.Forbidden(
+                "Not your reservation.");
+        }
+
+        if (!reservation.CanBeConfirmed())
+        {
+            return ServiceResult<ReservationResponseDto>.Fail(
+                reservation.IsExpired()
+                    ? "Reservation has expired."
+                    : "Reservation is no longer pending.",
+                StatusCodes.Status409Conflict);
+        }
+
+        if (string.IsNullOrWhiteSpace(providerOrderId) ||
+            !string.Equals(
+                reservation.PendingProviderOrderId,
+                providerOrderId,
+                StringComparison.Ordinal))
+        {
+            return ServiceResult<ReservationResponseDto>.Fail(
+                "PayPal order does not match this reservation.",
+                StatusCodes.Status409Conflict);
+        }
+
+        if (string.IsNullOrWhiteSpace(captureId))
+        {
+            return ServiceResult<ReservationResponseDto>.Fail(
+                "PayPal capture ID is missing.",
+                StatusCodes.Status400BadRequest);
+        }
+
+        var existingPayPalPayment =
+            await _repository.GetPaymentByTransactionIdAsync(captureId);
+
+        if (existingPayPalPayment is not null)
+        {
+            return ServiceResult<ReservationResponseDto>.Conflict(
+                "This payment reference has already been processed.");
+        }
+
+        var payment = PaymentDetail.CreateCompletedPayPal(
+            reservationId,
+            userId,
+            reservation.TotalAmount,
+            reservation.Currency,
+            providerOrderId,
+            captureId,
+            captureId);
+
+        return await CompleteReservationAsync(
+            reservation,
+            payment,
+            userId);
+    }
+
+    private async Task<ServiceResult<ReservationResponseDto>> CompleteReservationAsync(
+        Reservation reservation,
+        PaymentDetail payment,
+        int userId)
+    {
+        List<Ticket> tickets = [];
+
+        await _repository.ExecuteInStrategyAsync(async () =>
+        {
+            await using var tx = await _repository.BeginTransactionAsync();
+
+            try
+            {
+                await _repository.AddPaymentDetailAsync(payment);
+
+                reservation.Confirm(payment.TransactionId!);
+                await _repository.UpdateReservationAsync(reservation);
+
+                tickets = Enumerable.Range(0, reservation.Quantity)
+                    .Select(_ => Ticket.Issue(
+                        reservation.ReservationId,
+                        userId,
+                        reservation.EventId,
+                        reservation.EventTicket?.TicketType ?? "General",
+                        GenerateQrCode(),
+                        reservation.TotalAmount / reservation.Quantity,
+                        reservation.Currency))
+                    .ToList();
+
+                await _repository.AddTicketsAsync(tickets);
+                await _repository.SaveChangesAsync();
+                await tx.CommitAsync();
+            }
+            catch
+            {
+                await tx.RollbackAsync();
+                throw;
+            }
+        });
+
+        await _publishEndpoint.Publish(new ReservationConfirmedMessage(
+            reservation.ReservationId,
+            reservation.EventId,
+            reservation.UserId,
+            reservation.Quantity,
+            reservation.ConfirmedAt ?? DateTime.UtcNow));
+
+        var eventSummary = await _eventDirectoryClient.GetEventAsync(
+            reservation.EventId);
+
+        if (eventSummary is null)
+        {
+            _logger.LogWarning(
+                "Could not update preferences. Event {EventId} was not found.",
+                reservation.EventId);
+        }
+        else
+        {
+            await _publishEndpoint.Publish(
+                new UserEventPreferenceInteractionMessage(
+                    Guid.NewGuid(),
+                    reservation.UserId,
+                    reservation.EventId,
+                    eventSummary.SegmentId,
+                    eventSummary.GenreId,
+                    eventSummary.SubGenreId,
+                    "ReservationConfirmed",
+                    reservation.ConfirmedAt ?? DateTime.UtcNow));
+        }
+
+        if (payment.Method == PaymentMethod.PayPal)
+        {
+            await _publishEndpoint.Publish(new PaymentSucceededMessage(
+                payment.PaymentId,
+                reservation.ReservationId,
+                userId,
+                payment.Amount,
+                payment.Currency,
+                payment.TransactionId!,
+                payment.PaidAt ?? DateTime.UtcNow));
+
+            await PublishReservationPaidNotificationAsync(
+                reservation,
+                payment.PaidAt ?? DateTime.UtcNow);
+        }
+        else if (payment.Method == PaymentMethod.Cash)
+        {
+            await PublishReservationCashPendingNotificationAsync(
+                reservation,
+                payment.Amount,
+                payment.Currency,
+                DateTime.UtcNow);
+        }
+
+        foreach (var ticket in tickets)
+        {
+            await _publishEndpoint.Publish(new TicketPurchasedMessage(
+                ticket.TicketId,
+                reservation.ReservationId,
+                reservation.EventId,
+                userId,
+                ticket.TicketType,
+                ticket.Amount,
+                ticket.Currency,
+                ticket.IssuedAt));
+        }
+
+        _logger.LogInformation(
+            "Confirmed reservation {ReservationId} with payment {PaymentId} using {PaymentMethod}",
+            reservation.ReservationId,
+            payment.PaymentId,
+            payment.Method);
+
+        return ServiceResult<ReservationResponseDto>.Ok(
+            MapToReservationResponse(reservation));
+    }
+
     public async Task<ServiceResult<bool>>
     ExpireEventDataAsync(
         int eventId,
@@ -329,10 +739,10 @@ public class TicketServiceImpl : ITicketService
                 StatusCodes.Status400BadRequest);
         }
 
-        if (request.Capacity <= 0)
+        if (request.Capacity < 0)
         {
             return ServiceResult<EventTicketResponseDto>.Fail(
-                "Capacity must be greater than zero.",
+                "Capacity cannot be negative.",
                 StatusCodes.Status400BadRequest);
         }
 
@@ -439,121 +849,6 @@ public class TicketServiceImpl : ITicketService
         }
 
         return orderResult;
-    }
-
-    public async Task<ServiceResult<ReservationResponseDto>> CaptureReservationPayPalOrderAsync(
-        int reservationId,
-        CapturePayPalOrderDto dto,
-        int userId)
-    {
-        if (dto is null || string.IsNullOrWhiteSpace(dto.OrderId))
-        {
-            return ServiceResult<ReservationResponseDto>.Fail(
-                "OrderId is required.",
-                StatusCodes.Status400BadRequest);
-        }
-
-        var reservationResult = await GetReservationAsync(reservationId, userId);
-        if (!reservationResult.Success || reservationResult.Data is null)
-        {
-            return ServiceResult<ReservationResponseDto>.Fail(
-                reservationResult.Error ?? "Reservation not found.",
-                reservationResult.StatusCode);
-        }
-
-        if (!string.Equals(
-                reservationResult.Data.Status,
-                ReservationStatus.Pending.ToString(),
-                StringComparison.OrdinalIgnoreCase))
-        {
-            return ServiceResult<ReservationResponseDto>.Fail(
-                "Reservation is not pending.",
-                StatusCodes.Status400BadRequest);
-        }
-
-        if (string.IsNullOrWhiteSpace(reservationResult.Data.PendingProviderOrderId))
-        {
-            return ServiceResult<ReservationResponseDto>.Fail(
-                "No pending PayPal order is attached to this reservation.",
-                StatusCodes.Status400BadRequest);
-        }
-
-        if (!string.Equals(
-                reservationResult.Data.PendingProviderOrderId,
-                dto.OrderId,
-                StringComparison.Ordinal))
-        {
-            return ServiceResult<ReservationResponseDto>.Fail(
-                "OrderId does not match the pending PayPal order for this reservation.",
-                StatusCodes.Status400BadRequest);
-        }
-
-        var orderDetails = await _payPalService.GetOrderAsync(dto.OrderId);
-        if (!orderDetails.Success || orderDetails.Data is null)
-        {
-            return ServiceResult<ReservationResponseDto>.Fail(
-                orderDetails.Error ?? "Failed to get PayPal order details.",
-                orderDetails.StatusCode);
-        }
-
-        if (!string.Equals(orderDetails.Data.OrderId, dto.OrderId, StringComparison.Ordinal))
-        {
-            return ServiceResult<ReservationResponseDto>.Fail(
-                "PayPal order ID mismatch.",
-                StatusCodes.Status400BadRequest);
-        }
-
-        if (!string.Equals(orderDetails.Data.ReferenceId, reservationId.ToString(), StringComparison.Ordinal))
-        {
-            return ServiceResult<ReservationResponseDto>.Fail(
-                "PayPal order does not belong to this reservation.",
-                StatusCodes.Status400BadRequest);
-        }
-
-        if (!PayPalService.AmountMatchesForPayPal(
-                reservationResult.Data.TotalAmount,
-                reservationResult.Data.Currency,
-                orderDetails.Data.Amount,
-                orderDetails.Data.Currency))
-        {
-            return ServiceResult<ReservationResponseDto>.Fail(
-                "PayPal amount or currency does not match reservation amount.",
-                StatusCodes.Status400BadRequest);
-        }
-
-        if (!string.Equals(orderDetails.Data.Status, "APPROVED", StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(orderDetails.Data.Status, "COMPLETED", StringComparison.OrdinalIgnoreCase))
-        {
-            return ServiceResult<ReservationResponseDto>.Fail(
-                "PayPal order is not approved.",
-                StatusCodes.Status400BadRequest);
-        }
-
-        var captureResult = await _payPalService.CaptureOrderAsync(dto.OrderId);
-        if (!captureResult.Success || captureResult.Data is null)
-        {
-            return ServiceResult<ReservationResponseDto>.Fail(
-                captureResult.Error ?? "Failed to capture PayPal order.",
-                captureResult.StatusCode);
-        }
-
-        if (!string.Equals(captureResult.Data.Status, "COMPLETED", StringComparison.OrdinalIgnoreCase))
-        {
-            return ServiceResult<ReservationResponseDto>.Fail(
-                "PayPal order not completed.",
-                StatusCodes.Status400BadRequest);
-        }
-
-        var confirmDto = new ConfirmReservationDto
-        {
-            PaymentReference = captureResult.Data.Id,
-            ProviderPaymentId = captureResult.Data.Id,
-            ProviderOrderId = dto.OrderId,
-            PaymentMethod = PaymentMethod.PayPal,
-            Currency = reservationResult.Data.Currency
-        };
-
-        return await ConfirmReservationAsync(reservationId, confirmDto, userId);
     }
 
     private static string BuildPayPalRedirectUrl(string baseUrl, int reservationId)
@@ -754,11 +1049,23 @@ public class TicketServiceImpl : ITicketService
 
     public async Task CancelTicketsByEventAsync(int eventId)
     {
+        const string systemReason = "Event Cancelled by Organizer";
+
         var reservations = await _repository.GetActiveReservationsByEventAsync(eventId);
 
         foreach (var reservation in reservations)
         {
-            if (reservation.EventTicketId.HasValue)
+            // Idempotency: skip reservations that are already in a terminal state
+            if (reservation.Status == ReservationStatus.Cancelled ||
+                reservation.Status == ReservationStatus.Expired ||
+                reservation.Status == ReservationStatus.Refunded)
+            {
+                continue;
+            }
+
+            // Release inventory for pending/unpaid reservations
+            if (reservation.Status == ReservationStatus.Pending &&
+                reservation.EventTicketId.HasValue)
             {
                 var eventTicket = await _repository.GetEventTicketByIdAsync(
                     reservation.EventTicketId.Value);
@@ -781,16 +1088,64 @@ public class TicketServiceImpl : ITicketService
                     ticket.TicketId,
                     eventId,
                     reservation.UserId,
-                    "Event cancelled",
+                    systemReason,
                     DateTime.UtcNow));
             }
 
+            if (reservation.Status == ReservationStatus.Confirmed)
+            {
+                // Emit the integration message so the user is immediately removed from the event chat group.
+                // The consumer handles this idempotently if they were already removed.
+                await _publishEndpoint.Publish(new ReservationCancelledIntegrationMessage(
+                    reservation.ReservationId,
+                    reservation.EventId,
+                    reservation.UserId,
+                    DateTime.UtcNow));
+
+                // Paid confirmed reservations: queue for refund if not already in pipeline
+                var hasPaidPayment = reservation.PaymentDetails.Any(p =>
+                    p.Status == PaymentStatus.Completed && p.Amount > 0);
+
+                if (hasPaidPayment)
+                {
+                    if (reservation.RefundRequestStatus == RefundRequestStatus.None)
+                    {
+                        // Transition to refund-pending pipeline
+                        reservation.RequestRefund(systemReason);
+                        await _repository.UpdateReservationAsync(reservation);
+
+                        _logger.LogInformation(
+                            "Queued refund for reservation {ReservationId} (EventId {EventId})",
+                            reservation.ReservationId,
+                            eventId);
+                    }
+                    else
+                    {
+                        // Already in refund pipeline — skip silently (idempotent)
+                        _logger.LogInformation(
+                            "Reservation {ReservationId} refund already in pipeline (status: {Status}), skipping.",
+                            reservation.ReservationId,
+                            reservation.RefundRequestStatus);
+                    }
+
+                    // Do NOT cancel a paid-confirmed reservation; leave it for the refund flow
+                    continue;
+                }
+            }
+
+            // Cancel unpaid or zero-amount confirmed reservations
             if (reservation.CanBeCancelled())
             {
-                reservation.Cancel();
+                reservation.Cancel(cancellationReason: systemReason);
                 await _repository.UpdateReservationAsync(reservation);
             }
         }
+
+        await _repository.SaveChangesAsync();
+
+        _logger.LogInformation(
+            "CancelTicketsByEventAsync completed for EventId {EventId}.",
+            eventId);
     }
 
     public async Task<ServiceResult<ReservationResponseDto>> CreateReservationAsync(
@@ -800,9 +1155,28 @@ public class TicketServiceImpl : ITicketService
             return ServiceResult<ReservationResponseDto>.Fail(
                 "Quantity must be between 1 and 10.");
 
+        var eventSummary = await _eventDirectoryClient.GetEventAsync(dto.EventId);
+        if (eventSummary is null)
+            return ServiceResult<ReservationResponseDto>.NotFound("Event not found.");
+            
+        if (!string.Equals(eventSummary.Status, "Confirmed", StringComparison.OrdinalIgnoreCase))
+        {
+            return ServiceResult<ReservationResponseDto>.Fail(
+                "Event is not published.",
+                StatusCodes.Status409Conflict);
+        }
+
         var eventTicket = await _repository.GetEventTicketByIdAsync(dto.EventTicketId);
         if (eventTicket is null)
-            return ServiceResult<ReservationResponseDto>.NotFound("Ticket type not found.");
+            return ServiceResult<ReservationResponseDto>.NotFound(
+                "Ticket type not found.");
+
+        if (dto.EventId != eventTicket.EventId)
+        {
+            return ServiceResult<ReservationResponseDto>.Fail(
+                "EventId does not match the selected EventTicketId.",
+                StatusCodes.Status400BadRequest);
+        }
 
         if (!eventTicket.IsAvailable())
             return ServiceResult<ReservationResponseDto>.Fail(
@@ -813,14 +1187,19 @@ public class TicketServiceImpl : ITicketService
             return ServiceResult<ReservationResponseDto>.Fail(
                 $"Only {eventTicket.AvailableQuantity} tickets available.");
 
-        var hasActive = await _repository.HasActiveReservationAsync(userId, dto.EventTicketId);
+        var hasActive = await _repository.HasActiveReservationAsync(
+            userId, dto.EventTicketId);
+
         if (hasActive)
             return ServiceResult<ReservationResponseDto>.Conflict(
                 "You already have an active reservation for this ticket type.");
 
         const string businessCurrency = "BAM";
 
-        if (!string.Equals(dto.Currency, businessCurrency, StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(
+                dto.Currency,
+                businessCurrency,
+                StringComparison.OrdinalIgnoreCase))
         {
             return ServiceResult<ReservationResponseDto>.Fail(
                 $"Currency mismatch. Expected {businessCurrency}.",
@@ -832,13 +1211,14 @@ public class TicketServiceImpl : ITicketService
         await _repository.ExecuteInStrategyAsync(async () =>
         {
             await using var tx = await _repository.BeginTransactionAsync();
+
             try
             {
                 eventTicket.Reserve(dto.Quantity);
                 await _repository.UpdateEventTicketAsync(eventTicket);
 
                 var reservation = Reservation.Create(
-                    dto.EventId,
+                    eventTicket.EventId,
                     userId,
                     dto.EventTicketId,
                     dto.Quantity,
@@ -872,224 +1252,17 @@ public class TicketServiceImpl : ITicketService
             created.CreatedAt
         ));
 
-        await PublishReservationCreatedNotificationAsync(created, created.CreatedAt);
+        await PublishReservationCreatedNotificationAsync(
+            created, created.CreatedAt);
 
         _logger.LogInformation(
             "Created reservation {ReservationId} for Event {EventId} by User {UserId}",
             created.ReservationId,
-            dto.EventId,
+            created.EventId,
             userId);
 
-        return ServiceResult<ReservationResponseDto>.Created(MapToReservationResponse(created));
-    }
-
-    public async Task<ServiceResult<ReservationResponseDto>> ConfirmReservationAsync(
-    int reservationId,
-    ConfirmReservationDto dto,
-    int userId)
-    {
-        var reservation = await _repository.GetReservationByIdAsync(reservationId);
-        if (reservation is null)
-            return ServiceResult<ReservationResponseDto>.NotFound("Reservation not found.");
-
-        if (reservation.UserId != userId)
-            return ServiceResult<ReservationResponseDto>.Forbidden("Not your reservation.");
-
-        if (!reservation.CanBeConfirmed())
-        {
-            return ServiceResult<ReservationResponseDto>.Fail(
-                reservation.IsExpired() ? "Reservation has expired." : "Reservation is no longer pending.",
-                StatusCodes.Status409Conflict);
-        }
-
-        if (!string.Equals(dto.Currency, reservation.Currency, StringComparison.OrdinalIgnoreCase))
-        {
-            return ServiceResult<ReservationResponseDto>.Fail(
-                $"Currency mismatch. Expected {reservation.Currency}.",
-                StatusCodes.Status400BadRequest);
-        }
-
-        PaymentDetail payment;
-        var expectedAmount = reservation.TotalAmount;
-
-        switch (dto.PaymentMethod)
-        {
-            case PaymentMethod.PayPal:
-                {
-                    if (string.IsNullOrWhiteSpace(dto.ProviderOrderId))
-                        return ServiceResult<ReservationResponseDto>.Fail(
-                            "Provider order ID is required for PayPal confirmation.",
-                            StatusCodes.Status400BadRequest);
-
-                    if (!string.Equals(reservation.PendingProviderOrderId, dto.ProviderOrderId, StringComparison.Ordinal))
-                        return ServiceResult<ReservationResponseDto>.Fail(
-                            "PayPal order does not match this reservation.",
-                            StatusCodes.Status409Conflict);
-
-                    if (string.IsNullOrWhiteSpace(dto.PaymentReference))
-                        return ServiceResult<ReservationResponseDto>.Fail(
-                            "Payment reference is required for PayPal confirmation.",
-                            StatusCodes.Status400BadRequest);
-
-                    if (string.IsNullOrWhiteSpace(dto.ProviderPaymentId))
-                        return ServiceResult<ReservationResponseDto>.Fail(
-                            "Provider payment ID is required for PayPal confirmation.",
-                            StatusCodes.Status400BadRequest);
-
-                    var existingPayPalPayment =
-                        await _repository.GetPaymentByTransactionIdAsync(dto.PaymentReference);
-
-                    if (existingPayPalPayment is not null)
-                        return ServiceResult<ReservationResponseDto>.Conflict(
-                            "This payment reference has already been processed.");
-
-                    payment = PaymentDetail.CreateCompletedPayPal(
-                        reservationId,
-                        userId,
-                        expectedAmount,
-                        reservation.Currency,
-                        dto.ProviderOrderId,
-                        dto.ProviderPaymentId,
-                        dto.PaymentReference);
-
-                    break;
-                }
-
-            case PaymentMethod.Cash:
-                {
-                    var cashReference = $"cash-{reservationId}-{Guid.NewGuid():N}";
-                    var existingCashPayment =
-                        await _repository.GetPaymentByTransactionIdAsync(cashReference);
-
-                    if (existingCashPayment is not null)
-                        return ServiceResult<ReservationResponseDto>.Conflict(
-                            "Cash payment reference collision. Please retry.");
-
-                    payment = PaymentDetail.CreatePendingCash(
-                        reservationId,
-                        userId,
-                        expectedAmount,
-                        reservation.Currency,
-                        cashReference);
-
-                    dto.PaymentReference = cashReference;
-                    break;
-                }
-
-            default:
-                return ServiceResult<ReservationResponseDto>.Fail(
-                    "Unsupported payment method.",
-                    StatusCodes.Status400BadRequest);
-        }
-
-        List<Ticket> tickets = [];
-
-        await _repository.ExecuteInStrategyAsync(async () =>
-        {
-            await using var tx = await _repository.BeginTransactionAsync();
-            try
-            {
-                await _repository.AddPaymentDetailAsync(payment);
-
-                reservation.Confirm(payment.TransactionId!);
-                await _repository.UpdateReservationAsync(reservation);
-
-                tickets = Enumerable.Range(0, reservation.Quantity)
-                    .Select(_ => Ticket.Issue(
-                        reservation.ReservationId,
-                        userId,
-                        reservation.EventId,
-                        reservation.EventTicket?.TicketType ?? "General",
-                        GenerateQrCode(),
-                        reservation.TotalAmount / reservation.Quantity,
-                        reservation.Currency))
-                    .ToList();
-
-                await _repository.AddTicketsAsync(tickets);
-                await _repository.SaveChangesAsync();
-                await tx.CommitAsync();
-            }
-            catch
-            {
-                await tx.RollbackAsync();
-                throw;
-            }
-        });
-
-        await _publishEndpoint.Publish(new ReservationConfirmedMessage(
-            reservation.ReservationId,
-            reservation.EventId,
-            reservation.UserId,
-            reservation.Quantity,
-            reservation.ConfirmedAt ?? DateTime.UtcNow));
-
-        var eventSummary = await _eventDirectoryClient.GetEventAsync(
-    reservation.EventId);
-
-        if (eventSummary is null)
-        {
-            _logger.LogWarning(
-                "Could not update preferences. Event {EventId} was not found.",
-                reservation.EventId);
-        }
-        else
-        {
-            await _publishEndpoint.Publish(
-                new UserEventPreferenceInteractionMessage(
-                    Guid.NewGuid(),
-                    reservation.UserId,
-                    reservation.EventId,
-                    eventSummary.SegmentId,
-                    eventSummary.GenreId,
-                    eventSummary.SubGenreId,
-                    "ReservationConfirmed",
-                    reservation.ConfirmedAt ?? DateTime.UtcNow));
-        }
-
-        if (payment.Method == PaymentMethod.PayPal)
-        {
-            await _publishEndpoint.Publish(new PaymentSucceededMessage(
-                payment.PaymentId,
-                reservation.ReservationId,
-                userId,
-                payment.Amount,
-                payment.Currency,
-                payment.TransactionId!,
-                payment.PaidAt ?? DateTime.UtcNow));
-
-            await PublishReservationPaidNotificationAsync(
-                reservation,
-                payment.PaidAt ?? DateTime.UtcNow);
-        }
-        else if (payment.Method == PaymentMethod.Cash)
-        {
-            await PublishReservationCashPendingNotificationAsync(
-                reservation,
-                payment.Amount,
-                payment.Currency,
-                DateTime.UtcNow);
-        }
-
-        foreach (var ticket in tickets)
-        {
-            await _publishEndpoint.Publish(new TicketPurchasedMessage(
-                ticket.TicketId,
-                reservation.ReservationId,
-                reservation.EventId,
-                userId,
-                ticket.TicketType,
-                ticket.Amount,
-                ticket.Currency,
-                ticket.IssuedAt));
-        }
-
-        _logger.LogInformation(
-            "Confirmed reservation {ReservationId} with payment {PaymentId} using {PaymentMethod}",
-            reservation.ReservationId,
-            payment.PaymentId,
-            dto.PaymentMethod);
-
-        return ServiceResult<ReservationResponseDto>.Ok(MapToReservationResponse(reservation));
+        return ServiceResult<ReservationResponseDto>.Created(
+            MapToReservationResponse(created));
     }
 
     private async Task PublishReservationCashPendingNotificationAsync(
@@ -1122,55 +1295,93 @@ public class TicketServiceImpl : ITicketService
         ));
     }
 
-    public async Task<ServiceResult<bool>> CancelReservationAsync(int reservationId, int userId)
+    public async Task<ServiceResult<bool>> CancelReservationAsync(
+    int reservationId,
+    int userId,
+    CancelReservationDto? dto = null)
     {
+        int eventId = 0;
+        string? cancellationReason = string.IsNullOrWhiteSpace(dto?.Reason)
+            ? null
+            : dto.Reason.Trim();
+
         await _repository.ExecuteInStrategyAsync(async () =>
         {
             await using var tx = await _repository.BeginTransactionAsync();
 
-            var reservation = await _repository.GetReservationByIdForUpdateAsync(reservationId);
-            if (reservation is null)
-                throw new KeyNotFoundException("Reservation not found.");
-
-            if (reservation.UserId != userId)
-                throw new UnauthorizedAccessException("Not your reservation.");
-
-            if (!reservation.CanBeCancelled())
-                throw new InvalidOperationException("Reservation cannot be cancelled in its current state.");
-
-            if (reservation.Status == ReservationStatus.Confirmed)
+            try
             {
-                var completedPaidPayment = reservation.PaymentDetails
-                    .OrderByDescending(p => p.PaidAt)
-                    .FirstOrDefault(p => p.Status == PaymentStatus.Completed && p.Amount > 0);
+                var reservation =
+                    await _repository.GetReservationByIdForUpdateAsync(reservationId);
 
-                if (completedPaidPayment is not null)
-                    throw new InvalidOperationException("Paid confirmed reservations must be refunded, not cancelled.");
+                if (reservation is null)
+                    throw new KeyNotFoundException("Reservation not found.");
+
+                if (reservation.UserId != userId)
+                    throw new UnauthorizedAccessException("Not your reservation.");
+
+                if (!reservation.CanBeCancelled())
+                    throw new InvalidOperationException(
+                        "Reservation cannot be cancelled in its current state.");
+
+                if (reservation.Status == ReservationStatus.Confirmed)
+                {
+                    var completedPaidPayment = reservation.PaymentDetails
+                        .OrderByDescending(p => p.PaidAt)
+                        .FirstOrDefault(p =>
+                            p.Status == PaymentStatus.Completed &&
+                            p.Amount > 0);
+
+                    if (completedPaidPayment is not null)
+                        throw new InvalidOperationException(
+                            "Paid confirmed reservations must be refunded, not cancelled.");
+                }
+
+                if (reservation.EventTicketId.HasValue)
+                {
+                    var eventTicket =
+                        await _repository.GetEventTicketByIdForUpdateAsync(
+                            reservation.EventTicketId.Value);
+
+                    if (eventTicket is not null)
+                        eventTicket.Release(reservation.Quantity);
+                }
+
+                foreach (var ticket in reservation.Tickets
+                             .Where(t => t.CanBeCancelled()))
+                {
+                    ticket.Cancel();
+                }
+
+                reservation.Cancel(userId, cancellationReason);
+
+                await _repository.SaveChangesAsync();
+                await tx.CommitAsync();
+
+                eventId = reservation.EventId;
             }
-
-            if (reservation.EventTicketId.HasValue)
+            catch
             {
-                var eventTicket = await _repository.GetEventTicketByIdForUpdateAsync(reservation.EventTicketId.Value);
-                if (eventTicket is not null)
-                    eventTicket.Release(reservation.Quantity);
+                await tx.RollbackAsync();
+                throw;
             }
-
-            foreach (var ticket in reservation.Tickets.Where(t => t.CanBeCancelled()))
-            {
-                ticket.Cancel();
-            }
-
-            reservation.Cancel();
-
-            await _repository.SaveChangesAsync();
-            await tx.CommitAsync();
         });
 
-        await _publishEndpoint.Publish(new ReservationCancelledIntegrationMessage(
-            reservationId,
-            0,
-            userId,
-            DateTime.UtcNow));
+        await _publishEndpoint.Publish(
+            new ReservationCancelledIntegrationMessage(
+                reservationId,
+                eventId,
+                userId,
+                DateTime.UtcNow));
+
+        // Notify the organizer of the cancellation (Problem 8)
+        await _publishEndpoint.Publish(
+            new ReservationCancelledMessage(
+                reservationId,
+                eventId,
+                userId,
+                DateTime.UtcNow,
+                cancellationReason));
 
         return ServiceResult<bool>.Ok(true);
     }
@@ -1408,6 +1619,13 @@ public class TicketServiceImpl : ITicketService
                 "Reservation refunded",
                 now));
         }
+
+        // Remove the user from the event group chat now that their reservation is refunded.
+        await _publishEndpoint.Publish(new ReservationCancelledIntegrationMessage(
+            reservation.ReservationId,
+            reservation.EventId,
+            reservation.UserId,
+            now));
 
         await PublishRefundApprovedNotificationAsync(reservation, payment);
 
@@ -1797,27 +2015,8 @@ public class TicketServiceImpl : ITicketService
             });
     }
 
-    public async Task<ServiceResult<bool>> CancelTicketAsync(int ticketId, int userId)
-    {
-        var ticket = await _repository.GetTicketByIdAsync(ticketId);
-        if (ticket is null)
-            return ServiceResult<bool>.NotFound("Ticket not found.");
-
-        if (ticket.UserId != userId)
-            return ServiceResult<bool>.Forbidden("Not your ticket.");
-
-        if (!ticket.IsValid())
-            return ServiceResult<bool>.Fail("Ticket cannot be cancelled.");
-
-        ticket.Cancel();
-        await _repository.UpdateTicketAsync(ticket);
-        await _repository.SaveChangesAsync();
-
-        await _publishEndpoint.Publish(new TicketCancelledMessage(
-            ticket.TicketId, ticket.EventId, userId, "Cancelled by user", DateTime.UtcNow));
-
-        return ServiceResult<bool>.Ok(true);
-    }
+    // CancelTicketAsync removed — dead code (Problem 13)
+    // The PATCH /api/tickets/{id}/cancel endpoint and this method had zero callers.
 
     public async Task<ServiceResult<PagedResult<OrganizerReservationResponseDto>>> GetEventReservationsAsync(
         int eventId,
@@ -2224,7 +2423,46 @@ public class TicketServiceImpl : ITicketService
         RefundReviewedAt = r.RefundReviewedAt,
         RefundReviewedByUserId = r.RefundReviewedByUserId,
         RefundDecisionReason = r.RefundDecisionReason,
+        // Cancellation audit (Problem 8)
+        CancelledByUserId = r.CancelledByUserId,
+        CancellationReason = r.CancellationReason,
     };
+
+    public async Task<ServiceResult<EventTicketResponseDto>> UpdateDefaultEventTicketAsync(
+    int eventId,
+    UpdateDefaultEventTicketRequest request)
+    {
+        var tickets = await _repository.GetEventTicketsByEventAsync(eventId);
+        var defaultTicket = tickets.FirstOrDefault(t => string.Equals(t.TicketType, "General", StringComparison.OrdinalIgnoreCase));
+
+        if (defaultTicket == null)
+        {
+            return ServiceResult<EventTicketResponseDto>.NotFound("Default ticket not found.");
+        }
+
+        try
+        {
+            defaultTicket.UpdateDetails(
+                defaultTicket.TicketType,
+                request.Price,
+                request.Capacity,
+                defaultTicket.SaleStartDate,
+                defaultTicket.SaleEndDate,
+                defaultTicket.Description,
+                defaultTicket.IsActive);
+            await _repository.UpdateEventTicketAsync(defaultTicket);
+            await _repository.SaveChangesAsync();
+
+            return ServiceResult<EventTicketResponseDto>.Ok(MapToEventTicketResponse(defaultTicket));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to update default ticket for event {EventId}", eventId);
+            return ServiceResult<EventTicketResponseDto>.Fail("Failed to update default ticket.");
+        }
+    }
+
+
 
     private static string ResolveDisplayName(PublicUserProfileDto? profile, int userId)
     {

@@ -524,6 +524,7 @@ void _onScroll() {
           onOpenDirections: _openDirections,
           onCloseParentSearchSheet:
               _closeParentSearchSheet,
+          recommendationLabel: item.recommendationReason,
         );
       },
     );

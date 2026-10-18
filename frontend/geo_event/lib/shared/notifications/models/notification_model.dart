@@ -155,7 +155,13 @@ class NotificationModel {
       'eventliked' ||
       'eventbookmarked' ||
       'eventreservationcreated' ||
-      'eventreservationpaid' =>
+      'eventreservationpaid' ||
+      'eventreservationcancelled' ||
+      'eventreservationcashpending' ||
+      'eventrefundrequested' ||
+      'reservationrefundapproved' ||
+      'reservationrefundrejected' ||
+      'reservationremovedbyorganizer' =>
         NotificationType.system,
 
       _ => NotificationType.unknown,

@@ -12,7 +12,7 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace MessageService.Infrastructure.Migrations
 {
     [DbContext(typeof(MessageDbContext))]
-    [Migration("20260930124417_FINAL")]
+    [Migration("20261018184013_FINAL")]
     partial class FINAL
     {
         /// <inheritdoc />

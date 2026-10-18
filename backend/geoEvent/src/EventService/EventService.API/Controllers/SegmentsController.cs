@@ -22,11 +22,12 @@ public class SegmentsController : ControllerBase
     public async Task<IActionResult> GetAll(
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20,
-        [FromQuery] string? searchTerm = null)
+        [FromQuery] string? searchTerm = null,
+        [FromQuery] bool includeInactive = false)
     {
         pageSize = Math.Min(pageSize, 100);
         
-        var result = await _eventService.GetSegmentsPagedAsync(page, pageSize, searchTerm);
+        var result = await _eventService.GetSegmentsPagedAsync(page, pageSize, searchTerm, includeInactive);
         return result.Success
             ? Ok(result.Data)
             : StatusCode(result.StatusCode, new { error = result.Error });

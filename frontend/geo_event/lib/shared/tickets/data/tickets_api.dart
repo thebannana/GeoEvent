@@ -103,8 +103,13 @@ class TicketsApi {
     );
   }
 
-  Future<void> cancelReservation(int reservationId) async {
-    await dio.patch(ApiEndpoints.cancelReservation(reservationId));
+  Future<void> cancelReservation(int reservationId, {String? reason}) async {
+    await dio.patch(
+      ApiEndpoints.cancelReservation(reservationId),
+      data: {
+        if (reason != null && reason.trim().isNotEmpty) 'reason': reason.trim(),
+      },
+    );
   }
 
   Future<ReservationItem> requestRefund(

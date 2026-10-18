@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/errors/error_mapper.dart';
 import '../../../../core/utils/logger.dart';
-import '../../../../core/widgets/feedback/app_confirm_dialog.dart';
 import '../../../../core/widgets/feedback/app_empty_state.dart';
 import '../../../../core/widgets/feedback/app_error_state.dart';
 import '../../../../core/widgets/feedback/app_loading_indicator.dart';
@@ -216,23 +215,22 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
     BuildContext context,
     Reservation reservation,
   ) async {
-    final confirmed = await AppConfirmDialog.show(
-      context,
-      title: 'Cancel reservation?',
-      message: 'Reservation for '
-          '${reservation.quantity} ticket${reservation.quantity > 1 ? 's' : ''} '
-          'will be cancelled.',
-      cancelLabel: 'Keep',
-      confirmLabel: 'Cancel reservation',
-      destructive: true,
+    final reason = await showDialog<String?>(
+      context: context,
+      builder: (_) => _CancelReservationDialog(
+        reservation: reservation,
+      ),
     );
 
-    if (!confirmed || !mounted) return;
+    if (reason == null || !mounted) return;
 
     try {
       await ref
           .read(reservationsControllerProvider.notifier)
-          .cancelReservation(reservation.reservationId);
+          .cancelReservation(
+            reservation.reservationId,
+            reason: reason.isEmpty ? null : reason,
+          );
 
       if (!mounted) return;
       _showMessage('Reservation cancelled.');
@@ -371,6 +369,89 @@ class _RefundRequestDialogState extends State<_RefundRequestDialog> {
         FilledButton(
           onPressed: _submit,
           child: const Text('Send request'),
+        ),
+      ],
+    );
+  }
+}
+
+class _CancelReservationDialog extends StatefulWidget {
+  final Reservation reservation;
+
+  const _CancelReservationDialog({
+    required this.reservation,
+  });
+
+  @override
+  State<_CancelReservationDialog> createState() =>
+      _CancelReservationDialogState();
+}
+
+class _CancelReservationDialogState extends State<_CancelReservationDialog> {
+  late final TextEditingController _reasonController;
+
+  @override
+  void initState() {
+    super.initState();
+    _reasonController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _reasonController.dispose();
+    super.dispose();
+  }
+
+  void _keep() {
+    Navigator.of(context).pop(null);
+  }
+
+  void _confirm() {
+    Navigator.of(context).pop(_reasonController.text.trim());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final reservation = widget.reservation;
+
+    return AlertDialog(
+      title: const Text('Cancel reservation?'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Reservation for '
+            '${reservation.quantity} ticket'
+            '${reservation.quantity > 1 ? 's' : ''} '
+            'will be cancelled.',
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _reasonController,
+            minLines: 2,
+            maxLines: 4,
+            maxLength: 500,
+            textInputAction: TextInputAction.done,
+            decoration: const InputDecoration(
+              labelText: 'Reason (optional)',
+              hintText: 'Let the organizer know why you are cancelling',
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: _keep,
+          child: const Text('Keep'),
+        ),
+        FilledButton(
+          onPressed: _confirm,
+          style: FilledButton.styleFrom(
+            backgroundColor: Theme.of(context).colorScheme.error,
+            foregroundColor: Theme.of(context).colorScheme.onError,
+          ),
+          child: const Text('Cancel reservation'),
         ),
       ],
     );

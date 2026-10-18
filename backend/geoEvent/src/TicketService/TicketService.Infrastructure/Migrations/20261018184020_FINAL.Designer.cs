@@ -12,8 +12,8 @@ using TicketService.Infrastructure.Persistence;
 namespace TicketService.Infrastructure.Migrations
 {
     [DbContext(typeof(TicketDbContext))]
-    [Migration("20260930233422_AddCancellationFieldsToReservation")]
-    partial class AddCancellationFieldsToReservation
+    [Migration("20261018184020_FINAL")]
+    partial class FINAL
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)

@@ -1301,6 +1301,7 @@ public class TicketServiceImpl : ITicketService
     CancelReservationDto? dto = null)
     {
         int eventId = 0;
+        int cancelledQuantity = 0;
         string? cancellationReason = string.IsNullOrWhiteSpace(dto?.Reason)
             ? null
             : dto.Reason.Trim();
@@ -1359,6 +1360,7 @@ public class TicketServiceImpl : ITicketService
                 await tx.CommitAsync();
 
                 eventId = reservation.EventId;
+                cancelledQuantity = reservation.Quantity;
             }
             catch
             {
@@ -1375,13 +1377,12 @@ public class TicketServiceImpl : ITicketService
                 DateTime.UtcNow));
 
         // Notify the organizer of the cancellation (Problem 8)
-        await _publishEndpoint.Publish(
-            new ReservationCancelledMessage(
-                reservationId,
-                eventId,
-                userId,
-                DateTime.UtcNow,
-                cancellationReason));
+        await PublishReservationCancelledNotificationAsync(
+            reservationId,
+            eventId,
+            userId,
+            cancelledQuantity,
+            cancellationReason);
 
         return ServiceResult<bool>.Ok(true);
     }
@@ -2440,6 +2441,18 @@ public class TicketServiceImpl : ITicketService
             return ServiceResult<EventTicketResponseDto>.NotFound("Default ticket not found.");
         }
 
+        if (request.Capacity < 0)
+        {
+            return ServiceResult<EventTicketResponseDto>.BadRequest("Capacity cannot be negative.");
+        }
+
+        // Never shrink capacity below tickets that are already sold (Problem 3).
+        if (request.Capacity < defaultTicket.SoldQuantity)
+        {
+            return ServiceResult<EventTicketResponseDto>.Conflict(
+                $"Capacity cannot be lower than the {defaultTicket.SoldQuantity} tickets already sold.");
+        }
+
         try
         {
             defaultTicket.UpdateDetails(
@@ -2463,6 +2476,53 @@ public class TicketServiceImpl : ITicketService
     }
 
 
+
+    /// <summary>
+    /// Publishes the organizer-facing cancellation message. Lookups are best-effort:
+    /// a failure here must never undo or fail an already committed cancellation.
+    /// </summary>
+    private async Task PublishReservationCancelledNotificationAsync(
+        int reservationId,
+        int eventId,
+        int userId,
+        int quantity,
+        string? cancellationReason)
+    {
+        int? organizerUserId = null;
+        string? eventTitle = null;
+        string? eventImageUrl = null;
+        PublicUserProfileDto? profile = null;
+
+        try
+        {
+            var ev = await _eventDirectoryClient.GetEventAsync(eventId);
+            organizerUserId = ev?.OrganizerId;
+            eventTitle = ev?.Title;
+            eventImageUrl = ev?.CoverImageUrl;
+
+            var profiles = await _userDirectoryService.GetPublicProfilesAsync(new[] { userId });
+            profile = profiles.FirstOrDefault(x => x.UserId == userId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "Could not enrich cancellation notification for reservation {ReservationId}",
+                reservationId);
+        }
+
+        await _publishEndpoint.Publish(new ReservationCancelledMessage(
+            reservationId,
+            eventId,
+            userId,
+            DateTime.UtcNow,
+            cancellationReason,
+            organizerUserId,
+            eventTitle,
+            eventImageUrl,
+            ResolveDisplayName(profile, userId),
+            profile?.ImageUrl,
+            quantity));
+    }
 
     private static string ResolveDisplayName(PublicUserProfileDto? profile, int userId)
     {

@@ -267,7 +267,7 @@ class ReservationsController extends AsyncNotifier<ReservationsState> {
     }
   }
 
-  Future<void> cancelReservation(int reservationId) async {
+  Future<void> cancelReservation(int reservationId, {String? reason}) async {
     final current = state.valueOrNull;
     if (current == null) return;
 
@@ -292,7 +292,7 @@ class ReservationsController extends AsyncNotifier<ReservationsState> {
     );
 
     try {
-      await _repository.cancelReservation(reservationId);
+      await _repository.cancelReservation(reservationId, reason: reason);
     } catch (_) {
       state = AsyncData(current);
       rethrow;

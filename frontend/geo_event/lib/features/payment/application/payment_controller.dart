@@ -188,7 +188,10 @@ class PaymentController extends StateNotifier<PaymentState> {
 
   Future<void> _cancelReservationSilently(int reservationId) async {
     try {
-      await ticketsRepository.cancelReservation(reservationId);
+      await ticketsRepository.cancelReservation(
+        reservationId,
+        reason: 'Payment was not completed',
+      );
     } catch (_) {}
   }
 }

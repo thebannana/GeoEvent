@@ -22,8 +22,8 @@ class ReservationsRepository {
     );
   }
 
-  Future<void> cancelReservation(int reservationId) {
-    return api.cancelReservation(reservationId);
+  Future<void> cancelReservation(int reservationId, {String? reason}) {
+    return api.cancelReservation(reservationId, reason: reason);
   }
 
   Future<Reservation> requestRefund(

@@ -153,6 +153,20 @@ public sealed class TicketInternalClient : ITicketInternalClient
             return;
         }
 
+        // Permanent conditions that retrying cannot fix:
+        //  - 404: the event has no default ticket yet (e.g. still Pending/unpublished).
+        //    The ticket is created from EventCreatedMessage when the event is published.
+        //  - 409: the new capacity is lower than the number of tickets already sold.
+        if (response.StatusCode == System.Net.HttpStatusCode.NotFound ||
+            response.StatusCode == System.Net.HttpStatusCode.Conflict)
+        {
+            _logger.LogWarning(
+                "Default ticket update skipped for EventId {EventId}. StatusCode: {StatusCode}",
+                eventId,
+                (int)response.StatusCode);
+            return;
+        }
+
         var responseBody =
             await response.Content.ReadAsStringAsync(
                 cancellationToken);

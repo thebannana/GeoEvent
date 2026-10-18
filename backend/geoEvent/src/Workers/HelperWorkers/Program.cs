@@ -180,6 +180,7 @@ builder.Services.AddMassTransit(x =>
     x.AddConsumer<ReservationRefundApprovedNotificationConsumer>();
     x.AddConsumer<ReservationRefundRejectedNotificationConsumer>();
     x.AddConsumer<ReservationRemovedByOrganizerNotificationConsumer>();
+    x.AddConsumer<ReservationCancelledNotificationConsumer>();
 
     x.AddConsumer<EventCreatedConsumer>();
     x.AddConsumer<EventCancelledLifecycleConsumer>();

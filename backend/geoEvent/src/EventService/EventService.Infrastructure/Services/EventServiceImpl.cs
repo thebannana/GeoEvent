@@ -20,6 +20,7 @@ public class EventServiceImpl : IEventService
 {
     private const int DefaultPageSize = 20;
     private const int MaxPageSize = 50;
+    private const int MaxLookupPageSize = 100;
     private const string SegmentsCacheKey = "eventservice:segments:all";
 
     private readonly IEventRepository _eventRepository;
@@ -572,12 +573,13 @@ public class EventServiceImpl : IEventService
     public async Task<ServiceResult<PagedResultSegmentResponseDto>> GetSegmentsPagedAsync(
     int page,
     int pageSize,
-    string? searchTerm)
+    string? searchTerm,
+    bool includeInactive = false)
     {
         page = NormalizePage(page);
-        pageSize = NormalizePageSize(pageSize);
+        pageSize = NormalizeLookupPageSize(pageSize);
 
-        var result = await _eventRepository.GetSegmentsPagedAsync(page, pageSize, searchTerm);
+        var result = await _eventRepository.GetSegmentsPagedAsync(page, pageSize, searchTerm, includeInactive);
 
         return ServiceResult<PagedResultSegmentResponseDto>.Ok(new PagedResultSegmentResponseDto
         {
@@ -591,12 +593,13 @@ public class EventServiceImpl : IEventService
     public async Task<ServiceResult<PagedResultGenreResponseDto>> GetGenresPagedAsync(
         int page,
         int pageSize,
-        string? searchTerm)
+        string? searchTerm,
+        bool includeInactive = false)
     {
         page = NormalizePage(page);
-        pageSize = NormalizePageSize(pageSize);
+        pageSize = NormalizeLookupPageSize(pageSize);
 
-        var result = await _eventRepository.GetGenresPagedAsync(page, pageSize, searchTerm);
+        var result = await _eventRepository.GetGenresPagedAsync(page, pageSize, searchTerm, includeInactive);
 
         return ServiceResult<PagedResultGenreResponseDto>.Ok(new PagedResultGenreResponseDto
         {
@@ -610,12 +613,13 @@ public class EventServiceImpl : IEventService
     public async Task<ServiceResult<PagedResultSubGenreResponseDto>> GetSubGenresPagedAsync(
         int page,
         int pageSize,
-        string? searchTerm)
+        string? searchTerm,
+        bool includeInactive = false)
     {
         page = NormalizePage(page);
-        pageSize = NormalizePageSize(pageSize);
+        pageSize = NormalizeLookupPageSize(pageSize);
 
-        var result = await _eventRepository.GetSubGenresPagedAsync(page, pageSize, searchTerm);
+        var result = await _eventRepository.GetSubGenresPagedAsync(page, pageSize, searchTerm, includeInactive);
 
         return ServiceResult<PagedResultSubGenreResponseDto>.Ok(new PagedResultSubGenreResponseDto
         {
@@ -1345,6 +1349,15 @@ public class EventServiceImpl : IEventService
         if (ev.EndDateTime <= ev.StartDateTime)
             return ServiceResult<bool>.Fail("End date must be after start date.");
 
+        try
+        {
+            await ValidateCategoryHierarchyAsync(ev.SegmentId, ev.GenreId, ev.SubGenreId);
+        }
+        catch (InvalidEventDataException ex)
+        {
+            return ServiceResult<bool>.Fail(ex.Message);
+        }
+
         ev.Publish();
         await _eventRepository.UpdateAsync(ev);
 
@@ -1623,6 +1636,9 @@ public class EventServiceImpl : IEventService
         if (await _eventRepository.HasEventsForSegmentAsync(segmentId))
             return ServiceResult<bool>.Conflict("Cannot delete segment because it is referenced by one or more events.");
 
+        if (await _eventRepository.HasGenresForSegmentAsync(segmentId))
+            return ServiceResult<bool>.Conflict("Cannot delete segment because it still has genres. Delete or move its genres first.");
+
         await _eventRepository.DeleteSegmentAsync(segment);
         InvalidateSegmentCache();
 
@@ -1631,6 +1647,13 @@ public class EventServiceImpl : IEventService
 
     public async Task<ServiceResult<List<GenreResponseDto>>> GetGenresBySegmentAsync(int segmentId)
     {
+        var segment = await _eventRepository.GetSegmentByIdAsync(segmentId);
+        if (segment is null)
+            return ServiceResult<List<GenreResponseDto>>.NotFound("Segment not found.");
+
+        if (!segment.IsActive)
+            return ServiceResult<List<GenreResponseDto>>.Ok([]);
+
         var cacheKey = $"eventservice:genres:segment:{segmentId}";
 
         var items = await _cache.GetOrCreateAsync(cacheKey, async entry =>
@@ -1657,6 +1680,9 @@ public class EventServiceImpl : IEventService
         var segment = await _eventRepository.GetSegmentByIdAsync(dto.SegmentId);
         if (segment is null)
             return ServiceResult<GenreResponseDto>.NotFound("Segment not found.");
+
+        if (!segment.IsActive)
+            return ServiceResult<GenreResponseDto>.Fail("Cannot create a genre under an inactive segment.");
 
         try
         {
@@ -1690,6 +1716,10 @@ public class EventServiceImpl : IEventService
         var segment = await _eventRepository.GetSegmentByIdAsync(targetSegmentId);
         if (segment is null)
             return ServiceResult<GenreResponseDto>.NotFound("Segment not found.");
+
+        var willBeActive = dto.IsActive ?? genre.IsActive;
+        if (willBeActive && !segment.IsActive)
+            return ServiceResult<GenreResponseDto>.Fail("Cannot keep a genre active under an inactive segment.");
 
         try
         {
@@ -1727,6 +1757,9 @@ public class EventServiceImpl : IEventService
         if (await _eventRepository.HasEventsForGenreAsync(genreId))
             return ServiceResult<bool>.Conflict("Cannot delete genre because it is referenced by one or more events.");
 
+        if (await _eventRepository.HasSubGenresForGenreAsync(genreId))
+            return ServiceResult<bool>.Conflict("Cannot delete genre because it still has subgenres. Delete or move its subgenres first.");
+
         await _eventRepository.DeleteGenreAsync(genre);
         InvalidateGenresCache(genre.SegmentId);
 
@@ -1735,6 +1768,14 @@ public class EventServiceImpl : IEventService
 
     public async Task<ServiceResult<List<SubGenreResponseDto>>> GetSubGenresByGenreAsync(int genreId)
     {
+        var genre = await _eventRepository.GetGenreByIdAsync(genreId);
+        if (genre is null)
+            return ServiceResult<List<SubGenreResponseDto>>.NotFound("Genre not found.");
+
+        var segment = await _eventRepository.GetSegmentByIdAsync(genre.SegmentId);
+        if (!genre.IsActive || segment is null || !segment.IsActive)
+            return ServiceResult<List<SubGenreResponseDto>>.Ok([]);
+
         var cacheKey = $"eventservice:subgenres:genre:{genreId}";
 
         var items = await _cache.GetOrCreateAsync(cacheKey, async entry =>
@@ -1761,6 +1802,10 @@ public class EventServiceImpl : IEventService
         var genre = await _eventRepository.GetGenreByIdAsync(dto.GenreId);
         if (genre is null)
             return ServiceResult<SubGenreResponseDto>.NotFound("Genre not found.");
+
+        var parentSegment = await _eventRepository.GetSegmentByIdAsync(genre.SegmentId);
+        if (!genre.IsActive || parentSegment is null || !parentSegment.IsActive)
+            return ServiceResult<SubGenreResponseDto>.Fail("Cannot create a subgenre under an inactive genre or segment.");
 
         try
         {
@@ -1792,6 +1837,11 @@ public class EventServiceImpl : IEventService
         var genre = await _eventRepository.GetGenreByIdAsync(targetGenreId);
         if (genre is null)
             return ServiceResult<SubGenreResponseDto>.NotFound("Genre not found.");
+
+        var parentSegment = await _eventRepository.GetSegmentByIdAsync(genre.SegmentId);
+        var willBeActive = dto.IsActive ?? subGenre.IsActive;
+        if (willBeActive && (!genre.IsActive || parentSegment is null || !parentSegment.IsActive))
+            return ServiceResult<SubGenreResponseDto>.Fail("Cannot keep a subgenre active under an inactive genre or segment.");
 
         try
         {
@@ -2127,7 +2177,7 @@ public class EventServiceImpl : IEventService
         Name = s.Name,
         Color = s.Color,
         IsActive = s.IsActive,
-        Genres = s.Genres.Select(MapGenre).ToList()
+        Genres = s.Genres.Where(g => g.IsActive).Select(MapGenre).ToList()
     };
 
     private static GenreResponseDto MapGenre(Genre g) => new()
@@ -2137,7 +2187,7 @@ public class EventServiceImpl : IEventService
         SegmentId = g.SegmentId,
         SegmentName = g.Segment?.Name,
         IsActive = g.IsActive,
-        SubGenres = g.SubGenres.Select(MapSubGenre).ToList()
+        SubGenres = g.SubGenres.Where(sg => sg.IsActive).Select(MapSubGenre).ToList()
     };
 
     private static SubGenreResponseDto MapSubGenre(SubGenre s) => new()
@@ -2245,6 +2295,9 @@ public class EventServiceImpl : IEventService
 
     private static int NormalizePage(int page) => page <= 0 ? 1 : page;
 
+    private static int NormalizeLookupPageSize(int pageSize) =>
+        pageSize <= 0 ? DefaultPageSize : Math.Min(pageSize, MaxLookupPageSize);
+
     private static int NormalizePageSize(int pageSize) =>
         pageSize <= 0 ? DefaultPageSize : Math.Min(pageSize, MaxPageSize);
 
@@ -2266,11 +2319,21 @@ public class EventServiceImpl : IEventService
 
     private async Task ValidateCategoryHierarchyAsync(int segmentId, int genreId, int? subGenreId)
     {
+        var segment = await _eventRepository.GetSegmentByIdAsync(segmentId);
+        if (segment is null)
+            throw new InvalidEventDataException("Selected Segment was not found.");
+
+        if (!segment.IsActive)
+            throw new InvalidEventDataException("Selected Segment is inactive and cannot be used.");
+
         var genre = await _eventRepository.GetGenreByIdAsync(genreId);
         if (genre == null || genre.SegmentId != segmentId)
         {
             throw new InvalidEventDataException("Selected Genre does not belong to the selected Segment.");
         }
+
+        if (!genre.IsActive)
+            throw new InvalidEventDataException("Selected Genre is inactive and cannot be used.");
 
         if (subGenreId.HasValue)
         {
@@ -2279,6 +2342,9 @@ public class EventServiceImpl : IEventService
             {
                 throw new InvalidEventDataException("Selected SubGenre does not belong to the selected Genre.");
             }
+
+            if (!subGenre.IsActive)
+                throw new InvalidEventDataException("Selected SubGenre is inactive and cannot be used.");
         }
     }
 }

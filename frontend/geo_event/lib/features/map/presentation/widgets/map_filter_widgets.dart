@@ -351,7 +351,7 @@ class MapRangeSliderCard extends StatelessWidget {
                 ),
               ),
               Text(
-                '\$${max.round()}+',
+                '${max.round()}+ KM',
                 style: theme.textTheme.labelSmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),

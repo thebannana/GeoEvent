@@ -352,9 +352,9 @@ class _MapFilterPanelState extends ConsumerState<MapFilterPanel>
     final max = _selection.maxPrice;
 
     if (min == null && max == null) return 'Any price';
-    if (min == null) return 'Up to \$${max!.round()}';
-    if (max == null) return '\$${min.round()} and above';
-    return '\$${min.round()} – \$${max.round()}';
+    if (min == null) return 'Up to ${max!.round()} KM';
+    if (max == null) return '${min.round()} KM and above';
+    return '${min.round()} – ${max.round()} KM';
   }
 
   IconData _segmentIcon(String name) {

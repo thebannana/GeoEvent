@@ -47,6 +47,7 @@ class AdminCategoriesApi {
       'paged': true,
       'page': page,
       'pageSize': pageSize,
+      'includeInactive': true,
       if (searchTerm != null && searchTerm.trim().isNotEmpty)
         'searchTerm': searchTerm.trim(),
     },
@@ -78,6 +79,7 @@ class AdminCategoriesApi {
       queryParameters: {
         'page': page,
         'pageSize': pageSize,
+        'includeInactive': true,
         if (searchTerm != null && searchTerm.trim().isNotEmpty)
           'searchTerm': searchTerm.trim(),
       },
@@ -109,6 +111,7 @@ class AdminCategoriesApi {
       queryParameters: {
         'page': page,
         'pageSize': pageSize,
+        'includeInactive': true,
         if (searchTerm != null && searchTerm.trim().isNotEmpty)
           'searchTerm': searchTerm.trim(),
       },

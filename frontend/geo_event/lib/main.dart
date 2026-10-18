@@ -18,7 +18,7 @@ Future<void> main() async {
   try {
     AppEnvironment.validateCore();
     AppEnvironment.validateMaps();
-  } catch (e, stack) {
+  } catch (e) {
     debugPrint('Environment validation failed: $e');
     runApp(MaterialApp(
       home: Scaffold(

@@ -21,9 +21,10 @@ public class SubGenresController : ControllerBase
     public async Task<IActionResult> GetAll(
     [FromQuery] int page = 1,
     [FromQuery] int pageSize = 20,
-    [FromQuery] string? searchTerm = null)
+    [FromQuery] string? searchTerm = null,
+    [FromQuery] bool includeInactive = false)
     {
-        var result = await _eventService.GetSubGenresPagedAsync(page, pageSize, searchTerm);
+        var result = await _eventService.GetSubGenresPagedAsync(page, pageSize, searchTerm, includeInactive);
         return result.Success
             ? Ok(result.Data)
             : StatusCode(result.StatusCode, new { error = result.Error });

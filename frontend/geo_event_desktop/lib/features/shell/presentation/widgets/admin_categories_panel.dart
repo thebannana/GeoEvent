@@ -489,7 +489,8 @@ class _AdminCategoriesPanelState extends State<AdminCategoriesPanel> {
       await _loadCategories(showLoader: false, page: 1);
     } catch (e) {
       if (e is DioException && e.response?.statusCode == 409) {
-        final msg = e.response?.data is Map ? e.response?.data['message'] : null;
+        final data = e.response?.data;
+        final msg = data is Map ? (data['error'] ?? data['message']) : null;
         _showSnack(msg?.toString() ?? 'Cannot delete because it is in use.');
       } else {
         _showSnack('Failed to delete category.');

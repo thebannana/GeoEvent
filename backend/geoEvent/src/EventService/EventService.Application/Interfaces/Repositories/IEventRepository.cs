@@ -24,9 +24,9 @@ public interface IEventRepository
     Task<int> GetBookmarksCountAsync();
     Task<int> GetCommentsCountAsync();
     Task<int> GetLikedEventsCountAsync();
-    Task<PagedResult<Segment>> GetSegmentsPagedAsync(int page, int pageSize, string? searchTerm);
-    Task<PagedResult<Genre>> GetGenresPagedAsync(int page, int pageSize, string? searchTerm);
-    Task<PagedResult<SubGenre>> GetSubGenresPagedAsync(int page, int pageSize, string? searchTerm);
+    Task<PagedResult<Segment>> GetSegmentsPagedAsync(int page, int pageSize, string? searchTerm, bool includeInactive = false);
+    Task<PagedResult<Genre>> GetGenresPagedAsync(int page, int pageSize, string? searchTerm, bool includeInactive = false);
+    Task<PagedResult<SubGenre>> GetSubGenresPagedAsync(int page, int pageSize, string? searchTerm, bool includeInactive = false);
     Task<int> CountPublicByOrganizerAsync(int userId);
     Task<Event?> GetTrackedByIdAsync(int eventId);
     Task<Comment?> GetCommentTreeByIdAsync(int commentId);
@@ -68,6 +68,7 @@ public interface IEventRepository
     Task UpdateSegmentAsync(Segment segment);
     Task DeleteSegmentAsync(Segment segment);
     Task<bool> HasEventsForSegmentAsync(int segmentId);
+    Task<bool> HasGenresForSegmentAsync(int segmentId);
 
     Task<List<Genre>> GetGenresBySegmentAsync(int segmentId);
     Task<Genre?> GetGenreByIdAsync(int genreId);
@@ -75,6 +76,7 @@ public interface IEventRepository
     Task UpdateGenreAsync(Genre genre);
     Task DeleteGenreAsync(Genre genre);
     Task<bool> HasEventsForGenreAsync(int genreId);
+    Task<bool> HasSubGenresForGenreAsync(int genreId);
 
     Task<List<SubGenre>> GetSubGenresByGenreAsync(int genreId);
     Task<SubGenre?> GetSubGenreByIdAsync(int subGenreId);

@@ -152,7 +152,10 @@ public class AuthService : IAuthService
             return ServiceResult<AuthResponseDto>.Unauthorized("Invalid refresh token.");
 
         if (stored.User.IsBanned)
+        {
+            await _userRepository.RevokeAllUserTokensAsync(stored.User.PersonId);
             return ServiceResult<AuthResponseDto>.Forbidden("Account is banned.");
+        }
 
         await _userRepository.RevokeRefreshTokenAsync(hash);
         await _userRepository.CleanupExpiredTokensAsync(stored.User.PersonId);

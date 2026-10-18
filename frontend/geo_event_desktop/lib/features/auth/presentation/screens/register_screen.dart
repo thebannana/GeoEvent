@@ -23,7 +23,10 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   final _lastNameController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
-  
+  final _phoneController = TextEditingController();
+  final _birthDateController = TextEditingController();
+  DateTime? _birthDate;
+
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
 
@@ -35,7 +38,30 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     _lastNameController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
+    _phoneController.dispose();
+    _birthDateController.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickBirthDate() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _birthDate ?? DateTime(now.year - 25, now.month, now.day),
+      firstDate: DateTime(1900),
+      lastDate: now,
+      helpText: 'Select birth date',
+    );
+
+    if (picked == null || !mounted) return;
+
+    setState(() {
+      _birthDate = DateTime.utc(picked.year, picked.month, picked.day);
+      _birthDateController.text =
+          '${picked.year.toString().padLeft(4, '0')}-'
+          '${picked.month.toString().padLeft(2, '0')}-'
+          '${picked.day.toString().padLeft(2, '0')}';
+    });
   }
 
   Future<void> _onRegisterPressed() async {
@@ -53,8 +79,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       await ref.read(authStateProvider.notifier).register(
             username: _usernameController.text.trim(),
             email: _emailController.text.trim(),
-            birthDate: DateTime(2000, 1, 1), // Default birthDate since it's not collected here
-            phoneNumber: '+123456789', // Default since it's not collected
+            birthDate: _birthDate!,
+            phoneNumber:
+                _phoneController.text.replaceAll(RegExp(r'[\s()-]'), ''),
             consentGiven: true,
             consentVersion: '1.0',
             password: _passwordController.text,
@@ -134,7 +161,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'Register Admin',
+                                  'Create Account',
                                   style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                                     fontWeight: FontWeight.w800,
                                     color: colors.textPrimary,
@@ -142,7 +169,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                                 ),
                                 const SizedBox(height: 8),
                                 Text(
-                                  'Create a new administrative account.',
+                                  'Register a new account. An existing administrator must grant admin access before you can use the dashboard.',
                                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                                     color: colors.textSecondary,
                                     height: 1.5,
@@ -178,7 +205,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                                   controller: _usernameController,
                                   icon: Icons.alternate_email,
                                   enabled: !isLoading,
-                                  validator: (v) => Validators.requiredField(v, fieldName: 'Username'),
+                                  validator: Validators.username,
                                 ),
                                 const SizedBox(height: 16),
                                 _RegisterField(
@@ -190,12 +217,31 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                                 ),
                                 const SizedBox(height: 16),
                                 _RegisterField(
+                                  label: 'Phone number',
+                                  controller: _phoneController,
+                                  icon: Icons.phone_outlined,
+                                  enabled: !isLoading,
+                                  keyboardType: TextInputType.phone,
+                                  validator: Validators.phoneNumber,
+                                ),
+                                const SizedBox(height: 16),
+                                _RegisterField(
+                                  label: 'Birth date',
+                                  controller: _birthDateController,
+                                  icon: Icons.cake_outlined,
+                                  enabled: !isLoading,
+                                  readOnly: true,
+                                  onTap: isLoading ? null : _pickBirthDate,
+                                  validator: (_) => Validators.birthDate(_birthDate),
+                                ),
+                                const SizedBox(height: 16),
+                                _RegisterField(
                                   label: 'Password',
                                   controller: _passwordController,
                                   icon: Icons.lock_outline,
                                   obscureText: _obscurePassword,
                                   enabled: !isLoading,
-                                  validator: (v) => Validators.requiredField(v, fieldName: 'Password'),
+                                  validator: (v) => Validators.password(v),
                                   suffix: IconButton(
                                     onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
                                     icon: Icon(_obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined),
@@ -288,6 +334,9 @@ class _RegisterField extends StatelessWidget {
   final bool enabled;
   final String? Function(String?)? validator;
   final Widget? suffix;
+  final bool readOnly;
+  final VoidCallback? onTap;
+  final TextInputType? keyboardType;
 
   const _RegisterField({
     required this.label,
@@ -297,6 +346,9 @@ class _RegisterField extends StatelessWidget {
     this.enabled = true,
     this.validator,
     this.suffix,
+    this.readOnly = false,
+    this.onTap,
+    this.keyboardType,
   });
 
   @override
@@ -322,6 +374,9 @@ class _RegisterField extends StatelessWidget {
           controller: controller,
           obscureText: obscureText,
           enabled: enabled,
+          readOnly: readOnly,
+          onTap: onTap,
+          keyboardType: keyboardType,
           validator: validator,
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
             color: colors.textPrimary,
@@ -378,7 +433,7 @@ class _RegisterInformationPanel extends StatelessWidget {
               ),
               SizedBox(height: 18),
               Text(
-                'Register a new account to access the administrative dashboard and manage events.',
+                'Register a new account. Once an administrator grants you admin access, you can manage events from the dashboard.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 16,

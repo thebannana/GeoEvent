@@ -692,6 +692,7 @@ public class UserServiceImpl : IUserService
 
         user.Ban();
         await _userRepository.UpdateAsync(user);
+        await _userRepository.RevokeAllUserTokensAsync(userId);
         await _userRepository.SaveChangesAsync();
 
         await _publishEndpoint.Publish(new UserBannedMessage(userId, user.Username, reason, DateTime.UtcNow));

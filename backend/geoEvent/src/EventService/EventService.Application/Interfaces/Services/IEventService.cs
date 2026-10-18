@@ -19,9 +19,9 @@ public interface IEventService
     Task<ServiceResult<bool>> AdminDeleteAsync(int eventId);
     Task<ServiceResult<AdminEventStatsDto>> GetAdminEventStatsAsync();
     Task<ServiceResult<InternalEventEngagementStatsDto>> GetInternalEngagementStatsAsync();
-    Task<ServiceResult<PagedResultSegmentResponseDto>> GetSegmentsPagedAsync(int page, int pageSize, string? searchTerm);
-    Task<ServiceResult<PagedResultGenreResponseDto>> GetGenresPagedAsync(int page, int pageSize, string? searchTerm);
-    Task<ServiceResult<PagedResultSubGenreResponseDto>> GetSubGenresPagedAsync(int page, int pageSize, string? searchTerm);
+    Task<ServiceResult<PagedResultSegmentResponseDto>> GetSegmentsPagedAsync(int page, int pageSize, string? searchTerm, bool includeInactive = false);
+    Task<ServiceResult<PagedResultGenreResponseDto>> GetGenresPagedAsync(int page, int pageSize, string? searchTerm, bool includeInactive = false);
+    Task<ServiceResult<PagedResultSubGenreResponseDto>> GetSubGenresPagedAsync(int page, int pageSize, string? searchTerm, bool includeInactive = false);
     Task<ServiceResult<int>> GetPublicCountByOrganizerAsync(int userId);
     Task<ServiceResult<PagedResult<EventResponseDto>>> GetPublicAsync(
         EventFilterDto filter,

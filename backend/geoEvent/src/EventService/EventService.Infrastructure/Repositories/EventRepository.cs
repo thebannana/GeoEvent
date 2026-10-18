@@ -13,6 +13,7 @@ public class EventRepository : IEventRepository
     private const int DefaultPage = 1;
     private const int DefaultPageSize = 20;
     private const int MaxPageSize = 50;
+    private const int MaxLookupPageSize = 100;
     private const int DefaultNearbyRadiusKm = 50;
     private const int MaxNearbyRadiusKm = 500;
     private const int DefaultNearbyLimit = 20;
@@ -22,6 +23,7 @@ public class EventRepository : IEventRepository
     private const double MaxPopularityScore = 12.0;
     private const double MaxDistanceScore = 8.0;
     private const double MaxTextScore = 90.0;
+    private const double PopularReasonThreshold = 4.0;
 
     private static readonly EventStatus[] ReservationStatuses =
     [
@@ -169,16 +171,19 @@ public class EventRepository : IEventRepository
         await _context.EventLikes
             .AsNoTracking()
             .CountAsync();
-    public async Task<PagedResult<Segment>> GetSegmentsPagedAsync(int page, int pageSize, string? searchTerm)
+    public async Task<PagedResult<Segment>> GetSegmentsPagedAsync(int page, int pageSize, string? searchTerm, bool includeInactive = false)
     {
         page = NormalizePage(page);
-        pageSize = NormalizePageSize(pageSize);
+        pageSize = NormalizeLookupPageSize(pageSize);
 
         var query = _context.Segments
             .AsNoTracking()
             .Include(s => s.Genres)
                 .ThenInclude(g => g.SubGenres)
             .AsQueryable();
+
+        if (!includeInactive)
+            query = query.Where(s => s.IsActive);
 
         if (!string.IsNullOrWhiteSpace(searchTerm))
         {
@@ -204,16 +209,19 @@ public class EventRepository : IEventRepository
         };
     }
 
-    public async Task<PagedResult<Genre>> GetGenresPagedAsync(int page, int pageSize, string? searchTerm)
+    public async Task<PagedResult<Genre>> GetGenresPagedAsync(int page, int pageSize, string? searchTerm, bool includeInactive = false)
     {
         page = NormalizePage(page);
-        pageSize = NormalizePageSize(pageSize);
+        pageSize = NormalizeLookupPageSize(pageSize);
 
         var query = _context.Genres
             .AsNoTracking()
             .Include(g => g.Segment)
             .Include(g => g.SubGenres)
             .AsQueryable();
+
+        if (!includeInactive)
+            query = query.Where(g => g.IsActive && g.Segment != null && g.Segment.IsActive);
 
         if (!string.IsNullOrWhiteSpace(searchTerm))
         {
@@ -243,16 +251,24 @@ public class EventRepository : IEventRepository
         };
     }
 
-    public async Task<PagedResult<SubGenre>> GetSubGenresPagedAsync(int page, int pageSize, string? searchTerm)
+    public async Task<PagedResult<SubGenre>> GetSubGenresPagedAsync(int page, int pageSize, string? searchTerm, bool includeInactive = false)
     {
         page = NormalizePage(page);
-        pageSize = NormalizePageSize(pageSize);
+        pageSize = NormalizeLookupPageSize(pageSize);
 
         var query = _context.SubGenres
             .AsNoTracking()
             .Include(sg => sg.Genre)
                 .ThenInclude(g => g!.Segment)
             .AsQueryable();
+
+        if (!includeInactive)
+            query = query.Where(sg =>
+                sg.IsActive &&
+                sg.Genre != null &&
+                sg.Genre.IsActive &&
+                sg.Genre.Segment != null &&
+                sg.Genre.Segment.IsActive);
 
         if (!string.IsNullOrWhiteSpace(searchTerm))
         {
@@ -746,23 +762,98 @@ public class EventRepository : IEventRepository
 
         var totalScore = preferenceScore + distanceScore + popularityScore + featuredScore + textScore;
 
-        string? reason = null;
-        if (totalScore > 0)
-        {
-            var maxComponent = Math.Max(preferenceScore, Math.Max(distanceScore, Math.Max(popularityScore, Math.Max(featuredScore, textScore))));
-            if (maxComponent == textScore && textScore > 0)
-                reason = "Matches your search";
-            else if (maxComponent == preferenceScore && preferenceScore > 0)
-                reason = "Based on your preferences";
-            else if (maxComponent == distanceScore && distanceScore > 0)
-                reason = "Happening near you";
-            else if (maxComponent == featuredScore && featuredScore > 0)
-                reason = "Featured event";
-            else if (maxComponent == popularityScore && popularityScore > 0)
-                reason = "Highly rated by users";
-        }
+        var reason = totalScore > 0
+            ? BuildRecommendationReason(
+                ev,
+                userLatitude,
+                userLongitude,
+                preferences,
+                searchTerm,
+                preferenceScore,
+                distanceScore,
+                popularityScore,
+                featuredScore,
+                textScore)
+            : null;
 
         return (totalScore, reason);
+    }
+
+    /// <summary>
+    /// Builds a short, human-readable explanation for the strongest signal that put an
+    /// event in the results. The wording is based on the real data (the user's matching
+    /// interest, the actual distance, the search term, likes) rather than a fixed label.
+    /// Returns null when no signal is meaningful enough to explain.
+    /// </summary>
+    private static string? BuildRecommendationReason(
+        Event ev,
+        decimal? userLatitude,
+        decimal? userLongitude,
+        IReadOnlyList<UserPreferenceDto> preferences,
+        string? searchTerm,
+        double preferenceScore,
+        double distanceScore,
+        double popularityScore,
+        double featuredScore,
+        double textScore)
+    {
+        var signals = new List<(double Strength, string Text)>();
+
+        if (textScore > 0 && !string.IsNullOrWhiteSpace(searchTerm))
+        {
+            var term = searchTerm.Trim();
+            if (term.Length > 24)
+            {
+                term = term[..24].TrimEnd() + "...";
+            }
+
+            signals.Add((textScore, $"Matches your search \"{term}\""));
+        }
+
+        if (preferenceScore > 0)
+        {
+            var interest = FindBestMatchingInterestName(ev, preferences);
+            if (interest is not null)
+            {
+                signals.Add((preferenceScore, $"Because you showed interest in {interest}"));
+            }
+        }
+
+        if (distanceScore > 0 && userLatitude.HasValue && userLongitude.HasValue)
+        {
+            var distanceKm = CalculateDistanceKm(
+                (double)userLatitude.Value,
+                (double)userLongitude.Value,
+                (double)ev.Latitude,
+                (double)ev.Longitude);
+
+            var distanceText = distanceKm < 1.0
+                ? "Less than 1 km from you"
+                : $"About {distanceKm.ToString(distanceKm < 10.0 ? "0.0" : "0", System.Globalization.CultureInfo.InvariantCulture)} km from you";
+
+            signals.Add((distanceScore, distanceText));
+        }
+
+        if (popularityScore >= PopularReasonThreshold)
+        {
+            var popularityText = ev.LikesCount switch
+            {
+                >= 2 => $"Liked by {ev.LikesCount} people",
+                1 => "Liked by 1 person",
+                _ => "Frequently viewed by other users"
+            };
+
+            signals.Add((popularityScore, popularityText));
+        }
+
+        if (featuredScore > 0)
+        {
+            signals.Add((featuredScore, "Featured by GeoEvent"));
+        }
+
+        return signals.Count == 0
+            ? null
+            : signals.OrderByDescending(signal => signal.Strength).First().Text;
     }
 
     private static double CalculatePreferenceScore(
@@ -778,57 +869,120 @@ public class EventRepository : IEventRepository
 
         foreach (var preference in preferences)
         {
-            var matchesSegment =
-                !preference.SegmentId.HasValue ||
-                preference.SegmentId.Value ==
-                    ev.SegmentId;
+            var specificity = GetPreferenceSpecificity(ev, preference);
 
-            var matchesGenre =
-                !preference.GenreId.HasValue ||
-                preference.GenreId.Value ==
-                    ev.GenreId;
-
-            var matchesSubGenre =
-                !preference.SubGenreId.HasValue ||
-                preference.SubGenreId.Value ==
-                    ev.SubGenreId;
-
-            if (!matchesSegment ||
-                !matchesGenre ||
-                !matchesSubGenre)
+            if (specificity < 0)
             {
                 continue;
             }
 
-            var specificity = 0;
-
-            if (preference.SegmentId.HasValue)
-            {
-                specificity++;
-            }
-
-            if (preference.GenreId.HasValue)
-            {
-                specificity++;
-            }
-
-            if (preference.SubGenreId.HasValue)
-            {
-                specificity++;
-            }
-
-            var multiplier = specificity switch
-            {
-                3 => 3.0,
-                2 => 2.0,
-                1 => 1.0,
-                _ => 0.25
-            };
-
-            score += preference.Score * multiplier;
+            score += preference.Score * GetSpecificityMultiplier(specificity);
         }
 
         return score;
+    }
+
+    /// <summary>
+    /// Returns -1 when the preference does not match the event, otherwise how many
+    /// category levels (segment, genre, sub-genre) the preference is specific about.
+    /// </summary>
+    private static int GetPreferenceSpecificity(
+        Event ev,
+        UserPreferenceDto preference)
+    {
+        if (preference.SegmentId.HasValue &&
+            preference.SegmentId.Value != ev.SegmentId)
+        {
+            return -1;
+        }
+
+        if (preference.GenreId.HasValue &&
+            preference.GenreId.Value != ev.GenreId)
+        {
+            return -1;
+        }
+
+        if (preference.SubGenreId.HasValue &&
+            preference.SubGenreId.Value != ev.SubGenreId)
+        {
+            return -1;
+        }
+
+        var specificity = 0;
+
+        if (preference.SegmentId.HasValue)
+        {
+            specificity++;
+        }
+
+        if (preference.GenreId.HasValue)
+        {
+            specificity++;
+        }
+
+        if (preference.SubGenreId.HasValue)
+        {
+            specificity++;
+        }
+
+        return specificity;
+    }
+
+    private static double GetSpecificityMultiplier(int specificity)
+    {
+        return specificity switch
+        {
+            3 => 3.0,
+            2 => 2.0,
+            1 => 1.0,
+            _ => 0.25
+        };
+    }
+
+    /// <summary>
+    /// Finds the name of the category (sub-genre, genre or segment) behind the user's
+    /// strongest matching interest, so the reason can name it explicitly.
+    /// </summary>
+    private static string? FindBestMatchingInterestName(
+        Event ev,
+        IReadOnlyList<UserPreferenceDto> preferences)
+    {
+        string? bestName = null;
+        var bestContribution = 0.0;
+
+        foreach (var preference in preferences)
+        {
+            var specificity = GetPreferenceSpecificity(ev, preference);
+
+            // Not matching, or a generic preference that names no category.
+            if (specificity <= 0)
+            {
+                continue;
+            }
+
+            var contribution = preference.Score * GetSpecificityMultiplier(specificity);
+
+            if (contribution <= bestContribution)
+            {
+                continue;
+            }
+
+            var name = preference.SubGenreId.HasValue
+                ? ev.SubGenre?.Name
+                : preference.GenreId.HasValue
+                    ? ev.Genre?.Name
+                    : ev.Segment?.Name;
+
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                continue;
+            }
+
+            bestContribution = contribution;
+            bestName = name;
+        }
+
+        return bestName;
     }
 
     private static double CalculateDistanceScore(
@@ -1491,8 +1645,8 @@ public class EventRepository : IEventRepository
     public async Task<List<Segment>> GetAllSegmentsAsync() =>
         await _context.Segments
             .AsNoTracking()
-            .Include(s => s.Genres)
-                .ThenInclude(g => g.SubGenres)
+            .Include(s => s.Genres.Where(g => g.IsActive))
+                .ThenInclude(g => g.SubGenres.Where(sg => sg.IsActive))
             .Where(s => s.IsActive)
             .OrderBy(s => s.Name)
             .ToListAsync();
@@ -1507,7 +1661,7 @@ public class EventRepository : IEventRepository
     public async Task<List<Genre>> GetGenresBySegmentAsync(int segmentId) =>
         await _context.Genres
             .AsNoTracking()
-            .Include(g => g.SubGenres)
+            .Include(g => g.SubGenres.Where(sg => sg.IsActive))
             .Where(g => g.SegmentId == segmentId && g.IsActive)
             .OrderBy(g => g.Name)
             .ToListAsync();
@@ -1551,6 +1705,9 @@ public class EventRepository : IEventRepository
     public async Task<bool> HasEventsForSegmentAsync(int segmentId) =>
         await _context.Events.AsNoTracking().AnyAsync(e => e.SegmentId == segmentId);
 
+    public async Task<bool> HasGenresForSegmentAsync(int segmentId) =>
+        await _context.Genres.AsNoTracking().AnyAsync(g => g.SegmentId == segmentId);
+
     public async Task<Genre> CreateGenreAsync(Genre genre)
     {
         await _context.Genres.AddAsync(genre);
@@ -1571,6 +1728,9 @@ public class EventRepository : IEventRepository
 
     public async Task<bool> HasEventsForGenreAsync(int genreId) =>
         await _context.Events.AsNoTracking().AnyAsync(e => e.GenreId == genreId);
+
+    public async Task<bool> HasSubGenresForGenreAsync(int genreId) =>
+        await _context.SubGenres.AsNoTracking().AnyAsync(s => s.GenreId == genreId);
 
     public async Task<SubGenre> CreateSubGenreAsync(SubGenre subGenre)
     {
@@ -1595,6 +1755,11 @@ public class EventRepository : IEventRepository
 
     private static int NormalizePage(int page) =>
         page < 1 ? DefaultPage : page;
+
+    private static int NormalizeLookupPageSize(int pageSize) =>
+        pageSize < 1
+            ? DefaultPageSize
+            : Math.Min(pageSize, MaxLookupPageSize);
 
     private static int NormalizePageSize(int pageSize) =>
         pageSize < 1

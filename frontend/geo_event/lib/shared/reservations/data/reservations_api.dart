@@ -40,8 +40,13 @@ class ReservationsApi {
     return PagedResult<Reservation>.fromJson(data, Reservation.fromJson);
   }
 
-  Future<void> cancelReservation(int reservationId) async {
-    await _dio.patch<void>(ApiEndpoints.cancelReservation(reservationId));
+  Future<void> cancelReservation(int reservationId, {String? reason}) async {
+    await _dio.patch<void>(
+      ApiEndpoints.cancelReservation(reservationId),
+      data: {
+        if (reason != null && reason.trim().isNotEmpty) 'reason': reason.trim(),
+      },
+    );
   }
 
   Future<Reservation> requestRefund(

@@ -24,20 +24,17 @@ class _TicketScannerEntryScreenState
     extends ConsumerState<TicketScannerEntryScreen> {
   final ScrollController _scrollController = ScrollController();
 
-  @override
-  void initState() {
-    super.initState();
-    _scrollController.addListener(_onScroll);
+@override
+void initState() {
+  super.initState();
+  _scrollController.addListener(_onScroll);
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final state = ref.read(myEventsProvider);
-      state.whenData((data) {
-        if (data.items.isEmpty) {
-          ref.read(myEventsProvider.notifier).refresh();
-        }
-      });
-    });
-  }
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    if (!mounted) return;
+
+    ref.read(myEventsProvider.notifier).refresh();
+  });
+}
 
   @override
   void dispose() {
@@ -64,7 +61,7 @@ Future<void> _openScanner(
   BuildContext context,
   MyEventResponseDto event,
 ) async {
-  final didValidate = await Navigator.of(context).push<bool>(
+  await Navigator.of(context).push<bool>(
     MaterialPageRoute(
       builder: (_) => TicketScannerScreen(
         eventId: event.eventId,
@@ -73,9 +70,7 @@ Future<void> _openScanner(
     ),
   );
 
-  if (!mounted || didValidate != true) {
-    return;
-  }
+  if (!mounted) return;
 
   await ref.read(myEventsProvider.notifier).refresh();
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:geo_event_desktop/shared/admin_profile/providers/admin_dashboard_providers.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/errors/error_mapper.dart';
@@ -45,15 +46,17 @@ class _AdminShellScreenState extends ConsumerState<AdminShellScreen> {
   AdminShellPage _selectedPage = AdminShellPage.dashboard;
   List<AdminSearchResult> _searchResults = const [];
 
-  @override
-  void initState() {
-    super.initState();
+@override
+void initState() {
+  super.initState();
 
-    AppLogger.debug(
-      'Admin shell initialized.',
-      tag: _loggerTag,
-    );
-  }
+  ref.invalidate(adminDashboardStatsProvider);
+
+  AppLogger.debug(
+    'Admin shell initialized.',
+    tag: _loggerTag,
+  );
+}
 
   @override
   void dispose() {
@@ -210,17 +213,12 @@ class _AdminShellScreenState extends ConsumerState<AdminShellScreen> {
     _selectSearchResult(results.first);
   }
 
-  void _selectSearchResult(AdminSearchResult result) {
+void _selectSearchResult(AdminSearchResult result) {
   if (_isLoggingOut) {
     return;
   }
 
-  setState(() {
-    _selectedPage = result.page;
-    _searchResults = const [];
-  });
-
-  _searchController.clear();
+  _selectPage(result.page);
 
   AppLogger.info(
     'Admin search opened: ${result.title}.',
@@ -436,27 +434,31 @@ class _AdminShellScreenState extends ConsumerState<AdminShellScreen> {
     );
   }
 
-  void _selectPage(AdminShellPage page) {
-    if (_isLoggingOut) {
-      return;
-    }
-
-    _searchController.clear();
-
-    if (_selectedPage == page && _searchResults.isEmpty) {
-      return;
-    }
-
-    setState(() {
-      _selectedPage = page;
-      _searchResults = const [];
-    });
-
-    AppLogger.debug(
-      'Admin page selected: ${_pageTitle(page)}.',
-      tag: _loggerTag,
-    );
+void _selectPage(AdminShellPage page) {
+  if (_isLoggingOut) {
+    return;
   }
+
+  _searchController.clear();
+
+  if (page == AdminShellPage.dashboard) {
+    ref.invalidate(adminDashboardStatsProvider);
+  }
+
+  if (_selectedPage == page && _searchResults.isEmpty) {
+    return;
+  }
+
+  setState(() {
+    _selectedPage = page;
+    _searchResults = const [];
+  });
+
+  AppLogger.debug(
+    'Admin page selected: ${_pageTitle(page)}.',
+    tag: _loggerTag,
+  );
+}
 
   void _showMessage(String message) {
     final messenger = ScaffoldMessenger.of(context);

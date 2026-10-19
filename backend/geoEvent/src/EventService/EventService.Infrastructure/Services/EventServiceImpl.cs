@@ -43,6 +43,48 @@ public class EventServiceImpl : IEventService
         _logger = logger;
     }
 
+    private static string? ValidateCapacityChange(
+    DomainEvent ev,
+    int? requestedCapacity)
+    {
+        if (!requestedCapacity.HasValue)
+        {
+            return null;
+        }
+
+        var newCapacity = requestedCapacity.Value;
+
+        if (newCapacity < 0)
+        {
+            return "Capacity cannot be negative.";
+        }
+
+        if (newCapacity == ev.Capacity)
+        {
+            return null;
+        }
+
+        switch (ev.Status)
+        {
+            case EventStatus.Pending:
+                return null;
+
+            case EventStatus.Confirmed:
+                return newCapacity < ev.Capacity
+                    ? "Capacity cannot be reduced after an event is published. "
+                      + "You can increase capacity, but existing reservations and "
+                      + "ticket inventory must remain protected."
+                    : null;
+
+            case EventStatus.Cancelled:
+            case EventStatus.Completed:
+                return "Capacity cannot be changed for a cancelled or completed event.";
+
+            default:
+                return "Capacity cannot be changed in the event's current state.";
+        }
+    }
+
     public async Task<ServiceResult<EventResponseDto>> AdminUpdateAsync(
     int eventId,
     UpdateEventDto dto)
@@ -57,13 +99,26 @@ public class EventServiceImpl : IEventService
 
         try
         {
+            var capacityError = ValidateCapacityChange(ev, dto.Capacity);
+
+            if (capacityError is not null)
+            {
+                return ServiceResult<EventResponseDto>.Fail(
+                    capacityError);
+            }
+
             var newSegmentId = dto.SegmentId ?? ev.SegmentId;
             var newGenreId = dto.GenreId ?? ev.GenreId;
             var newSubGenreId = dto.SubGenreId ?? ev.SubGenreId;
 
-            if (dto.SegmentId.HasValue || dto.GenreId.HasValue || dto.SubGenreId.HasValue)
+            if (dto.SegmentId.HasValue ||
+                dto.GenreId.HasValue ||
+                dto.SubGenreId.HasValue)
             {
-                await ValidateCategoryHierarchyAsync(newSegmentId, newGenreId, newSubGenreId);
+                await ValidateCategoryHierarchyAsync(
+                    newSegmentId,
+                    newGenreId,
+                    newSubGenreId);
             }
 
             ev.UpdateDetails(
@@ -80,10 +135,10 @@ public class EventServiceImpl : IEventService
                 price: dto.Price ?? ev.Price,
                 isFeatured: dto.IsFeatured ?? ev.IsFeatured,
                 tags: dto.Tags ?? ev.Tags,
-                accessibilityInfo: dto.AccessibilityInfo ?? ev.AccessibilityInfo,
+                accessibilityInfo:
+                    dto.AccessibilityInfo ?? ev.AccessibilityInfo,
                 promoterName: dto.PromoterName ?? ev.PromoterName,
-                locale: dto.Locale ?? ev.Locale
-            );
+                locale: dto.Locale ?? ev.Locale);
 
             await _eventRepository.UpdateAsync(ev);
 
@@ -116,12 +171,22 @@ public class EventServiceImpl : IEventService
             return ServiceResult<EventResponseDto>.Fail(
                 ex.Message);
         }
+        catch (InvalidEventStateException ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Invalid event state while admin updated event {EventId}",
+                eventId);
+
+            return ServiceResult<EventResponseDto>.Fail(
+                ex.Message);
+        }
     }
 
     public async Task<ServiceResult<EventResponseDto>> UpdateAsync(
-        int eventId,
-        UpdateEventDto dto,
-        int requesterId)
+    int eventId,
+    UpdateEventDto dto,
+    int requesterId)
     {
         var ev = await _eventRepository.GetTrackedByIdAsync(eventId);
 
@@ -139,13 +204,26 @@ public class EventServiceImpl : IEventService
 
         try
         {
+            var capacityError = ValidateCapacityChange(ev, dto.Capacity);
+
+            if (capacityError is not null)
+            {
+                return ServiceResult<EventResponseDto>.Fail(
+                    capacityError);
+            }
+
             var newSegmentId = dto.SegmentId ?? ev.SegmentId;
             var newGenreId = dto.GenreId ?? ev.GenreId;
             var newSubGenreId = dto.SubGenreId ?? ev.SubGenreId;
 
-            if (dto.SegmentId.HasValue || dto.GenreId.HasValue || dto.SubGenreId.HasValue)
+            if (dto.SegmentId.HasValue ||
+                dto.GenreId.HasValue ||
+                dto.SubGenreId.HasValue)
             {
-                await ValidateCategoryHierarchyAsync(newSegmentId, newGenreId, newSubGenreId);
+                await ValidateCategoryHierarchyAsync(
+                    newSegmentId,
+                    newGenreId,
+                    newSubGenreId);
             }
 
             ev.UpdateDetails(
@@ -162,25 +240,28 @@ public class EventServiceImpl : IEventService
                 price: dto.Price ?? ev.Price,
                 isFeatured: ev.IsFeatured,
                 tags: dto.Tags ?? ev.Tags,
-                accessibilityInfo: dto.AccessibilityInfo ?? ev.AccessibilityInfo,
+                accessibilityInfo:
+                    dto.AccessibilityInfo ?? ev.AccessibilityInfo,
                 promoterName: dto.PromoterName ?? ev.PromoterName,
                 locale: dto.Locale ?? ev.Locale);
 
             await _eventRepository.UpdateAsync(ev);
 
-            await _publishEndpoint.Publish(new EventUpdatedMessage(
-                ev.EventId,
-                ev.Title,
-                ev.OrganizerId,
-                ev.StartDateTime,
-                ev.EndDateTime,
-                ev.Capacity,
-                ev.Price,
-                "Event details updated",
-                DateTime.UtcNow));
+            await _publishEndpoint.Publish(
+                new EventUpdatedMessage(
+                    ev.EventId,
+                    ev.Title,
+                    ev.OrganizerId,
+                    ev.StartDateTime,
+                    ev.EndDateTime,
+                    ev.Capacity,
+                    ev.Price,
+                    "Event details updated",
+                    DateTime.UtcNow));
 
             var updated =
-                await _eventRepository.GetByIdWithDetailsAsync(eventId) ?? ev;
+                await _eventRepository.GetByIdWithDetailsAsync(eventId)
+                ?? ev;
 
             return ServiceResult<EventResponseDto>.Ok(
                 MapToDto(updated));
@@ -192,7 +273,8 @@ public class EventServiceImpl : IEventService
                 "Invalid event data while updating event {EventId}",
                 eventId);
 
-            return ServiceResult<EventResponseDto>.Fail(ex.Message);
+            return ServiceResult<EventResponseDto>.Fail(
+                ex.Message);
         }
         catch (InvalidEventStateException ex)
         {
@@ -201,7 +283,8 @@ public class EventServiceImpl : IEventService
                 "Invalid event state while updating event {EventId}",
                 eventId);
 
-            return ServiceResult<EventResponseDto>.Fail(ex.Message);
+            return ServiceResult<EventResponseDto>.Fail(
+                ex.Message);
         }
     }
 
